@@ -154,6 +154,37 @@
 
   .placeholder{ text-align:center; padding:60px 20px; color:var(--slate); }
   .placeholder .ic-big{ margin-bottom:14px; color:#D8D5C8; }
+
+  /* ===== تجاوب مع الجوال ===== */
+  @media (max-width: 720px){
+    #login-screen{ grid-template-columns: 1fr; }
+    .brand-panel{ padding:32px 24px 40px; min-height:220px; }
+    .brand-panel h1{ font-size:24px; }
+    .login-panel{ padding:28px 20px; }
+
+    #dashboard-screen{ flex-direction:column; }
+    .sidebar{
+      width:100%; height:auto; position:relative;
+      flex-direction:row; align-items:center; padding:10px 12px; gap:10px;
+      overflow-x:auto;
+    }
+    .sidebar .brand{ padding:0 8px 0 0; flex-shrink:0; }
+    #nav-list{ display:flex; gap:6px; flex:1; overflow-x:auto; }
+    .nav-item{ flex-shrink:0; white-space:nowrap; margin-bottom:0; }
+    .nav-item span{ display:none; }
+    .nav-item{ padding:10px; }
+    .sidebar-footer{ margin-top:0; border-top:none; padding-top:0; flex-shrink:0; }
+    .user-meta{ display:none; }
+
+    .main{ padding:18px 14px; }
+    .main-header h2{ font-size:19px; }
+    .tiles{ grid-template-columns: repeat(auto-fit, minmax(140px,1fr)); gap:12px; }
+    .tile{ padding:16px; }
+
+    .stat-grid{ grid-template-columns:1fr 1fr; }
+    .form-row{ grid-template-columns:1fr; }
+    .panel{ padding:18px; }
+  }
 </style>
 </head>
 <body>
