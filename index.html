@@ -490,8 +490,17 @@ function renderTiles() {
   });
 }
 
-function openTile(key, title) {
+function hideAllModules() {
   document.getElementById('tiles-view').classList.add('hidden');
+  document.getElementById('notes-module').classList.add('hidden');
+  document.getElementById('weekly-module').classList.add('hidden');
+  document.getElementById('perms-module').classList.add('hidden');
+  document.getElementById('portal-module').classList.add('hidden');
+  document.getElementById('placeholder-module').classList.add('hidden');
+}
+
+function openTile(key, title) {
+  hideAllModules();
   if (key === 'notes') {
     document.getElementById('notes-module').classList.remove('hidden');
     loadNotesModule();
@@ -510,11 +519,7 @@ function openTile(key, title) {
   }
 }
 function backToTiles() {
-  document.getElementById('notes-module').classList.add('hidden');
-  document.getElementById('weekly-module').classList.add('hidden');
-  document.getElementById('perms-module').classList.add('hidden');
-  document.getElementById('portal-module').classList.add('hidden');
-  document.getElementById('placeholder-module').classList.add('hidden');
+  hideAllModules();
   document.getElementById('tiles-view').classList.remove('hidden');
 }
 document.getElementById('back-to-tiles').addEventListener('click', backToTiles);
