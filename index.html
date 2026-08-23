@@ -440,47 +440,57 @@
       <!-- ===== شاشة الموظف المشارك ===== -->
       <div id="opplan-employee-view" class="hidden">
         <div class="form-card">
-          <h4>إضافة مهمة جديدة</h4>
-          <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">الهدف العام</label>
-          <select id="opt-goal" style="margin-bottom:10px;"></select>
-          <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">الهدف التشغيلي</label>
-          <select id="opt-objective" style="margin-bottom:10px;"></select>
-          <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">البرنامج</label>
-          <select id="opt-program" style="margin-bottom:14px;"></select>
+          <h4 id="opt-manual-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+            <span>+ إضافة مهمة جديدة</span>
+            <svg id="opt-manual-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+          </h4>
+          <div id="opt-manual-body" class="hidden" style="margin-top:14px;">
+            <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">الهدف العام</label>
+            <select id="opt-goal" style="margin-bottom:10px;"></select>
+            <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">الهدف التشغيلي</label>
+            <select id="opt-objective" style="margin-bottom:10px;"></select>
+            <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">البرنامج</label>
+            <select id="opt-program" style="margin-bottom:14px;"></select>
 
-          <input type="text" id="opt-title" placeholder="عنوان المهمة" style="margin-bottom:10px;" />
-          <textarea id="opt-desc" placeholder="الوصف" rows="2"></textarea>
+            <input type="text" id="opt-title" placeholder="عنوان المهمة" style="margin-bottom:10px;" />
+            <textarea id="opt-desc" placeholder="الوصف" rows="2"></textarea>
 
-          <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">مدة المهمة</label>
-          <select id="opt-duration">
-            <option value="single_week">أسبوع محدد (الأشيع)</option>
-            <option value="semester_1">الفصل الدراسي الأول (متكررة أسبوعيًا)</option>
-            <option value="semester_2">الفصل الدراسي الثاني (متكررة أسبوعيًا)</option>
-            <option value="full_year">طوال العام الدراسي (متكررة أسبوعيًا)</option>
-          </select>
-          <div id="opt-week-wrap">
-            <input type="number" id="opt-week" placeholder="رقم الأسبوع (1-40)" min="1" max="40" />
-          </div>
-          <div id="opt-recurrence-wrap" class="hidden">
-            <select id="opt-recurrence">
-              <option value="weekly">تتكرر أسبوعيًا (الأشيع)</option>
-              <option value="daily">تتكرر يوميًا (حالة نادرة)</option>
+            <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">مدة المهمة</label>
+            <select id="opt-duration">
+              <option value="single_week">أسبوع محدد (الأشيع)</option>
+              <option value="semester_1">الفصل الدراسي الأول (متكررة أسبوعيًا)</option>
+              <option value="semester_2">الفصل الدراسي الثاني (متكررة أسبوعيًا)</option>
+              <option value="full_year">طوال العام الدراسي (متكررة أسبوعيًا)</option>
             </select>
+            <div id="opt-week-wrap">
+              <input type="number" id="opt-week" placeholder="رقم الأسبوع (1-40)" min="1" max="40" />
+            </div>
+            <div id="opt-recurrence-wrap" class="hidden">
+              <select id="opt-recurrence">
+                <option value="weekly">تتكرر أسبوعيًا (الأشيع)</option>
+                <option value="daily">تتكرر يوميًا (حالة نادرة)</option>
+              </select>
+            </div>
+            <div class="error-msg" id="opt-error"></div>
+            <button class="btn-primary" id="opt-submit">إرسال للاعتماد</button>
           </div>
-          <div class="error-msg" id="opt-error"></div>
-          <button class="btn-primary" id="opt-submit">إرسال للاعتماد</button>
         </div>
 
         <div class="form-card">
-          <h4>أو ارفع مهامك دفعة وحدة من ملف إكسل</h4>
-          <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج الفارغ، عبّه بمهامك، وارفعه. كل مهمة تنضاف لك بحالة "بانتظار اعتماد الإضافة" تلقائيًا.</p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-            <button id="opt-download-template" style="width:auto; background:var(--sand); color:var(--ink); border:1px solid #E4E2D9;">تنزيل نموذج فارغ</button>
+          <h4 id="opt-excel-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+            <span>+ رفع مهام دفعة وحدة من ملف إكسل</span>
+            <svg id="opt-excel-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+          </h4>
+          <div id="opt-excel-body" class="hidden" style="margin-top:14px;">
+            <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج الفارغ، عبّه بمهامك، وارفعه. كل مهمة تنضاف لك بحالة "بانتظار اعتماد الإضافة" تلقائيًا.</p>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+              <button id="opt-download-template" style="width:auto; background:var(--sand); color:var(--ink); border:1px solid #E4E2D9;">تنزيل نموذج فارغ</button>
+            </div>
+            <input type="file" id="opt-excel-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
+            <div class="error-msg" id="opt-excel-error"></div>
+            <div id="opt-excel-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:10px;"></div>
+            <button id="opt-excel-upload" style="width:auto;">رفع الملف وإضافة المهام</button>
           </div>
-          <input type="file" id="opt-excel-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
-          <div class="error-msg" id="opt-excel-error"></div>
-          <div id="opt-excel-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:10px;"></div>
-          <button id="opt-excel-upload" style="width:auto;">رفع الملف وإضافة المهام</button>
         </div>
 
         <div class="week-nav" style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
@@ -1178,6 +1188,21 @@ async function refreshOpPlanApprovals() {
 }
 
 /* ---------- شاشة الموظف المشارك ---------- */
+function setupCollapsible(toggleId, bodyId, chevronId) {
+  const toggle = document.getElementById(toggleId);
+  const body = document.getElementById(bodyId);
+  const chevron = document.getElementById(chevronId);
+  toggle.addEventListener('click', () => {
+    const isHidden = body.classList.contains('hidden');
+    body.classList.toggle('hidden');
+    chevron.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+    const label = toggle.querySelector('span');
+    label.textContent = label.textContent.replace(/^[+−]/, isHidden ? '−' : '+');
+  });
+}
+setupCollapsible('opt-manual-toggle', 'opt-manual-body', 'opt-manual-chevron');
+setupCollapsible('opt-excel-toggle', 'opt-excel-body', 'opt-excel-chevron');
+
 async function loadOpPlanEmployeeData() {
   await refreshStructureCaches();
 
