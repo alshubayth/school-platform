@@ -102,9 +102,13 @@ document.getElementById('fixed-add').addEventListener('click', async () => {
     errEl.style.display = 'block';
     return;
   }
-  const { error } = await sb.from('duty_roster').insert({
-    teacher_profile_id: teacherId, duty_type_id: dutyTypeId, kind: 'fixed', day_of_week: day, created_by: currentUserId,
-  });
+
+  const daysToAdd = day === 'all_week' ? ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'] : [day];
+  const rows = daysToAdd.map(d => ({
+    teacher_profile_id: teacherId, duty_type_id: dutyTypeId, kind: 'fixed', day_of_week: d, created_by: currentUserId,
+  }));
+
+  const { error } = await sb.from('duty_roster').insert(rows);
   if (error) { errEl.textContent = 'تعذر الإضافة: ' + error.message; errEl.style.display = 'block'; return; }
   await refreshFixedList();
   await refreshTodayAttendance();
