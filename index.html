@@ -606,6 +606,12 @@ async function loadProfileAndShowDashboard(userId) {
   }
   currentProfile = profile;
   currentUserId = userId;
+
+  if (profile.role === 'teacher') {
+    const { data: membership } = await sb.from('operational_plan_members').select('id').eq('profile_id', userId).maybeSingle();
+    isOpPlanMember = !!membership;
+  }
+
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('dashboard-screen').classList.remove('hidden');
   document.getElementById('user-name').textContent = profile.full_name;
@@ -619,15 +625,21 @@ document.getElementById('logout-btn').addEventListener('click', async () => { aw
 
 sb.auth.getSession().then(({ data }) => { if (data.session) loadProfileAndShowDashboard(data.session.user.id); });
 
+function isTileAllowed(t) {
+  if (!t.roles.includes(currentProfile.role)) return false;
+  if (t.key === 'plan' && currentProfile.role === 'teacher' && !isOpPlanMember) return false;
+  return true;
+}
+
 function renderNav(){
   const nav = document.getElementById('nav-list');
   nav.innerHTML = `<div class="nav-item active" data-key="home">${icons.home}<span>الرئيسية</span></div>`;
   tiles.forEach(t=>{
-    const allowed = t.roles.includes(currentProfile.role);
+    if (!isTileAllowed(t)) return;
     const div = document.createElement('div');
-    div.className = 'nav-item' + (allowed ? '' : ' locked');
+    div.className = 'nav-item';
     div.innerHTML = `${t.icon}<span>${t.title}</span>`;
-    if (allowed) div.addEventListener('click', ()=>{ setActiveNav(div); openTile(t.key, t.title); });
+    div.addEventListener('click', ()=>{ setActiveNav(div); openTile(t.key, t.title); });
     nav.appendChild(div);
   });
   nav.querySelector('[data-key="home"]').addEventListener('click', (e)=>{ setActiveNav(e.currentTarget); backToTiles(); });
@@ -638,11 +650,11 @@ function renderTiles() {
   const grid = document.getElementById('tiles-grid');
   grid.innerHTML = '';
   tiles.forEach(t => {
-    const allowed = t.roles.includes(currentProfile.role);
+    if (!isTileAllowed(t)) return;
     const div = document.createElement('div');
-    div.className = 'tile' + (allowed ? '' : ' locked');
+    div.className = 'tile';
     div.innerHTML = `<div class="ic-wrap">${t.icon}</div><h3>${t.title}</h3><p>${t.desc}</p>`;
-    if (allowed) div.addEventListener('click', () => openTile(t.key, t.title));
+    div.addEventListener('click', () => openTile(t.key, t.title));
     grid.appendChild(div);
   });
 }
