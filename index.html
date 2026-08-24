@@ -312,6 +312,14 @@
         </div>
       </div>
 
+      <div id="weekly-admin-note-card" class="form-card hidden">
+        <h4>ملاحظة الإدارة لهذا الأسبوع</h4>
+        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">تظهر لولي الأمر فوق قائمة المواد مباشرة</p>
+        <textarea id="weekly-admin-note-text" placeholder="مثال: يوم الخميس القادم إجازة رسمية، أو تذكير باجتماع أولياء الأمور" rows="2"></textarea>
+        <div id="weekly-admin-note-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-bottom:10px;"></div>
+        <button id="weekly-admin-note-save" style="width:auto;">حفظ الملاحظة</button>
+      </div>
+
       <div id="weekly-form-card" class="form-card hidden">
         <h4>إضافة / تحديث خطة المادة لهذا الأسبوع</h4>
         <select id="weekly-subject"></select>
@@ -1600,6 +1608,7 @@ const isStaff = () => ['admin','deputy','teacher'].includes(currentProfile.role)
 
 async function loadWeeklyModule() {
   document.getElementById('weekly-form-card').classList.toggle('hidden', !isStaff());
+  document.getElementById('weekly-admin-note-card').classList.toggle('hidden', !isAdminOrDeputy());
   document.getElementById('week-label').textContent = 'الأسبوع ' + currentWeek;
 
   if (currentProfile.role === 'teacher') {
@@ -1614,12 +1623,38 @@ async function loadWeeklyModule() {
     subjectsCache.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; subSelect.appendChild(o); });
   }
 
+  if (isAdminOrDeputy()) await loadWeeklyAdminNote();
   await refreshWeeklyList();
 }
 
+async function loadWeeklyAdminNote() {
+  const grade = document.getElementById('weekly-grade').value;
+  const { data } = await sb.from('weekly_admin_notes').select('note').eq('grade_level', grade).eq('week_number', currentWeek).maybeSingle();
+  document.getElementById('weekly-admin-note-text').value = data ? data.note : '';
+  document.getElementById('weekly-admin-note-success').style.display = 'none';
+}
+
+document.getElementById('weekly-admin-note-save').addEventListener('click', async () => {
+  const grade = document.getElementById('weekly-grade').value;
+  const note = document.getElementById('weekly-admin-note-text').value.trim();
+  const successEl = document.getElementById('weekly-admin-note-success');
+
+  if (!note) {
+    await sb.from('weekly_admin_notes').delete().eq('grade_level', grade).eq('week_number', currentWeek);
+    successEl.textContent = 'تم حذف الملاحظة (الحقل فارغ).';
+  } else {
+    await sb.from('weekly_admin_notes').upsert(
+      { grade_level: grade, week_number: currentWeek, note, created_by: currentUserId },
+      { onConflict: 'grade_level,week_number' }
+    );
+    successEl.textContent = 'تم حفظ الملاحظة بنجاح.';
+  }
+  successEl.style.display = 'block';
+});
+
 document.getElementById('week-prev').addEventListener('click', () => { if (currentWeek > 1) { currentWeek--; loadWeeklyModule(); } });
 document.getElementById('week-next').addEventListener('click', () => { if (currentWeek < 40) { currentWeek++; loadWeeklyModule(); } });
-document.getElementById('weekly-grade').addEventListener('change', refreshWeeklyList);
+document.getElementById('weekly-grade').addEventListener('change', () => { refreshWeeklyList(); if (isAdminOrDeputy()) loadWeeklyAdminNote(); });
 
 document.getElementById('weekly-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('weekly-error');
