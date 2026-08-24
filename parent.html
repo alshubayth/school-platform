@@ -86,6 +86,14 @@
 
   .empty-state{ grid-column:1 / -1; text-align:center; padding:50px 20px; color:var(--slate); background:#fff; border-radius:var(--radius); border:1px solid #E7E5DD; }
   .empty-state svg{ color:#D8D5C8; margin-bottom:10px; }
+
+  .admin-note{
+    display:flex; align-items:flex-start; gap:12px; background:var(--gold-light,#FDEEE3); border:1px solid #F0C9A6;
+    border-radius:14px; padding:16px 18px; margin-bottom:16px;
+  }
+  .admin-note .ic{ color:#C56A2E; flex-shrink:0; margin-top:2px; }
+  .admin-note h4{ font-size:14px; color:#8A4A1F; margin-bottom:4px; }
+  .admin-note p{ font-size:13.5px; color:var(--ink); margin:0; line-height:1.7; }
 </style>
 </head>
 <body>
@@ -134,6 +142,7 @@
     <button id="week-next">التالي <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 18l6-6-6-6"/></svg></button>
   </div>
 
+  <div id="admin-note-container"></div>
   <div id="plans-container"></div>
 </div>
 
@@ -180,6 +189,20 @@ document.getElementById('week-next').addEventListener('click', () => { if (curre
 
 async function loadPlans() {
   document.getElementById('week-label').textContent = 'الأسبوع ' + currentWeek;
+
+  const { data: noteData } = await sb.from('weekly_admin_notes')
+    .select('note').eq('grade_level', currentGrade).eq('week_number', currentWeek).maybeSingle();
+
+  const noteContainer = document.getElementById('admin-note-container');
+  if (noteData && noteData.note) {
+    noteContainer.innerHTML = `
+      <div class="admin-note">
+        <svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+        <div><h4>ملاحظة من الإدارة</h4><p>${noteData.note}</p></div>
+      </div>`;
+  } else {
+    noteContainer.innerHTML = '';
+  }
 
   const { data: plans, error } = await sb.from('weekly_plans')
     .select('lesson, performance_tasks, homework, has_test, subjects(name)')
