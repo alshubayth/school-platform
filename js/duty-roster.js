@@ -1,7 +1,7 @@
-import { sb, currentUserId, roleLabels, isAdminOrDeputy, backToTiles } from './core.js';
+import { sb, currentUserId, roleLabels, isAdminOrDeputy, backToTiles, setupCollapsible } from './core.js';
 
 const dayLabels = { sunday: 'الأحد', monday: 'الاثنين', tuesday: 'الثلاثاء', wednesday: 'الأربعاء', thursday: 'الخميس' };
-const statusLabels = { present: 'حاضر', absent: 'غائب', late: 'متأخر' };
+const dayOrder = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
 
 let dutyTypesCache = [];
 let teachersCache = [];
@@ -21,6 +21,16 @@ function thisWeekSunday() {
   sunday.setDate(now.getDate() - now.getDay());
   return sunday.toISOString().slice(0, 10);
 }
+
+function formatDays(days) {
+  const sorted = [...days].sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b));
+  if (sorted.length === 5 && dayOrder.every(d => sorted.includes(d))) return 'طوال الأسبوع';
+  return sorted.map(d => dayLabels[d]).join('، ');
+}
+
+setupCollapsible('dt-toggle', 'dt-body', 'dt-chevron');
+setupCollapsible('fixed-toggle', 'fixed-body', 'fixed-chevron');
+setupCollapsible('weekly-toggle', 'weekly-body', 'weekly-chevron');
 
 export async function loadDutyRosterModule() {
   const [{ data: types }, { data: teachers }] = await Promise.all([
@@ -90,6 +100,89 @@ async function refreshDutyTypesList() {
   });
 }
 
+/* ---------- أداة مشتركة: تجميع الصفوف حسب المعلم + نوع المناوبة ---------- */
+function groupByTeacherAndType(rows) {
+  const groups = new Map();
+  rows.forEach(r => {
+    const key = r.teacher_profile_id + '_' + r.duty_type_id;
+    if (!groups.has(key)) {
+      groups.set(key, {
+        teacherId: r.teacher_profile_id,
+        dutyTypeId: r.duty_type_id,
+        teacherName: r.profiles ? r.profiles.full_name : '-',
+        dutyTypeName: r.duty_types ? r.duty_types.name : '',
+        days: [],
+        rowIds: {}, // day_of_week -> row id (للحذف الدقيق)
+      });
+    }
+    const g = groups.get(key);
+    g.days.push(r.day_of_week);
+    g.rowIds[r.day_of_week] = r.id;
+  });
+  return Array.from(groups.values());
+}
+
+function renderGroupedList(containerId, groups, kind, onChanged) {
+  const list = document.getElementById(containerId);
+  list.innerHTML = '';
+  if (groups.length === 0) {
+    list.innerHTML = `<div class="placeholder" style="padding:20px;"><p>${kind === 'fixed' ? 'لا يوجد مناوبون ثابتون بعد' : 'ما فيه مناوبون متغيرون مضافون لهذا الأسبوع بعد'}</p></div>`;
+    return;
+  }
+
+  groups.forEach(g => {
+    const row = document.createElement('div');
+    row.className = 'emp-row';
+    row.style.flexWrap = 'wrap';
+    row.innerHTML = `
+      <div><div class="name">${g.teacherName}</div>
+      <div class="title">${g.dutyTypeName} · ${formatDays(g.days)}</div></div>
+      <button class="edit-btn" style="width:auto;">تحرير</button>
+      <div class="edit-panel hidden" style="width:100%; margin-top:12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;"></div>`;
+
+    const editBtn = row.querySelector('.edit-btn');
+    const panel = row.querySelector('.edit-panel');
+
+    editBtn.addEventListener('click', () => {
+      const isHidden = panel.classList.contains('hidden');
+      if (isHidden) {
+        panel.innerHTML = dayOrder.map(d => `
+          <label style="display:flex; align-items:center; gap:5px; font-size:13px;">
+            <input type="checkbox" class="day-check" value="${d}" ${g.days.includes(d) ? 'checked' : ''} style="width:auto;" />
+            ${dayLabels[d]}
+          </label>`).join('') + `<button class="save-days-btn" style="width:auto; background:var(--meadow); color:#fff;">حفظ</button>`;
+
+        panel.querySelector('.save-days-btn').addEventListener('click', async () => {
+          const checked = Array.from(panel.querySelectorAll('.day-check:checked')).map(c => c.value);
+          await applyDaysChange(g, checked, kind);
+          await onChanged();
+        });
+      }
+      panel.classList.toggle('hidden');
+    });
+
+    list.appendChild(row);
+  });
+}
+
+async function applyDaysChange(group, newDays, kind) {
+  const toAdd = newDays.filter(d => !group.days.includes(d));
+  const toRemove = group.days.filter(d => !newDays.includes(d));
+
+  if (toRemove.length > 0) {
+    const idsToDelete = toRemove.map(d => group.rowIds[d]).filter(Boolean);
+    if (idsToDelete.length > 0) await sb.from('duty_roster').delete().in('id', idsToDelete);
+  }
+  if (toAdd.length > 0) {
+    const rows = toAdd.map(d => ({
+      teacher_profile_id: group.teacherId, duty_type_id: group.dutyTypeId, kind,
+      day_of_week: d, created_by: currentUserId,
+      week_start_date: kind === 'weekly' ? thisWeekSunday() : null,
+    }));
+    await sb.from('duty_roster').insert(rows);
+  }
+}
+
 /* ---------- المناوبون الثابتون ---------- */
 document.getElementById('fixed-add').addEventListener('click', async () => {
   const teacherId = document.getElementById('fixed-teacher').value;
@@ -103,7 +196,7 @@ document.getElementById('fixed-add').addEventListener('click', async () => {
     return;
   }
 
-  const daysToAdd = day === 'all_week' ? ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'] : [day];
+  const daysToAdd = day === 'all_week' ? dayOrder : [day];
   const rows = daysToAdd.map(d => ({
     teacher_profile_id: teacherId, duty_type_id: dutyTypeId, kind: 'fixed', day_of_week: d, created_by: currentUserId,
   }));
@@ -116,28 +209,10 @@ document.getElementById('fixed-add').addEventListener('click', async () => {
 
 async function refreshFixedList() {
   const { data } = await sb.from('duty_roster')
-    .select('id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name)')
+    .select('id, teacher_profile_id, duty_type_id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name)')
     .eq('kind', 'fixed');
-  const list = document.getElementById('fixed-list');
-  list.innerHTML = '';
-  if (!data || data.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>لا يوجد مناوبون ثابتون بعد</p></div>';
-    return;
-  }
-  data.forEach(r => {
-    const row = document.createElement('div');
-    row.className = 'emp-row';
-    row.innerHTML = `
-      <div><div class="name">${r.profiles ? r.profiles.full_name : '-'}</div>
-      <div class="title">${r.duty_types ? r.duty_types.name : ''} · ${dayLabels[r.day_of_week]}</div></div>
-      <button class="logout-icon" style="color:var(--danger);" data-id="${r.id}">حذف</button>`;
-    row.querySelector('button').addEventListener('click', async () => {
-      await sb.from('duty_roster').delete().eq('id', r.id);
-      await refreshFixedList();
-      await refreshTodayAttendance();
-    });
-    list.appendChild(row);
-  });
+  const groups = groupByTeacherAndType(data || []);
+  renderGroupedList('fixed-list', groups, 'fixed', async () => { await refreshFixedList(); await refreshTodayAttendance(); });
 }
 
 /* ---------- المناوبون المتغيرون (هذا الأسبوع) ---------- */
@@ -152,10 +227,12 @@ document.getElementById('weekly-add').addEventListener('click', async () => {
     errEl.style.display = 'block';
     return;
   }
-  const { error } = await sb.from('duty_roster').insert({
+  const daysToAdd = day === 'all_week' ? dayOrder : [day];
+  const rows = daysToAdd.map(d => ({
     teacher_profile_id: teacherId, duty_type_id: dutyTypeId, kind: 'weekly',
-    day_of_week: day, week_start_date: thisWeekSunday(), created_by: currentUserId,
-  });
+    day_of_week: d, week_start_date: thisWeekSunday(), created_by: currentUserId,
+  }));
+  const { error } = await sb.from('duty_roster').insert(rows);
   if (error) { errEl.textContent = 'تعذر الإضافة: ' + error.message; errEl.style.display = 'block'; return; }
   await refreshWeeklyList();
   await refreshTodayAttendance();
@@ -163,28 +240,10 @@ document.getElementById('weekly-add').addEventListener('click', async () => {
 
 async function refreshWeeklyList() {
   const { data } = await sb.from('duty_roster')
-    .select('id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name)')
+    .select('id, teacher_profile_id, duty_type_id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name)')
     .eq('kind', 'weekly').eq('week_start_date', thisWeekSunday());
-  const list = document.getElementById('weekly-list');
-  list.innerHTML = '';
-  if (!data || data.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه مناوبون متغيرون مضافون لهذا الأسبوع بعد</p></div>';
-    return;
-  }
-  data.forEach(r => {
-    const row = document.createElement('div');
-    row.className = 'emp-row';
-    row.innerHTML = `
-      <div><div class="name">${r.profiles ? r.profiles.full_name : '-'}</div>
-      <div class="title">${r.duty_types ? r.duty_types.name : ''} · ${dayLabels[r.day_of_week]}</div></div>
-      <button class="logout-icon" style="color:var(--danger);" data-id="${r.id}">حذف</button>`;
-    row.querySelector('button').addEventListener('click', async () => {
-      await sb.from('duty_roster').delete().eq('id', r.id);
-      await refreshWeeklyList();
-      await refreshTodayAttendance();
-    });
-    list.appendChild(row);
-  });
+  const groups = groupByTeacherAndType(data || []);
+  renderGroupedList('weekly-list', groups, 'weekly', async () => { await refreshWeeklyList(); await refreshTodayAttendance(); });
 }
 
 /* ---------- تسجيل حضور اليوم ---------- */
@@ -215,42 +274,68 @@ async function refreshTodayAttendance() {
     return;
   }
 
-  const { data: existingAttendance } = await sb.from('duty_attendance').select('teacher_profile_id, duty_type_id, status').eq('duty_date', dateStr);
-  const attendanceMap = new Map((existingAttendance || []).map(a => [a.teacher_profile_id + '_' + a.duty_type_id, a.status]));
+  const { data: existingAttendance } = await sb.from('duty_attendance').select('teacher_profile_id, duty_type_id, status, late_minutes').eq('duty_date', dateStr);
+  const attendanceMap = new Map((existingAttendance || []).map(a => [a.teacher_profile_id + '_' + a.duty_type_id, a]));
 
   container.innerHTML = '';
   entries.forEach(e => {
     const key = e.teacher_profile_id + '_' + e.duty_type_id;
-    const currentStatus = attendanceMap.get(key) || '';
+    const existing = attendanceMap.get(key);
+    const isAbsent = existing && existing.status === 'absent';
+    const isLate = existing && existing.status === 'late';
 
     const row = document.createElement('div');
     row.className = 'form-card';
     row.style.marginBottom = '10px';
     row.innerHTML = `
-      <p style="margin:0 0 10px;"><strong>${e.profiles ? e.profiles.full_name : '-'}</strong> — ${e.duty_types ? e.duty_types.name : ''}</p>
-      <select class="status-select">
-        <option value="">اختر الحالة</option>
-        <option value="present" ${currentStatus === 'present' ? 'selected' : ''}>حاضر</option>
-        <option value="absent" ${currentStatus === 'absent' ? 'selected' : ''}>غائب</option>
-        <option value="late" ${currentStatus === 'late' ? 'selected' : ''}>متأخر</option>
-      </select>
+      <p style="margin:0 0 10px;"><strong>${e.profiles ? e.profiles.full_name : '-'}</strong> — ${e.duty_types ? e.duty_types.name : ''}
+        ${existing ? `<span style="font-size:11.5px; background:${existing.status === 'present' ? 'var(--meadow-light)' : 'var(--danger-light)'}; color:${existing.status === 'present' ? 'var(--meadow)' : 'var(--danger)'}; padding:3px 10px; border-radius:20px; margin-right:8px;">${existing.status === 'present' ? 'حاضر' : existing.status === 'absent' ? 'غائب' : 'متأخر ' + (existing.late_minutes || 0) + ' د'}</span>` : ''}
+      </p>
+      <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:10px;">
+        <label style="display:flex; align-items:center; gap:6px; font-size:13.5px;">
+          <input type="checkbox" class="absent-check" style="width:auto;" ${isAbsent ? 'checked' : ''} /> غائب
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; font-size:13.5px;">
+          <input type="checkbox" class="late-check" style="width:auto;" ${isLate ? 'checked' : ''} /> متأخر
+        </label>
+        <span class="late-minutes-wrap" style="display:${isLate ? 'flex' : 'none'}; align-items:center; gap:6px;">
+          <input type="number" class="late-minutes-input" min="1" placeholder="كم دقيقة" value="${existing && existing.late_minutes ? existing.late_minutes : ''}" style="width:100px; padding:8px;" />
+        </span>
+      </div>
       <button class="save-status-btn" style="width:auto;">حفظ الحالة</button>`;
 
+    const absentCheck = row.querySelector('.absent-check');
+    const lateCheck = row.querySelector('.late-check');
+    const lateMinutesWrap = row.querySelector('.late-minutes-wrap');
+
+    absentCheck.addEventListener('change', () => { if (absentCheck.checked) { lateCheck.checked = false; lateMinutesWrap.style.display = 'none'; } });
+    lateCheck.addEventListener('change', () => {
+      if (lateCheck.checked) { absentCheck.checked = false; lateMinutesWrap.style.display = 'flex'; }
+      else { lateMinutesWrap.style.display = 'none'; }
+    });
+
     row.querySelector('.save-status-btn').addEventListener('click', async () => {
-      const status = row.querySelector('.status-select').value;
-      if (!status) { alert('اختر الحالة أولاً'); return; }
-      await saveDutyStatus(e.teacher_profile_id, e.duty_type_id, dateStr, status, e.profiles ? e.profiles.full_name : '', e.duty_types ? e.duty_types.name : '');
+      let status = 'present';
+      let lateMinutes = null;
+      if (absentCheck.checked) {
+        status = 'absent';
+      } else if (lateCheck.checked) {
+        status = 'late';
+        lateMinutes = parseInt(row.querySelector('.late-minutes-input').value) || null;
+        if (!lateMinutes) { alert('اكتب عدد دقائق التأخير'); return; }
+      }
+      await saveDutyStatus(e.teacher_profile_id, e.duty_type_id, dateStr, status, lateMinutes, e.duty_types ? e.duty_types.name : '');
       await refreshTodayAttendance();
     });
     container.appendChild(row);
   });
 }
 
-async function saveDutyStatus(teacherId, dutyTypeId, dateStr, status, teacherName, dutyTypeName) {
+async function saveDutyStatus(teacherId, dutyTypeId, dateStr, status, lateMinutes, dutyTypeName) {
   const { data: existing } = await sb.from('duty_attendance').select('id').eq('teacher_profile_id', teacherId).eq('duty_type_id', dutyTypeId).eq('duty_date', dateStr).maybeSingle();
 
   const { error } = await sb.from('duty_attendance').upsert({
-    teacher_profile_id: teacherId, duty_type_id: dutyTypeId, duty_date: dateStr, status, marked_by: currentUserId, marked_at: new Date().toISOString(),
+    teacher_profile_id: teacherId, duty_type_id: dutyTypeId, duty_date: dateStr, status, late_minutes: lateMinutes, marked_by: currentUserId, marked_at: new Date().toISOString(),
   }, { onConflict: 'teacher_profile_id,duty_type_id,duty_date' });
 
   if (error) { alert('تعذر الحفظ: ' + error.message); return; }
@@ -259,7 +344,7 @@ async function saveDutyStatus(teacherId, dutyTypeId, dateStr, status, teacherNam
   if (!existing && (status === 'absent' || status === 'late')) {
     const { data: emp } = await sb.from('employees').select('id').eq('profile_id', teacherId).maybeSingle();
     if (emp) {
-      const label = status === 'absent' ? 'غياب' : 'تأخر';
+      const label = status === 'absent' ? 'غياب' : `تأخر ${lateMinutes} دقيقة`;
       await sb.from('notes').insert({
         employee_id: emp.id,
         indicator_id: null,
