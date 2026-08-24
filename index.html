@@ -1720,7 +1720,7 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
 async function refreshWeeklyList() {
   const grade = document.getElementById('weekly-grade').value;
   const { data: plans } = await sb.from('weekly_plans')
-    .select('lesson, performance_tasks, homework, has_test, subjects(name)')
+    .select('id, lesson, performance_tasks, homework, has_test, subjects(name)')
     .eq('grade_level', grade).eq('week_number', currentWeek);
 
   const list = document.getElementById('weekly-list');
@@ -1737,10 +1737,19 @@ async function refreshWeeklyList() {
     card.style.marginBottom = '12px';
     const testBadge = p.has_test ? '<span style="font-size:11.5px; background:var(--danger-light); color:var(--danger); padding:3px 10px; border-radius:20px; font-weight:600; margin-right:8px;">يوجد اختبار</span>' : '';
     card.innerHTML = `
-      <h4 style="color:var(--meadow); margin-bottom:10px; display:flex; align-items:center;">${p.subjects ? p.subjects.name : ''}${testBadge}</h4>
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+        <h4 style="color:var(--meadow); margin:0; display:flex; align-items:center;">${p.subjects ? p.subjects.name : ''}${testBadge}</h4>
+        <button class="weekly-delete-btn" style="width:auto; background:var(--danger-light); color:var(--danger);" data-id="${p.id}">حذف</button>
+      </div>
       <p style="margin:0 0 6px;"><strong>الدرس:</strong> ${p.lesson || '-'}</p>
       <p style="margin:0 0 6px;"><strong>المهام الأدائية:</strong> ${p.performance_tasks || '-'}</p>
       <p style="margin:0;"><strong>الواجبات:</strong> ${p.homework || '-'}</p>`;
+    card.querySelector('.weekly-delete-btn').addEventListener('click', async () => {
+      if (!confirm(`متأكد تبي تحذف خطة "${p.subjects ? p.subjects.name : 'هذه المادة'}" لهذا الأسبوع؟`)) return;
+      const { error } = await sb.from('weekly_plans').delete().eq('id', p.id);
+      if (error) { alert('تعذر الحذف: ' + error.message); return; }
+      await refreshWeeklyList();
+    });
     list.appendChild(card);
   });
 }
