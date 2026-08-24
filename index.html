@@ -71,6 +71,7 @@
         <h2>الرئيسية</h2>
         <p>مرحبًا بك في لوحة تحكم مدرسة المروج</p>
       </div>
+      <div id="my-duty-banner"></div>
       <div class="tiles" id="tiles-grid"></div>
     </div>
 
@@ -360,6 +361,62 @@
 
       <div id="opplan-not-member" class="hidden">
         <div class="placeholder"><p>أنت لست مضافًا للخطة التشغيلية حاليًا. راجع المدير لإضافتك.</p></div>
+      </div>
+    </div>
+
+    <div id="duty-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-8">→ رجوع للرئيسية</span>
+      <div class="main-header" style="margin-bottom:20px;"><h2>المناوبات اليومية</h2><p>إدارة أنواع المناوبة، المناوبين، وتسجيل الحضور</p></div>
+
+      <div class="form-card">
+        <h4>أنواع المناوبة</h4>
+        <div class="form-row">
+          <input type="text" id="dt-name" placeholder="اسم نوع مناوبة جديد (مثال: مناوبة الطابور)" />
+          <button class="btn-primary" id="dt-add" style="width:auto; padding:11px 20px;">إضافة نوع</button>
+        </div>
+        <div id="dt-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;"></div>
+      </div>
+
+      <div class="form-card">
+        <h4>مناوبون ثابتون (تتكرر كل أسبوع تلقائيًا)</h4>
+        <div class="form-row">
+          <select id="fixed-teacher"></select>
+          <select id="fixed-duty-type"></select>
+        </div>
+        <select id="fixed-day">
+          <option value="sunday">الأحد</option>
+          <option value="monday">الاثنين</option>
+          <option value="tuesday">الثلاثاء</option>
+          <option value="wednesday">الأربعاء</option>
+          <option value="thursday">الخميس</option>
+        </select>
+        <div class="error-msg" id="fixed-error"></div>
+        <button class="btn-primary" id="fixed-add">إضافة مناوب ثابت</button>
+        <div id="fixed-list" style="margin-top:14px;"></div>
+      </div>
+
+      <div class="form-card">
+        <h4>مناوبون متغيرون لهذا الأسبوع</h4>
+        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">أسبوع يبدأ من: <strong id="week-sunday-label"></strong> (الأحد إلى الخميس)</p>
+        <div class="form-row">
+          <select id="weekly-teacher"></select>
+          <select id="weekly-duty-type"></select>
+        </div>
+        <select id="weekly-day">
+          <option value="sunday">الأحد</option>
+          <option value="monday">الاثنين</option>
+          <option value="tuesday">الثلاثاء</option>
+          <option value="wednesday">الأربعاء</option>
+          <option value="thursday">الخميس</option>
+        </select>
+        <div class="error-msg" id="weekly-error"></div>
+        <button class="btn-primary" id="weekly-add">إضافة مناوب هذا الأسبوع</button>
+        <div id="weekly-list" style="margin-top:14px;"></div>
+      </div>
+
+      <div class="form-card">
+        <h4>تسجيل الحضور — اليوم: <span id="today-date-label"></span></h4>
+        <div id="today-duty-list"></div>
       </div>
     </div>
 
