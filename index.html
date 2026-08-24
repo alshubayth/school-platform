@@ -216,8 +216,8 @@
       <p class="sub">أدخل بياناتك للمتابعة إلى لوحتك</p>
       <div class="error-msg" id="login-error"></div>
       <div class="field">
-        <label>البريد الإلكتروني</label>
-        <input type="email" id="login-email" placeholder="name@example.com" />
+        <label>البريد الإلكتروني أو الرقم الوظيفي</label>
+        <input type="text" id="login-email" placeholder="name@example.com أو 12345" />
       </div>
       <div class="field">
         <label>كلمة المرور</label>
@@ -354,7 +354,7 @@
           </select>
         </div>
         <div class="form-row">
-          <input type="email" id="newuser-email" placeholder="البريد الإلكتروني" style="margin-bottom:10px;" />
+          <input type="text" id="newuser-email" placeholder="البريد الإلكتروني أو الرقم الوظيفي" style="margin-bottom:10px;" />
           <input type="text" id="newuser-password" placeholder="كلمة مرور مبدئية" style="margin-bottom:10px;" />
         </div>
         <div class="error-msg" id="newuser-error"></div>
@@ -548,6 +548,13 @@ const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// يحوّل "رقم وظيفي" لإيميل داخلي وهمي (لو مافيه @، نعتبره رقم وظيفي)
+const STAFF_ID_DOMAIN = '@madrasa-almuruj.local';
+function toLoginEmail(value) {
+  const v = (value || '').trim();
+  return v.includes('@') ? v : v + STAFF_ID_DOMAIN;
+}
+
 let currentProfile = null;
 let currentUserId = null;
 const roleLabels = { admin: 'مدير', deputy: 'وكيل', teacher: 'معلم', parent: 'ولي أمر' };
@@ -572,16 +579,16 @@ const tiles = [
 ];
 
 document.getElementById('login-btn').addEventListener('click', async () => {
-  const email = document.getElementById('login-email').value.trim();
+  const rawInput = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
   errEl.style.display = 'none';
-  if (!email || !password) {
-    errEl.textContent = 'أدخل البريد الإلكتروني وكلمة المرور';
+  if (!rawInput || !password) {
+    errEl.textContent = 'أدخل البريد الإلكتروني أو الرقم الوظيفي وكلمة المرور';
     errEl.style.display = 'block';
     return;
   }
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
+  const { data, error } = await sb.auth.signInWithPassword({ email: toLoginEmail(rawInput), password });
   if (error) {
     errEl.textContent = 'بيانات الدخول غير صحيحة. حاول مرة أخرى';
     errEl.style.display = 'block';
@@ -766,9 +773,9 @@ setupCollapsible('portal-bulk-toggle', 'portal-bulk-body', 'portal-bulk-chevron'
 
 /* ---------- تنزيل نموذج إكسل لإنشاء حسابات متعددة ---------- */
 document.getElementById('portal-download-template').addEventListener('click', () => {
-  const headers = ['الاسم الكامل', 'البريد الإلكتروني', 'كلمة المرور', 'الدور'];
-  const example = ['محمد سالم العتيبي', 'mohammed.example@school.com', 'Passw0rd123', 'معلم'];
-  const note = ['الدور: اكتب بالضبط أحد هذه الخيارات → معلم / وكيل / مدير (افتراضيًا معلم لو تُرك فاضي)', '', '', ''];
+  const headers = ['الاسم الكامل', 'البريد الإلكتروني أو الرقم الوظيفي', 'كلمة المرور', 'الدور'];
+  const example = ['محمد سالم العتيبي', '10234 (أو mohammed.example@school.com)', 'Passw0rd123', 'معلم'];
+  const note = ['الدور: اكتب بالضبط أحد هذه الخيارات → معلم / وكيل / مدير (افتراضيًا معلم لو تُرك فاضي). العمود الثاني يقبل رقم وظيفي بدون @ أو إيميل حقيقي.', '', '', ''];
   const ws = XLSX.utils.aoa_to_sheet([headers, example, note]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'الموظفون');
@@ -809,7 +816,7 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
 
       for (const row of rows) {
         const full_name = (row['الاسم الكامل'] || '').toString().trim();
-        const email = (row['البريد الإلكتروني'] || '').toString().trim();
+        const email = (row['البريد الإلكتروني أو الرقم الوظيفي'] || row['البريد الإلكتروني'] || '').toString().trim();
         const password = (row['كلمة المرور'] || '').toString().trim();
         const roleText = (row['الدور'] || 'معلم').toString().trim();
         if (!full_name || !email) continue; // صف فارغ أو صف ملاحظات
@@ -826,7 +833,7 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
           const res = await fetch(`${SUPABASE_URL}/functions/v1/create-user`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-            body: JSON.stringify({ email, password, full_name, role }),
+            body: JSON.stringify({ email: toLoginEmail(email), password, full_name, role }),
           });
           const result = await res.json();
           if (!res.ok) { failedRows.push(`"${full_name}" — ${result.error || 'خطأ غير معروف'}`); continue; }
@@ -877,7 +884,7 @@ document.getElementById('portal-submit').addEventListener('click', async () => {
 });
 
 async function refreshPortalList() {
-  const { data: emps } = await sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role)');
+  const { data: emps } = await sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role, login_email)');
   const list = document.getElementById('portal-list');
   list.innerHTML = '';
 
@@ -892,8 +899,12 @@ async function refreshPortalList() {
     row.style.flexWrap = 'wrap';
 
     const linked = !!emp.profile_id;
+    const loginEmail = linked && emp.profiles ? emp.profiles.login_email : null;
+    const loginDisplay = loginEmail
+      ? (loginEmail.endsWith(STAFF_ID_DOMAIN) ? loginEmail.replace(STAFF_ID_DOMAIN, '') + ' (رقم وظيفي)' : loginEmail)
+      : null;
     const statusHtml = linked
-      ? `<span style="font-size:12px; background:var(--meadow-light); color:var(--meadow); padding:3px 10px; border-radius:20px;">مرتبط بحساب · ${roleLabels[emp.profiles ? emp.profiles.role : ''] || ''}</span>`
+      ? `<span style="font-size:12px; background:var(--meadow-light); color:var(--meadow); padding:3px 10px; border-radius:20px;">مرتبط بحساب · ${roleLabels[emp.profiles ? emp.profiles.role : ''] || ''}${loginDisplay ? ' · ' + loginDisplay : ''}</span>`
       : `<span style="font-size:12px; background:#F1EFE8; color:var(--slate); padding:3px 10px; border-radius:20px;">بدون حساب دخول (للتقييم فقط)</span>`;
 
     let linkFormHtml = '';
@@ -1009,7 +1020,7 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ email, password, full_name: name, role }),
+      body: JSON.stringify({ email: toLoginEmail(email), password, full_name: name, role }),
     });
     const result = await res.json();
 
