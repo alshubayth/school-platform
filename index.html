@@ -416,6 +416,19 @@
       <div id="portal-list"></div>
     </div>
 
+    <div id="weekly-tracking-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-7">→ رجوع للرئيسية</span>
+      <div class="main-header" style="margin-bottom:20px;"><h2>متابعة الخطة الأسبوعية</h2><p>المواد اللي لسا ما دخّل لها المعلمون خطة هذا الأسبوع</p></div>
+
+      <div class="week-nav" style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
+        <button id="wt-week-prev" style="width:auto; padding:8px 16px;">السابق</button>
+        <span id="wt-week-label" style="font-weight:700;">الأسبوع 1</span>
+        <button id="wt-week-next" style="width:auto; padding:8px 16px;">التالي</button>
+      </div>
+
+      <div id="wt-grades-container"></div>
+    </div>
+
     <div id="opplan-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-6">→ رجوع للرئيسية</span>
       <div class="main-header" style="margin-bottom:20px;"><h2>الخطة التشغيلية</h2><p id="opplan-subtitle"></p></div>
@@ -571,6 +584,7 @@ const icons = {
 
 const tiles = [
   { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'] },
+  { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy'] },
   { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'] },
   { key: 'notes',  icon: icons.notes,  title: 'متابعة أداء الموظفين', desc: 'ملاحظات ومؤشرات وتقييم',       roles: ['admin','deputy'] },
   { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'] },
@@ -663,6 +677,7 @@ function hideAllModules() {
   document.getElementById('tiles-view').classList.add('hidden');
   document.getElementById('notes-module').classList.add('hidden');
   document.getElementById('weekly-module').classList.add('hidden');
+  document.getElementById('weekly-tracking-module').classList.add('hidden');
   document.getElementById('perms-module').classList.add('hidden');
   document.getElementById('portal-module').classList.add('hidden');
   document.getElementById('opplan-module').classList.add('hidden');
@@ -677,6 +692,9 @@ function openTile(key, title) {
   } else if (key === 'weekly') {
     document.getElementById('weekly-module').classList.remove('hidden');
     loadWeeklyModule();
+  } else if (key === 'weekly-tracking') {
+    document.getElementById('weekly-tracking-module').classList.remove('hidden');
+    loadWeeklyTrackingModule();
   } else if (key === 'perms') {
     document.getElementById('perms-module').classList.remove('hidden');
     loadPermsModule();
@@ -700,6 +718,7 @@ document.getElementById('back-to-tiles-2').addEventListener('click', backToTiles
 document.getElementById('back-to-tiles-3').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-4').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-5').addEventListener('click', backToTiles);
+document.getElementById('back-to-tiles-7').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-6').addEventListener('click', backToTiles);
 
 let employeesCache = [];
@@ -770,6 +789,51 @@ async function refreshEvaluations() {
   document.getElementById('stat-emp-count').textContent = employeesCache.length;
   document.getElementById('stat-notes-count').textContent = totalNotes;
   document.getElementById('stat-top').textContent = best.score ? best.name.split(' ')[0] : '-';
+}
+
+/* ================= متابعة الخطة الأسبوعية ================= */
+let wtWeek = 1;
+
+async function loadWeeklyTrackingModule() {
+  document.getElementById('wt-week-label').textContent = 'الأسبوع ' + wtWeek;
+  await refreshWeeklyTracking();
+}
+
+document.getElementById('wt-week-prev').addEventListener('click', () => { if (wtWeek > 1) { wtWeek--; loadWeeklyTrackingModule(); } });
+document.getElementById('wt-week-next').addEventListener('click', () => { if (wtWeek < 40) { wtWeek++; loadWeeklyTrackingModule(); } });
+
+async function refreshWeeklyTracking() {
+  const container = document.getElementById('wt-grades-container');
+  container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
+
+  const [{ data: allSubjects }, { data: enteredPlans }] = await Promise.all([
+    sb.from('subjects').select('id, name').order('name'),
+    sb.from('weekly_plans').select('grade_level, subject_id').eq('week_number', wtWeek),
+  ]);
+
+  container.innerHTML = '';
+  const grades = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+
+  grades.forEach(grade => {
+    const enteredIds = new Set((enteredPlans || []).filter(p => p.grade_level === grade).map(p => p.subject_id));
+    const missing = (allSubjects || []).filter(s => !enteredIds.has(s.id));
+
+    const card = document.createElement('div');
+    card.className = 'form-card';
+    if (missing.length === 0) {
+      card.innerHTML = `
+        <h4 style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+          <span style="color:var(--meadow);">✓</span> ${gradeLabels[grade]}
+        </h4>
+        <p style="margin:0; font-size:13.5px; color:var(--meadow);">كل المواد مُدخلة لهذا الأسبوع 🎉</p>`;
+    } else {
+      const chips = missing.map(s => `<span style="display:inline-block; font-size:12.5px; background:var(--danger-light); color:var(--danger); padding:4px 12px; border-radius:20px; margin:0 4px 4px 0;">${s.name}</span>`).join('');
+      card.innerHTML = `
+        <h4 style="margin-bottom:10px;">${gradeLabels[grade]} <span style="font-size:12px; color:var(--slate); font-weight:400;">(${missing.length} مادة ناقصة من ${(allSubjects||[]).length})</span></h4>
+        <div>${chips}</div>`;
+    }
+    container.appendChild(card);
+  });
 }
 
 /* ================= بوابة الموظفين ================= */
