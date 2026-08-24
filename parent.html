@@ -884,7 +884,7 @@ document.getElementById('portal-submit').addEventListener('click', async () => {
 });
 
 async function refreshPortalList() {
-  const { data: emps } = await sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role)');
+  const { data: emps } = await sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role, login_email)');
   const list = document.getElementById('portal-list');
   list.innerHTML = '';
 
@@ -899,8 +899,12 @@ async function refreshPortalList() {
     row.style.flexWrap = 'wrap';
 
     const linked = !!emp.profile_id;
+    const loginEmail = linked && emp.profiles ? emp.profiles.login_email : null;
+    const loginDisplay = loginEmail
+      ? (loginEmail.endsWith(STAFF_ID_DOMAIN) ? loginEmail.replace(STAFF_ID_DOMAIN, '') + ' (رقم وظيفي)' : loginEmail)
+      : null;
     const statusHtml = linked
-      ? `<span style="font-size:12px; background:var(--meadow-light); color:var(--meadow); padding:3px 10px; border-radius:20px;">مرتبط بحساب · ${roleLabels[emp.profiles ? emp.profiles.role : ''] || ''}</span>`
+      ? `<span style="font-size:12px; background:var(--meadow-light); color:var(--meadow); padding:3px 10px; border-radius:20px;">مرتبط بحساب · ${roleLabels[emp.profiles ? emp.profiles.role : ''] || ''}${loginDisplay ? ' · ' + loginDisplay : ''}</span>`
       : `<span style="font-size:12px; background:#F1EFE8; color:var(--slate); padding:3px 10px; border-radius:20px;">بدون حساب دخول (للتقييم فقط)</span>`;
 
     let linkFormHtml = '';
