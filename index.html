@@ -387,6 +387,23 @@
         <button class="btn-primary" id="portal-submit">إضافة الموظف</button>
       </div>
 
+      <div class="form-card" id="portal-bulk-form">
+        <h4 id="portal-bulk-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+          <span>+ إنشاء حسابات دخول متعددة من ملف إكسل</span>
+          <svg id="portal-bulk-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+        </h4>
+        <div id="portal-bulk-body" class="hidden" style="margin-top:14px;">
+          <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج، عبّه ببيانات الموظفين (اسم، إيميل، كلمة مرور، دور)، وارفعه — يتم إنشاء كل حساب وربطه بجدول الموظفين تلقائيًا.</p>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+            <button id="portal-download-template" style="width:auto; background:var(--sand); color:var(--ink); border:1px solid #E4E2D9;">تنزيل نموذج فارغ</button>
+          </div>
+          <input type="file" id="portal-excel-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
+          <div class="error-msg" id="portal-excel-error"></div>
+          <div id="portal-excel-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:10px;"></div>
+          <button id="portal-excel-upload" style="width:auto;">رفع الملف وإنشاء الحسابات</button>
+        </div>
+      </div>
+
       <h4 style="margin-bottom:14px;">كل الموظفين</h4>
       <div id="portal-list"></div>
     </div>
@@ -733,8 +750,108 @@ const isAdminOrDeputy = () => ['admin','deputy'].includes(currentProfile.role);
 
 async function loadPortalModule() {
   document.getElementById('portal-add-form').classList.toggle('hidden', !isAdminOrDeputy());
+  document.getElementById('portal-bulk-form').classList.toggle('hidden', !isAdminOrDeputy());
   await refreshPortalList();
 }
+
+setupCollapsible('portal-bulk-toggle', 'portal-bulk-body', 'portal-bulk-chevron');
+
+/* ---------- تنزيل نموذج إكسل لإنشاء حسابات متعددة ---------- */
+document.getElementById('portal-download-template').addEventListener('click', () => {
+  const headers = ['الاسم الكامل', 'البريد الإلكتروني', 'كلمة المرور', 'الدور'];
+  const example = ['محمد سالم العتيبي', 'mohammed.example@school.com', 'Passw0rd123', 'معلم'];
+  const note = ['الدور: اكتب بالضبط أحد هذه الخيارات → معلم / وكيل / مدير (افتراضيًا معلم لو تُرك فاضي)', '', '', ''];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example, note]);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'الموظفون');
+  XLSX.writeFile(wb, 'نموذج_إنشاء_حسابات_الموظفين.xlsx');
+});
+
+/* ---------- رفع ملف إكسل لإنشاء حسابات متعددة ---------- */
+document.getElementById('portal-excel-upload').addEventListener('click', async () => {
+  const fileInput = document.getElementById('portal-excel-file');
+  const errEl = document.getElementById('portal-excel-error');
+  const successEl = document.getElementById('portal-excel-success');
+  errEl.style.display = 'none';
+  successEl.style.display = 'none';
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    errEl.textContent = 'اختر ملف إكسل أولاً';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const roleTextMap = { 'معلم': 'teacher', 'وكيل': 'deputy', 'مدير': 'admin' };
+  const uploadBtn = document.getElementById('portal-excel-upload');
+  const file = fileInput.files[0];
+  const reader = new FileReader();
+
+  reader.onload = async (e) => {
+    try {
+      const data = new Uint8Array(e.target.result);
+      const workbook = XLSX.read(data, { type: 'array' });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+      const { data: sessionData } = await sb.auth.getSession();
+      const accessToken = sessionData.session.access_token;
+
+      let created = 0;
+      const failedRows = [];
+
+      for (const row of rows) {
+        const full_name = (row['الاسم الكامل'] || '').toString().trim();
+        const email = (row['البريد الإلكتروني'] || '').toString().trim();
+        const password = (row['كلمة المرور'] || '').toString().trim();
+        const roleText = (row['الدور'] || 'معلم').toString().trim();
+        if (!full_name || !email) continue; // صف فارغ أو صف ملاحظات
+
+        if (!password || password.length < 6) {
+          failedRows.push(`"${full_name}" — كلمة المرور ناقصة أو أقل من 6 أحرف`);
+          continue;
+        }
+        const role = roleTextMap[roleText] || 'teacher';
+
+        uploadBtn.textContent = `جارٍ الإنشاء... (${created + failedRows.length + 1}/${rows.length})`;
+
+        try {
+          const res = await fetch(`${SUPABASE_URL}/functions/v1/create-user`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+            body: JSON.stringify({ email, password, full_name, role }),
+          });
+          const result = await res.json();
+          if (!res.ok) { failedRows.push(`"${full_name}" — ${result.error || 'خطأ غير معروف'}`); continue; }
+
+          if (['admin', 'deputy', 'teacher'].includes(role)) {
+            await sb.from('employees').insert({ full_name, job_title: roleLabels[role], profile_id: result.id });
+          }
+          created++;
+        } catch (err) {
+          failedRows.push(`"${full_name}" — تعذر الاتصال: ${err.message}`);
+        }
+      }
+
+      uploadBtn.textContent = 'رفع الملف وإنشاء الحسابات';
+
+      if (created > 0) {
+        successEl.textContent = `تم إنشاء ${created} حساب بنجاح.`;
+        successEl.style.display = 'block';
+      }
+      if (failedRows.length > 0) {
+        errEl.innerHTML = 'صفوف لم تُنشأ:<br>' + failedRows.join('<br>');
+        errEl.style.display = 'block';
+      }
+      fileInput.value = '';
+      await refreshPortalList();
+    } catch (err) {
+      uploadBtn.textContent = 'رفع الملف وإنشاء الحسابات';
+      errEl.textContent = 'تعذر قراءة الملف: ' + err.message;
+      errEl.style.display = 'block';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
 
 document.getElementById('portal-submit').addEventListener('click', async () => {
   const name = document.getElementById('portal-name').value.trim();
