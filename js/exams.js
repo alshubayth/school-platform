@@ -4,6 +4,7 @@ const SCHOOL_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABYkAAAI3CAYAA
 
 setupCollapsible('exam-import-toggle', 'exam-import-body', 'exam-import-chevron');
 setupCollapsible('exam-period-toggle', 'exam-period-body', 'exam-period-chevron');
+setupCollapsible('exam-locations-toggle', 'exam-locations-body', 'exam-locations-chevron');
 
 let currentPeriodId = null;
 let currentPeriodRow = null;
@@ -218,6 +219,16 @@ document.getElementById('exam-locations-save').addEventListener('click', async (
   const { error } = await sb.from('exam_committee_locations').upsert(rows, { onConflict: 'period_id,committee_number' });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
   successEl.style.display = 'block';
+
+  setTimeout(() => {
+    const body = document.getElementById('exam-locations-body');
+    const chevron = document.getElementById('exam-locations-chevron');
+    const toggle = document.getElementById('exam-locations-toggle');
+    body.classList.add('hidden');
+    chevron.style.transform = 'rotate(0deg)';
+    const label = toggle.querySelector('span');
+    label.textContent = label.textContent.replace(/^[+−]/, '+');
+  }, 900);
 });
 
 /* ---------- اللجنة الخاصة ---------- */
