@@ -410,9 +410,9 @@ function printCommittee(title, rows) {
     <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
     <style>
       @page{ size: A4; margin: 10mm; }
-      body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:13px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:12px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       table{ width:100%; border-collapse:collapse; margin-top:8px; }
-      th, td{ border:1px solid #333; padding:4px 6px; text-align:center; font-size:13px; }
+      th, td{ border:1px solid #333; padding:4px 6px; text-align:center; font-size:12px; }
       th{ background:#B3E5F2 !important; color:#E8763A !important; font-size:15px; font-weight:bold; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .name-cell{ text-align:right; }
       .grade-shade{ background:#E6E6E6 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
@@ -423,7 +423,7 @@ function printCommittee(title, rows) {
       col.sig{ width:22%; }
     </style></head><body>
     <div class="header">
-      <img src="${SCHOOL_LOGO}" style="width:180px;" />
+      <img id="print-logo" style="width:180px;" />
       <div class="meta">
         <p>رقم اللجنة: ${num}</p>
         <p>العام: ${year}</p>
@@ -443,7 +443,14 @@ function printCommittee(title, rows) {
     </div>
     </body></html>`);
   win.document.close();
-  win.print();
+  const logoEl = win.document.getElementById('print-logo');
+  if (logoEl) {
+    logoEl.onload = () => win.print();
+    logoEl.onerror = () => win.print();
+    logoEl.src = SCHOOL_LOGO;
+  } else {
+    win.print();
+  }
 }
 
 document.getElementById('back-to-tiles-9').addEventListener('click', backToTiles);
