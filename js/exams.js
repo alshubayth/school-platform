@@ -534,5 +534,90 @@ async function printAllCommittees() {
   openPrintWindow('كل كشوف المناداة', innerHtml);
 }
 
+/* ---------- كشوف الفصول (مقر كل طالب) ---------- */
+function classSheetInnerHtml(title, rows) {
+  const year = currentPeriodRow ? (currentPeriodRow.academic_year || '') : '';
+  const semester = currentPeriodRow ? (currentPeriodRow.semester || '') : '';
+  const tableRows = rows.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${r.national_id}</td>
+      <td class="name-cell">${r.full_name}</td>
+      <td>${r.seat_number}</td>
+      <td>${r.committee_label}</td>
+      <td>${r.location || '-'}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="print-page">
+    <div class="header">
+      <img class="print-logo" style="width:216px;" />
+      <div class="meta">
+        <p>العام: ${year}</p>
+        <p>الفصل الدراسي: ${semester}</p>
+      </div>
+    </div>
+    <h2>كشف مقاعد الاختبار — ${title}</h2>
+    <table>
+      <colgroup><col style="width:5%;"><col style="width:14%;"><col style="width:38%;"><col style="width:13%;"><col style="width:13%;"><col style="width:17%;"></colgroup>
+      <thead><tr><th>م</th><th>رقم الهوية</th><th>اسم الطالب</th><th>رقم الجلوس</th><th>رقم اللجنة</th><th>مقر اللجنة</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    </div>`;
+}
+
+async function printClassSheets() {
+  if (!currentPeriodId) return;
+
+  const [{ data: students }, { data: assignments }, { data: locations }] = await Promise.all([
+    sb.from('students').select('id, full_name, national_id, grade_level, class_section'),
+    sb.from('exam_committee_assignments').select('student_id, committee_number, seat_number, is_special').eq('period_id', currentPeriodId),
+    sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId),
+  ]);
+
+  if (!assignments || assignments.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+
+  const locationMap = {};
+  (locations || []).forEach(l => { locationMap[l.committee_number] = l.location; });
+
+  const assignMap = {};
+  assignments.forEach(a => { assignMap[a.student_id] = a; });
+
+  const classGroups = new Map();
+  (students || []).forEach(s => {
+    const a = assignMap[s.id];
+    if (!a) return;
+    const key = s.grade_level + '|' + s.class_section;
+    if (!classGroups.has(key)) classGroups.set(key, { grade_level: s.grade_level, class_section: s.class_section, rows: [] });
+    classGroups.get(key).rows.push({
+      full_name: s.full_name,
+      national_id: s.national_id,
+      seat_number: a.seat_number,
+      committee_label: a.is_special ? 'خاصة' : a.committee_number,
+      location: a.is_special ? '-' : (locationMap[a.committee_number] || '-'),
+    });
+  });
+
+  const gradeOrder = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+  const sortedKeys = Array.from(classGroups.keys()).sort((k1, k2) => {
+    const g1 = classGroups.get(k1), g2 = classGroups.get(k2);
+    const gi1 = gradeOrder.indexOf(g1.grade_level), gi2 = gradeOrder.indexOf(g2.grade_level);
+    if (gi1 !== gi2) return gi1 - gi2;
+    return (g1.class_section || 0) - (g2.class_section || 0);
+  });
+
+  let innerHtml = '';
+  sortedKeys.forEach(key => {
+    const group = classGroups.get(key);
+    group.rows.sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
+    const title = (gradeLabels[group.grade_level] || '') + ' ' + (group.class_section || '');
+    innerHtml += classSheetInnerHtml(title, group.rows);
+  });
+
+  if (!innerHtml) { alert('ما فيه بيانات كافية لبناء كشوف الفصول'); return; }
+  openPrintWindow('كشوف مقاعد الاختبار حسب الفصل', innerHtml);
+}
+
 document.getElementById('exam-print-all-btn').addEventListener('click', printAllCommittees);
+document.getElementById('exam-class-sheets-btn').addEventListener('click', printClassSheets);
 document.getElementById('back-to-tiles-9').addEventListener('click', backToTiles);
