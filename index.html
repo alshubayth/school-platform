@@ -75,9 +75,10 @@
       <div class="tiles" id="tiles-grid"></div>
     </div>
 
+    <div id="module-header" class="page-header hidden"></div>
+
     <div id="notes-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles">→ رجوع للرئيسية</span>
-      <div class="main-header" style="margin-bottom:20px;"><h2>متابعة أداء الموظفين</h2></div>
 
       <div class="stat-grid">
         <div class="stat-card"><div class="label">عدد الموظفين</div><div class="value" id="stat-emp-count">-</div></div>
@@ -115,7 +116,7 @@
 
     <div id="weekly-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-3">→ رجوع للرئيسية</span>
-      <div class="main-header" style="margin-bottom:20px;"><h2>الخطة الأسبوعية الدراسية</h2></div>
+
 
       <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:20px;">
         <select id="weekly-grade" style="max-width:220px; margin-bottom:0;">
@@ -158,7 +159,7 @@
 
     <div id="perms-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-4">→ رجوع للرئيسية</span>
-      <div class="main-header" style="margin-bottom:20px;"><h2>إدارة الصلاحيات</h2><p>أنشئ حسابات جديدة، وحدّد لكل معلم المادة والمرحلة اللي يقدر يدخلها</p></div>
+
 
       <div class="form-card">
         <h4>إنشاء حساب دخول جديد</h4>
@@ -201,7 +202,7 @@
 
     <div id="portal-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-5">→ رجوع للرئيسية</span>
-      <div class="main-header" style="margin-bottom:20px;"><h2>بوابة الموظفين</h2><p>كل موظفي المدرسة في مكان واحد</p></div>
+
 
       <div class="form-card" id="portal-add-form">
         <h4>إضافة موظف جديد</h4>
@@ -236,7 +237,7 @@
 
     <div id="weekly-tracking-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-7">→ رجوع للرئيسية</span>
-      <div class="main-header" style="margin-bottom:20px;"><h2>متابعة الخطة الأسبوعية</h2><p>المواد اللي لسا ما دخّل لها المعلمون خطة هذا الأسبوع</p></div>
+
 
       <div class="week-nav" style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
         <button id="wt-week-prev" style="width:auto; padding:8px 16px;">السابق</button>
@@ -249,7 +250,7 @@
 
     <div id="opplan-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-6">→ رجوع للرئيسية</span>
-      <div class="main-header" style="margin-bottom:20px;"><h2>الخطة التشغيلية</h2><p id="opplan-subtitle"></p></div>
+      <p id="opplan-subtitle" style="color:var(--slate); font-size:12.5px; margin:-10px 0 20px;"></p>
 
       <!-- ===== شاشة المدير ===== -->
       <div id="opplan-admin-view" class="hidden">
@@ -366,7 +367,7 @@
 
     <div id="duty-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-8">→ رجوع للرئيسية</span>
-      <div class="main-header" style="margin-bottom:20px;"><h2>المناوبات اليومية</h2><p>إدارة أنواع المناوبة، المناوبين، وتسجيل الحضور</p></div>
+
 
       <div class="form-card">
         <h4 id="dt-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
