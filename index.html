@@ -564,6 +564,58 @@
       </div>
     </div>
 
+    <div id="exam-tracking-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-10">→ رجوع للرئيسية</span>
+
+      <div class="form-card">
+        <h4>اختر فترة الاختبار</h4>
+        <select id="tracking-period-select"></select>
+      </div>
+
+      <div id="tracking-content" class="hidden">
+        <div class="form-card" style="background:var(--sand);">
+          <h4>فرق الاختبار (لكل الفترة)</h4>
+          <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">فريق الكنترول وفريق التدقيق يغطيان كل مواد هذه الفترة</p>
+          <div class="form-row">
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">فريق الكنترول</label>
+              <div id="exam-kontrol-list" style="max-height:180px; overflow-y:auto; background:#fff; border-radius:10px; padding:8px;"></div>
+            </div>
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">فريق التدقيق</label>
+              <div id="exam-tadqeeq-list" style="max-height:180px; overflow-y:auto; background:#fff; border-radius:10px; padding:8px;"></div>
+            </div>
+          </div>
+          <button class="btn-primary" id="exam-teams-save" style="width:auto; padding:10px 18px; margin-top:8px;">حفظ الفرق</button>
+          <div id="exam-teams-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-top:10px;">تم حفظ الفرق بنجاح.</div>
+        </div>
+
+        <div class="form-card" style="background:var(--sand);">
+          <h4>إضافة مادة ومسؤول</h4>
+          <div class="form-row">
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">المرحلة</label>
+              <select id="exam-track-grade">
+                <option value="first_intermediate">أول متوسط</option>
+                <option value="second_intermediate">ثاني متوسط</option>
+                <option value="third_intermediate">ثالث متوسط</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">المادة</label>
+              <select id="exam-track-subject"></select>
+            </div>
+          </div>
+          <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">المعلم المسؤول (يصدّر الأسئلة ويطبعها ويفتح المظاريف ويصحح المقالي)</label>
+          <select id="exam-track-teacher"></select>
+          <div class="error-msg" id="exam-track-add-error"></div>
+          <button class="btn-primary" id="exam-track-add-btn" style="width:auto; padding:10px 18px; margin-top:8px;">إضافة</button>
+        </div>
+
+        <div id="exam-tracking-list"></div>
+      </div>
+    </div>
+
     <div id="placeholder-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-2">→ رجوع للرئيسية</span>
       <div class="placeholder">
