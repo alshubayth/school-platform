@@ -313,7 +313,8 @@ async function refreshResults() {
   const { data } = await sb.from('exam_committee_assignments')
     .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
     .eq('period_id', currentPeriodId)
-    .order('committee_number', { ascending: true });
+    .order('committee_number', { ascending: true })
+    .order('seat_number', { ascending: true });
 
   if (!data || data.length === 0) {
     container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما تم توليد أي توزيع لهذه الفترة بعد</p></div>';
