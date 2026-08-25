@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>لوحة متابعة الاختبارات - مدرسة المروج</title>
+<meta name="theme-color" content="#0F2447">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --ink:#16233A;
+    --navy:#1D3F73; --navy-dark:#0F2447;
+    --teal:#1D8FA6; --teal-light:#E4F4F7;
+    --gold:#C9A227; --gold-light:#FBF3DA;
+    --green:#379969; --green-light:#E7F5EE;
+    --danger:#C0392B; --danger-light:#FBEAE8;
+    --sand:#F6F7F5; --slate:#667085; --white:#FFFFFF;
+  }
+  *{box-sizing:border-box;}
+  html,body{ height:100%; }
+  body{ font-family:'IBM Plex Sans Arabic', sans-serif; margin:0; color:var(--ink); background:var(--sand); }
+  h1,h2,h3,h4{ font-family:'Tajawal', sans-serif; margin:0; }
+
+  .top-bar{
+    background: linear-gradient(120deg, var(--navy-dark) 0%, var(--navy) 55%, var(--teal) 100%);
+    padding:20px 28px; display:flex; align-items:center; justify-content:space-between; color:#fff;
+  }
+  .top-bar h1{ font-size:24px; }
+  .top-bar .meta{ font-size:14px; opacity:0.85; }
+  #period-select{ font-family:inherit; font-size:14px; padding:8px 14px; border-radius:10px; border:none; }
+
+  #grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:18px; padding:24px 28px; }
+
+  .card{ background:#fff; border-radius:18px; padding:18px 20px; box-shadow:0 2px 10px rgba(15,36,71,0.06); border:1px solid #ECEAE1; }
+  .card .head{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .card h3{ font-size:18px; }
+  .card .grade{ font-size:12.5px; color:var(--slate); margin-top:2px; }
+
+  .progress-wrap{ background:#EEEEEE; border-radius:20px; height:12px; overflow:hidden; margin:10px 0 6px; }
+  .progress-bar{ height:100%; border-radius:20px; transition:width 0.4s ease; }
+
+  .pct-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .pct{ font-size:26px; font-weight:800; font-family:'Tajawal', sans-serif; }
+
+  .stage-label{ font-size:13.5px; color:var(--ink); background:var(--teal-light); color:var(--teal); display:inline-block; padding:4px 12px; border-radius:20px; font-weight:600; }
+  .stage-label.done{ background:var(--green-light); color:var(--green); }
+
+  .absence-badge{ font-size:13px; font-weight:700; padding:4px 12px; border-radius:20px; }
+  .absence-badge.has{ background:var(--danger-light); color:var(--danger); }
+  .absence-badge.none{ background:var(--sand); color:var(--slate); }
+
+  .footer-row{ display:flex; align-items:center; justify-content:space-between; margin-top:12px; }
+
+  .placeholder{ text-align:center; padding:60px 20px; color:var(--slate); font-size:16px; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div>
+    <h1>لوحة متابعة الاختبارات</h1>
+    <div class="meta" id="last-update">آخر تحديث: --</div>
+  </div>
+  <select id="period-select"></select>
+</div>
+
+<div id="grid"><div class="placeholder">جارٍ التحميل...</div></div>
+
+<script type="module">
+const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const gradeLabels = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
+const STAGE_LABELS = {
+  1: 'تصدير الأسئلة', 2: 'طباعة وتغليف الأسئلة', 3: 'تسليم المظاريف', 4: 'استلام الأوراق (الكنترول)',
+  5: 'فتح المظاريف', 6: 'جاري الاختبار', 7: 'انتهاء الاختبار', 8: 'تصحيح المقالي',
+  9: 'استلام أوراق التصحيح', 10: 'التصحيح الآلي', 11: 'المراجعة والتدقيق', 12: 'إغلاق المادة',
+};
+
+let selectedPeriodId = null;
+
+async function loadPeriods() {
+  const { data } = await sb.from('exam_periods').select('id, name').order('created_at', { ascending: false });
+  const select = document.getElementById('period-select');
+  const prevValue = select.value;
+  select.innerHTML = '';
+  (data || []).forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; select.appendChild(o); });
+  if (prevValue && (data || []).some(p => p.id === prevValue)) select.value = prevValue;
+  selectedPeriodId = select.value || null;
+}
+
+function computeEffectiveCount(logs) {
+  const s5 = logs.find(l => l.stage_number === 5);
+  const virtualActive = !!(s5 && (Date.now() - new Date(s5.completed_at).getTime()) >= 25 * 60 * 1000);
+  return logs.length + (virtualActive ? 1 : 0);
+}
+
+function currentStageInfo(logs) {
+  const highest = logs.reduce((m, l) => Math.max(m, l.stage_number), 0);
+  const s5 = logs.find(l => l.stage_number === 5);
+  const virtualActive = !!(s5 && (Date.now() - new Date(s5.completed_at).getTime()) >= 25 * 60 * 1000);
+
+  if (highest === 12) return { label: 'مكتملة ✅', done: true };
+  if (highest === 5 && virtualActive) return { label: 'جاري الاختبار الآن', done: false };
+  const next = highest + 1;
+  return { label: STAGE_LABELS[next] || '-', done: false };
+}
+
+function progressColor(pct) {
+  if (pct >= 100) return 'var(--green)';
+  if (pct >= 50) return 'var(--teal)';
+  return 'var(--gold)';
+}
+
+async function refreshDashboard() {
+  if (!selectedPeriodId) return;
+
+  const { data: assignments } = await sb.from('exam_subject_assignments')
+    .select('id, grade_level, subjects(name)').eq('period_id', selectedPeriodId).order('created_at', { ascending: true });
+
+  const grid = document.getElementById('grid');
+  if (!assignments || assignments.length === 0) {
+    grid.innerHTML = '<div class="placeholder">ما فيه مواد مضافة لهذه الفترة بعد</div>';
+    return;
+  }
+
+  const assignmentIds = assignments.map(a => a.id);
+  const [{ data: allLogs }, { data: allAbsences }] = await Promise.all([
+    sb.from('exam_stage_log').select('assignment_id, stage_number, completed_at').in('assignment_id', assignmentIds),
+    sb.from('exam_student_absences').select('assignment_id').in('assignment_id', assignmentIds),
+  ]);
+
+  const logsByAssignment = {};
+  (allLogs || []).forEach(l => { (logsByAssignment[l.assignment_id] ||= []).push(l); });
+  const absenceCountByAssignment = {};
+  (allAbsences || []).forEach(a => { absenceCountByAssignment[a.assignment_id] = (absenceCountByAssignment[a.assignment_id] || 0) + 1; });
+
+  grid.innerHTML = '';
+  assignments.forEach(a => {
+    const logs = logsByAssignment[a.id] || [];
+    const effectiveCount = computeEffectiveCount(logs);
+    const pct = Math.round((effectiveCount / 12) * 100);
+    const stageInfo = currentStageInfo(logs);
+    const absenceCount = absenceCountByAssignment[a.id] || 0;
+
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.innerHTML = `
+      <div class="head">
+        <div>
+          <h3>${a.subjects ? a.subjects.name : ''}</h3>
+          <div class="grade">${gradeLabels[a.grade_level] || ''}</div>
+        </div>
+        <div class="pct" style="color:${progressColor(pct)};">${pct}%</div>
+      </div>
+      <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%; background:${progressColor(pct)};"></div></div>
+      <div class="footer-row">
+        <span class="stage-label ${stageInfo.done ? 'done' : ''}">${stageInfo.label}</span>
+        <span class="absence-badge ${absenceCount > 0 ? 'has' : 'none'}">${absenceCount > 0 ? absenceCount + ' غائب' : 'لا يوجد غياب'}</span>
+      </div>`;
+    grid.appendChild(card);
+  });
+
+  document.getElementById('last-update').textContent = 'آخر تحديث: ' + new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+document.getElementById('period-select').addEventListener('change', (e) => {
+  selectedPeriodId = e.target.value;
+  refreshDashboard();
+});
+
+async function init() {
+  await loadPeriods();
+  await refreshDashboard();
+  setInterval(async () => {
+    await loadPeriods();
+    await refreshDashboard();
+  }, 20000);
+}
+init();
+</script>
+</body>
+</html>
