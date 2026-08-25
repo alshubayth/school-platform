@@ -54,13 +54,21 @@ document.getElementById('exam-import-btn').addEventListener('click', async () =>
         allRows = allRows.concat(rows);
       });
 
-      let headerIdx = -1, colMap = {};
+      let headerIdx = -1, colIdx = {};
       for (let i = 0; i < allRows.length; i++) {
         const row = allRows[i];
-        const idx = row.findIndex(c => String(c).trim() === 'اسم الطالب');
+        const idx = row.findIndex(c => String(c).includes('اسم') && String(c).includes('طالب'));
         if (idx !== -1) {
           headerIdx = i;
-          row.forEach((cell, ci) => { colMap[String(cell).trim()] = ci; });
+          row.forEach((cell, ci) => {
+            const c = String(cell).trim();
+            if (!c) return;
+            if (c.includes('اسم') && c.includes('طالب')) colIdx.name = ci;
+            else if (c.includes('هوية') || (c.includes('رقم') && c.includes('طالب'))) colIdx.nationalId = ci;
+            else if (c.includes('فصل')) colIdx.classSection = ci;
+            else if (c.includes('صف')) colIdx.grade = ci;
+            else if (c.includes('جوال') || c.includes('هاتف') || c.includes('موبايل')) colIdx.mobile = ci;
+          });
           break;
         }
       }
@@ -73,11 +81,11 @@ document.getElementById('exam-import-btn').addEventListener('click', async () =>
       const students = [];
       for (let i = headerIdx + 1; i < allRows.length; i++) {
         const row = allRows[i];
-        const name = row[colMap['اسم الطالب']];
-        const nationalId = row[colMap['رقم الطالب']];
-        const classSection = row[colMap['الفصل']];
-        const gradeRaw = row[colMap['رقم الصف']];
-        const mobile = row[colMap['الجوال']];
+        const name = row[colIdx.name];
+        const nationalId = row[colIdx.nationalId];
+        const classSection = row[colIdx.classSection];
+        const gradeRaw = row[colIdx.grade];
+        const mobile = row[colIdx.mobile];
         if (!name || !nationalId) continue;
         const grade = normalizeGrade(gradeRaw);
         if (!grade) continue;
