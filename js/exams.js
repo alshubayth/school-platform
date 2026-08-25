@@ -410,12 +410,12 @@ function printCommittee(title, rows) {
     <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
     <style>
       @page{ size: A4; margin: 10mm; }
-      body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:11px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:13px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       table{ width:100%; border-collapse:collapse; margin-top:8px; }
-      th, td{ border:1px solid #333; padding:3px 6px; text-align:center; font-size:11px; }
-      th{ background:#4FC3E8 !important; color:#E8763A !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      th, td{ border:1px solid #333; padding:4px 6px; text-align:center; font-size:13px; }
+      th{ background:#B3E5F2 !important; color:#E8763A !important; font-size:15px; font-weight:bold; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .name-cell{ text-align:right; }
-      .grade-shade{ background:#BEE3F2 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+      .grade-shade{ background:#E6E6E6 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       h2{ text-align:center; margin:6px 0 3px; font-size:16px; }
       .header{ display:flex; justify-content:space-between; align-items:center; }
       .meta p{ margin:2px 0; font-size:12px; font-weight:bold; text-align:right; }
@@ -433,7 +433,7 @@ function printCommittee(title, rows) {
     </div>
     <h2>كشف مناداة لجنة رقم ${num}</h2>
     <table>
-      <colgroup><col style="width:5%;"><col style="width:16%;"><col style="width:32%;"><col style="width:12%;"><col style="width:12%;"><col class="sig"></colgroup>
+      <colgroup><col style="width:4%;"><col style="width:10%;"><col style="width:42%;"><col style="width:10%;"><col style="width:8%;"><col class="sig"></colgroup>
       <thead><tr><th>م</th><th>رقم الهوية</th><th>اسم الطالب</th><th>الصف</th><th>رقم الجلوس</th><th>التوقيع</th></tr></thead>
       <tbody>${tableRows}</tbody>
     </table>
