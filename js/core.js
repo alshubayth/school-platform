@@ -5,6 +5,7 @@ import { loadOpPlanModule } from './operational-plan.js';
 import { loadWeeklyModule } from './weekly-plan.js';
 import { loadDutyRosterModule, renderMyDutyBanner } from './duty-roster.js';
 import { renderDashboard } from './dashboard.js';
+import { loadExamsModule } from './exams.js';
 
 export const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
@@ -47,6 +48,7 @@ const icons = {
   more: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>',
   weekly: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="M8 14h3M13 14h3M8 17.5h3"/></svg>',
   duty: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  exams: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>',
 };
 
 export const tiles = [
@@ -57,6 +59,7 @@ export const tiles = [
   { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'], color: 'diamond-purple' },
   { key: 'perms',  icon: icons.perms,  title: 'إدارة الصلاحيات',     desc: 'إضافة مستخدمين وأدوار',        roles: ['admin'], color: 'diamond-navy' },
   { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy'], color: 'diamond-navy' },
+  { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold' },
 ];
 
@@ -139,6 +142,7 @@ export function hideAllModules() {
   document.getElementById('portal-module').classList.add('hidden');
   document.getElementById('opplan-module').classList.add('hidden');
   document.getElementById('duty-module').classList.add('hidden');
+  document.getElementById('exams-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -174,6 +178,9 @@ export function openTile(key, title) {
   } else if (key === 'duty') {
     document.getElementById('duty-module').classList.remove('hidden');
     loadDutyRosterModule();
+  } else if (key === 'exams') {
+    document.getElementById('exams-module').classList.remove('hidden');
+    loadExamsModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
