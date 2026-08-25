@@ -395,7 +395,6 @@ function printCommittee(title, rows) {
       <td class="name-cell">${r.students ? r.students.full_name : ''}</td>
       <td>${r.students ? (gradeLabels[r.students.grade_level] || '') : ''}</td>
       <td>${r.seat_number}</td>
-      <td>لجنة${num}</td>
       <td></td>
     </tr>`).join('');
 
@@ -403,15 +402,17 @@ function printCommittee(title, rows) {
   win.document.write(`
     <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
     <style>
-      body{ font-family: Arial, sans-serif; padding:24px; }
-      table{ width:100%; border-collapse:collapse; margin-top:16px; }
-      th, td{ border:1px solid #333; padding:6px 8px; text-align:center; font-size:13px; }
+      @page{ size: A4; margin: 10mm; }
+      body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:11px; }
+      table{ width:100%; border-collapse:collapse; margin-top:8px; }
+      th, td{ border:1px solid #333; padding:3px 6px; text-align:center; font-size:11px; }
       th{ background:#eee; }
       .name-cell{ text-align:right; }
-      h2{ text-align:center; margin:10px 0 4px; }
+      h2{ text-align:center; margin:6px 0 3px; font-size:16px; }
       .header{ display:flex; justify-content:space-between; align-items:flex-start; }
-      .meta p{ margin:2px 0; font-size:13px; }
-      .footer{ display:flex; justify-content:space-between; margin-top:40px; font-size:13px; }
+      .meta p{ margin:1px 0; font-size:11px; }
+      .footer{ display:flex; justify-content:space-between; margin-top:18px; font-size:11px; }
+      col.sig{ width:22%; }
     </style></head><body>
     <div class="header">
       <div class="meta">
@@ -420,11 +421,14 @@ function printCommittee(title, rows) {
         <p>الفصل الدراسي: ${semester}</p>
         <p>المادة: ........................</p>
       </div>
-      ${logoSrc ? `<img src="${logoSrc}" style="width:140px;" />` : ''}
+      ${logoSrc ? `<img src="${logoSrc}" style="width:100px;" />` : ''}
     </div>
     <h2>كشف مناداة لجنة رقم ${num}</h2>
-    <table><thead><tr><th>م</th><th>رقم الهوية</th><th>اسم الطالب</th><th>الصف</th><th>رقم الجلوس</th><th>اللجنة</th><th>التوقيع</th></tr></thead>
-    <tbody>${tableRows}</tbody></table>
+    <table>
+      <colgroup><col style="width:5%;"><col style="width:16%;"><col style="width:32%;"><col style="width:12%;"><col style="width:12%;"><col class="sig"></colgroup>
+      <thead><tr><th>م</th><th>رقم الهوية</th><th>اسم الطالب</th><th>الصف</th><th>رقم الجلوس</th><th>التوقيع</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
     <div class="footer">
       <span>مراقب اللجان : ____________________</span>
       <span>الملاحظ: ____________________</span>
