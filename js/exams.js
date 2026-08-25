@@ -491,8 +491,7 @@ const PRINT_STYLES = `
   .print-page:last-child{ page-break-after: auto; }
 `;
 
-function openPrintWindow(title, innerHtml) {
-  const win = window.open('', '_blank');
+function openPrintWindow(win, title, innerHtml) {
   win.document.write(`
     <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
     <style>${PRINT_STYLES}</style></head><body>${innerHtml}</body></html>`);
@@ -507,18 +506,19 @@ function openPrintWindow(title, innerHtml) {
 function printCommittee(title, rows) {
   const num = committeeLabelFromTitle(title);
   const inner = committeeInnerHtml(num, rows);
-  openPrintWindow(title, inner);
+  const win = window.open('', '_blank');
+  openPrintWindow(win, title, inner);
 }
 
-async function printAllCommittees() {
-  if (!currentPeriodId) return;
+async function printAllCommittees(win) {
+  if (!currentPeriodId) { win.close(); return; }
   const { data } = await sb.from('exam_committee_assignments')
     .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
     .eq('period_id', currentPeriodId)
     .order('committee_number', { ascending: true })
     .order('seat_number', { ascending: true });
 
-  if (!data || data.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!data || data.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
 
   const committees = new Map();
   const special = [];
@@ -531,7 +531,7 @@ async function printAllCommittees() {
   const sortedNumbers = Array.from(committees.keys()).sort((a, b) => a - b);
   let innerHtml = sortedNumbers.map(num => committeeInnerHtml(num, committees.get(num))).join('');
   if (special.length > 0) innerHtml += committeeInnerHtml('خاصة', special);
-  openPrintWindow('كل كشوف المناداة', innerHtml);
+  openPrintWindow(win, 'كل كشوف المناداة', innerHtml);
 }
 
 /* ---------- كشوف الفصول (مقر كل طالب) ---------- */
@@ -566,8 +566,8 @@ function classSheetInnerHtml(title, rows) {
     </div>`;
 }
 
-async function printClassSheets() {
-  if (!currentPeriodId) return;
+async function printClassSheets(win) {
+  if (!currentPeriodId) { win.close(); return; }
 
   const [{ data: students }, { data: assignments }, { data: locations }] = await Promise.all([
     sb.from('students').select('id, full_name, national_id, grade_level, class_section'),
@@ -575,7 +575,7 @@ async function printClassSheets() {
     sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId),
   ]);
 
-  if (!assignments || assignments.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
 
   const locationMap = {};
   (locations || []).forEach(l => { locationMap[l.committee_number] = l.location; });
@@ -614,10 +614,16 @@ async function printClassSheets() {
     innerHtml += classSheetInnerHtml(title, group.rows);
   });
 
-  if (!innerHtml) { alert('ما فيه بيانات كافية لبناء كشوف الفصول'); return; }
-  openPrintWindow('كشوف مقاعد الاختبار حسب الفصل', innerHtml);
+  if (!innerHtml) { win.close(); alert('ما فيه بيانات كافية لبناء كشوف الفصول'); return; }
+  openPrintWindow(win, 'كشوف مقاعد الاختبار حسب الفصل', innerHtml);
 }
 
-document.getElementById('exam-print-all-btn').addEventListener('click', printAllCommittees);
-document.getElementById('exam-class-sheets-btn').addEventListener('click', printClassSheets);
+document.getElementById('exam-print-all-btn').addEventListener('click', () => {
+  const win = window.open('', '_blank');
+  printAllCommittees(win);
+});
+document.getElementById('exam-class-sheets-btn').addEventListener('click', () => {
+  const win = window.open('', '_blank');
+  printClassSheets(win);
+});
 document.getElementById('back-to-tiles-9').addEventListener('click', backToTiles);
