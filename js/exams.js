@@ -883,9 +883,8 @@ document.getElementById('exam-messages-export-btn').addEventListener('click', as
 
   if (!assignments || assignments.length === 0) { errEl.textContent = 'ما فيه توزيع مولّد لهذه الفترة بعد'; errEl.style.display = 'block'; return; }
 
-  const studentIds = assignments.map(a => a.student_id);
   const [{ data: students }, { data: locations }] = await Promise.all([
-    sb.from('students').select('id, full_name, grade_level, mobile').in('id', studentIds),
+    sb.from('students').select('id, full_name, grade_level, mobile'),
     sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId),
   ]);
 
