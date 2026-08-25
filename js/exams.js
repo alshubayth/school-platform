@@ -110,6 +110,8 @@ document.getElementById('exam-import-btn').addEventListener('click', async () =>
 /* ---------- فترات الاختبار ---------- */
 document.getElementById('exam-period-add').addEventListener('click', async () => {
   const name = document.getElementById('exam-period-name').value.trim();
+  const academicYear = document.getElementById('exam-academic-year').value.trim();
+  const semester = document.getElementById('exam-semester').value;
   const committeeCount = parseInt(document.getElementById('exam-committee-count').value);
   const seatFirst = parseInt(document.getElementById('exam-seat-first').value) || 1;
   const seatSecond = parseInt(document.getElementById('exam-seat-second').value) || 1;
@@ -125,13 +127,15 @@ document.getElementById('exam-period-add').addEventListener('click', async () =>
   }
 
   const { error } = await sb.from('exam_periods').insert({
-    name, committee_count: committeeCount,
+    name, academic_year: academicYear || null, semester,
+    committee_count: committeeCount,
     seat_start_first: seatFirst, seat_start_second: seatSecond, seat_start_third: seatThird,
     special_seat_start: specialSeatStart, created_by: currentUserId,
   });
   if (error) { errEl.textContent = 'تعذر الإنشاء: ' + error.message; errEl.style.display = 'block'; return; }
 
   document.getElementById('exam-period-name').value = '';
+  document.getElementById('exam-academic-year').value = '';
   document.getElementById('exam-committee-count').value = '';
   await refreshPeriodsList();
 });
@@ -372,14 +376,26 @@ function buildCommitteeCard(title, rows) {
   return card;
 }
 
+function committeeLabelFromTitle(title) {
+  const match = title.match(/\d+/);
+  return match ? match[0] : 'خاصة';
+}
+
 function printCommittee(title, rows) {
+  const num = committeeLabelFromTitle(title);
+  const year = currentPeriodRow ? (currentPeriodRow.academic_year || '') : '';
+  const semester = currentPeriodRow ? (currentPeriodRow.semester || '') : '';
+  const logoImg = document.querySelector('.sidebar .brand img');
+  const logoSrc = logoImg ? logoImg.getAttribute('src') : '';
+
   const tableRows = rows.map((r, i) => `
     <tr>
       <td>${i + 1}</td>
       <td>${r.students ? r.students.national_id : ''}</td>
-      <td>${r.students ? r.students.full_name : ''}</td>
+      <td class="name-cell">${r.students ? r.students.full_name : ''}</td>
       <td>${r.students ? (gradeLabels[r.students.grade_level] || '') : ''}</td>
       <td>${r.seat_number}</td>
+      <td>لجنة${num}</td>
       <td></td>
     </tr>`).join('');
 
@@ -387,15 +403,32 @@ function printCommittee(title, rows) {
   win.document.write(`
     <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
     <style>
-      body{ font-family: Arial, sans-serif; padding:20px; }
-      table{ width:100%; border-collapse:collapse; }
+      body{ font-family: Arial, sans-serif; padding:24px; }
+      table{ width:100%; border-collapse:collapse; margin-top:16px; }
       th, td{ border:1px solid #333; padding:6px 8px; text-align:center; font-size:13px; }
       th{ background:#eee; }
-      h2{ text-align:center; }
+      .name-cell{ text-align:right; }
+      h2{ text-align:center; margin:10px 0 4px; }
+      .header{ display:flex; justify-content:space-between; align-items:flex-start; }
+      .meta p{ margin:2px 0; font-size:13px; }
+      .footer{ display:flex; justify-content:space-between; margin-top:40px; font-size:13px; }
     </style></head><body>
-    <h2>كشف مناداة ${title}</h2>
-    <table><thead><tr><th>م</th><th>رقم الهوية</th><th>اسم الطالب</th><th>الصف</th><th>رقم الجلوس</th><th>التوقيع</th></tr></thead>
+    <div class="header">
+      <div class="meta">
+        <p>رقم اللجنة: ${num}</p>
+        <p>العام: ${year}</p>
+        <p>الفصل الدراسي: ${semester}</p>
+        <p>المادة: ........................</p>
+      </div>
+      ${logoSrc ? `<img src="${logoSrc}" style="width:140px;" />` : ''}
+    </div>
+    <h2>كشف مناداة لجنة رقم ${num}</h2>
+    <table><thead><tr><th>م</th><th>رقم الهوية</th><th>اسم الطالب</th><th>الصف</th><th>رقم الجلوس</th><th>اللجنة</th><th>التوقيع</th></tr></thead>
     <tbody>${tableRows}</tbody></table>
+    <div class="footer">
+      <span>مراقب اللجان : ____________________</span>
+      <span>الملاحظ: ____________________</span>
+    </div>
     </body></html>`);
   win.document.close();
   win.print();
