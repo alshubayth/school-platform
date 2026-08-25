@@ -61,7 +61,7 @@ async function refreshEvaluations() {
     const row = document.createElement('div');
     row.className = 'emp-row';
     row.innerHTML = `
-      <div><div class="name">${e.full_name}</div><div class="title">${e.job_title || ''} · ${e.total_notes || 0} ملاحظة</div></div>
+      <div class="info"><div class="name">${e.full_name}</div><div class="title">${e.job_title || ''} · ${e.total_notes || 0} ملاحظة</div></div>
       <div class="ring-wrap">${ringSVG(e.final_score)}<span class="ring-score">${e.final_score ?? '-'}</span></div>`;
     list.appendChild(row);
   });
