@@ -178,7 +178,47 @@ async function selectPeriod(period) {
   document.getElementById('exam-special-search-results').innerHTML = '';
   await refreshSpecialList();
   await refreshResults();
+  await refreshCommitteeLocations();
 }
+
+/* ---------- مقرات اللجان ---------- */
+async function refreshCommitteeLocations() {
+  const container = document.getElementById('exam-locations-list');
+  container.innerHTML = '';
+  if (!currentPeriodId || !currentPeriodRow) return;
+
+  const { data } = await sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId);
+  const existing = {};
+  (data || []).forEach(row => { existing[row.committee_number] = row.location || ''; });
+
+  for (let i = 1; i <= currentPeriodRow.committee_count; i++) {
+    const row = document.createElement('div');
+    row.className = 'form-row';
+    row.style.alignItems = 'center';
+    row.innerHTML = `
+      <label style="min-width:90px; font-size:13.5px; color:var(--ink); font-weight:600;">لجنة رقم ${i}</label>
+      <input type="text" class="exam-location-input" data-committee="${i}" placeholder="مثال: الفصل 101" value="${existing[i] || ''}" />`;
+    container.appendChild(row);
+  }
+}
+
+document.getElementById('exam-locations-save').addEventListener('click', async () => {
+  const errEl = document.getElementById('exam-locations-error');
+  const successEl = document.getElementById('exam-locations-success');
+  errEl.style.display = 'none';
+  successEl.style.display = 'none';
+  if (!currentPeriodId) return;
+
+  const rows = Array.from(document.querySelectorAll('.exam-location-input')).map(input => ({
+    period_id: currentPeriodId,
+    committee_number: parseInt(input.dataset.committee),
+    location: input.value.trim(),
+  }));
+
+  const { error } = await sb.from('exam_committee_locations').upsert(rows, { onConflict: 'period_id,committee_number' });
+  if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
+  successEl.style.display = 'block';
+});
 
 /* ---------- اللجنة الخاصة ---------- */
 document.getElementById('exam-special-search-btn').addEventListener('click', async () => {
