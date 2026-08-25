@@ -182,7 +182,7 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
   if (!q || !currentPeriodId) return;
 
   const { data } = await sb.from('students').select('id, full_name, national_id, grade_level')
-    .or(`full_name.ilike.%${q}%,national_id.ilike.%${q}%`).limit(10);
+    .or(`full_name.ilike.%${q}%,national_id.ilike.%${q}%`).order('full_name').limit(15);
 
   if (!data || data.length === 0) {
     resultsEl.innerHTML = '<div class="placeholder" style="padding:14px;"><p>ما فيه نتائج</p></div>';
