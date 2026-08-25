@@ -410,12 +410,12 @@ function printCommittee(title, rows) {
     <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
     <style>
       @page{ size: A4; margin: 10mm; }
-      body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:11px; }
+      body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:11px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       table{ width:100%; border-collapse:collapse; margin-top:8px; }
       th, td{ border:1px solid #333; padding:3px 6px; text-align:center; font-size:11px; }
-      th{ background:#eee; }
+      th{ background:#4FC3E8 !important; color:#E8763A !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .name-cell{ text-align:right; }
-      .grade-shade{ background:#eef1f5; }
+      .grade-shade{ background:#BEE3F2 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       h2{ text-align:center; margin:6px 0 3px; font-size:16px; }
       .header{ display:flex; justify-content:space-between; align-items:center; }
       .meta p{ margin:2px 0; font-size:12px; font-weight:bold; text-align:right; }
