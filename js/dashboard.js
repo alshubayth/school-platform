@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles } from './core.js';
 
 function todayInfo() {
   const now = new Date();
@@ -23,22 +23,18 @@ function statCard(label, value, color) {
   </div>`;
 }
 
-function attentionItem(iconColorClass, iconSvg, text, onClick) {
+function attentionItem(sectionKey, text) {
+  const t = tiles.find(x => x.key === sectionKey);
   const div = document.createElement('div');
   div.className = 'emp-row';
   div.style.cursor = 'pointer';
   div.innerHTML = `
-    <div class="ic-diamond ${iconColorClass}" style="width:32px; height:32px; border-radius:7px;">${iconSvg}</div>
+    <div class="ic-diamond ${t ? t.color : 'diamond-navy'}" style="width:34px; height:34px; border-radius:8px;">${t ? t.icon : ''}</div>
     <div class="info" style="font-size:13px; color:var(--ink);">${text}</div>
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--slate)" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>`;
-  div.addEventListener('click', onClick);
+  div.addEventListener('click', () => openTile(sectionKey));
   return div;
 }
-
-const icDanger = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="transform:rotate(-45deg)"><path d="M12 9v4M12 17h.01M10.3 3.9 2.5 18a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>';
-const icGold = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="transform:rotate(-45deg)"><path d="M9 11l3 3 8-8"/><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h9"/></svg>';
-const icPurple = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="transform:rotate(-45deg)"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M21 21v-2a4 4 0 0 0-3-3.85"/></svg>';
-const icNavy = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="transform:rotate(-45deg)"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 
 export async function renderDashboard() {
   const container = document.getElementById('dashboard-content');
@@ -113,19 +109,19 @@ async function renderAdminDashboard(container) {
 
   if (missingCount > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('diamond-navy', icDanger, `${missingCount} مادة لسا ما دخّل لها المعلمون خطة هذا الأسبوع`, () => openTile('weekly-tracking')));
+    attentionList.appendChild(attentionItem('weekly-tracking', `${missingCount} مادة لسا ما دخّل لها المعلمون خطة هذا الأسبوع`));
   }
   if (pendingApprovals > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('diamond-gold', icGold, `${pendingApprovals} مهام/إنجازات بالخطة التشغيلية بانتظار اعتمادك`, () => openTile('plan')));
+    attentionList.appendChild(attentionItem('plan', `${pendingApprovals} مهام/إنجازات بالخطة التشغيلية بانتظار اعتمادك`));
   }
   if (unlinkedCount > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('diamond-purple', icPurple, `${unlinkedCount} موظف بدون حساب دخول مربوط`, () => openTile('portal')));
+    attentionList.appendChild(attentionItem('portal', `${unlinkedCount} موظف بدون حساب دخول مربوط`));
   }
   if (dutyMissingCount > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('diamond-navy', icNavy, `${dutyMissingCount} من مناوبي اليوم لسا ما سجّلت حضورهم`, () => openTile('duty')));
+    attentionList.appendChild(attentionItem('duty', `${dutyMissingCount} من مناوبي اليوم لسا ما سجّلت حضورهم`));
   }
   if (!anyAttention) {
     attentionList.innerHTML = '<div class="placeholder" style="padding:20px;"><p>كل شي محدّث، ما فيه شي يحتاج انتباهك حاليًا 🎉</p></div>';
@@ -152,18 +148,19 @@ async function renderTeacherDashboard(container) {
   if (missingAssignments.length > 0) {
     any = true;
     const names = missingAssignments.map(a => a.subjects ? a.subjects.name : '').filter(Boolean).join('، ');
-    list.appendChild(attentionItem('diamond-navy', icDanger, `لسا ما سلّمت خطة هذا الأسبوع لـ: ${names}`, () => openTile('weekly')));
+    list.appendChild(attentionItem('weekly', `لسا ما سلّمت خطة هذا الأسبوع لـ: ${names}`));
   } else if ((assignments || []).length > 0) {
     any = true;
+    const t = tiles.find(x => x.key === 'weekly');
     const okDiv = document.createElement('div');
     okDiv.className = 'emp-row';
-    okDiv.innerHTML = `<div class="ic-diamond diamond-teal" style="width:32px; height:32px; border-radius:7px;">${icGold}</div><div class="info" style="font-size:13px; color:var(--ink);">خطتك الأسبوعية مسلّمة لكل موادك 🎉</div>`;
+    okDiv.innerHTML = `<div class="ic-diamond ${t ? t.color : 'diamond-teal'}" style="width:34px; height:34px; border-radius:8px;">${t ? t.icon : ''}</div><div class="info" style="font-size:13px; color:var(--ink);">خطتك الأسبوعية مسلّمة لكل موادك 🎉</div>`;
     list.appendChild(okDiv);
   }
 
   if (opPlanPendingCount > 0) {
     any = true;
-    list.appendChild(attentionItem('diamond-gold', icGold, `${opPlanPendingCount} مهمة أضفتها بالخطة التشغيلية بانتظار اعتماد المدير`, () => openTile('plan')));
+    list.appendChild(attentionItem('plan', `${opPlanPendingCount} مهمة أضفتها بالخطة التشغيلية بانتظار اعتماد المدير`));
   }
 
   if (!any) {
