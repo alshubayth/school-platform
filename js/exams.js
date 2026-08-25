@@ -7,6 +7,36 @@ setupCollapsible('exam-period-toggle', 'exam-period-body', 'exam-period-chevron'
 setupCollapsible('exam-locations-toggle', 'exam-locations-body', 'exam-locations-chevron');
 setupCollapsible('exam-messages-toggle', 'exam-messages-body', 'exam-messages-chevron');
 
+/* إدراج المتغيرات بالسحب أو بالضغط */
+function insertAtCursor(textarea, text) {
+  const start = textarea.selectionStart != null ? textarea.selectionStart : textarea.value.length;
+  const end = textarea.selectionEnd != null ? textarea.selectionEnd : textarea.value.length;
+  textarea.value = textarea.value.slice(0, start) + text + textarea.value.slice(end);
+  const newPos = start + text.length;
+  textarea.focus();
+  textarea.setSelectionRange(newPos, newPos);
+}
+
+document.querySelectorAll('.exam-var-chip').forEach(chip => {
+  chip.addEventListener('dragstart', (e) => {
+    e.dataTransfer.setData('text/plain', chip.dataset.var);
+    e.dataTransfer.effectAllowed = 'copy';
+  });
+  chip.addEventListener('click', () => {
+    const textarea = document.getElementById('exam-message-template');
+    insertAtCursor(textarea, chip.dataset.var);
+  });
+});
+
+const messageTemplateEl = document.getElementById('exam-message-template');
+messageTemplateEl.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+messageTemplateEl.addEventListener('drop', (e) => {
+  e.preventDefault();
+  const varText = e.dataTransfer.getData('text/plain');
+  if (!varText) return;
+  insertAtCursor(messageTemplateEl, varText);
+});
+
 let currentPeriodId = null;
 let currentPeriodRow = null;
 
