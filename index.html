@@ -547,8 +547,14 @@
             <svg id="exam-messages-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
           </h4>
           <div id="exam-messages-body" class="hidden" style="margin-top:14px;">
-            <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">اكتب نص الرسالة، واستخدم أي من هذي المتغيرات وبتنستبدل تلقائيًا لكل طالب:</p>
-            <p style="font-size:12px; color:var(--meadow); margin:0 0 10px; direction:ltr; text-align:right;">#الاسم_الاول &nbsp; #اللجنة &nbsp; #الصف &nbsp; #رقم_الجلوس &nbsp; #المقر</p>
+            <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">اسحب أي متغير للصندوق (أو اضغط عليه) وبينحط بمكان المؤشر، وبيتم استبداله تلقائيًا لكل طالب:</p>
+            <div id="exam-var-chips" style="display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px;">
+              <span class="exam-var-chip" draggable="true" data-var="#الاسم_الاول">#الاسم_الاول</span>
+              <span class="exam-var-chip" draggable="true" data-var="#اللجنة">#اللجنة</span>
+              <span class="exam-var-chip" draggable="true" data-var="#الصف">#الصف</span>
+              <span class="exam-var-chip" draggable="true" data-var="#رقم_الجلوس">#رقم_الجلوس</span>
+              <span class="exam-var-chip" draggable="true" data-var="#المقر">#المقر</span>
+            </div>
             <textarea id="exam-message-template" rows="5" placeholder="مثال: عزيزي ولي أمر الطالب #الاسم_الاول، لجنة اختبار ابنكم هي #اللجنة بمقر #المقر، رقم الجلوس #رقم_الجلوس، الصف #الصف."></textarea>
             <button class="btn-primary" id="exam-messages-export-btn" style="width:auto; padding:11px 20px;">تصدير الرسائل (إكسل)</button>
             <div class="error-msg" id="exam-messages-error"></div>
