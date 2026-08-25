@@ -131,13 +131,15 @@ function renderGroupedList(containerId, groups, kind, onChanged) {
   }
 
   groups.forEach(g => {
+    const initials = (g.teacherName || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join('');
     const row = document.createElement('div');
     row.className = 'emp-row';
     row.style.flexWrap = 'wrap';
     row.innerHTML = `
-      <div><div class="name">${g.teacherName}</div>
+      <div class="avatar-circle">${initials}</div>
+      <div class="info"><div class="name">${g.teacherName}</div>
       <div class="title">${g.dutyTypeName} · ${formatDays(g.days)}</div></div>
-      <button class="edit-btn" style="width:auto;">تحرير</button>
+      <button class="edit-btn text-action-btn">تحرير</button>
       <div class="edit-panel hidden" style="width:100%; margin-top:12px; display:flex; flex-wrap:wrap; gap:10px; align-items:center;"></div>`;
 
     const editBtn = row.querySelector('.edit-btn');
@@ -289,7 +291,7 @@ async function refreshTodayAttendance() {
     row.style.marginBottom = '10px';
     row.innerHTML = `
       <p style="margin:0 0 10px;"><strong>${e.profiles ? e.profiles.full_name : '-'}</strong> — ${e.duty_types ? e.duty_types.name : ''}
-        ${existing ? `<span style="font-size:11.5px; background:${existing.status === 'present' ? 'var(--meadow-light)' : 'var(--danger-light)'}; color:${existing.status === 'present' ? 'var(--meadow)' : 'var(--danger)'}; padding:3px 10px; border-radius:20px; margin-right:8px;">${existing.status === 'present' ? 'حاضر' : existing.status === 'absent' ? 'غائب' : 'متأخر ' + (existing.late_minutes || 0) + ' د'}</span>` : ''}
+        ${existing ? `<span class="badge ${existing.status === 'present' ? 'badge-meadow' : existing.status === 'late' ? 'badge-gold' : 'badge-danger'}" style="margin-right:8px;">${existing.status === 'present' ? 'حاضر' : existing.status === 'absent' ? 'غائب' : 'متأخر ' + (existing.late_minutes || 0) + ' د'}</span>` : ''}
       </p>
       <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:10px;">
         <label style="display:flex; align-items:center; gap:6px; font-size:13.5px;">
