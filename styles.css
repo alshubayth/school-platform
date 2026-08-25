@@ -122,7 +122,7 @@
     display:flex; align-items:center; justify-content:center; margin-bottom:14px;
     transform:rotate(45deg);
   }
-  .tile .ic-wrap svg{ transform:rotate(-45deg); }
+  .tile .ic-wrap svg{ width:18px; height:18px; transform:rotate(-45deg); }
   .tile:nth-of-type(4n+1) .ic-wrap{ background:var(--teal); }
   .tile:nth-of-type(4n+2) .ic-wrap{ background:var(--gold); }
   .tile:nth-of-type(4n+3) .ic-wrap{ background:var(--purple); }
@@ -136,7 +136,7 @@
     width:36px; height:36px; border-radius:8px; transform:rotate(45deg);
     display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#fff;
   }
-  .ic-diamond svg{ transform:rotate(-45deg); }
+  .ic-diamond svg{ width:16px; height:16px; transform:rotate(-45deg); }
   .page-header h2{ font-size:18px; margin:0; }
   .page-header p{ color:var(--slate); font-size:12.5px; margin:2px 0 0; }
   .diamond-teal{ background:var(--teal); }
