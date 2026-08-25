@@ -388,15 +388,18 @@ function printCommittee(title, rows) {
   const logoImg = document.querySelector('.sidebar .brand img');
   const logoSrc = logoImg ? logoImg.getAttribute('src') : '';
 
-  const tableRows = rows.map((r, i) => `
-    <tr>
+  const tableRows = rows.map((r, i) => {
+    const gradeClass = r.students && r.students.grade_level === 'second_intermediate' ? ' class="grade-shade"' : '';
+    return `
+    <tr${gradeClass}>
       <td>${i + 1}</td>
       <td>${r.students ? r.students.national_id : ''}</td>
       <td class="name-cell">${r.students ? r.students.full_name : ''}</td>
       <td>${r.students ? (gradeLabels[r.students.grade_level] || '') : ''}</td>
       <td>${r.seat_number}</td>
       <td></td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
 
   const win = window.open('', '_blank');
   win.document.write(`
@@ -408,20 +411,21 @@ function printCommittee(title, rows) {
       th, td{ border:1px solid #333; padding:3px 6px; text-align:center; font-size:11px; }
       th{ background:#eee; }
       .name-cell{ text-align:right; }
+      .grade-shade{ background:#eef1f5; }
       h2{ text-align:center; margin:6px 0 3px; font-size:16px; }
-      .header{ display:flex; justify-content:space-between; align-items:flex-start; }
-      .meta p{ margin:1px 0; font-size:11px; }
-      .footer{ display:flex; justify-content:space-between; margin-top:18px; font-size:11px; }
+      .header{ display:flex; justify-content:space-between; align-items:center; }
+      .meta p{ margin:2px 0; font-size:12px; font-weight:bold; text-align:left; }
+      .footer{ display:flex; justify-content:space-between; margin-top:18px; font-size:15px; font-weight:bold; }
       col.sig{ width:22%; }
     </style></head><body>
     <div class="header">
+      ${logoSrc ? `<img src="${logoSrc}" style="width:180px;" />` : '<span></span>'}
       <div class="meta">
         <p>رقم اللجنة: ${num}</p>
         <p>العام: ${year}</p>
         <p>الفصل الدراسي: ${semester}</p>
         <p>المادة: ........................</p>
       </div>
-      ${logoSrc ? `<img src="${logoSrc}" style="width:100px;" />` : ''}
     </div>
     <h2>كشف مناداة لجنة رقم ${num}</h2>
     <table>
