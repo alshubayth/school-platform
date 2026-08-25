@@ -49,14 +49,14 @@ const icons = {
 };
 
 const tiles = [
-  { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'] },
-  { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy'] },
-  { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'] },
-  { key: 'notes',  icon: icons.notes,  title: 'متابعة أداء الموظفين', desc: 'ملاحظات ومؤشرات وتقييم',       roles: ['admin','deputy'] },
-  { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'] },
-  { key: 'perms',  icon: icons.perms,  title: 'إدارة الصلاحيات',     desc: 'إضافة مستخدمين وأدوار',        roles: ['admin'] },
-  { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy'] },
-  { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'] },
+  { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal' },
+  { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy'], color: 'diamond-navy' },
+  { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'], color: 'diamond-gold' },
+  { key: 'notes',  icon: icons.notes,  title: 'متابعة أداء الموظفين', desc: 'ملاحظات ومؤشرات وتقييم',       roles: ['admin','deputy'], color: 'diamond-purple' },
+  { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'], color: 'diamond-purple' },
+  { key: 'perms',  icon: icons.perms,  title: 'إدارة الصلاحيات',     desc: 'إضافة مستخدمين وأدوار',        roles: ['admin'], color: 'diamond-navy' },
+  { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy'], color: 'diamond-navy' },
+  { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold' },
 ];
 
 document.getElementById('login-btn').addEventListener('click', async () => {
@@ -153,8 +153,17 @@ export function hideAllModules() {
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
+function renderModuleHeader(key) {
+  const header = document.getElementById('module-header');
+  const t = tiles.find(x => x.key === key);
+  if (!t) { header.classList.add('hidden'); return; }
+  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div><h2>${t.title}</h2><p>${t.desc}</p></div>`;
+  header.classList.remove('hidden');
+}
+
 export function openTile(key, title) {
   hideAllModules();
+  renderModuleHeader(key);
   if (key === 'notes') {
     document.getElementById('notes-module').classList.remove('hidden');
     loadNotesModule();
@@ -183,6 +192,7 @@ export function openTile(key, title) {
 }
 export function backToTiles() {
   hideAllModules();
+  document.getElementById('module-header').classList.add('hidden');
   document.getElementById('tiles-view').classList.remove('hidden');
 }
 document.getElementById('back-to-tiles').addEventListener('click', backToTiles);
