@@ -4,6 +4,7 @@ import { loadPortalModule, loadPermsModule } from './employees-admin.js';
 import { loadOpPlanModule } from './operational-plan.js';
 import { loadWeeklyModule } from './weekly-plan.js';
 import { loadDutyRosterModule, renderMyDutyBanner } from './duty-roster.js';
+import { renderDashboard } from './dashboard.js';
 
 export const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
@@ -48,7 +49,7 @@ const icons = {
   duty: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 };
 
-const tiles = [
+export const tiles = [
   { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal' },
   { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy'], color: 'diamond-navy' },
   { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'], color: 'diamond-gold' },
@@ -99,7 +100,7 @@ export async function loadProfileAndShowDashboard(userId) {
   document.getElementById('user-role-badge').textContent = roleLabels[profile.role] || profile.role;
   document.getElementById('user-avatar').textContent = (profile.full_name || '؟').trim().charAt(0);
   renderNav();
-  renderTiles();
+  renderDashboard();
   renderMyDutyBanner();
 }
 
@@ -128,18 +129,6 @@ export function renderNav(){
 }
 export function setActiveNav(el){ document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active')); el.classList.add('active'); }
 
-export function renderTiles() {
-  const grid = document.getElementById('tiles-grid');
-  grid.innerHTML = '';
-  tiles.forEach(t => {
-    if (!isTileAllowed(t)) return;
-    const div = document.createElement('div');
-    div.className = 'tile';
-    div.innerHTML = `<div class="ic-wrap">${t.icon}</div><h3>${t.title}</h3><p>${t.desc}</p>`;
-    div.addEventListener('click', () => openTile(t.key, t.title));
-    grid.appendChild(div);
-  });
-}
 
 export function hideAllModules() {
   document.getElementById('tiles-view').classList.add('hidden');
@@ -194,6 +183,8 @@ export function backToTiles() {
   hideAllModules();
   document.getElementById('module-header').classList.add('hidden');
   document.getElementById('tiles-view').classList.remove('hidden');
+  renderDashboard();
+  renderMyDutyBanner();
 }
 document.getElementById('back-to-tiles').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-2').addEventListener('click', backToTiles);
