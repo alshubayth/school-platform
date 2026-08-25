@@ -383,15 +383,9 @@ function committeeLabelFromTitle(title) {
   return match ? match[0] : 'خاصة';
 }
 
-function printCommittee(title, rows) {
-  const num = committeeLabelFromTitle(title);
-  const defaultYear = currentPeriodRow ? (currentPeriodRow.academic_year || '') : '';
-  const defaultSemester = currentPeriodRow ? (currentPeriodRow.semester || '') : '';
-  const year = prompt('العام الدراسي (مثال: 1447هـ):', defaultYear);
-  if (year === null) return;
-  const semester = prompt('الفصل الدراسي:', defaultSemester);
-  if (semester === null) return;
-
+function committeeInnerHtml(num, rows) {
+  const year = currentPeriodRow ? (currentPeriodRow.academic_year || '') : '';
+  const semester = currentPeriodRow ? (currentPeriodRow.semester || '') : '';
   const tableRows = rows.map((r, i) => {
     const gradeClass = r.students && r.students.grade_level === 'second_intermediate' ? ' class="grade-shade"' : '';
     return `
@@ -405,25 +399,10 @@ function printCommittee(title, rows) {
     </tr>`;
   }).join('');
 
-  const win = window.open('', '_blank');
-  win.document.write(`
-    <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
-    <style>
-      @page{ size: A4; margin: 10mm; }
-      body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:12px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      table{ width:100%; border-collapse:collapse; margin-top:8px; }
-      th, td{ border:1px solid #333; padding:4px 6px; text-align:center; font-size:12px; }
-      th{ background:#B3E5F2 !important; color:#E8763A !important; font-size:15px; font-weight:bold; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      .name-cell{ text-align:right; }
-      .grade-shade{ background:#E6E6E6 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      h2{ text-align:center; margin:6px 0 3px; font-size:20px; }
-      .header{ display:flex; justify-content:space-between; align-items:center; }
-      .meta p{ margin:2px 0; font-size:12px; font-weight:bold; text-align:right; }
-      .footer{ display:flex; justify-content:space-between; margin-top:18px; font-size:15px; font-weight:bold; }
-      col.sig{ width:22%; }
-    </style></head><body>
+  return `
+    <div class="print-page">
     <div class="header">
-      <img id="print-logo" style="width:216px;" />
+      <img class="print-logo" style="width:216px;" />
       <div class="meta">
         <p>رقم اللجنة: ${num}</p>
         <p>العام: ${year}</p>
@@ -441,16 +420,68 @@ function printCommittee(title, rows) {
       <span>مراقب اللجان : ____________________</span>
       <span>الملاحظ: ____________________</span>
     </div>
-    </body></html>`);
-  win.document.close();
-  const logoEl = win.document.getElementById('print-logo');
-  if (logoEl) {
-    logoEl.onload = () => win.print();
-    logoEl.onerror = () => win.print();
-    logoEl.src = SCHOOL_LOGO;
-  } else {
-    win.print();
-  }
+    </div>`;
 }
 
+const PRINT_STYLES = `
+  @page{ size: A4; margin: 10mm; }
+  body{ font-family: Arial, sans-serif; margin:0; padding:8px; font-size:12px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  table{ width:100%; border-collapse:collapse; margin-top:8px; }
+  th, td{ border:1px solid #333; padding:4px 6px; text-align:center; font-size:12px; }
+  th{ background:#B3E5F2 !important; color:#E8763A !important; font-size:15px; font-weight:bold; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  .name-cell{ text-align:right; }
+  .grade-shade{ background:#E6E6E6 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  h2{ text-align:center; margin:6px 0 3px; font-size:20px; }
+  .header{ display:flex; justify-content:space-between; align-items:center; }
+  .meta p{ margin:2px 0; font-size:12px; font-weight:bold; text-align:right; }
+  .footer{ display:flex; justify-content:space-between; margin-top:18px; font-size:15px; font-weight:bold; }
+  col.sig{ width:22%; }
+  .print-page{ page-break-after: always; }
+  .print-page:last-child{ page-break-after: auto; }
+`;
+
+function openPrintWindow(title, innerHtml) {
+  const win = window.open('', '_blank');
+  win.document.write(`
+    <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
+    <style>${PRINT_STYLES}</style></head><body>${innerHtml}</body></html>`);
+  win.document.close();
+  const logos = win.document.querySelectorAll('.print-logo');
+  if (logos.length === 0) { win.print(); return; }
+  let loaded = 0;
+  const done = () => { loaded++; if (loaded === logos.length) win.print(); };
+  logos.forEach(img => { img.onload = done; img.onerror = done; img.src = SCHOOL_LOGO; });
+}
+
+function printCommittee(title, rows) {
+  const num = committeeLabelFromTitle(title);
+  const inner = committeeInnerHtml(num, rows);
+  openPrintWindow(title, inner);
+}
+
+async function printAllCommittees() {
+  if (!currentPeriodId) return;
+  const { data } = await sb.from('exam_committee_assignments')
+    .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
+    .eq('period_id', currentPeriodId)
+    .order('committee_number', { ascending: true })
+    .order('seat_number', { ascending: true });
+
+  if (!data || data.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+
+  const committees = new Map();
+  const special = [];
+  data.forEach(row => {
+    if (row.is_special) { special.push(row); return; }
+    if (!committees.has(row.committee_number)) committees.set(row.committee_number, []);
+    committees.get(row.committee_number).push(row);
+  });
+
+  const sortedNumbers = Array.from(committees.keys()).sort((a, b) => a - b);
+  let innerHtml = sortedNumbers.map(num => committeeInnerHtml(num, committees.get(num))).join('');
+  if (special.length > 0) innerHtml += committeeInnerHtml('خاصة', special);
+  openPrintWindow('كل كشوف المناداة', innerHtml);
+}
+
+document.getElementById('exam-print-all-btn').addEventListener('click', printAllCommittees);
 document.getElementById('back-to-tiles-9').addEventListener('click', backToTiles);
