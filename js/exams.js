@@ -253,7 +253,9 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
       <div class="title">${gradeLabels[s.grade_level] || ''} · ${s.national_id}</div></div>
       <button class="text-action-btn add-special-btn">إضافة للجنة الخاصة</button>`;
     row.querySelector('.add-special-btn').addEventListener('click', async () => {
-      const { error } = await sb.from('exam_special_members').insert({ period_id: currentPeriodId, student_id: s.id });
+      const conditionNote = prompt('الحالة (مثل: صعوبات تعلم، توحد، إعاقة حركية) — اختياري:', '');
+      if (conditionNote === null) return;
+      const { error } = await sb.from('exam_special_members').insert({ period_id: currentPeriodId, student_id: s.id, condition_note: conditionNote.trim() || null });
       if (error) { alert(error.message.includes('duplicate') ? 'هذا الطالب مضاف مسبقًا' : 'تعذر الإضافة: ' + error.message); return; }
       document.getElementById('exam-special-search').value = '';
       resultsEl.innerHTML = '';
@@ -264,7 +266,7 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
 });
 
 async function refreshSpecialList() {
-  const { data } = await sb.from('exam_special_members').select('id, students(full_name, national_id, grade_level)').eq('period_id', currentPeriodId);
+  const { data } = await sb.from('exam_special_members').select('id, condition_note, students(full_name, national_id, grade_level)').eq('period_id', currentPeriodId);
   const list = document.getElementById('exam-special-list');
   list.innerHTML = '';
   if (!data || data.length === 0) {
@@ -274,11 +276,21 @@ async function refreshSpecialList() {
   data.forEach(m => {
     const row = document.createElement('div');
     row.className = 'emp-row';
+    const conditionHtml = m.condition_note
+      ? `<span style="font-size:11.5px; background:var(--sand); color:var(--ink); padding:3px 10px; border-radius:20px; font-weight:600;">${m.condition_note}</span>`
+      : '';
     row.innerHTML = `
-      <div class="info"><div class="name">${m.students ? m.students.full_name : '-'}</div>
+      <div class="info"><div class="name">${m.students ? m.students.full_name : '-'} ${conditionHtml}</div>
       <div class="title">${m.students ? (gradeLabels[m.students.grade_level] || '') : ''} · ${m.students ? m.students.national_id : ''}</div></div>
+      <button class="text-action-btn edit-condition-btn">تعديل الحالة</button>
       <button class="text-action-btn" style="color:var(--danger) !important;">حذف</button>`;
-    row.querySelector('button').addEventListener('click', async () => {
+    row.querySelector('.edit-condition-btn').addEventListener('click', async () => {
+      const newNote = prompt('الحالة:', m.condition_note || '');
+      if (newNote === null) return;
+      await sb.from('exam_special_members').update({ condition_note: newNote.trim() || null }).eq('id', m.id);
+      await refreshSpecialList();
+    });
+    row.querySelectorAll('button')[1].addEventListener('click', async () => {
       await sb.from('exam_special_members').delete().eq('id', m.id);
       await refreshSpecialList();
     });
@@ -618,6 +630,66 @@ async function printClassSheets(win) {
   openPrintWindow(win, 'كشوف مقاعد الاختبار حسب الفصل', innerHtml);
 }
 
+/* ---------- كشف بحالات اللجنة الخاصة ---------- */
+function specialConditionsInnerHtml(rows) {
+  const year = currentPeriodRow ? (currentPeriodRow.academic_year || '') : '';
+  const semester = currentPeriodRow ? (currentPeriodRow.semester || '') : '';
+  const tableRows = rows.map((r, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${r.national_id}</td>
+      <td class="name-cell">${r.full_name}</td>
+      <td>${r.grade_label}</td>
+      <td>${r.seat_number}</td>
+      <td>${r.condition_note || '-'}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="print-page">
+    <div class="header">
+      <img class="print-logo" style="width:216px;" />
+      <div class="meta">
+        <p>اللجنة: خاصة</p>
+        <p>العام: ${year}</p>
+        <p>الفصل الدراسي: ${semester}</p>
+      </div>
+    </div>
+    <h2>كشف بحالات اللجنة الخاصة</h2>
+    <table>
+      <colgroup><col style="width:4%;"><col style="width:12%;"><col style="width:34%;"><col style="width:10%;"><col style="width:10%;"><col style="width:30%;"></colgroup>
+      <thead><tr><th>م</th><th>رقم الهوية</th><th>اسم الطالب</th><th>الصف</th><th>رقم الجلوس</th><th>الحالة</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    </div>`;
+}
+
+async function printSpecialConditions(win) {
+  if (!currentPeriodId) { win.close(); return; }
+
+  const [{ data: assignments }, { data: members }] = await Promise.all([
+    sb.from('exam_committee_assignments')
+      .select('student_id, seat_number, students(full_name, national_id, grade_level)')
+      .eq('period_id', currentPeriodId).eq('is_special', true)
+      .order('seat_number', { ascending: true }),
+    sb.from('exam_special_members').select('student_id, condition_note').eq('period_id', currentPeriodId),
+  ]);
+
+  if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه طلاب باللجنة الخاصة مسكّنين لهذه الفترة بعد'); return; }
+
+  const conditionMap = {};
+  (members || []).forEach(m => { conditionMap[m.student_id] = m.condition_note; });
+
+  const rows = assignments.map(a => ({
+    full_name: a.students ? a.students.full_name : '',
+    national_id: a.students ? a.students.national_id : '',
+    grade_label: a.students ? (gradeLabels[a.students.grade_level] || '') : '',
+    seat_number: a.seat_number,
+    condition_note: conditionMap[a.student_id] || '',
+  }));
+
+  openPrintWindow(win, 'كشف بحالات اللجنة الخاصة', specialConditionsInnerHtml(rows));
+}
+
 document.getElementById('exam-print-all-btn').addEventListener('click', () => {
   const win = window.open('', '_blank');
   printAllCommittees(win);
@@ -625,5 +697,9 @@ document.getElementById('exam-print-all-btn').addEventListener('click', () => {
 document.getElementById('exam-class-sheets-btn').addEventListener('click', () => {
   const win = window.open('', '_blank');
   printClassSheets(win);
+});
+document.getElementById('exam-conditions-print-btn').addEventListener('click', () => {
+  const win = window.open('', '_blank');
+  printSpecialConditions(win);
 });
 document.getElementById('back-to-tiles-9').addEventListener('click', backToTiles);
