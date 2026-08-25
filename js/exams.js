@@ -416,14 +416,14 @@ function printCommittee(title, rows) {
       th{ background:#B3E5F2 !important; color:#E8763A !important; font-size:15px; font-weight:bold; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
       .name-cell{ text-align:right; }
       .grade-shade{ background:#E6E6E6 !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-      h2{ text-align:center; margin:6px 0 3px; font-size:16px; }
+      h2{ text-align:center; margin:6px 0 3px; font-size:20px; }
       .header{ display:flex; justify-content:space-between; align-items:center; }
       .meta p{ margin:2px 0; font-size:12px; font-weight:bold; text-align:right; }
       .footer{ display:flex; justify-content:space-between; margin-top:18px; font-size:15px; font-weight:bold; }
       col.sig{ width:22%; }
     </style></head><body>
     <div class="header">
-      <img id="print-logo" style="width:180px;" />
+      <img id="print-logo" style="width:216px;" />
       <div class="meta">
         <p>رقم اللجنة: ${num}</p>
         <p>العام: ${year}</p>
