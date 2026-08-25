@@ -5,6 +5,7 @@ const SCHOOL_LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAABYkAAAI3CAYAA
 setupCollapsible('exam-import-toggle', 'exam-import-body', 'exam-import-chevron');
 setupCollapsible('exam-period-toggle', 'exam-period-body', 'exam-period-chevron');
 setupCollapsible('exam-locations-toggle', 'exam-locations-body', 'exam-locations-chevron');
+setupCollapsible('exam-messages-toggle', 'exam-messages-body', 'exam-messages-chevron');
 
 let currentPeriodId = null;
 let currentPeriodRow = null;
@@ -794,5 +795,118 @@ document.getElementById('exam-conditions-print-btn').addEventListener('click', (
 document.getElementById('exam-roster-print-btn').addEventListener('click', () => {
   const win = window.open('', '_blank');
   printCommitteeRoster(win);
+});
+
+/* ---------- ملصقات الطلاب (GS-1114، 105×42مم، عمودين × 7 صفوف) ---------- */
+const LABEL_STYLES = `
+  @page{ size: A4; margin: 0; }
+  body{ font-family: Arial, sans-serif; margin:0; padding:0; }
+  .label-page{ display:grid; grid-template-columns: 105mm 105mm; }
+  .label-card{ width:105mm; height:42mm; box-sizing:border-box; border:1px solid #999; display:flex; flex-direction:row-reverse; overflow:hidden; page-break-inside:avoid; }
+  .label-strip{ width:13mm; background:#122B4A; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:2mm; flex-shrink:0; }
+  .label-strip .diamond{ width:6mm; height:6mm; background:#fff; transform:rotate(45deg); border-radius:1.5px; margin-bottom:2mm; }
+  .label-strip .brand-text{ writing-mode:vertical-rl; font-size:6.5px; font-weight:600; letter-spacing:0.5px; }
+  .label-main{ flex:1; padding:2mm 3mm; display:flex; flex-direction:column; }
+  .label-tag{ align-self:flex-start; border:1px solid #2C5F8A; border-radius:6px; padding:0.5mm 3mm; font-size:9px; font-weight:bold; color:#2C5F8A; margin-bottom:1.5mm; }
+  .label-title{ text-align:center; font-weight:bold; font-size:9px; margin-bottom:1.5mm; letter-spacing:1px; }
+  .label-row{ font-size:8.5px; margin:0.8mm 0; }
+  .label-row .lbl{ font-weight:bold; }
+  .label-row .val-green{ color:#2E7D32; font-weight:bold; }
+`;
+
+function studentLabelHtml(r) {
+  return `
+    <div class="label-card">
+      <div class="label-strip"><div class="diamond"></div><div class="brand-text">الهيئة الملكية للجبيل وينبع</div></div>
+      <div class="label-main">
+        <div class="label-tag">${r.committee_label}</div>
+        <div class="label-title">بـيـانـات الـطـالـب</div>
+        <div class="label-row"><span class="lbl">اسم الطالب : </span>${r.full_name}</div>
+        <div class="label-row"><span class="lbl">رقم الهوية : </span><span class="val-green">${r.national_id}</span></div>
+        <div class="label-row"><span class="lbl">رقم الجلوس : </span>${r.seat_number} &nbsp;&nbsp; <span class="lbl">الصف : </span>${r.grade_label}</div>
+      </div>
+    </div>`;
+}
+
+async function printStudentLabels(win) {
+  if (!currentPeriodId) { win.close(); return; }
+
+  const { data } = await sb.from('exam_committee_assignments')
+    .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
+    .eq('period_id', currentPeriodId)
+    .order('committee_number', { ascending: true })
+    .order('seat_number', { ascending: true });
+
+  if (!data || data.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+
+  const rows = data.map(r => ({
+    full_name: r.students ? r.students.full_name : '',
+    national_id: r.students ? r.students.national_id : '',
+    grade_label: r.students ? (gradeLabels[r.students.grade_level] || '') : '',
+    seat_number: r.seat_number,
+    committee_label: r.is_special ? 'لجنة خاصة' : ('لجنة' + r.committee_number),
+  }));
+
+  const innerHtml = '<div class="label-page">' + rows.map(studentLabelHtml).join('') + '</div>';
+
+  win.document.write(`
+    <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>ملصقات الطلاب</title>
+    <style>${LABEL_STYLES}</style></head><body>${innerHtml}</body></html>`);
+  win.document.close();
+  win.print();
+}
+
+document.getElementById('exam-labels-print-btn').addEventListener('click', () => {
+  const win = window.open('', '_blank');
+  printStudentLabels(win);
+});
+
+/* ---------- إعداد رسائل أولياء الأمور ---------- */
+document.getElementById('exam-messages-export-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('exam-messages-error');
+  errEl.style.display = 'none';
+  if (!currentPeriodId) return;
+
+  const template = document.getElementById('exam-message-template').value;
+  if (!template.trim()) { errEl.textContent = 'اكتب نص الرسالة أولاً'; errEl.style.display = 'block'; return; }
+
+  const { data: assignments } = await sb.from('exam_committee_assignments')
+    .select('student_id, committee_number, seat_number, is_special').eq('period_id', currentPeriodId);
+
+  if (!assignments || assignments.length === 0) { errEl.textContent = 'ما فيه توزيع مولّد لهذه الفترة بعد'; errEl.style.display = 'block'; return; }
+
+  const studentIds = assignments.map(a => a.student_id);
+  const [{ data: students }, { data: locations }] = await Promise.all([
+    sb.from('students').select('id, full_name, grade_level, mobile').in('id', studentIds),
+    sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId),
+  ]);
+
+  const studentMap = {};
+  (students || []).forEach(s => { studentMap[s.id] = s; });
+  const locationMap = {};
+  (locations || []).forEach(l => { locationMap[l.committee_number] = l.location; });
+
+  const rows = [];
+  assignments.forEach(a => {
+    const s = studentMap[a.student_id];
+    if (!s || !s.mobile) return;
+    const firstName = (s.full_name || '').trim().split(/\s+/)[0] || '';
+    const committeeLabel = a.is_special ? 'اللجنة الخاصة' : ('لجنة ' + a.committee_number);
+    const location = a.is_special ? '' : (locationMap[a.committee_number] || '');
+    const msg = template
+      .replaceAll('#الاسم_الاول', firstName)
+      .replaceAll('#اللجنة', committeeLabel)
+      .replaceAll('#الصف', gradeLabels[s.grade_level] || '')
+      .replaceAll('#رقم_الجلوس', String(a.seat_number))
+      .replaceAll('#المقر', location);
+    rows.push([s.mobile, msg]);
+  });
+
+  if (rows.length === 0) { errEl.textContent = 'ما فيه طلاب لديهم رقم جوال مسجّل بهذه الفترة'; errEl.style.display = 'block'; return; }
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'الرسائل');
+  XLSX.writeFile(wb, 'رسائل_اولياء_الامور.xlsx');
 });
 document.getElementById('back-to-tiles-9').addEventListener('click', backToTiles);
