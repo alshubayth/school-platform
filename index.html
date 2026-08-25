@@ -523,6 +523,7 @@
           <button class="btn-primary" id="exam-print-all-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#E8763A; color:#fff;">طباعة كشوف المناداة</button>
           <button class="btn-primary" id="exam-class-sheets-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#1E5B3A; color:#fff;">كشوف الفصول (القاعات)</button>
           <button class="btn-primary" id="exam-roster-print-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#2C5F8A; color:#fff;">طباعة كشاف اللجان</button>
+          <button class="btn-primary" id="exam-labels-print-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#5A3E9E; color:#fff;">طباعة ملصقات الطلاب</button>
           <div class="error-msg" id="exam-generate-error"></div>
         </div>
 
@@ -537,6 +538,20 @@
             <button class="btn-primary" id="exam-locations-save" style="width:auto; padding:11px 20px; margin-top:10px;">حفظ المقرات</button>
             <div class="error-msg" id="exam-locations-error"></div>
             <div id="exam-locations-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-top:10px;">تم حفظ المقرات بنجاح.</div>
+          </div>
+        </div>
+
+        <div class="form-card">
+          <h4 id="exam-messages-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+            <span>+ إعداد رسائل أولياء الأمور</span>
+            <svg id="exam-messages-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+          </h4>
+          <div id="exam-messages-body" class="hidden" style="margin-top:14px;">
+            <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">اكتب نص الرسالة، واستخدم أي من هذي المتغيرات وبتنستبدل تلقائيًا لكل طالب:</p>
+            <p style="font-size:12px; color:var(--meadow); margin:0 0 10px; direction:ltr; text-align:right;">#الاسم_الاول &nbsp; #اللجنة &nbsp; #الصف &nbsp; #رقم_الجلوس &nbsp; #المقر</p>
+            <textarea id="exam-message-template" rows="5" placeholder="مثال: عزيزي ولي أمر الطالب #الاسم_الاول، لجنة اختبار ابنكم هي #اللجنة بمقر #المقر، رقم الجلوس #رقم_الجلوس، الصف #الصف."></textarea>
+            <button class="btn-primary" id="exam-messages-export-btn" style="width:auto; padding:11px 20px;">تصدير الرسائل (إكسل)</button>
+            <div class="error-msg" id="exam-messages-error"></div>
           </div>
         </div>
         <div id="exam-results"></div>
