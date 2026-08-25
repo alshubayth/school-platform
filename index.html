@@ -438,6 +438,78 @@
       </div>
     </div>
 
+    <div id="exams-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-9">→ رجوع للرئيسية</span>
+
+      <div class="form-card">
+        <h4 id="exam-import-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+          <span>+ استيراد بيانات الطلاب (ملف إكسل)</span>
+          <svg id="exam-import-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </h4>
+        <div id="exam-import-body" class="hidden" style="margin-top:14px;">
+          <input type="file" id="exam-import-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
+          <button class="btn-primary" id="exam-import-btn" style="width:auto; padding:11px 20px;">استيراد الملف</button>
+          <div class="error-msg" id="exam-import-error"></div>
+        </div>
+        <div id="exam-student-stats" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px;"></div>
+      </div>
+
+      <div class="form-card">
+        <h4 id="exam-period-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+          <span>+ إضافة فترة اختبار جديدة</span>
+          <svg id="exam-period-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </h4>
+        <div id="exam-period-body" class="hidden" style="margin-top:14px;">
+          <input type="text" id="exam-period-name" placeholder="اسم الفترة (مثال: اختبارات الفصل الثاني 1447هـ)" />
+          <div class="form-row">
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">عدد اللجان</label>
+              <input type="number" id="exam-committee-count" min="1" placeholder="24" />
+            </div>
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">بداية ترقيم اللجنة الخاصة</label>
+              <input type="number" id="exam-special-seat-start" min="1" placeholder="900" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">بداية ترقيم أول متوسط</label>
+              <input type="number" id="exam-seat-first" min="1" placeholder="1" />
+            </div>
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">بداية ترقيم ثاني متوسط</label>
+              <input type="number" id="exam-seat-second" min="1" placeholder="300" />
+            </div>
+          </div>
+          <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">بداية ترقيم ثالث متوسط</label>
+          <input type="number" id="exam-seat-third" min="1" placeholder="600" />
+          <div class="error-msg" id="exam-period-error"></div>
+          <button class="btn-primary" id="exam-period-add" style="width:auto; padding:11px 20px;">إنشاء الفترة</button>
+        </div>
+      </div>
+
+      <div class="form-card">
+        <h4>فترات الاختبار</h4>
+        <div id="exam-periods-list"></div>
+      </div>
+
+      <div id="exam-period-detail" class="hidden">
+        <div class="form-card">
+          <h4 id="exam-detail-title"></h4>
+          <div class="form-row">
+            <input type="text" id="exam-special-search" placeholder="ابحث بالاسم أو رقم الهوية لإضافته للجنة الخاصة" />
+            <button id="exam-special-search-btn" style="width:auto; padding:11px 20px;">بحث</button>
+          </div>
+          <div id="exam-special-search-results" style="margin-bottom:12px;"></div>
+          <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">طلاب اللجنة الخاصة الحاليين:</p>
+          <div id="exam-special-list"></div>
+          <button class="btn-primary" id="exam-generate-btn" style="width:auto; padding:11px 20px; margin-top:16px;">توليد التوزيع والترقيم</button>
+          <div class="error-msg" id="exam-generate-error"></div>
+        </div>
+        <div id="exam-results"></div>
+      </div>
+    </div>
+
     <div id="placeholder-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-2">→ رجوع للرئيسية</span>
       <div class="placeholder">
