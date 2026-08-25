@@ -208,7 +208,7 @@ async function loadPlans() {
   }
 
   const { data: plans, error } = await sb.from('weekly_plans')
-    .select('lesson, performance_tasks, homework, has_test, subjects(name)')
+    .select('lessons, performance_tasks, homework, has_test, subjects(name)')
     .eq('grade_level', currentGrade).eq('week_number', currentWeek);
 
   const container = document.getElementById('plans-container');
@@ -232,6 +232,10 @@ async function loadPlans() {
     const subjectName = p.subjects ? p.subjects.name : '';
     const iconPath = subjectIcons[subjectName] || defaultIcon;
     const accent = accentCycle[idx % accentCycle.length];
+    const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [];
+    const lessonsHtml = lessonsList.length > 1
+      ? '<ul style="margin:2px 0 0; padding-right:16px;">' + lessonsList.map(l => `<li class="txt">${l}</li>`).join('') + '</ul>'
+      : `<span class="txt">${lessonsList[0] || '-'}</span>`;
     const card = document.createElement('div');
     card.className = 'subject-card' + (p.has_test ? ' has-test' : '');
     const testBadgeHtml = p.has_test ? `<div class="test-badge">
@@ -245,7 +249,7 @@ async function loadPlans() {
       </div>
       <div class="row">
         <svg class="row-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${rowIconColors[0]}" stroke-width="2"><path d="M4 19.5V6a2 2 0 012-2h13v15H6a2 2 0 00-2 2z"/><path d="M19 19a2 2 0 01-2 2H6a2 2 0 002 2h13v-2"/></svg>
-        <div><b>الدرس: </b><span class="txt">${p.lesson || '-'}</span></div>
+        <div><b>الدرس: </b>${lessonsHtml}</div>
       </div>
       <div class="row">
         <svg class="row-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${rowIconColors[1]}" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
