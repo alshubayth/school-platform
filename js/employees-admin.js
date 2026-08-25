@@ -143,8 +143,10 @@ async function refreshPortalList() {
       ? (loginEmail.endsWith(STAFF_ID_DOMAIN) ? loginEmail.replace(STAFF_ID_DOMAIN, '') + ' (رقم وظيفي)' : loginEmail)
       : null;
     const statusHtml = linked
-      ? `<span style="font-size:12px; background:var(--meadow-light); color:var(--meadow); padding:3px 10px; border-radius:20px;">مرتبط بحساب · ${roleLabels[emp.profiles ? emp.profiles.role : ''] || ''}${loginDisplay ? ' · ' + loginDisplay : ''}</span>`
-      : `<span style="font-size:12px; background:#F1EFE8; color:var(--slate); padding:3px 10px; border-radius:20px;">بدون حساب دخول (للتقييم فقط)</span>`;
+      ? `<span class="badge badge-meadow">مرتبط بحساب · ${roleLabels[emp.profiles ? emp.profiles.role : ''] || ''}${loginDisplay ? ' · ' + loginDisplay : ''}</span>`
+      : `<span class="badge badge-gray">بدون حساب دخول (للتقييم فقط)</span>`;
+
+    const initials = (emp.full_name || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join('');
 
     let linkFormHtml = '';
     if (!linked && isAdminOrDeputy()) {
@@ -157,21 +159,22 @@ async function refreshPortalList() {
 
     let actionsHtml = '';
     if (isAdminOrDeputy()) {
-      actionsHtml = `<div style="display:flex; gap:8px; margin-top:10px; width:100%;">`;
+      actionsHtml = `<div style="display:flex; align-items:center; gap:14px; flex-shrink:0;">`;
       if (linked) {
-        actionsHtml += `<button class="reset-pw-btn" style="padding:8px 14px; background:var(--sand); color:var(--ink); font-size:13px; border:1px solid #E4E2D9;">إعادة تعيين كلمة المرور</button>`;
+        actionsHtml += `<button class="reset-pw-btn text-action-btn">إعادة تعيين كلمة المرور</button>`;
       }
-      actionsHtml += `<button class="delete-emp-btn" style="padding:8px 14px; background:var(--danger-light); color:var(--danger); font-size:13px; margin-right:auto;">حذف الموظف</button></div>`;
+      actionsHtml += `<button class="delete-emp-btn text-action-btn" style="color:var(--danger) !important;">حذف الموظف</button></div>`;
     }
 
     row.innerHTML = `
-      <div>
+      <div class="avatar-circle">${initials}</div>
+      <div class="info">
         <div class="name">${emp.full_name}</div>
         <div class="title">${emp.job_title || ''}</div>
       </div>
       ${statusHtml}
-      ${linkFormHtml}
-      ${actionsHtml}`;
+      ${actionsHtml}
+      ${linkFormHtml}`;
 
     if (!linked && isAdminOrDeputy()) {
       row.querySelector('.link-btn').addEventListener('click', async () => {
@@ -346,8 +349,10 @@ async function refreshPermsList() {
   assignments.forEach(a => {
     const row = document.createElement('div');
     row.className = 'emp-row';
+    const initials = (a.profiles && a.profiles.full_name ? a.profiles.full_name : '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join('');
     row.innerHTML = `
-      <div><div class="name">${a.profiles ? a.profiles.full_name : '-'}</div>
+      <div class="avatar-circle" style="background:var(--purple-light); color:var(--purple);">${initials}</div>
+      <div class="info"><div class="name">${a.profiles ? a.profiles.full_name : '-'}</div>
       <div class="title">${a.subjects ? a.subjects.name : '-'} · ${gradeLabels[a.grade_level]}</div></div>
       <button class="logout-icon" data-id="${a.id}" title="حذف" style="color:var(--danger);">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
