@@ -690,6 +690,95 @@ async function printSpecialConditions(win) {
   openPrintWindow(win, 'كشف بحالات اللجنة الخاصة', specialConditionsInnerHtml(rows));
 }
 
+/* ---------- كشاف اللجان (ملخص الأعداد) ---------- */
+function committeeRosterInnerHtml(rows, totals) {
+  const year = currentPeriodRow ? (currentPeriodRow.academic_year || '') : '';
+  const semester = currentPeriodRow ? (currentPeriodRow.semester || '') : '';
+  const tableRows = rows.map(r => `
+    <tr>
+      <td class="name-cell">${r.label}</td>
+      <td>${r.location || '-'}</td>
+      <td>${r.first}</td>
+      <td>${r.second}</td>
+      <td>${r.third}</td>
+      <td>${r.total}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="print-page">
+    <div class="header">
+      <img class="print-logo" style="width:216px;" />
+      <div class="meta">
+        <p>العام: ${year}</p>
+        <p>الفصل الدراسي: ${semester}</p>
+      </div>
+    </div>
+    <h2>كشاف اللجان</h2>
+    <table>
+      <colgroup><col style="width:12%;"><col style="width:20%;"><col style="width:17%;"><col style="width:17%;"><col style="width:17%;"><col style="width:17%;"></colgroup>
+      <thead><tr><th>اللجنة</th><th>مقرها</th><th>أول متوسط</th><th>ثاني متوسط</th><th>ثالث متوسط</th><th>الإجمالي</th></tr></thead>
+      <tbody>${tableRows}
+      <tr style="font-weight:bold;">
+        <td colspan="2">الإجمالي</td>
+        <td>${totals.first}</td>
+        <td>${totals.second}</td>
+        <td>${totals.third}</td>
+        <td>${totals.total}</td>
+      </tr>
+      </tbody>
+    </table>
+    </div>`;
+}
+
+async function printCommitteeRoster(win) {
+  if (!currentPeriodId || !currentPeriodRow) { win.close(); return; }
+
+  const [{ data: assignments }, { data: locations }] = await Promise.all([
+    sb.from('exam_committee_assignments').select('committee_number, is_special, students(grade_level)').eq('period_id', currentPeriodId),
+    sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId),
+  ]);
+
+  if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+
+  const locationMap = {};
+  (locations || []).forEach(l => { locationMap[l.committee_number] = l.location; });
+
+  const counts = new Map();
+  let specialCounts = { first: 0, second: 0, third: 0 };
+  assignments.forEach(a => {
+    const grade = a.students ? a.students.grade_level : null;
+    if (a.is_special) {
+      if (grade === 'first_intermediate') specialCounts.first++;
+      else if (grade === 'second_intermediate') specialCounts.second++;
+      else if (grade === 'third_intermediate') specialCounts.third++;
+      return;
+    }
+    if (!counts.has(a.committee_number)) counts.set(a.committee_number, { first: 0, second: 0, third: 0 });
+    const c = counts.get(a.committee_number);
+    if (grade === 'first_intermediate') c.first++;
+    else if (grade === 'second_intermediate') c.second++;
+    else if (grade === 'third_intermediate') c.third++;
+  });
+
+  const rows = [];
+  const totals = { first: 0, second: 0, third: 0, total: 0 };
+  const sortedNumbers = Array.from(counts.keys()).sort((a, b) => a - b);
+  sortedNumbers.forEach(num => {
+    const c = counts.get(num);
+    const total = c.first + c.second + c.third;
+    rows.push({ label: 'لجنة' + num, location: locationMap[num] || '', first: c.first, second: c.second, third: c.third, total });
+    totals.first += c.first; totals.second += c.second; totals.third += c.third; totals.total += total;
+  });
+
+  const specialTotal = specialCounts.first + specialCounts.second + specialCounts.third;
+  if (specialTotal > 0) {
+    rows.push({ label: 'لجنة خاصة', location: locationMap['special'] || '', first: specialCounts.first, second: specialCounts.second, third: specialCounts.third, total: specialTotal });
+    totals.first += specialCounts.first; totals.second += specialCounts.second; totals.third += specialCounts.third; totals.total += specialTotal;
+  }
+
+  openPrintWindow(win, 'كشاف اللجان', committeeRosterInnerHtml(rows, totals));
+}
+
 document.getElementById('exam-print-all-btn').addEventListener('click', () => {
   const win = window.open('', '_blank');
   printAllCommittees(win);
@@ -701,5 +790,9 @@ document.getElementById('exam-class-sheets-btn').addEventListener('click', () =>
 document.getElementById('exam-conditions-print-btn').addEventListener('click', () => {
   const win = window.open('', '_blank');
   printSpecialConditions(win);
+});
+document.getElementById('exam-roster-print-btn').addEventListener('click', () => {
+  const win = window.open('', '_blank');
+  printCommitteeRoster(win);
 });
 document.getElementById('back-to-tiles-9').addEventListener('click', backToTiles);
