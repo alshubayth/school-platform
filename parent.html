@@ -141,7 +141,7 @@
 
   <div class="week-nav">
     <button id="week-prev"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 18l-6-6 6-6"/></svg> السابق</button>
-    <div class="center"><div class="label" id="week-label">الأسبوع 1</div><div class="sub">اختر الأسبوع للاستعراض</div></div>
+    <div class="center"><div class="label" id="week-label">الأسبوع 2</div><div class="sub">اختر الأسبوع للاستعراض</div></div>
     <button id="week-next">التالي <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 18l6-6-6-6"/></svg></button>
   </div>
 
@@ -154,7 +154,7 @@ const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let currentWeek = 1;
+let currentWeek = 2;
 let currentGrade = 'first_intermediate';
 
 const subjectIcons = {
@@ -187,7 +187,7 @@ document.getElementById('grade-tabs').addEventListener('click', (e) => {
   loadPlans();
 });
 
-document.getElementById('week-prev').addEventListener('click', () => { if (currentWeek > 1) { currentWeek--; loadPlans(); } });
+document.getElementById('week-prev').addEventListener('click', () => { if (currentWeek > 2) { currentWeek--; loadPlans(); } });
 document.getElementById('week-next').addEventListener('click', () => { if (currentWeek < 40) { currentWeek++; loadPlans(); } });
 
 async function loadPlans() {
@@ -201,7 +201,7 @@ async function loadPlans() {
     noteContainer.innerHTML = `
       <div class="admin-note">
         <svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-        <div><h4>ملاحظة من الإدارة</h4><p>${noteData.note}</p></div>
+        <div><h4>ملاحظة الإدارة</h4><p>${noteData.note}</p></div>
       </div>`;
   } else {
     noteContainer.innerHTML = '';
