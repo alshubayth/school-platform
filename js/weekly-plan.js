@@ -183,6 +183,11 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
   document.getElementById('weekly-has-test').checked = false;
   await loadFormForCurrentSelection();
   await refreshWeeklyList();
+
+  const successEl = document.getElementById('weekly-submit-success');
+  successEl.textContent = `تم إضافة الخطة بنجاح للأسبوع ${currentWeek}`;
+  successEl.style.display = 'block';
+  setTimeout(() => { successEl.style.display = 'none'; }, 3500);
 });
 
 async function refreshWeeklyList() {
@@ -203,32 +208,96 @@ async function refreshWeeklyList() {
     const card = document.createElement('div');
     card.className = 'form-card';
     card.style.marginBottom = '12px';
-    const testBadge = p.has_test ? '<span style="font-size:11.5px; background:var(--danger-light); color:var(--danger); padding:3px 10px; border-radius:20px; font-weight:600; margin-right:8px;">يوجد اختبار</span>' : '';
-    const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [];
-    const lessonsHtml = lessonsList.length > 1
-      ? '<ul style="margin:4px 0 6px; padding-right:18px;">' + lessonsList.map(l => `<li>${l}</li>`).join('') + '</ul>'
-      : `<p style="margin:0 0 6px;"><strong>الدرس:</strong> ${lessonsList[0] || '-'}</p>`;
-    const deleteBtnHtml = isAdminOrDeputy()
-      ? `<button class="weekly-delete-btn" style="width:auto; background:var(--danger-light); color:var(--danger);" data-id="${p.id}">حذف</button>`
-      : '';
-    card.innerHTML = `
-      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-        <h4 style="color:var(--meadow); margin:0; display:flex; align-items:center;">${p.subjects ? p.subjects.name : ''}${testBadge}</h4>
-        ${deleteBtnHtml}
-      </div>
-      ${lessonsHtml}
-      <p style="margin:0 0 6px;"><strong>المهام الأدائية:</strong> ${p.performance_tasks || '-'}</p>
-      <p style="margin:0;"><strong>الواجبات:</strong> ${p.homework || '-'}</p>`;
-    const delBtn = card.querySelector('.weekly-delete-btn');
-    if (delBtn) {
-      delBtn.addEventListener('click', async () => {
-        if (!confirm(`متأكد تبي تحذف خطة "${p.subjects ? p.subjects.name : 'هذه المادة'}" لهذا الأسبوع؟`)) return;
-        const { error } = await sb.from('weekly_plans').delete().eq('id', p.id);
-        if (error) { alert('تعذر الحذف: ' + error.message); return; }
-        await refreshWeeklyList();
-      });
-    }
+    renderPlanViewMode(card, p);
     list.appendChild(card);
+  });
+}
+
+function renderPlanViewMode(card, p) {
+  const testBadge = p.has_test ? '<span style="font-size:11.5px; background:var(--danger-light); color:var(--danger); padding:3px 10px; border-radius:20px; font-weight:600; margin-right:8px;">يوجد اختبار</span>' : '';
+  const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [];
+  const lessonsHtml = lessonsList.length > 1
+    ? '<ul style="margin:4px 0 6px; padding-right:18px;">' + lessonsList.map(l => `<li>${l}</li>`).join('') + '</ul>'
+    : `<p style="margin:0 0 6px;"><strong>الدرس:</strong> ${lessonsList[0] || '-'}</p>`;
+  const editBtnHtml = isAdminOrDeputy()
+    ? `<button class="weekly-edit-btn" style="width:auto; background:var(--sand); color:var(--ink); margin-left:6px;" data-id="${p.id}">تعديل</button>`
+    : '';
+  const deleteBtnHtml = isAdminOrDeputy()
+    ? `<button class="weekly-delete-btn" style="width:auto; background:var(--danger-light); color:var(--danger);" data-id="${p.id}">حذف</button>`
+    : '';
+  card.innerHTML = `
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <h4 style="color:var(--meadow); margin:0; display:flex; align-items:center;">${p.subjects ? p.subjects.name : ''}${testBadge}</h4>
+      <div>${editBtnHtml}${deleteBtnHtml}</div>
+    </div>
+    ${lessonsHtml}
+    <p style="margin:0 0 6px;"><strong>المهام الأدائية:</strong> ${p.performance_tasks || '-'}</p>
+    <p style="margin:0;"><strong>الواجبات:</strong> ${p.homework || '-'}</p>`;
+
+  const editBtn = card.querySelector('.weekly-edit-btn');
+  if (editBtn) editBtn.addEventListener('click', () => renderPlanEditMode(card, p));
+
+  const delBtn = card.querySelector('.weekly-delete-btn');
+  if (delBtn) {
+    delBtn.addEventListener('click', async () => {
+      if (!confirm(`متأكد تبي تحذف خطة "${p.subjects ? p.subjects.name : 'هذه المادة'}" لهذا الأسبوع؟`)) return;
+      const { error } = await sb.from('weekly_plans').delete().eq('id', p.id);
+      if (error) { alert('تعذر الحذف: ' + error.message); return; }
+      await refreshWeeklyList();
+    });
+  }
+}
+
+function renderPlanEditMode(card, p) {
+  const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [''];
+  card.innerHTML = `
+    <h4 style="color:var(--meadow); margin:0 0 10px;">${p.subjects ? p.subjects.name : ''} — تعديل (بواسطة الإدارة)</h4>
+    <div class="edit-lessons-container"></div>
+    <span class="text-action-btn edit-add-lesson-btn" style="display:inline-block; margin-bottom:14px;">+ إضافة درس</span>
+    <textarea class="edit-tasks" rows="2" placeholder="المهام الأدائية">${p.performance_tasks || ''}</textarea>
+    <textarea class="edit-homework" rows="2" placeholder="الواجبات">${p.homework || ''}</textarea>
+    <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:14px; cursor:pointer;">
+      <input type="checkbox" class="edit-has-test" ${p.has_test ? 'checked' : ''} style="width:auto; margin:0;" />
+      يوجد اختبار هذا الأسبوع لهذه المادة
+    </label>
+    <div class="error-msg edit-error"></div>
+    <button class="btn-primary edit-save-btn" style="width:auto; padding:10px 18px;">حفظ التعديل</button>
+    <span class="text-action-btn edit-cancel-btn" style="margin-right:10px;">إلغاء</span>`;
+
+  const lessonsContainer = card.querySelector('.edit-lessons-container');
+  function addRow(value = '') {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:8px; align-items:flex-start; margin-bottom:10px;';
+    row.innerHTML = `
+      <textarea class="edit-lesson-input" placeholder="الدرس" rows="2" style="flex:1; margin-bottom:0;"></textarea>
+      <button type="button" class="text-action-btn edit-lesson-remove" style="color:var(--danger) !important; white-space:nowrap;">حذف</button>`;
+    row.querySelector('.edit-lesson-input').value = value;
+    row.querySelector('.edit-lesson-remove').addEventListener('click', () => {
+      row.remove();
+      if (lessonsContainer.children.length === 0) addRow('');
+    });
+    lessonsContainer.appendChild(row);
+  }
+  lessonsList.forEach(v => addRow(v));
+
+  card.querySelector('.edit-add-lesson-btn').addEventListener('click', () => addRow(''));
+  card.querySelector('.edit-cancel-btn').addEventListener('click', () => renderPlanViewMode(card, p));
+  card.querySelector('.edit-save-btn').addEventListener('click', async () => {
+    const errEl = card.querySelector('.edit-error');
+    const lessons = Array.from(card.querySelectorAll('.edit-lesson-input')).map(t => t.value.trim()).filter(v => v.length > 0);
+    if (lessons.length === 0) { errEl.textContent = 'اكتب درس واحد على الأقل'; errEl.style.display = 'block'; return; }
+
+    const payload = {
+      lessons,
+      performance_tasks: card.querySelector('.edit-tasks').value.trim(),
+      homework: card.querySelector('.edit-homework').value.trim(),
+      has_test: card.querySelector('.edit-has-test').checked,
+    };
+    const { error } = await sb.from('weekly_plans').update(payload).eq('id', p.id);
+    if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
+
+    Object.assign(p, payload);
+    renderPlanViewMode(card, p);
   });
 }
 
