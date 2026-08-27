@@ -154,7 +154,8 @@ const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-let currentWeek = 2;
+let publishedWeeks = [];
+let currentWeekIndex = 0;
 let currentGrade = 'first_intermediate';
 
 const subjectIcons = {
@@ -187,10 +188,26 @@ document.getElementById('grade-tabs').addEventListener('click', (e) => {
   loadPlans();
 });
 
-document.getElementById('week-prev').addEventListener('click', () => { if (currentWeek > 2) { currentWeek--; loadPlans(); } });
-document.getElementById('week-next').addEventListener('click', () => { if (currentWeek < 40) { currentWeek++; loadPlans(); } });
+document.getElementById('week-prev').addEventListener('click', () => { if (currentWeekIndex > 0) { currentWeekIndex--; loadPlans(); } });
+document.getElementById('week-next').addEventListener('click', () => { if (currentWeekIndex < publishedWeeks.length - 1) { currentWeekIndex++; loadPlans(); } });
+
+async function loadPublishedWeeks() {
+  const { data } = await sb.from('weekly_plan_publish_settings').select('week_number').eq('is_published', true).order('week_number', { ascending: true });
+  publishedWeeks = (data || []).map(r => r.week_number);
+  currentWeekIndex = publishedWeeks.length > 0 ? publishedWeeks.length - 1 : 0;
+}
 
 async function loadPlans() {
+  if (publishedWeeks.length === 0) {
+    document.getElementById('week-label').textContent = '-';
+    document.getElementById('admin-note-container').innerHTML = '';
+    document.getElementById('plans-container').innerHTML = `<div class="empty-state">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18"/></svg>
+      <p>لا توجد خطة معلنة من الإدارة حاليًا</p></div>`;
+    return;
+  }
+
+  const currentWeek = publishedWeeks[currentWeekIndex];
   document.getElementById('week-label').textContent = 'الأسبوع ' + currentWeek;
 
   const { data: noteData } = await sb.from('weekly_admin_notes')
@@ -263,7 +280,7 @@ async function loadPlans() {
   });
 }
 
-loadPlans();
+loadPublishedWeeks().then(loadPlans);
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
