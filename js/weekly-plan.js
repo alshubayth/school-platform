@@ -99,6 +99,7 @@ let subjectsCache = [];
 export async function loadWeeklyModule() {
   document.getElementById('weekly-form-card').classList.toggle('hidden', !isStaff());
   document.getElementById('weekly-admin-note-card').classList.toggle('hidden', !isAdminOrDeputy());
+  document.getElementById('weekly-publish-card').classList.toggle('hidden', !isAdminOrDeputy());
   document.getElementById('week-label').textContent = 'الأسبوع ' + currentWeek;
 
   if (currentProfile.role === 'teacher') {
@@ -114,9 +115,26 @@ export async function loadWeeklyModule() {
     renderLessonInputs(['']);
   }
 
-  if (isAdminOrDeputy()) await loadWeeklyAdminNote();
+  if (isAdminOrDeputy()) {
+    await loadWeeklyAdminNote();
+    await loadPublishToggle();
+  }
   await refreshWeeklyList();
 }
+
+async function loadPublishToggle() {
+  const { data } = await sb.from('weekly_plan_publish_settings').select('is_published').eq('week_number', currentWeek).maybeSingle();
+  document.getElementById('weekly-publish-toggle').checked = !!(data && data.is_published);
+}
+
+document.getElementById('weekly-publish-toggle').addEventListener('change', async (e) => {
+  const isPublished = e.target.checked;
+  if (isPublished) {
+    await sb.from('weekly_plan_publish_settings').upsert({ week_number: currentWeek, is_published: true, updated_at: new Date().toISOString() });
+  } else {
+    await sb.from('weekly_plan_publish_settings').delete().eq('week_number', currentWeek);
+  }
+});
 
 async function loadWeeklyAdminNote() {
   const grade = document.getElementById('weekly-grade').value;
