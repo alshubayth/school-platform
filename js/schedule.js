@@ -1,194 +1,376 @@
-import { sb, gradeLabels, backToTiles } from './core.js';
+import { sb, gradeLabels } from './core.js';
+import { SCHEDULE_SUBJECTS, previewInGrid } from './schedule.js';
 
-document.getElementById('back-to-tiles-11').addEventListener('click', backToTiles);
+/*
+ * استيراد جدول الحصص من ملف PDF (بنفس شكل الجدول الرسمي المعتمد من المدرسة - برنامج aSc Timetables).
+ * الفكرة: نقرأ نص كل صفحة بإحداثياته (عبر pdf.js)، ونحدد الأعمدة (الحصص 1-7) والصفوف (الأيام) هندسيًا
+ * من مواقع النصوص نفسها (مو أرقام ثابتة بالكود) عشان يشتغل حتى لو تغيّر حجم/تخطيط الملف شوي مستقبلًا.
+ * كل صفحة تُقرأ لحالها ولا تُعتمد تلقائيًا - لازم مراجعة وتأكيد يدوي من شاشة "الجدول الدراسي".
+ */
 
-export const DAYS = [
-  { key: 'sunday', label: 'الأحد' },
-  { key: 'monday', label: 'الاثنين' },
-  { key: 'tuesday', label: 'الثلاثاء' },
-  { key: 'wednesday', label: 'الأربعاء' },
-  { key: 'thursday', label: 'الخميس' },
-];
-export const PERIODS = [1, 2, 3, 4, 5, 6, 7];
-const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+const GRADE_MAP = { 'أول': 'first_intermediate', 'ثاني': 'second_intermediate', 'ثالث': 'third_intermediate' };
+const DAY_MAP = { 'احد': 'sunday', 'اثنين': 'monday', 'ثلاثاء': 'tuesday', 'اربعاء': 'wednesday', 'أربعاء': 'wednesday', 'خميس': 'thursday' };
+const DAY_ORDER = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
+const DAY_LABELS_AR = { sunday: 'الأحد', monday: 'الاثنين', tuesday: 'الثلاثاء', wednesday: 'الأربعاء', thursday: 'الخميس' };
+const REFERENCE_STRINGS = new Set([...Object.keys(DAY_MAP), ...Object.keys(GRADE_MAP), ...SCHEDULE_SUBJECTS]);
+const ARABIC_RE = /[؀-ۿﭐ-﷿ﹰ-﻿]/;
+const EASTERN_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 
-let scGrade = 'first_intermediate';
-let scSection = null;
+let parsedClasses = []; // [{page, grade, section, map}]
 
-// مواد جدول الحصص (حسب تسمياتها بالجدول الرسمي المعتمد من المدرسة)
-export const SCHEDULE_SUBJECTS = [
-  'إنجليزي', 'الإسلامية', 'الاجتماعيات', 'البدنية', 'الحياتية',
-  'الرياضيات', 'الفكير الناقد', 'الفنية', 'رقمية', 'علوم', 'لغتي',
-];
-
-export async function loadScheduleModule() {
-  renderGradeTabs();
-  await refreshSectionOptions();
+function translateDigits(s) {
+  return s.replace(/[٠-٩]/g, ch => String(EASTERN_DIGITS.indexOf(ch)));
+}
+function decodeReversed(raw) {
+  return translateDigits(Array.from(raw).reverse().join('').normalize('NFKC'));
+}
+function decodeNormal(raw) {
+  return translateDigits(raw.normalize('NFKC'));
 }
 
-// يستخدمها استيراد PDF لعرض بيانات مستخرجة داخل نفس شاشة التحرير المعتادة، بدون حفظها تلقائيًا
-export async function previewInGrid(grade, section, map) {
-  scGrade = grade;
-  scSection = section;
-  renderGradeTabs();
-
-  const sectionSelect = document.getElementById('sc-section-select');
-  const hasOption = Array.from(sectionSelect.options).some(o => o.value === String(section));
-  if (!hasOption) {
-    const opt = document.createElement('option');
-    opt.value = String(section);
-    opt.textContent = 'الفصل ' + section;
-    sectionSelect.appendChild(opt);
-  }
-  sectionSelect.value = String(section);
-
-  await renderGrid(map);
-  document.getElementById('sc-grid-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
-
-function renderGradeTabs() {
-  const wrap = document.getElementById('sc-grade-tabs');
-  wrap.innerHTML = '';
-  GRADES.forEach(g => {
-    const btn = document.createElement('button');
-    btn.className = 'tab' + (g === scGrade ? ' active' : '');
-    btn.textContent = gradeLabels[g];
-    btn.addEventListener('click', () => {
-      scGrade = g;
-      scSection = null;
-      renderGradeTabs();
-      refreshSectionOptions();
-    });
-    wrap.appendChild(btn);
+function calibratePage(items) {
+  let revScore = 0, normScore = 0;
+  items.forEach(it => {
+    const r = decodeReversed(it.str).trim();
+    const n = decodeNormal(it.str).trim();
+    if (REFERENCE_STRINGS.has(r)) revScore++;
+    if (REFERENCE_STRINGS.has(n)) normScore++;
   });
+  return revScore >= normScore ? 'reversed' : 'normal';
 }
 
-async function refreshSectionOptions() {
-  const sectionSelect = document.getElementById('sc-section-select');
-  sectionSelect.innerHTML = '<option value="">جارٍ التحميل...</option>';
-  document.getElementById('sc-grid-container').innerHTML = '';
-
-  const { data: studentsData } = await sb.from('students').select('class_section').eq('grade_level', scGrade);
-  let sections = [...new Set((studentsData || []).map(s => s.class_section).filter(n => n > 0))].sort((a, b) => a - b);
-
-  // احتياطًا لو ما استُوردت بيانات الطلاب بعد لهذه المرحلة، نتيح فصول 1-8 يدويًا
-  if (sections.length === 0) sections = [1, 2, 3, 4, 5, 6, 7, 8];
-
-  sectionSelect.innerHTML = '<option value="">اختر الفصل</option>' +
-    sections.map(n => `<option value="${n}">الفصل ${n}</option>`).join('');
-  sectionSelect.onchange = () => {
-    scSection = sectionSelect.value ? parseInt(sectionSelect.value) : null;
-    renderGrid();
-  };
-  scSection = null;
-}
-
-function subjectOptionsHtml(selected) {
-  let html = '<option value=""' + (!selected ? ' selected' : '') + '>-</option>';
-  SCHEDULE_SUBJECTS.forEach(name => {
-    html += `<option value="${name}"${name === selected ? ' selected' : ''}>${name}</option>`;
-  });
-  // لو المادة المحفوظة مو من القائمة المعروفة (تمت إضافتها يدويًا)، نضيفها كخيار برضو
-  if (selected && !SCHEDULE_SUBJECTS.includes(selected)) {
-    html += `<option value="${selected}" selected>${selected}</option>`;
-  }
-  return html;
-}
-
-async function renderGrid(overrideMap) {
-  const container = document.getElementById('sc-grid-container');
-  if (!scSection) { container.innerHTML = ''; return; }
-
-  let map;
-  if (overrideMap) {
-    map = overrideMap;
-  } else {
-    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
-    const { data: existing } = await sb.from('class_schedules')
-      .select('day_of_week, period_number, subject_name, teacher_name')
-      .eq('grade_level', scGrade).eq('class_section', scSection);
-    map = {};
-    (existing || []).forEach(r => { map[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
-  }
-
-  let html = `
-    <div class="form-card">
-      <h4>${gradeLabels[scGrade]} - الفصل ${scSection}</h4>
-      ${overrideMap ? '<p style="font-size:12.5px; color:var(--gold); font-weight:700; margin:-6px 0 12px;">⚠ معاينة من ملف مستورد — راجع كل خلية بعنايه، ثم اضغط "حفظ الجدول" لاعتمادها</p>' : ''}
-      <div style="overflow-x:auto;">
-        <table id="sc-table" style="width:100%; border-collapse:collapse; min-width:760px;">
-          <thead>
-            <tr>
-              <th style="padding:8px; text-align:center; font-size:12.5px; color:var(--slate);">الحصة</th>
-              ${DAYS.map(d => `<th style="padding:8px; text-align:center; font-size:12.5px; color:var(--slate);">${d.label}</th>`).join('')}
-            </tr>
-          </thead>
-          <tbody>
-            ${PERIODS.map(p => `
-              <tr>
-                <td style="padding:6px; text-align:center; font-weight:700; font-size:13px;">${p}</td>
-                ${DAYS.map(d => {
-                  const cell = map[d.key + '-' + p] || { subject: '', teacher: '' };
-                  return `
-                  <td style="padding:4px;">
-                    <select class="sc-cell-subject" data-day="${d.key}" data-period="${p}" style="margin-bottom:4px; font-size:12.5px; padding:8px 6px;">
-                      ${subjectOptionsHtml(cell.subject)}
-                    </select>
-                    <input class="sc-cell-teacher" data-day="${d.key}" data-period="${p}" type="text" placeholder="اسم المعلم" value="${cell.teacher.replace(/"/g, '&quot;')}" style="margin-bottom:0; font-size:11.5px; padding:7px 6px;" />
-                  </td>`;
-                }).join('')}
-              </tr>`).join('')}
-          </tbody>
-        </table>
-      </div>
-      <div style="margin-top:16px; display:flex; align-items:center; gap:12px;">
-        <button class="btn-primary" id="sc-save-btn" style="width:auto; padding:11px 24px;">حفظ الجدول</button>
-        <span id="sc-save-status" style="font-size:12.5px; color:var(--slate);"></span>
-      </div>
-    </div>`;
-
-  container.innerHTML = html;
-  document.getElementById('sc-save-btn').addEventListener('click', saveGrid);
-}
-
-async function saveGrid() {
-  const statusEl = document.getElementById('sc-save-status');
-  statusEl.textContent = 'جارٍ الحفظ...';
-  statusEl.style.color = 'var(--slate)';
-
-  const subjectSelects = Array.from(document.querySelectorAll('.sc-cell-subject'));
-  const rowsToUpsert = [];
-  const keysToDelete = [];
-
-  subjectSelects.forEach(sel => {
-    const day = sel.dataset.day;
-    const period = parseInt(sel.dataset.period);
-    const subject = sel.value.trim();
-    const teacherInput = document.querySelector(`.sc-cell-teacher[data-day="${day}"][data-period="${period}"]`);
-    const teacher = teacherInput ? teacherInput.value.trim() : '';
-    if (subject) {
-      rowsToUpsert.push({
-        grade_level: scGrade, class_section: scSection,
-        day_of_week: day, period_number: period,
-        subject_name: subject, teacher_name: teacher || null, updated_at: new Date().toISOString(),
-      });
-    } else {
-      keysToDelete.push({ day, period });
+function findColumnAnchors(items) {
+  const byPeriod = {};
+  items.forEach(it => {
+    const t = translateDigits(it.str.normalize('NFKC')).trim();
+    if (/^[1-7]$/.test(t)) {
+      const period = parseInt(t);
+      if (!(period in byPeriod)) byPeriod[period] = { x: (it.x0 + it.x1) / 2, item: it };
     }
   });
+  return byPeriod;
+}
 
-  if (rowsToUpsert.length > 0) {
-    const { error } = await sb.from('class_schedules').upsert(rowsToUpsert, { onConflict: 'grade_level,class_section,day_of_week,period_number' });
-    if (error) { statusEl.textContent = 'تعذر الحفظ: ' + error.message; statusEl.style.color = 'var(--danger)'; return; }
+function findDayAnchors(items, decode) {
+  const byDay = {};
+  items.forEach(it => {
+    const t = decode(it.str).trim();
+    const day = DAY_MAP[t];
+    if (day && !(day in byDay)) byDay[day] = { y: it.y, item: it };
+  });
+  return byDay;
+}
+
+function parseTitle(items, decode, excludeItems) {
+  // الحالة الشائعة: المرحلة/الفصل بخلية واحدة مثل "أول/1"
+  for (const it of items) {
+    if (excludeItems.has(it)) continue;
+    const t = translateDigits(decode(it.str)).trim();
+    const m = t.match(/^(أول|ثاني|ثالث)\s*\/?\s*([0-9]+)$/);
+    if (m) return { grade: GRADE_MAP[m[1]], section: parseInt(m[2]) };
+  }
+  // احتياطي: كلمة المرحلة ورقم الفصل بخليتين منفصلتين قريبتين من بعض
+  const gradeItems = items.filter(it => !excludeItems.has(it) && ['أول', 'ثاني', 'ثالث'].includes(decode(it.str).trim()));
+  const digitItems = items.filter(it => {
+    if (excludeItems.has(it)) return false;
+    const t = translateDigits(decode(it.str)).trim();
+    return /^[0-9]{1,2}$/.test(t);
+  });
+  for (const g of gradeItems) {
+    let best = null, bestD = Infinity;
+    digitItems.forEach(d => {
+      const dist = Math.hypot(d.x0 - g.x0, d.y - g.y);
+      if (dist < bestD) { bestD = dist; best = d; }
+    });
+    if (best && bestD < 60) {
+      return { grade: GRADE_MAP[decode(g.str).trim()], section: parseInt(translateDigits(decode(best.str)).trim()) };
+    }
+  }
+  return null;
+}
+
+function medianSpacing(sortedByX) {
+  const gaps = [];
+  for (let i = 0; i < sortedByX.length - 1; i++) gaps.push(sortedByX[i + 1].x - sortedByX[i].x);
+  gaps.sort((a, b) => a - b);
+  return gaps[Math.floor(gaps.length / 2)] || 1;
+}
+
+function classifyColumns(cx, byX) {
+  const spacing = medianSpacing(byX);
+  const tolerance = spacing * 0.22;
+  for (let i = 0; i < byX.length - 1; i++) {
+    const boundary = (byX[i].x + byX[i + 1].x) / 2;
+    if (Math.abs(cx - boundary) < tolerance) return [byX[i].period, byX[i + 1].period];
+  }
+  let best = byX[0], bestD = Math.abs(byX[0].x - cx);
+  byX.forEach(a => { const d = Math.abs(a.x - cx); if (d < bestD) { bestD = d; best = a; } });
+  return [best.period];
+}
+
+function groupByColumn(items, byX) {
+  const groups = {};
+  items.forEach(it => {
+    const cx = (it.x0 + it.x1) / 2;
+    const periods = classifyColumns(cx, byX);
+    const key = periods.join(',');
+    if (!groups[key]) groups[key] = { periods, items: [] };
+    groups[key].items.push(it);
+  });
+  return Object.values(groups);
+}
+
+function joinCellText(items, decode) {
+  const sorted = [...items].sort((a, b) => b.x0 - a.x0); // قراءة من اليمين لليسار
+  let result = '';
+  let prevX0 = null;
+  sorted.forEach(it => {
+    if (prevX0 !== null) {
+      const gap = prevX0 - it.x1;
+      if (gap > 3) result += ' ';
+    }
+    result += decode(it.str);
+    prevX0 = it.x0;
+  });
+  return result.trim();
+}
+
+async function extractPageItems(page) {
+  const content = await page.getTextContent();
+  return content.items
+    .filter(it => it.str && it.str.trim().length > 0)
+    .map(it => {
+      const tr = it.transform;
+      return {
+        str: it.str,
+        x0: tr[4],
+        x1: tr[4] + it.width,
+        y: tr[5],
+        size: Math.hypot(tr[2], tr[3]) || Math.hypot(tr[0], tr[1]) || 1,
+      };
+    });
+}
+
+async function parsePdfFile(file) {
+  if (!window.pdfjsLib) throw new Error('مكتبة قراءة PDF ما تحمّلت. حدّث الصفحة وجرب مرة ثانية.');
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+
+  const classes = [];
+  const issues = [];
+
+  for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+    const page = await pdf.getPage(pageNum);
+    const items = await extractPageItems(page);
+
+    if (items.length === 0) {
+      issues.push({ page: pageNum, reason: 'ما فيه أي نص قابل للقراءة بهذي الصفحة — يحتمل إن الملف صورة ممسوحة ضوئيًا (سكان) أو تم ضغطه بطريقة حوّلت الصفحات لصور بدل نص. جرّب ملف PDF الأصلي غير المضغوط.' });
+      continue;
+    }
+
+    const mode = calibratePage(items);
+    const decode = mode === 'reversed' ? decodeReversed : decodeNormal;
+
+    const columnAnchors = findColumnAnchors(items);
+    if (Object.keys(columnAnchors).length !== 7) {
+      issues.push({ page: pageNum, reason: 'ما قدرت أحدد أعمدة الحصص (1-7) بهذي الصفحة' });
+      continue;
+    }
+    const byX = Object.entries(columnAnchors).map(([p, a]) => ({ period: parseInt(p), x: a.x })).sort((a, b) => a.x - b.x);
+    const columnAnchorItems = new Set(Object.values(columnAnchors).map(a => a.item));
+
+    const dayAnchors = findDayAnchors(items, decode);
+    if (Object.keys(dayAnchors).length !== 5) {
+      issues.push({ page: pageNum, reason: 'ما قدرت أحدد كل أيام الأسبوع (5 أيام) بهذي الصفحة' });
+      continue;
+    }
+    const dayAnchorItems = new Set(Object.values(dayAnchors).map(a => a.item));
+
+    const excludeForTitle = new Set([...columnAnchorItems, ...dayAnchorItems]);
+    const title = parseTitle(items, decode, excludeForTitle);
+    if (!title) {
+      issues.push({ page: pageNum, reason: 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة' });
+      continue;
+    }
+
+    const usedItems = new Set([...columnAnchorItems, ...dayAnchorItems]);
+    const contentItems = items.filter(it => !usedItems.has(it) && ARABIC_RE.test(it.str));
+
+    // تجميع كل خلية حسب أقرب يوم (صف)
+    const rows = {};
+    Object.keys(dayAnchors).forEach(day => { rows[day] = []; });
+    contentItems.forEach(it => {
+      let bestDay = null, bestD = Infinity;
+      Object.entries(dayAnchors).forEach(([day, a]) => {
+        const d = Math.abs(a.y - it.y);
+        if (d < bestD) { bestD = d; bestDay = day; }
+      });
+      if (bestDay) rows[bestDay].push(it);
+    });
+
+    const classMap = {};
+    let filledCount = 0;
+
+    Object.entries(rows).forEach(([day, rowItems]) => {
+      if (rowItems.length === 0) return;
+      const sizes = [...new Set(rowItems.map(it => Math.round(it.size * 10) / 10))].sort((a, b) => a - b);
+      let splitPoint = -Infinity; // افتراضيًا الكل "مادة" لو ما فيه إلا حجم خط واحد
+      if (sizes.length > 1) {
+        let maxGap = -1, gapIdx = 0;
+        for (let i = 0; i < sizes.length - 1; i++) {
+          const g = sizes[i + 1] - sizes[i];
+          if (g > maxGap) { maxGap = g; gapIdx = i; }
+        }
+        splitPoint = (sizes[gapIdx] + sizes[gapIdx + 1]) / 2;
+      }
+      const subjItems = rowItems.filter(it => it.size > splitPoint);
+      const teachItems = rowItems.filter(it => it.size <= splitPoint);
+
+      groupByColumn(subjItems, byX).forEach(g => {
+        const text = joinCellText(g.items, decode);
+        if (!text) return;
+        g.periods.forEach(p => {
+          const key = day + '-' + p;
+          if (!classMap[key]) { classMap[key] = { subject: '', teacher: '' }; filledCount++; }
+          classMap[key].subject = text;
+        });
+      });
+      groupByColumn(teachItems, byX).forEach(g => {
+        const text = joinCellText(g.items, decode);
+        if (!text) return;
+        g.periods.forEach(p => {
+          const key = day + '-' + p;
+          if (!classMap[key]) classMap[key] = { subject: '', teacher: '' };
+          classMap[key].teacher = text;
+        });
+      });
+    });
+
+    classes.push({ page: pageNum, grade: title.grade, section: title.section, map: classMap, filledCount });
   }
 
-  // حذف الخلايا اللي رجعت فاضية (لو كانت محفوظة سابقًا)
-  for (const k of keysToDelete) {
-    await sb.from('class_schedules').delete()
-      .eq('grade_level', scGrade).eq('class_section', scSection)
-      .eq('day_of_week', k.day).eq('period_number', k.period);
+  return { classes, issues };
+}
+
+function renderSummary({ classes, issues }) {
+  parsedClasses = classes;
+  const el = document.getElementById('sc-pdf-summary');
+
+  const order = { first_intermediate: 0, second_intermediate: 1, third_intermediate: 2 };
+  const sorted = [...classes].sort((a, b) => (order[a.grade] - order[b.grade]) || (a.section - b.section));
+
+  let html = `<p style="font-size:12.5px; color:var(--slate); margin:10px 0;">تم التعرف على <b>${classes.length}</b> فصل${issues.length ? ` (وتعذّر التعرف على ${issues.length} صفحة، راجعها يدويًا)` : ''}.</p>`;
+
+  if (classes.length > 0) {
+    html += `<div style="max-height:280px; overflow-y:auto; border-radius:10px; background:#fff; padding:6px;">`;
+    sorted.forEach((c, idx) => {
+      const totalCells = 34; // 7×5 ناقص فسحة الخميس (خلية فاضية عادة)
+      const warn = c.filledCount < totalCells - 4; // فرق واضح عن المتوقع
+      html += `
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid var(--sand);">
+          <span style="font-size:12.5px; font-weight:600;">${gradeLabels[c.grade]} - الفصل ${c.section} ${warn ? '<span style="color:var(--danger);">⚠ عدد خلايا قليل، راجعها</span>' : ''}</span>
+          <button type="button" class="text-action-btn sc-preview-btn" data-idx="${idx}" style="width:auto;">معاينة</button>
+        </div>`;
+    });
+    html += `</div>
+      <div style="margin-top:14px;">
+        <button class="btn-primary" id="sc-pdf-commit-all" style="width:auto; padding:11px 22px;">اعتماد كل الفصول دفعة وحدة</button>
+        <span id="sc-pdf-commit-status" style="font-size:12.5px; color:var(--slate); margin-right:10px;"></span>
+      </div>`;
   }
 
-  statusEl.textContent = 'تم الحفظ بنجاح ✓';
+  if (issues.length > 0) {
+    html += `<div style="margin-top:14px; background:var(--danger-light); border-radius:10px; padding:10px 14px;">
+      <p style="font-size:12.5px; font-weight:700; color:var(--danger); margin-bottom:6px;">صفحات ما قدرنا نقرأها تلقائيًا:</p>
+      ${issues.map(i => `<p style="font-size:12px; color:var(--danger); margin:2px 0;">صفحة ${i.page}: ${i.reason}</p>`).join('')}
+    </div>`;
+  }
+
+  el.innerHTML = html;
+
+  el.querySelectorAll('.sc-preview-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const cls = sorted[parseInt(btn.dataset.idx)];
+      previewInGrid(cls.grade, cls.section, cls.map);
+    });
+  });
+
+  const commitBtn = document.getElementById('sc-pdf-commit-all');
+  if (commitBtn) commitBtn.addEventListener('click', commitAllParsed);
+}
+
+async function commitAllParsed() {
+  const statusEl = document.getElementById('sc-pdf-commit-status');
+  if (!confirm(`سيتم استبدال جدول ${parsedClasses.length} فصل بالكامل بالبيانات المستخرجة من الملف. هذا الإجراء يحذف الجدول الحالي لهذي الفصول ويحطّ بدله الجديد. متأكد؟`)) return;
+
+  statusEl.textContent = 'جارٍ الاعتماد...';
+  statusEl.style.color = 'var(--slate)';
+
+  for (const cls of parsedClasses) {
+    await sb.from('class_schedules').delete().eq('grade_level', cls.grade).eq('class_section', cls.section);
+    const rows = [];
+    Object.entries(cls.map).forEach(([key, val]) => {
+      if (!val.subject) return;
+      const [day, period] = key.split('-');
+      rows.push({
+        grade_level: cls.grade, class_section: cls.section,
+        day_of_week: day, period_number: parseInt(period),
+        subject_name: val.subject, teacher_name: val.teacher || null,
+      });
+    });
+    for (let i = 0; i < rows.length; i += 200) {
+      const chunk = rows.slice(i, i + 200);
+      if (chunk.length === 0) continue;
+      const { error } = await sb.from('class_schedules').insert(chunk);
+      if (error) {
+        statusEl.textContent = `تعذر حفظ ${gradeLabels[cls.grade]} - الفصل ${cls.section}: ${error.message}`;
+        statusEl.style.color = 'var(--danger)';
+        return;
+      }
+    }
+  }
+
+  statusEl.textContent = 'تم اعتماد كل الفصول بنجاح ✓';
   statusEl.style.color = 'var(--meadow)';
 }
+
+async function handleParseClick() {
+  const fileInput = document.getElementById('sc-pdf-file');
+  const errEl = document.getElementById('sc-pdf-error');
+  const summaryEl = document.getElementById('sc-pdf-summary');
+  errEl.style.display = 'none';
+  errEl.textContent = '';
+  summaryEl.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin-top:10px;">جارٍ القراءة والتحليل، ممكن تاخذ نص دقيقة لو الملف كبير...</p>';
+
+  const file = fileInput.files[0];
+  if (!file) {
+    errEl.textContent = 'اختر ملف PDF أولاً';
+    errEl.style.display = 'block';
+    summaryEl.innerHTML = '';
+    return;
+  }
+
+  try {
+    const result = await parsePdfFile(file);
+    if (result.classes.length === 0 && result.issues.length === 0) {
+      errEl.textContent = 'ما قدرت أستخرج أي فصل من الملف. تأكد إنه ملف PDF سليم وبنفس شكل الجدول الرسمي المعتاد.';
+      errEl.style.display = 'block';
+      summaryEl.innerHTML = '';
+      return;
+    }
+    renderSummary(result);
+    if (result.classes.length === 0) {
+      errEl.textContent = 'ما قدرت أستخرج أي فصل من الملف — شوف تفاصيل كل صفحة بالأسفل لمعرفة السبب.';
+      errEl.style.display = 'block';
+    }
+  } catch (e) {
+    console.error(e);
+    errEl.textContent = 'تعذرت قراءة الملف: ' + (e && e.message ? e.message : e);
+    errEl.style.display = 'block';
+    summaryEl.innerHTML = '';
+  }
+}
+
+document.getElementById('sc-pdf-parse-btn').addEventListener('click', handleParseClick);
