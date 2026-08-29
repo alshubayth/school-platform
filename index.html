@@ -12,6 +12,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -627,6 +628,18 @@
 
     <div id="schedule-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-11">→ رجوع للرئيسية</span>
+
+      <div class="form-card" style="background:var(--sand);">
+        <h4>استيراد جدول من ملف PDF</h4>
+        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">
+          ارفع ملف الجدول الرسمي (نفس شكل الجدول المعتمد من المدرسة) وبنحاول نقرأ كل الفصول منه تلقائيًا.
+          <b>مهم:</b> راجع كل ما يستخرج بعنايه قبل التأكيد — لو أي مادة أو اسم طلع معكوس أو غريب لا تعتمد ولا تحفظ، وخبرنا.
+        </p>
+        <input type="file" id="sc-pdf-file" accept=".pdf" style="margin-bottom:10px;" />
+        <button class="btn-primary" id="sc-pdf-parse-btn" style="width:auto; padding:10px 18px;">معاينة الملف</button>
+        <div class="error-msg" id="sc-pdf-error"></div>
+        <div id="sc-pdf-summary"></div>
+      </div>
 
       <div class="tabs" id="sc-grade-tabs"></div>
 
