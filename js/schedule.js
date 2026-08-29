@@ -119,15 +119,15 @@ async function renderGrid(overrideMap) {
         <table id="sc-table" style="width:100%; border-collapse:collapse; min-width:760px;">
           <thead>
             <tr>
-              <th style="padding:8px; text-align:center; font-size:12.5px; color:var(--slate);">الحصة</th>
-              ${DAYS.map(d => `<th style="padding:8px; text-align:center; font-size:12.5px; color:var(--slate);">${d.label}</th>`).join('')}
+              <th style="padding:8px; text-align:center; font-size:12.5px; color:var(--slate);">اليوم</th>
+              ${PERIODS.map(p => `<th style="padding:8px; text-align:center; font-size:12.5px; color:var(--slate);">الحصة ${p}</th>`).join('')}
             </tr>
           </thead>
           <tbody>
-            ${PERIODS.map(p => `
+            ${DAYS.map(d => `
               <tr>
-                <td style="padding:6px; text-align:center; font-weight:700; font-size:13px;">${p}</td>
-                ${DAYS.map(d => {
+                <td style="padding:6px; text-align:center; font-weight:700; font-size:13px;">${d.label}</td>
+                ${PERIODS.map(p => {
                   const cell = map[d.key + '-' + p] || { subject: '', teacher: '' };
                   return `
                   <td style="padding:4px;">
