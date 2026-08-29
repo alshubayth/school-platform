@@ -165,6 +165,11 @@ async function parsePdfFile(file) {
     const page = await pdf.getPage(pageNum);
     const items = await extractPageItems(page);
 
+    if (items.length === 0) {
+      issues.push({ page: pageNum, reason: 'ما فيه أي نص قابل للقراءة بهذي الصفحة — يحتمل إن الملف صورة ممسوحة ضوئيًا (سكان) أو تم ضغطه بطريقة حوّلت الصفحات لصور بدل نص. جرّب ملف PDF الأصلي غير المضغوط.' });
+      continue;
+    }
+
     const mode = calibratePage(items);
     const decode = mode === 'reversed' ? decodeReversed : decodeNormal;
 
@@ -349,13 +354,17 @@ async function handleParseClick() {
 
   try {
     const result = await parsePdfFile(file);
-    if (result.classes.length === 0) {
-      errEl.textContent = 'ما قدرت أستخرج أي فصل من الملف. تأكد إنه بنفس شكل الجدول الرسمي المعتاد.';
+    if (result.classes.length === 0 && result.issues.length === 0) {
+      errEl.textContent = 'ما قدرت أستخرج أي فصل من الملف. تأكد إنه ملف PDF سليم وبنفس شكل الجدول الرسمي المعتاد.';
       errEl.style.display = 'block';
       summaryEl.innerHTML = '';
       return;
     }
     renderSummary(result);
+    if (result.classes.length === 0) {
+      errEl.textContent = 'ما قدرت أستخرج أي فصل من الملف — شوف تفاصيل كل صفحة بالأسفل لمعرفة السبب.';
+      errEl.style.display = 'block';
+    }
   } catch (e) {
     console.error(e);
     errEl.textContent = 'تعذرت قراءة الملف: ' + (e && e.message ? e.message : e);
