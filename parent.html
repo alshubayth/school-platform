@@ -133,7 +133,7 @@
   .schedule-table{ width:100%; border-collapse:collapse; min-width:600px; }
   .schedule-table th{ padding:10px 4px; text-align:center; font-size:11px; color:var(--slate); font-weight:700; }
   .schedule-table td{ padding:4px; text-align:center; vertical-align:middle; }
-  .schedule-table .period-cell{ font-weight:900; font-size:13px; color:var(--navy); width:34px; }
+  .schedule-table .period-cell{ font-weight:900; font-size:12px; color:var(--navy); width:64px; white-space:nowrap; }
   .schedule-table .subj-cell{
     background:var(--sand); border-radius:10px; padding:12px 4px; font-size:11.5px; font-weight:700; color:var(--ink); line-height:1.4;
   }
@@ -486,10 +486,10 @@ async function loadScheduleTable() {
   const map = {};
   (data || []).forEach(r => { map[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
 
-  const rowsHtml = SCHEDULE_PERIODS.map(p => `
+  const rowsHtml = SCHEDULE_DAYS.map(d => `
     <tr>
-      <td class="period-cell">${p}</td>
-      ${SCHEDULE_DAYS.map(d => {
+      <td class="period-cell">${d.label}</td>
+      ${SCHEDULE_PERIODS.map(p => {
         const cell = map[d.key + '-' + p];
         const subj = cell ? cell.subject : '';
         const teacher = cell ? cell.teacher : '';
@@ -504,7 +504,7 @@ async function loadScheduleTable() {
         <thead>
           <tr>
             <th></th>
-            ${SCHEDULE_DAYS.map(d => `<th>${d.label}</th>`).join('')}
+            ${SCHEDULE_PERIODS.map(p => `<th>الحصة ${p}</th>`).join('')}
           </tr>
         </thead>
         <tbody>${rowsHtml}</tbody>
