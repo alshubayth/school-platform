@@ -87,12 +87,16 @@ function parseTitle(items, decode, excludeItems) {
     }]);
     if (res) return { ...res, items: [it] };
   }
-  // احتياطي: كلمة المرحلة ورقم الفصل (وأحيانًا حتى "/" الفاصلة) بعناصر منفصلة قريبة من بعض هندسيًا -
-  // نطابق كل عنصر مع الوضعين (عادي/معكوس) لحاله، بدون الاعتماد على ترتيب تجميعها.
-  const gradeItems = items.filter(it => !excludeItems.has(it) && [decodeNormal, decodeReversed].some(d => ['أول', 'ثاني', 'ثالث'].includes(d(it.str).trim())));
+  // احتياطي: كلمة المرحلة ورقم الفصل بعناصر منفصلة قريبة من بعض هندسيًا - نطابق كل عنصر مع الوضعين
+  // (عادي/معكوس) لحاله، بدون الاعتماد على ترتيب تجميعها. تأكدنا (بالتشخيص المباشر) إن pdf.js أحيانًا
+  // يلصق "/" الفاصلة بكلمة المرحلة بنفس العنصر (مثلاً "أول/")، فنسمح بوجودها اختياريًا بالنهاية بدل
+  // ما نطابق الكلمة المجردة بس.
+  const GRADE_WORD_RE = /^(أول|ثاني|ثالث)\/?$/;
+  const DIGIT_RE = /^\/?([0-9]{1,2})\/?$/;
+  const gradeItems = items.filter(it => !excludeItems.has(it) && [decodeNormal, decodeReversed].some(d => GRADE_WORD_RE.test(d(it.str).trim())));
   const digitItems = items.filter(it => {
     if (excludeItems.has(it)) return false;
-    return [decodeNormal, decodeReversed].some(d => /^[0-9]{1,2}$/.test(translateDigits(d(it.str)).trim()));
+    return [decodeNormal, decodeReversed].some(d => DIGIT_RE.test(translateDigits(d(it.str)).trim()));
   });
   for (const g of gradeItems) {
     let best = null, bestD = Infinity;
@@ -101,9 +105,11 @@ function parseTitle(items, decode, excludeItems) {
       if (dist < bestD) { bestD = dist; best = d; }
     });
     if (best && bestD < 80) {
-      const gradeWord = [decodeNormal, decodeReversed].map(d => d(g.str).trim()).find(t => ['أول', 'ثاني', 'ثالث'].includes(t));
-      const digitStr = [decodeNormal, decodeReversed].map(d => translateDigits(d(best.str)).trim()).find(t => /^[0-9]{1,2}$/.test(t));
-      return { grade: GRADE_MAP[gradeWord], section: parseInt(digitStr), items: [g, best] };
+      const gradeMatch = [decodeNormal, decodeReversed].map(d => d(g.str).trim().match(GRADE_WORD_RE)).find(Boolean);
+      const digitMatch = [decodeNormal, decodeReversed].map(d => translateDigits(d(best.str)).trim().match(DIGIT_RE)).find(Boolean);
+      if (gradeMatch && digitMatch) {
+        return { grade: GRADE_MAP[gradeMatch[1]], section: parseInt(digitMatch[1]), items: [g, best] };
+      }
     }
   }
   return null;
@@ -225,15 +231,7 @@ async function parsePdfFile(file) {
     const excludeForTitle = new Set([...columnAnchorItems, ...dayAnchorItems]);
     const title = parseTitle(items, decode, excludeForTitle);
     if (!title) {
-      let reason = 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة';
-      // تشخيص مؤقت (نسخة 2 - على العناصر الخام مباشرة بدون أي دمج) عشان نتأكد بالضبط وش يطلع
-      // من pdf.js لكل عنصر لحاله قبل أي معالجة.
-      if (pageNum === 1) {
-        const topItems = [...items].filter(it => !excludeForTitle.has(it)).sort((a, b) => b.y - a.y).slice(0, 10);
-        const dump = topItems.map((it, i) => `#${i}[x0:${Math.round(it.x0)} y:${Math.round(it.y)} size:${Math.round(it.size)} raw:"${it.str}" norm:"${decodeNormal(it.str)}" rev:"${decodeReversed(it.str)}"]`).join(' ');
-        reason += ' — تشخيص2: ' + dump;
-      }
-      issues.push({ page: pageNum, reason });
+      issues.push({ page: pageNum, reason: 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة' });
       continue;
     }
 
