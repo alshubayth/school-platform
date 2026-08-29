@@ -63,11 +63,13 @@ function findDayAnchors(items, decode) {
 
 function parseTitle(items, decode, excludeItems) {
   // الحالة الشائعة: المرحلة/الفصل بخلية واحدة مثل "أول/1"
+  // نرجّع أيضًا العنصر (العناصر) اللي طلعت منها القراءة عشان نستبعدها من محتوى الجدول لاحقًا
+  // (وإلا ينسحب نص العنوان بالغلط داخل إحدى خلايا الجدول القريبة منه).
   for (const it of items) {
     if (excludeItems.has(it)) continue;
     const t = translateDigits(decode(it.str)).trim();
     const m = t.match(/^(أول|ثاني|ثالث)\s*\/?\s*([0-9]+)$/);
-    if (m) return { grade: GRADE_MAP[m[1]], section: parseInt(m[2]) };
+    if (m) return { grade: GRADE_MAP[m[1]], section: parseInt(m[2]), items: [it] };
   }
   // احتياطي: كلمة المرحلة ورقم الفصل بخليتين منفصلتين قريبتين من بعض
   const gradeItems = items.filter(it => !excludeItems.has(it) && ['أول', 'ثاني', 'ثالث'].includes(decode(it.str).trim()));
@@ -83,7 +85,7 @@ function parseTitle(items, decode, excludeItems) {
       if (dist < bestD) { bestD = dist; best = d; }
     });
     if (best && bestD < 60) {
-      return { grade: GRADE_MAP[decode(g.str).trim()], section: parseInt(translateDigits(decode(best.str)).trim()) };
+      return { grade: GRADE_MAP[decode(g.str).trim()], section: parseInt(translateDigits(decode(best.str)).trim()), items: [g, best] };
     }
   }
   return null;
@@ -96,23 +98,33 @@ function medianSpacing(sortedByX) {
   return gaps[Math.floor(gaps.length / 2)] || 1;
 }
 
-function classifyColumns(cx, byX) {
-  const spacing = medianSpacing(byX);
-  const tolerance = spacing * 0.22;
-  for (let i = 0; i < byX.length - 1; i++) {
-    const boundary = (byX[i].x + byX[i + 1].x) / 2;
-    if (Math.abs(cx - boundary) < tolerance) return [byX[i].period, byX[i + 1].period];
-  }
+function nearestColumn(cx, byX) {
   let best = byX[0], bestD = Math.abs(byX[0].x - cx);
   byX.forEach(a => { const d = Math.abs(a.x - cx); if (d < bestD) { bestD = d; best = a; } });
-  return [best.period];
+  return best.period;
 }
 
-function groupByColumn(items, byX) {
+// allowMerge: نسمح بكشف "حصة مزدوجة" (نص يتوسط حدّ عمودين) للمادة فقط - لأن عرضها ثابت غالبًا فتوسّطها
+// دليل موثوق على امتدادها لحصتين. أسماء المعلمين تختلف بعرضها بشكل كبير فمركزها الهندسي ممكن يقع قرب
+// حد عمودين بالصدفة حتى لو الاسم لحصة وحدة بس - فنجبرها دايمًا على أقرب عمود واحد، والمعلم للحصة
+// الثانية المزدوجة نعبّيه لاحقًا فقط لو تأكدنا إن نفس المادة مكرره بالحصتين (راجع التعليق بالأسفل).
+function classifyColumns(cx, byX, allowMerge) {
+  if (allowMerge) {
+    const spacing = medianSpacing(byX);
+    const tolerance = spacing * 0.22;
+    for (let i = 0; i < byX.length - 1; i++) {
+      const boundary = (byX[i].x + byX[i + 1].x) / 2;
+      if (Math.abs(cx - boundary) < tolerance) return [byX[i].period, byX[i + 1].period];
+    }
+  }
+  return [nearestColumn(cx, byX)];
+}
+
+function groupByColumn(items, byX, allowMerge) {
   const groups = {};
   items.forEach(it => {
     const cx = (it.x0 + it.x1) / 2;
-    const periods = classifyColumns(cx, byX);
+    const periods = classifyColumns(cx, byX, allowMerge);
     const key = periods.join(',');
     if (!groups[key]) groups[key] = { periods, items: [] };
     groups[key].items.push(it);
@@ -137,8 +149,11 @@ function joinCellText(items, decode) {
 
 async function extractPageItems(page) {
   const content = await page.getTextContent();
-  return content.items
-    .filter(it => it.str && it.str.trim().length > 0)
+  // ملاحظة: نبقي عناصر المسافات الفارغة هنا (ما نفلترها بـ trim) عشان mergeAdjacentItems يقدر
+  // يحافظ عليها ضمن النص المدموج (مثلاً بين اسم أول واسم عائلة بالمعلم) - لو حذفناها بدري بيلتصق
+  // الاسمين ببعض بدون مسافة.
+  const raw = content.items
+    .filter(it => it.str && it.str.length > 0)
     .map(it => {
       const tr = it.transform;
       return {
@@ -149,6 +164,31 @@ async function extractPageItems(page) {
         size: Math.hypot(tr[2], tr[3]) || Math.hypot(tr[0], tr[1]) || 1,
       };
     });
+  return mergeAdjacentItems(raw);
+}
+
+// بعض مولّدات PDF (زي برنامج الجدول المستخدم هنا) ترسم كل حرف بأمر رسم مستقل بدل الكلمة كاملة.
+// pdf.js يرجّع وقتها كل حرف كعنصر (item) مستقل، فنجمع العناصر المتلاصقة (نفس السطر تقريبًا وفجوة
+// أفقية شبه معدومة) بعنصر واحد قبل أي تحليل - عشان نطابق سلوك pdfplumber اللي استخرجنا فيه الجدول
+// بايثون أول مرة بنجاح. لو العناصر أصلًا كلمات كاملة، هذا الدمج ما يغيّر شي (ما راح يلاقي شي يدمجه).
+function mergeAdjacentItems(items) {
+  const sorted = [...items].sort((a, b) => (a.y - b.y) || (a.x0 - b.x0));
+  const merged = [];
+  let current = null;
+  sorted.forEach(it => {
+    if (current &&
+        Math.abs(it.y - current.y) < 2.5 &&
+        Math.abs(it.size - current.size) < 2 &&
+        (it.x0 - current.x1) < 6) {
+      current.str += it.str;
+      current.x1 = Math.max(current.x1, it.x1);
+    } else {
+      if (current) merged.push(current);
+      current = { str: it.str, x0: it.x0, x1: it.x1, y: it.y, size: it.size };
+    }
+  });
+  if (current) merged.push(current);
+  return merged;
 }
 
 async function parsePdfFile(file) {
@@ -195,8 +235,18 @@ async function parsePdfFile(file) {
       continue;
     }
 
-    const usedItems = new Set([...columnAnchorItems, ...dayAnchorItems]);
+    const usedItems = new Set([...columnAnchorItems, ...dayAnchorItems, ...(title.items || [])]);
     const contentItems = items.filter(it => !usedItems.has(it) && ARABIC_RE.test(it.str));
+
+    // أقصى مسافة معقولة بين خلية ومنتصف صف يومها (نص متوسط تباعد الأيام) - لاستبعاد أي نص خارج
+    // الجدول نفسه (زي تذييل الصفحة "aSc Timetables ... جدول الفصل الدراسي" اللي ينطبع أسفل كل صفحة
+    // وأقرب صف له هو "الخميس" رغم إنه مو جزء من جدوله فعليًا).
+    const dayYs = Object.values(dayAnchors).map(a => a.y).sort((a, b) => a - b);
+    const dayGaps = [];
+    for (let i = 0; i < dayYs.length - 1; i++) dayGaps.push(dayYs[i + 1] - dayYs[i]);
+    dayGaps.sort((a, b) => a - b);
+    const daySpacing = dayGaps[Math.floor(dayGaps.length / 2)] || 90;
+    const maxDayDist = daySpacing * 0.6;
 
     // تجميع كل خلية حسب أقرب يوم (صف)
     const rows = {};
@@ -207,7 +257,7 @@ async function parsePdfFile(file) {
         const d = Math.abs(a.y - it.y);
         if (d < bestD) { bestD = d; bestDay = day; }
       });
-      if (bestDay) rows[bestDay].push(it);
+      if (bestDay && bestD <= maxDayDist) rows[bestDay].push(it);
     });
 
     const classMap = {};
@@ -228,7 +278,7 @@ async function parsePdfFile(file) {
       const subjItems = rowItems.filter(it => it.size > splitPoint);
       const teachItems = rowItems.filter(it => it.size <= splitPoint);
 
-      groupByColumn(subjItems, byX).forEach(g => {
+      groupByColumn(subjItems, byX, true).forEach(g => {
         const text = joinCellText(g.items, decode);
         if (!text) return;
         g.periods.forEach(p => {
@@ -237,7 +287,7 @@ async function parsePdfFile(file) {
           classMap[key].subject = text;
         });
       });
-      groupByColumn(teachItems, byX).forEach(g => {
+      groupByColumn(teachItems, byX, false).forEach(g => {
         const text = joinCellText(g.items, decode);
         if (!text) return;
         g.periods.forEach(p => {
@@ -246,6 +296,18 @@ async function parsePdfFile(file) {
           classMap[key].teacher = text;
         });
       });
+
+      // حصة مزدوجة (نفس المادة بحصتين متتاليتين): أحيانًا نص المعلم (لأنه أقصر من عرض الحصتين)
+      // ينحسب هندسيًا بحصة وحدة بس مع إن المادة انحسبت صح بالحصتين. نعبّي الفراغ من الحصة الجارة
+      // لو نفس المادة بالحصتين وواحدة بس فيها اسم معلم.
+      for (let p = 1; p < 7; p++) {
+        const a = classMap[day + '-' + p];
+        const b = classMap[day + '-' + (p + 1)];
+        if (a && b && a.subject && a.subject === b.subject) {
+          if (!a.teacher && b.teacher) a.teacher = b.teacher;
+          else if (!b.teacher && a.teacher) b.teacher = a.teacher;
+        }
+      }
     });
 
     classes.push({ page: pageNum, grade: title.grade, section: title.section, map: classMap, filledCount });
