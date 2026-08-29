@@ -119,6 +119,26 @@
   .icon-btn{ width:30px; height:30px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; text-decoration:none; }
   .icon-btn.call{ background:var(--violet-light); color:var(--violet); }
   .icon-btn.whatsapp{ background:var(--teal-light); color:var(--teal); }
+
+  .hidden-view{ display:none; }
+
+  .section-select-wrap{ position:relative; z-index:1; margin-bottom:16px; }
+  .section-select-wrap select{
+    width:100%; padding:13px 14px; border-radius:14px; border:1.5px solid #E7E4F5; background:#fff;
+    font-family:inherit; font-size:13.5px; font-weight:700; color:var(--ink); cursor:pointer;
+    box-shadow:0 4px 14px rgba(16,23,40,0.06); appearance:none; -webkit-appearance:none;
+  }
+
+  .schedule-card{ background:#fff; border-radius:20px; padding:16px; box-shadow:0 4px 14px rgba(16,23,40,0.06); overflow-x:auto; position:relative; z-index:1; }
+  .schedule-table{ width:100%; border-collapse:collapse; min-width:600px; }
+  .schedule-table th{ padding:10px 4px; text-align:center; font-size:11px; color:var(--slate); font-weight:700; }
+  .schedule-table td{ padding:4px; text-align:center; vertical-align:middle; }
+  .schedule-table .period-cell{ font-weight:900; font-size:13px; color:var(--navy); width:34px; }
+  .schedule-table .subj-cell{
+    background:var(--sand); border-radius:10px; padding:12px 4px; font-size:11.5px; font-weight:700; color:var(--ink); line-height:1.4;
+  }
+  .schedule-table .subj-cell.empty{ color:#C7CBD8; font-weight:500; }
+  .schedule-table .teacher-name{ font-size:9.5px; font-weight:500; color:var(--slate); margin-top:3px; }
 </style>
 </head>
 <body>
@@ -132,9 +152,40 @@
     </div>
   </div>
 
-  <div id="bento-container"></div>
-  <div id="alert-container"></div>
-  <div id="admin-note-container"></div>
+  <div class="tabs" id="main-view-tabs">
+    <button class="tab active" data-view="weekly">الخطة الأسبوعية</button>
+    <button class="tab" data-view="schedule">الجدول الدراسي</button>
+  </div>
+
+  <div id="weekly-view">
+    <div id="bento-container"></div>
+    <div id="alert-container"></div>
+    <div id="admin-note-container"></div>
+
+    <div class="tabs" id="grade-tabs">
+      <button class="tab active" data-grade="first_intermediate">أول متوسط</button>
+      <button class="tab" data-grade="second_intermediate">ثاني متوسط</button>
+      <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
+    </div>
+
+    <div class="week-tabs" id="week-tabs"></div>
+
+    <div id="plans-container"></div>
+  </div>
+
+  <div id="schedule-view" class="hidden-view">
+    <div class="tabs" id="sch-grade-tabs">
+      <button class="tab active" data-grade="first_intermediate">أول متوسط</button>
+      <button class="tab" data-grade="second_intermediate">ثاني متوسط</button>
+      <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
+    </div>
+
+    <div class="section-select-wrap">
+      <select id="sch-section-select"><option value="">اختر الفصل</option></select>
+    </div>
+
+    <div id="sch-table-container"></div>
+  </div>
 
   <div class="contact-card">
     <div class="contact-toggle" id="contact-toggle">
@@ -207,17 +258,6 @@
       </div>
     </div>
   </div>
-
-
-  <div class="tabs" id="grade-tabs">
-    <button class="tab active" data-grade="first_intermediate">أول متوسط</button>
-    <button class="tab" data-grade="second_intermediate">ثاني متوسط</button>
-    <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
-  </div>
-
-  <div class="week-tabs" id="week-tabs"></div>
-
-  <div id="plans-container"></div>
 </div>
 
 <script>
@@ -378,6 +418,99 @@ async function loadPlans() {
 }
 
 loadPublishedWeeks().then(loadPlans);
+
+/* ===== الجدول الدراسي ===== */
+const SCHEDULE_DAYS = [
+  { key: 'sunday', label: 'الأحد' },
+  { key: 'monday', label: 'الاثنين' },
+  { key: 'tuesday', label: 'الثلاثاء' },
+  { key: 'wednesday', label: 'الأربعاء' },
+  { key: 'thursday', label: 'الخميس' },
+];
+const SCHEDULE_PERIODS = [1, 2, 3, 4, 5, 6, 7];
+let schGrade = 'first_intermediate';
+let schSection = null;
+
+document.getElementById('main-view-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  document.querySelectorAll('#main-view-tabs .tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const view = btn.dataset.view;
+  document.getElementById('weekly-view').classList.toggle('hidden-view', view !== 'weekly');
+  document.getElementById('schedule-view').classList.toggle('hidden-view', view !== 'schedule');
+  if (view === 'schedule' && !schSection && document.getElementById('sch-section-select').options.length <= 1) {
+    refreshScheduleSections();
+  }
+});
+
+document.getElementById('sch-grade-tabs').addEventListener('click', (e) => {
+  const btn = e.target.closest('.tab');
+  if (!btn) return;
+  document.querySelectorAll('#sch-grade-tabs .tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  schGrade = btn.dataset.grade;
+  schSection = null;
+  refreshScheduleSections();
+});
+
+document.getElementById('sch-section-select').addEventListener('change', (e) => {
+  schSection = e.target.value ? parseInt(e.target.value) : null;
+  loadScheduleTable();
+});
+
+async function refreshScheduleSections() {
+  const sel = document.getElementById('sch-section-select');
+  sel.innerHTML = '<option value="">جارٍ التحميل...</option>';
+  document.getElementById('sch-table-container').innerHTML = '';
+
+  const { data } = await sb.from('class_schedules').select('class_section').eq('grade_level', schGrade);
+  const sections = [...new Set((data || []).map(r => r.class_section))].sort((a, b) => a - b);
+
+  if (sections.length === 0) {
+    sel.innerHTML = '<option value="">لا يوجد جدول لهذه المرحلة بعد</option>';
+    return;
+  }
+  sel.innerHTML = '<option value="">اختر الفصل</option>' + sections.map(n => `<option value="${n}">الفصل ${n}</option>`).join('');
+}
+
+async function loadScheduleTable() {
+  const container = document.getElementById('sch-table-container');
+  if (!schSection) { container.innerHTML = ''; return; }
+  container.innerHTML = '<div class="empty-state"><p>جارٍ التحميل...</p></div>';
+
+  const { data } = await sb.from('class_schedules')
+    .select('day_of_week, period_number, subject_name, teacher_name')
+    .eq('grade_level', schGrade).eq('class_section', schSection);
+
+  const map = {};
+  (data || []).forEach(r => { map[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
+
+  const rowsHtml = SCHEDULE_PERIODS.map(p => `
+    <tr>
+      <td class="period-cell">${p}</td>
+      ${SCHEDULE_DAYS.map(d => {
+        const cell = map[d.key + '-' + p];
+        const subj = cell ? cell.subject : '';
+        const teacher = cell ? cell.teacher : '';
+        if (!subj) return `<td><div class="subj-cell empty">-</div></td>`;
+        return `<td><div class="subj-cell">${subj}${teacher ? `<div class="teacher-name">${teacher}</div>` : ''}</div></td>`;
+      }).join('')}
+    </tr>`).join('');
+
+  container.innerHTML = `
+    <div class="schedule-card">
+      <table class="schedule-table">
+        <thead>
+          <tr>
+            <th></th>
+            ${SCHEDULE_DAYS.map(d => `<th>${d.label}</th>`).join('')}
+          </tr>
+        </thead>
+        <tbody>${rowsHtml}</tbody>
+      </table>
+    </div>`;
+}
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
