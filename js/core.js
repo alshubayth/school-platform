@@ -7,6 +7,7 @@ import { loadDutyRosterModule, renderMyDutyBanner } from './duty-roster.js';
 import { renderDashboard } from './dashboard.js';
 import { loadExamsModule } from './exams.js';
 import { loadExamTrackingTile } from './exam-tracking.js';
+import { loadScheduleModule } from './schedule.js';
 
 export const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
@@ -51,10 +52,12 @@ const icons = {
   duty: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
   exams: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>',
   tracking: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  schedule: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18"/><path d="M7.5 14.5h2M7.5 17.5h2M12 14.5h2M12 17.5h2M16.5 14.5h1M16.5 17.5h1"/></svg>',
 };
 
 export const tiles = [
   { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal' },
+  { key: 'schedule', icon: icons.schedule, title: 'الجدول الدراسي', desc: 'جدول الحصص لكل فصل',            roles: ['admin','deputy'], color: 'diamond-teal' },
   { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy'], color: 'diamond-navy' },
   { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'], color: 'diamond-gold' },
   { key: 'notes',  icon: icons.notes,  title: 'متابعة أداء الموظفين', desc: 'ملاحظات ومؤشرات وتقييم',       roles: ['admin','deputy'], color: 'diamond-purple' },
@@ -147,6 +150,7 @@ export function hideAllModules() {
   document.getElementById('duty-module').classList.add('hidden');
   document.getElementById('exams-module').classList.add('hidden');
   document.getElementById('exam-tracking-module').classList.add('hidden');
+  document.getElementById('schedule-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -188,6 +192,9 @@ export function openTile(key, title) {
   } else if (key === 'tracking') {
     document.getElementById('exam-tracking-module').classList.remove('hidden');
     loadExamTrackingTile();
+  } else if (key === 'schedule') {
+    document.getElementById('schedule-module').classList.remove('hidden');
+    loadScheduleModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
