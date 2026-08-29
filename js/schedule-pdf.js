@@ -61,22 +61,38 @@ function findDayAnchors(items, decode) {
   return byDay;
 }
 
+// نص عنوان الصفحة (منطقة العنوان/الترويسة) طلع أحيانًا مكتوب بترتيب منطقي صحيح من pdf.js حتى لو باقي
+// نصوص الصفحة (جدول الحصص نفسه) محتاجة وضع "معكوس" (decode المحسوب لكل الصفحة). فبدل ما نعتمد على
+// وضع واحد بس هنا، نجرب الوضعين (عادي ومعكوس) على كل عنصر لحاله عشان نلقط أي الاثنين يطابق.
+function bestDecodeMatch(str, testers) {
+  for (const d of [decodeNormal, decodeReversed]) {
+    const t = translateDigits(d(str)).trim();
+    for (const test of testers) {
+      const r = test(t);
+      if (r) return r;
+    }
+  }
+  return null;
+}
+
 function parseTitle(items, decode, excludeItems) {
   // الحالة الشائعة: المرحلة/الفصل بخلية واحدة مثل "أول/1"
   // نرجّع أيضًا العنصر (العناصر) اللي طلعت منها القراءة عشان نستبعدها من محتوى الجدول لاحقًا
   // (وإلا ينسحب نص العنوان بالغلط داخل إحدى خلايا الجدول القريبة منه).
   for (const it of items) {
     if (excludeItems.has(it)) continue;
-    const t = translateDigits(decode(it.str)).trim();
-    const m = t.match(/^(أول|ثاني|ثالث)\s*\/?\s*([0-9]+)$/);
-    if (m) return { grade: GRADE_MAP[m[1]], section: parseInt(m[2]), items: [it] };
+    const res = bestDecodeMatch(it.str, [t => {
+      const m = t.match(/^(أول|ثاني|ثالث)\s*\/?\s*([0-9]+)$/);
+      return m ? { grade: GRADE_MAP[m[1]], section: parseInt(m[2]) } : null;
+    }]);
+    if (res) return { ...res, items: [it] };
   }
-  // احتياطي: كلمة المرحلة ورقم الفصل بخليتين منفصلتين قريبتين من بعض
-  const gradeItems = items.filter(it => !excludeItems.has(it) && ['أول', 'ثاني', 'ثالث'].includes(decode(it.str).trim()));
+  // احتياطي: كلمة المرحلة ورقم الفصل (وأحيانًا حتى "/" الفاصلة) بعناصر منفصلة قريبة من بعض هندسيًا -
+  // نطابق كل عنصر مع الوضعين (عادي/معكوس) لحاله، بدون الاعتماد على ترتيب تجميعها.
+  const gradeItems = items.filter(it => !excludeItems.has(it) && [decodeNormal, decodeReversed].some(d => ['أول', 'ثاني', 'ثالث'].includes(d(it.str).trim())));
   const digitItems = items.filter(it => {
     if (excludeItems.has(it)) return false;
-    const t = translateDigits(decode(it.str)).trim();
-    return /^[0-9]{1,2}$/.test(t);
+    return [decodeNormal, decodeReversed].some(d => /^[0-9]{1,2}$/.test(translateDigits(d(it.str)).trim()));
   });
   for (const g of gradeItems) {
     let best = null, bestD = Infinity;
@@ -84,8 +100,10 @@ function parseTitle(items, decode, excludeItems) {
       const dist = Math.hypot(d.x0 - g.x0, d.y - g.y);
       if (dist < bestD) { bestD = dist; best = d; }
     });
-    if (best && bestD < 60) {
-      return { grade: GRADE_MAP[decode(g.str).trim()], section: parseInt(translateDigits(decode(best.str)).trim()), items: [g, best] };
+    if (best && bestD < 80) {
+      const gradeWord = [decodeNormal, decodeReversed].map(d => d(g.str).trim()).find(t => ['أول', 'ثاني', 'ثالث'].includes(t));
+      const digitStr = [decodeNormal, decodeReversed].map(d => translateDigits(d(best.str)).trim()).find(t => /^[0-9]{1,2}$/.test(t));
+      return { grade: GRADE_MAP[gradeWord], section: parseInt(digitStr), items: [g, best] };
     }
   }
   return null;
@@ -149,11 +167,12 @@ function joinCellText(items, decode) {
 
 async function extractPageItems(page) {
   const content = await page.getTextContent();
-  // ملاحظة: نبقي عناصر المسافات الفارغة هنا (ما نفلترها بـ trim) عشان mergeAdjacentItems يقدر
-  // يحافظ عليها ضمن النص المدموج (مثلاً بين اسم أول واسم عائلة بالمعلم) - لو حذفناها بدري بيلتصق
-  // الاسمين ببعض بدون مسافة.
-  const raw = content.items
-    .filter(it => it.str && it.str.length > 0)
+  // ملاحظة مهمة (تأكدنا منها بالتشخيص مع ملف حقيقي): pdf.js يرجّع كل عنصر (item) بنصه الصحيح
+  // منطقيًا زي ما هو مكتوب فعلاً (مو بترتيب بصري معكوس زي بعض أدوات استخراج PDF الثانية) - فما نحتاج
+  // ندمج الحروف يدويًا ولا نعكسها. اللي نحتاجه بس: ترتيب العناصر المنفصلة (لما الخلية توزّعت على أكثر
+  // من عنصر) من اليمين لليسار عند التجميع - وهذا موجود أصلاً بدالة joinCellText.
+  return content.items
+    .filter(it => it.str && it.str.trim().length > 0)
     .map(it => {
       const tr = it.transform;
       return {
@@ -164,31 +183,6 @@ async function extractPageItems(page) {
         size: Math.hypot(tr[2], tr[3]) || Math.hypot(tr[0], tr[1]) || 1,
       };
     });
-  return mergeAdjacentItems(raw);
-}
-
-// بعض مولّدات PDF (زي برنامج الجدول المستخدم هنا) ترسم كل حرف بأمر رسم مستقل بدل الكلمة كاملة.
-// pdf.js يرجّع وقتها كل حرف كعنصر (item) مستقل، فنجمع العناصر المتلاصقة (نفس السطر تقريبًا وفجوة
-// أفقية شبه معدومة) بعنصر واحد قبل أي تحليل - عشان نطابق سلوك pdfplumber اللي استخرجنا فيه الجدول
-// بايثون أول مرة بنجاح. لو العناصر أصلًا كلمات كاملة، هذا الدمج ما يغيّر شي (ما راح يلاقي شي يدمجه).
-function mergeAdjacentItems(items) {
-  const sorted = [...items].sort((a, b) => (a.y - b.y) || (a.x0 - b.x0));
-  const merged = [];
-  let current = null;
-  sorted.forEach(it => {
-    if (current &&
-        Math.abs(it.y - current.y) < 2.5 &&
-        Math.abs(it.size - current.size) < 2 &&
-        (it.x0 - current.x1) < 6) {
-      current.str += it.str;
-      current.x1 = Math.max(current.x1, it.x1);
-    } else {
-      if (current) merged.push(current);
-      current = { str: it.str, x0: it.x0, x1: it.x1, y: it.y, size: it.size };
-    }
-  });
-  if (current) merged.push(current);
-  return merged;
 }
 
 async function parsePdfFile(file) {
@@ -231,15 +225,7 @@ async function parsePdfFile(file) {
     const excludeForTitle = new Set([...columnAnchorItems, ...dayAnchorItems]);
     const title = parseTitle(items, decode, excludeForTitle);
     if (!title) {
-      let reason = 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة';
-      // تشخيص مؤقت: نطبع أقرب 6 عناصر نص لأعلى الصفحة (بعد الدمج) كل وحد بنصه الخام والمفكوك،
-      // عشان نشوف بالضبط وش يطلع من pdf.js بالمتصفح الحقيقي - هذا يساعدنا نلقط سبب الفشل بدقة.
-      if (pageNum === 1) {
-        const topItems = [...items].filter(it => !excludeForTitle.has(it)).sort((a, b) => b.y - a.y).slice(0, 8);
-        const dump = topItems.map(it => `[raw:"${it.str}" rev:"${decodeReversed(it.str)}" norm:"${decodeNormal(it.str)}"]`).join(' | ');
-        reason += ' — تشخيص: ' + dump;
-      }
-      issues.push({ page: pageNum, reason });
+      issues.push({ page: pageNum, reason: 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة' });
       continue;
     }
 
