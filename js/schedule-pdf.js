@@ -231,7 +231,15 @@ async function parsePdfFile(file) {
     const excludeForTitle = new Set([...columnAnchorItems, ...dayAnchorItems]);
     const title = parseTitle(items, decode, excludeForTitle);
     if (!title) {
-      issues.push({ page: pageNum, reason: 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة' });
+      let reason = 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة';
+      // تشخيص مؤقت: نطبع أقرب 6 عناصر نص لأعلى الصفحة (بعد الدمج) كل وحد بنصه الخام والمفكوك،
+      // عشان نشوف بالضبط وش يطلع من pdf.js بالمتصفح الحقيقي - هذا يساعدنا نلقط سبب الفشل بدقة.
+      if (pageNum === 1) {
+        const topItems = [...items].filter(it => !excludeForTitle.has(it)).sort((a, b) => b.y - a.y).slice(0, 8);
+        const dump = topItems.map(it => `[raw:"${it.str}" rev:"${decodeReversed(it.str)}" norm:"${decodeNormal(it.str)}"]`).join(' | ');
+        reason += ' — تشخيص: ' + dump;
+      }
+      issues.push({ page: pageNum, reason });
       continue;
     }
 
