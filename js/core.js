@@ -8,6 +8,7 @@ import { renderDashboard } from './dashboard.js';
 import { loadExamsModule } from './exams.js';
 import { loadExamTrackingTile } from './exam-tracking.js';
 import { loadScheduleModule } from './schedule.js';
+import './schedule-pdf.js';
 
 export const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
