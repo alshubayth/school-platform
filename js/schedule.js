@@ -2,21 +2,21 @@ import { sb, gradeLabels, backToTiles } from './core.js';
 
 document.getElementById('back-to-tiles-11').addEventListener('click', backToTiles);
 
-const DAYS = [
+export const DAYS = [
   { key: 'sunday', label: 'الأحد' },
   { key: 'monday', label: 'الاثنين' },
   { key: 'tuesday', label: 'الثلاثاء' },
   { key: 'wednesday', label: 'الأربعاء' },
   { key: 'thursday', label: 'الخميس' },
 ];
-const PERIODS = [1, 2, 3, 4, 5, 6, 7];
+export const PERIODS = [1, 2, 3, 4, 5, 6, 7];
 const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 
 let scGrade = 'first_intermediate';
 let scSection = null;
 
 // مواد جدول الحصص (حسب تسمياتها بالجدول الرسمي المعتمد من المدرسة)
-const SCHEDULE_SUBJECTS = [
+export const SCHEDULE_SUBJECTS = [
   'إنجليزي', 'الإسلامية', 'الاجتماعيات', 'البدنية', 'الحياتية',
   'الرياضيات', 'الفكير الناقد', 'الفنية', 'رقمية', 'علوم', 'لغتي',
 ];
@@ -24,6 +24,26 @@ const SCHEDULE_SUBJECTS = [
 export async function loadScheduleModule() {
   renderGradeTabs();
   await refreshSectionOptions();
+}
+
+// يستخدمها استيراد PDF لعرض بيانات مستخرجة داخل نفس شاشة التحرير المعتادة، بدون حفظها تلقائيًا
+export async function previewInGrid(grade, section, map) {
+  scGrade = grade;
+  scSection = section;
+  renderGradeTabs();
+
+  const sectionSelect = document.getElementById('sc-section-select');
+  const hasOption = Array.from(sectionSelect.options).some(o => o.value === String(section));
+  if (!hasOption) {
+    const opt = document.createElement('option');
+    opt.value = String(section);
+    opt.textContent = 'الفصل ' + section;
+    sectionSelect.appendChild(opt);
+  }
+  sectionSelect.value = String(section);
+
+  await renderGrid(map);
+  document.getElementById('sc-grid-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function renderGradeTabs() {
@@ -75,21 +95,26 @@ function subjectOptionsHtml(selected) {
   return html;
 }
 
-async function renderGrid() {
+async function renderGrid(overrideMap) {
   const container = document.getElementById('sc-grid-container');
   if (!scSection) { container.innerHTML = ''; return; }
-  container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
-  const { data: existing } = await sb.from('class_schedules')
-    .select('day_of_week, period_number, subject_name, teacher_name')
-    .eq('grade_level', scGrade).eq('class_section', scSection);
-
-  const map = {};
-  (existing || []).forEach(r => { map[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
+  let map;
+  if (overrideMap) {
+    map = overrideMap;
+  } else {
+    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
+    const { data: existing } = await sb.from('class_schedules')
+      .select('day_of_week, period_number, subject_name, teacher_name')
+      .eq('grade_level', scGrade).eq('class_section', scSection);
+    map = {};
+    (existing || []).forEach(r => { map[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
+  }
 
   let html = `
     <div class="form-card">
       <h4>${gradeLabels[scGrade]} - الفصل ${scSection}</h4>
+      ${overrideMap ? '<p style="font-size:12.5px; color:var(--gold); font-weight:700; margin:-6px 0 12px;">⚠ معاينة من ملف مستورد — راجع كل خلية بعنايه، ثم اضغط "حفظ الجدول" لاعتمادها</p>' : ''}
       <div style="overflow-x:auto;">
         <table id="sc-table" style="width:100%; border-collapse:collapse; min-width:760px;">
           <thead>
