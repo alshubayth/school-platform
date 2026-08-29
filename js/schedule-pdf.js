@@ -225,7 +225,15 @@ async function parsePdfFile(file) {
     const excludeForTitle = new Set([...columnAnchorItems, ...dayAnchorItems]);
     const title = parseTitle(items, decode, excludeForTitle);
     if (!title) {
-      issues.push({ page: pageNum, reason: 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة' });
+      let reason = 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة';
+      // تشخيص مؤقت (نسخة 2 - على العناصر الخام مباشرة بدون أي دمج) عشان نتأكد بالضبط وش يطلع
+      // من pdf.js لكل عنصر لحاله قبل أي معالجة.
+      if (pageNum === 1) {
+        const topItems = [...items].filter(it => !excludeForTitle.has(it)).sort((a, b) => b.y - a.y).slice(0, 10);
+        const dump = topItems.map((it, i) => `#${i}[x0:${Math.round(it.x0)} y:${Math.round(it.y)} size:${Math.round(it.size)} raw:"${it.str}" norm:"${decodeNormal(it.str)}" rev:"${decodeReversed(it.str)}"]`).join(' ');
+        reason += ' — تشخيص2: ' + dump;
+      }
+      issues.push({ page: pageNum, reason });
       continue;
     }
 
