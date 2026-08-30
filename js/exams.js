@@ -836,32 +836,37 @@ document.getElementById('exam-roster-print-btn').addEventListener('click', () =>
 });
 
 /* ---------- ملصقات الطلاب (GS-1114، 105×42مم، عمودين × 7 صفوف) ---------- */
+const LABEL_LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAAATkAAABMCAMAAAAhpzAFAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAINUExURQAAAP////////7+/v7+/v////7+/v39/f7+/v7+/v39/f////7+/v7+/v////7+/v7+/v7+/v////39/f7+/v////////////7+/v39/f7+/v////////7+/v7+/v////7+/v////7+/v39/f////////7+/v7+/v7+/v7+/v7+/v////39/f39/f////7+/v////////////////7+/v39/f////////////////////////////////////39/f39/f////////z8/P////////////7+/v39/f////////////7+/v7+/v////39/f////7+/v7+/v////39/f39/f7+/v////7+/v7+/v////39/f39/f7+/v////////39/f////39/f7+/v////7+/vz8/P39/f////////////////7+/v39/f////39/fz8/P////7+/v39/f////39/f39/f7+/v7+/v39/f7+/v39/f////////7+/v////39/f////39/f39/f7+/v7+/v////7+/v////////////7+/v////7+/v7+/vv7+/////7+/v7+/v////////////39/f39/f7+/v7+/v////7+/v7+/v////////7+/v////39/f7+/vz8/P////7+/v39/f39/f////39/f///////////////////yfN8loAAACvdFJOUwBl//SvStX+/a6jAtzsKdHowwaQyQUvaNqP8UUSwsp1uyDPlHhu5u25vd8Hqds58xxIXjXS72waaR8DEDJQTW6mCvBZb3Fb+4cBCBbZ+TuiLtb1qt/l+mT4/ojg9asbC6EEjPwzsVGNSUBaTO/aD5a5IbjyFGfktLOeyJIsNuc8m1159PLgPr4eJETpGMHN1kL32F9zFZzM5ep03eFUS61Og7zGKuuIdiL4WBlWEVVmFzv+AAAACXBIWXMAACHVAAAh1QEEnLSdAAAIK0lEQVR4Xu2bh78dRRXHxxHCQ0OLIIRQBKN0gnQFUWnBKAqIggIBjAVCx0KTokRUmgYLKlhAwQL6N3LO7/xmdmZ3dnf23pcHvHu/n3dnTvmdM7vn3dzc19ySJUuWrCkf8NP5IGsXGs5iMixfYDiI6bB+ceEcZoANFhfOYQbYYHHhHGaADRYXzmEG2GBh2Y9zmAF2WFg4hllgh4WFY5jO/mywuHAQU9hghVgXGY6jkqRkOTubwzgQH0BHcH4FoXeDAzfYEz9jA4K2rhpo96Fyzw9zEgNAt5FOQEZ+EBKTQe3BdCrQw3IO6UQEkyVinHMonRLdxh0gOaxHJ8l+NqniI3QytO5wNJgKammPo2cdQTswYXK0SwwmCdr1TU6zJT7KdE8e4SMp2XfIIUfRbKib3Bh6AzR7gaR3cmiRsTmGZTlazC0IZ1jVMVBOZuOx2mEcPYJmSvXkNh53fNU5GXpoqILRPzlqjTyQtDErkmQmYoVDpUyaLOFjyCaTQ/SEaMcVICnQ7RJzqQglSvAGJ0d5YgYa90TJfZy2EjIomoIWbd06WBmSKs1BOE6OwejEVdHE5k80fpeYSw3vPymG/r/JwPDkjJNQmGG9Aiqi2WRQWs/J3p8i22BhXzLEOTlzQzD3gjX0rzVqkxbKqU0I2+DkTkNJl9AscrqIz1CjyViHWlgwWNebZCKbXL7F0jPtRXjK5LYlHRjCNvycE0mJYhz6JIMGtVA/WNabZKJycvoCOGVyZ2H7FNa06eDkyiOSCu5tztaaiPWoxPSDZX25c5hgcVxDMK5Kni0RU8HAHhZ/bogMT+48iDuUo4p93RqcCbBkFTmfu16GrYqF5kY6DU9OcpRm9J+PzAUoVW8CF1oB6nrozTLx6VTg3Gbsn9Hm8I2LNDh4Tkx2VVsY0kYjkyufUYoZMWPl6LKI2AgwiYwsdDF3kGbYZPX4LPe14hLuM2AD+By2lGY+YtkHaSyDjeZnlduN4v3n5zmPl2tbQoyI5gtO3yDRL2lXh0u92+Qvo7MGyIVfPse1h5vnHmkCV0B3Jb3S5OR4vx2qRYL3flV7HsGnTAkR7inui1gXCty40FgGXQnbdyR2REVpct59yfYvQ7yPqPzU6OXMCVuMvSsxElPJEnrNV9MtT867r9DQgn1DbetVuAS2qJucaGiA6GhYP5oA9xbZd6K+yu6ri7+GxjByPq2ZYYvKyXl3LQ0lJK5DF318DX6TaeOup0F4wNoz29lbvp782IMtaieXzaSTWDGzlUlx36ARuYGHrC1yMK1qbrTrFcynUT25dChZot/JcN+k0ZC9WWFs4n3FgmDEAD+Z5jQUQm2ihIZM7lvO3RS7ca+f3MWNCyu42d5oOhRSPEZhRGCgjqgPRthv1lYKvIZupEOUtLTB5V4/OdHR4BCoCJ0shrVMN6dlhF4eHCfqg5Hv3XbdSIcoaWlvocvwhMmJMBjcd4pmO95J3cpIuySjk8QhxPsrsQ5cToGoD0a+39ZpV3FApyeZY3Le3c7dNqWl65RktLMoJua2gqNEfTDy/Yp2ujH66dPOM7nwMt8k9L2Zd9+ml2ZK7Gql7RQi/i55fGcK39UuanwvGLKFbuJ/P5wRwowPcUeUqHEnLKDubu53NScVUU2OhUKCmkRaKEm5O89rYYChydzDPR59b94vetEYpynmTrZzv4+7tSxBQQpi/ef3Z4z7MwGPURiZSizV96n6RkR/iEQeePDBH4QzKDXjEC3o54ciw7vPH4nxY4TAQ+I+LPsjsj/q/cmy9WIVGZtwttkF+jNkd6rgMULmrB6x7WO0ZPsJAvsYOaeDRosJ0J8J7EwkPEbInAk8zp1Ik/DlqwwoPQM2YKAPyetvG9GMjJW14Fk52oVml/5M5LRGw2OE3KumVaVdQsTsJ8wR7rLA2G+omSqY2JXUrgFdOrgnexJCf6ah6ctjFEamXZ+8HNEg2vspM4+zF6bJaIvGjLQOGoN306Y3UTe5pp7HGIXQ+xe7mS5zTi6OjsesQ+z+uswy0ww24DHrENxegf5U5eQwOjtjncL7bIOX0SL1k1v//JT3moInDO2cmsndzc4LAe85oL57xOyc0cmxYT2hRH+PqJ+8b/eUgZOzhD0pBhnLF7BbV2AmfkMxGPgZGxUwAZ0Mi3r/9LahS97D3egoC61jJEuFycWL0T1TdJvX8XO7w2TNKcUMNugBeTz8M9HRdnR0wY7wLzQDy/tbzdqJn/kGhXO/xF8KsfxXEn3WUhqyVlb3XNB4/7x/ITgvcnfu12L9Rh0VI8gV1lS0Vsi+eCeFkMC6AXgxe23zL2FdwarV/rdBZR+3R2sXrZ2yuN85fzV0GqJArd97/4eDxXjZooAamVyQ/bGZnPN/okz8kHd+W3NN8CmZxp8xEMwlpRup+//A+1esHx6vSh/3F70wu0Rb1JPHXyHaL+TkY0UsfCPhb7oghlW7wDLXdt0UavQ5B+fvssbJoQ2VqoobwyxGfhpob0ZOK0DVOLgQXg8eusSQzGYHVK9pFLnd0QqT0zwW8SyjBqzgOn+ZaZx7ghqZ3G3udTrN5FROJWz51x8sf5/7B/UmmATGwta0jcRLvsc4DnqxXKwjzBXfMnYK1rMQ6U7un1BQBmUwUG0tVhCC+QZWndwe/HmkOnFyb4rzLyhR8G/9WTwsyfq9+IMp1ZtgEloG3H/wzev4dzohA9Xs/HfeBu9ZOB/BzBjUBc58+LdorDt0SCTabzO3ZAgOS/lf4zC5ZACOCpj3f2aWDIORBRhbUgNnpjCypA5ObS/dJfXI2GgtWbJkQXDuHcRosAW6UnNNAAAAAElFTkSuQmCC';
+
 const LABEL_STYLES = `
   @page{ size: A4; margin: 0; }
   body{ font-family: Arial, sans-serif; margin:0; padding:0; }
   .label-page{ display:grid; grid-template-columns: 105mm 105mm; }
-  .label-card{ width:105mm; height:42mm; box-sizing:border-box; border:1px solid #999; display:flex; flex-direction:row-reverse; overflow:hidden; page-break-inside:avoid; }
-  .label-strip{ width:13mm; background:#122B4A; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; padding-top:2mm; flex-shrink:0; }
-  .label-strip .diamond{ width:6mm; height:6mm; background:#fff; transform:rotate(45deg); border-radius:1.5px; margin-bottom:2mm; }
-  .label-strip .brand-text{ writing-mode:vertical-rl; font-size:6.5px; font-weight:600; letter-spacing:0.5px; }
-  .label-main{ flex:1; padding:2mm 3mm; display:flex; flex-direction:column; }
-  .label-tag{ align-self:flex-start; border:1px solid #2C5F8A; border-radius:6px; padding:0.5mm 3mm; font-size:9px; font-weight:bold; color:#2C5F8A; margin-bottom:1.5mm; }
-  .label-title{ text-align:center; font-weight:bold; font-size:9px; margin-bottom:1.5mm; letter-spacing:1px; }
-  .label-row{ font-size:8.5px; margin:0.8mm 0; }
-  .label-row .lbl{ font-weight:bold; }
-  .label-row .val-green{ color:#2E7D32; font-weight:bold; }
+  .label-card{ width:105mm; height:42mm; box-sizing:border-box; border:1px solid #999; display:flex; flex-direction:row; overflow:hidden; page-break-inside:avoid; background:#fff; }
+  .label-strip{ width:12mm; background:#538135; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
+  .label-strip img{ width:34mm; height:auto; transform:rotate(-90deg); }
+  .label-main{ flex:1; padding:2mm 4mm; display:flex; flex-direction:column; }
+  .label-tag{ margin-right:auto; border:0.4mm solid #375623; border-radius:3mm; padding:0.5mm 3mm; font-size:9px; font-weight:bold; color:#375623; flex-shrink:0; }
+  .label-body{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:1.8mm; }
+  .label-title{ text-align:center; font-weight:bold; font-size:11px; color:#2F5496; }
+  .label-row{ font-size:9.5px; color:#000; }
+  .label-row .lbl{ font-weight:bold; color:#7030A0; }
+  .label-row .val-green{ color:#00B050; font-weight:bold; }
+  .label-row .val-red{ color:#FF0000; font-weight:bold; }
 `;
 
 function studentLabelHtml(r) {
   return `
     <div class="label-card">
-      <div class="label-strip"><div class="diamond"></div><div class="brand-text">الهيئة الملكية للجبيل وينبع</div></div>
+      <div class="label-strip"><img src="data:image/png;base64,${LABEL_LOGO_B64}"></div>
       <div class="label-main">
         <div class="label-tag">${r.committee_label}</div>
-        <div class="label-title">بـيـانـات الـطـالـب</div>
-        <div class="label-row"><span class="lbl">اسم الطالب : </span>${r.full_name}</div>
-        <div class="label-row"><span class="lbl">رقم الهوية : </span><span class="val-green">${r.national_id}</span></div>
-        <div class="label-row"><span class="lbl">رقم الجلوس : </span>${r.seat_number} &nbsp;&nbsp; <span class="lbl">الصف : </span>${r.grade_label}</div>
+        <div class="label-body">
+          <div class="label-title">بيانات الطالب</div>
+          <div class="label-row"><span class="lbl">اسم الطالب : </span>${r.full_name}</div>
+          <div class="label-row"><span class="lbl">رقم الهوية : </span><span class="val-green">${r.national_id}</span></div>
+          <div class="label-row"><span class="lbl">رقم الجلوس : </span><span class="val-red">${r.seat_number}</span>&nbsp;&nbsp;&nbsp;<span class="lbl">الصف : </span>${r.grade_label}</div>
+        </div>
       </div>
     </div>`;
 }
