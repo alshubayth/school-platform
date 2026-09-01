@@ -841,7 +841,7 @@ const LABEL_LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAAATkAAABMCAMAAAAhpzAFAAAAAXNSR0IA
 const LABEL_STYLES = `
   @page{ size: A4; margin: 0; }
   body{ font-family: Arial, sans-serif; margin:0; padding:0; }
-  .label-page{ display:grid; grid-template-columns: 105mm 105mm; }
+  .label-page{ display:flex; flex-wrap:wrap; width:210mm; }
   .label-card{ width:105mm; height:42mm; box-sizing:border-box; border:1px solid #999; display:flex; flex-direction:row; overflow:hidden; page-break-inside:avoid; background:#fff; }
   .label-strip{ width:12mm; background:#538135; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
   .label-strip img{ width:34mm; height:auto; transform:rotate(-90deg); }
@@ -915,20 +915,35 @@ function loadHtml2Pdf() {
 async function downloadLabelsPdf(innerHtml, filename) {
   await loadHtml2Pdf();
 
+  // مهم: ما نستخدم إحداثيات بعيدة جدًا (left:-99999px) لأن html2canvas أحيانًا يطلع الملف فارغ
+  // مع عناصر بعيدة عن الشاشة. بدلها نخليه بالزاوية (0,0) لكن خلف كل شي (z-index سالب) فما يظهر للمستخدم.
   const container = document.createElement('div');
-  container.style.cssText = 'position:fixed; left:-99999px; top:0; width:210mm; background:#fff;';
+  container.style.cssText = 'position:fixed; top:0; left:0; width:210mm; background:#fff; z-index:-9999;';
   container.innerHTML = `<style>${LABEL_STYLES}</style>${innerHtml}`;
   document.body.appendChild(container);
+
+  // ننتظر إطارين عشان نضمن اكتمال الرسم/تخطيط الصفحة (وتحميل صورة الشعار) قبل التصوير
+  await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
   try {
     await window.html2pdf().set({
       margin: 0,
       filename,
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: { scale: 2, useCORS: true },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: container.scrollWidth,
+        windowHeight: container.scrollHeight,
+      },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
       pagebreak: { mode: ['css', 'legacy'] },
     }).from(container).save();
+  } catch (err) {
+    alert('تعذر إنشاء ملف PDF: ' + (err && err.message ? err.message : err));
   } finally {
     document.body.removeChild(container);
   }
