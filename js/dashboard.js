@@ -1,4 +1,21 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed } from './core.js';
+
+function renderSectionTilesGrid() {
+  const grid = document.getElementById('dash-sections-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+  tiles.filter(isTileAllowed).forEach(t => {
+    const div = document.createElement('div');
+    div.className = 'tile';
+    div.innerHTML = `
+      <div class="ic-diamond ${t.color}" style="margin-bottom:14px;">${t.icon}</div>
+      <h3>${t.title}</h3>
+      <p>${t.desc}</p>
+      <span class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span>`;
+    div.addEventListener('click', () => openTile(t.key, t.title));
+    grid.appendChild(div);
+  });
+}
 
 function todayInfo() {
   const now = new Date();
@@ -39,6 +56,7 @@ function attentionItem(sectionKey, text) {
 export async function renderDashboard() {
   const container = document.getElementById('dashboard-content');
   if (!container) return;
+  renderSectionTilesGrid();
   container.innerHTML = '<div class="placeholder" style="padding:30px;"><p>جارٍ التحميل...</p></div>';
 
   if (currentProfile.role === 'admin' || currentProfile.role === 'deputy') {
