@@ -897,27 +897,36 @@ function studentLabelHtml(r) {
     </div>`;
 }
 
-let html2pdfLoadPromise = null;
-function loadHtml2Pdf() {
-  if (window.html2pdf) return Promise.resolve();
-  if (html2pdfLoadPromise) return html2pdfLoadPromise;
-  html2pdfLoadPromise = new Promise((resolve, reject) => {
+const PDF_LIB_URLS = {
+  html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+};
+const scriptLoadPromises = {};
+function loadScript(key, src) {
+  if (scriptLoadPromises[key]) return scriptLoadPromises[key];
+  scriptLoadPromises[key] = new Promise((resolve, reject) => {
     const s = document.createElement('script');
-    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.src = src;
     s.onload = resolve;
-    s.onerror = () => { html2pdfLoadPromise = null; reject(new Error('تعذر تحميل مكتبة إنشاء PDF')); };
+    s.onerror = () => { delete scriptLoadPromises[key]; reject(new Error('تعذر تحميل مكتبة إنشاء PDF (' + key + ')')); };
     document.head.appendChild(s);
   });
-  return html2pdfLoadPromise;
+  return scriptLoadPromises[key];
+}
+async function loadPdfLibs() {
+  if (!window.html2canvas) await loadScript('html2canvas', PDF_LIB_URLS.html2canvas);
+  if (!window.jspdf) await loadScript('jspdf', PDF_LIB_URLS.jspdf);
 }
 
-// يبني الملصقات في عنصر مخفي بالصفحة الحالية ثم يحوّلها لملف PDF وينزّله مباشرة
+// يبني الملصقات في عنصر مخفي بالصفحة الحالية، يصوّر كل صفحة (كل لجنة/مرحلة) على حدة،
+// ثم يجمعها في ملف PDF وينزّله مباشرة. نستخدم html2canvas وjsPDF مباشرة (بدون مكوّن
+// تقسيم الصفحات التلقائي بمكتبات أخرى) عشان لو صار خطأ أثناء التصوير نقدر نمسكه ونبلّغ المستخدم،
+// بدل ما ننتج ملف فارغ بصمت.
 async function downloadLabelsPdf(innerHtml, filename) {
-  await loadHtml2Pdf();
+  await loadPdfLibs();
 
-  // مهم: ما نستخدم إحداثيات بعيدة جدًا (left:-99999px) لأن html2canvas أحيانًا يطلع الملف فارغ
-  // مع عناصر بعيدة عن الشاشة. بدلها نخليه بالزاوية (0,0) لكن خلف كل شي (z-index سالب) فما يظهر للمستخدم.
   const container = document.createElement('div');
+  // بالزاوية (0,0) وخلف كل شي بـ z-index سالب - عناصر بعيدة جدًا عن الشاشة تخلي html2canvas يطلع صورة فارغة أحيانًا
   container.style.cssText = 'position:fixed; top:0; left:0; width:210mm; background:#fff; z-index:-9999;';
   container.innerHTML = `<style>${LABEL_STYLES}</style>${innerHtml}`;
   document.body.appendChild(container);
@@ -926,22 +935,30 @@ async function downloadLabelsPdf(innerHtml, filename) {
   await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
   try {
-    await window.html2pdf().set({
-      margin: 0,
-      filename,
-      image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
+    const pageEls = Array.from(container.querySelectorAll('.label-page'));
+    if (pageEls.length === 0) throw new Error('لا توجد ملصقات لعرضها');
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+    for (let i = 0; i < pageEls.length; i++) {
+      const canvas = await window.html2canvas(pageEls[i], {
         scale: 2,
         useCORS: true,
         backgroundColor: '#ffffff',
         scrollX: 0,
         scrollY: 0,
-        windowWidth: container.scrollWidth,
-        windowHeight: container.scrollHeight,
-      },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] },
-    }).from(container).save();
+        windowWidth: pageEls[i].scrollWidth || 794,
+        windowHeight: pageEls[i].scrollHeight || 1123,
+      });
+      if (!canvas.width || !canvas.height) throw new Error('فشل تصوير الملصقات (الصورة الناتجة فارغة)');
+
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      if (i > 0) doc.addPage();
+      doc.addImage(imgData, 'JPEG', 0, 0, 210, 297);
+    }
+
+    doc.save(filename);
   } catch (err) {
     alert('تعذر إنشاء ملف PDF: ' + (err && err.message ? err.message : err));
   } finally {
