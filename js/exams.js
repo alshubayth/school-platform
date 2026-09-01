@@ -846,23 +846,30 @@ const LABEL_STYLES = `
   .label-strip{ width:12mm; background:#538135; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
   .label-strip img{ width:34mm; height:auto; transform:rotate(-90deg); }
   .label-main{ flex:1; padding:2mm 4mm; display:flex; flex-direction:column; }
-  .label-tag{ margin-right:auto; border:0.4mm solid #375623; border-radius:3mm; padding:0.5mm 3mm; font-size:10px; font-weight:bold; color:#375623; flex-shrink:0; }
+  .label-tag{ margin-right:auto; border:0.4mm solid #375623; border-radius:3mm; padding:0.5mm 3mm; font-size:13px; font-weight:bold; color:#375623; flex-shrink:0; }
+  .label-title{ text-align:center; font-weight:bold; font-size:15px; color:#2F5496; margin-top:1mm; }
   .label-body{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:1.3mm; }
-  .label-title{ text-align:center; font-weight:bold; font-size:15px; color:#2F5496; }
   .label-row{ font-size:15px; color:#000; }
   .label-row .lbl{ font-weight:bold; color:#7030A0; }
   .label-row .val-green{ color:#00B050; font-weight:bold; }
   .label-row .val-red{ color:#FF0000; font-weight:bold; }
 `;
 
+const LABEL_STRIP_COLORS = {
+  first_intermediate: '#2F5496',   // أول متوسط - أزرق
+  second_intermediate: '#538135',  // ثاني متوسط - أخضر
+  third_intermediate: '#D9A400',   // ثالث متوسط - أصفر
+};
+
 function studentLabelHtml(r) {
+  const stripColor = LABEL_STRIP_COLORS[r.grade_level] || '#538135';
   return `
     <div class="label-card">
-      <div class="label-strip"><img src="data:image/png;base64,${LABEL_LOGO_B64}"></div>
+      <div class="label-strip" style="background:${stripColor};"><img src="data:image/png;base64,${LABEL_LOGO_B64}"></div>
       <div class="label-main">
         <div class="label-tag">${r.committee_label}</div>
+        <div class="label-title">بيانات الطالب</div>
         <div class="label-body">
-          <div class="label-title">بيانات الطالب</div>
           <div class="label-row"><span class="lbl">اسم الطالب : </span>${r.full_name}</div>
           <div class="label-row"><span class="lbl">رقم الهوية : </span><span class="val-green">${r.national_id}</span></div>
           <div class="label-row"><span class="lbl">رقم الجلوس : </span><span class="val-red">${r.seat_number}</span>&nbsp;&nbsp;&nbsp;<span class="lbl">الصف : </span>${r.grade_label}</div>
@@ -885,6 +892,7 @@ async function printStudentLabels(win) {
   const rows = data.map(r => ({
     full_name: r.students ? r.students.full_name : '',
     national_id: r.students ? r.students.national_id : '',
+    grade_level: r.students ? r.students.grade_level : '',
     grade_label: r.students ? (gradeLabels[r.students.grade_level] || '') : '',
     seat_number: r.seat_number,
     committee_label: r.is_special ? 'لجنة خاصة' : ('لجنة' + r.committee_number),
