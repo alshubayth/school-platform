@@ -841,7 +841,7 @@ const LABEL_LOGO_B64 = 'iVBORw0KGgoAAAANSUhEUgAAATkAAABMCAMAAAAhpzAFAAAAAXNSR0IA
 const LABEL_STYLES = `
   @page{ size: A4; margin: 0; }
   body{ font-family: Arial, sans-serif; margin:0; padding:0; }
-  .label-page{ display:flex; flex-wrap:wrap; width:210mm; }
+  .label-page{ display:flex; flex-wrap:wrap; align-content:flex-start; width:210mm; height:297mm; box-sizing:border-box; }
   .label-card{ width:105mm; height:42mm; box-sizing:border-box; border:1px solid #999; display:flex; flex-direction:row; overflow:hidden; page-break-inside:avoid; background:#fff; }
   .label-strip{ width:12mm; background:#538135; display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:visible; }
   .label-strip img{ width:34mm; height:auto; transform:rotate(-90deg); }
@@ -853,25 +853,26 @@ const LABEL_STYLES = `
   .label-row .lbl{ font-weight:bold; color:#7030A0; }
   .label-row .val-green{ color:#00B050; font-weight:bold; }
   .label-row .val-red{ color:#FF0000; font-weight:bold; }
-  .label-page.page-break{ break-before: page; page-break-before: always; }
 `;
 
-/* يجمع صفوف الملصقات إلى صفحات منفصلة (كل مجموعة تبدأ بصفحة جديدة) ويبني HTML الطباعة الكامل */
+const LABELS_PER_PAGE = 14; // ورقة GS-1114: عمودين × 7 صفوف = 14 ملصق بالحجم الصحيح 105×42مم
+
+/* يقسّم صفوف الملصقات إلى صفحات فعلية (كل صفحة 14 ملصق كحد أقصى بالحجم الصحيح).
+   أي مجموعة (لجنة/مرحلة) دائمًا تبدأ بصفحة جديدة حتى لو فيه مكان فاضي بآخر صفحة قبلها،
+   ولو المجموعة أكبر من صفحة وحدة تكمل على أكثر من صفحة بنفس الحجم الصحيح للملصقات. */
 function buildLabelPagesHtml(rows, groupKeyFn) {
-  const groups = [];
-  let currentKey = null, currentGroup = null;
+  const pages = [];
+  let currentKey = null, currentPage = null;
   rows.forEach(r => {
     const key = groupKeyFn(r);
-    if (key !== currentKey) {
-      currentGroup = [];
-      groups.push(currentGroup);
+    if (key !== currentKey || !currentPage || currentPage.length >= LABELS_PER_PAGE) {
+      currentPage = [];
+      pages.push(currentPage);
       currentKey = key;
     }
-    currentGroup.push(r);
+    currentPage.push(r);
   });
-  return groups.map((g, i) =>
-    `<div class="label-page${i > 0 ? ' page-break' : ''}">` + g.map(studentLabelHtml).join('') + '</div>'
-  ).join('');
+  return pages.map(g => `<div class="label-page">` + g.map(studentLabelHtml).join('') + '</div>').join('');
 }
 
 const LABEL_STRIP_COLORS = {
