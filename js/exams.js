@@ -847,9 +847,9 @@ const LABEL_STYLES = `
   .label-strip img{ width:34mm; height:auto; transform:rotate(-90deg); }
   .label-main{ flex:1; padding:2mm 4mm; display:flex; flex-direction:column; }
   .label-tag{ margin-right:auto; border:0.4mm solid #375623; border-radius:3mm; padding:0.5mm 3mm; font-size:10px; font-weight:bold; color:#375623; flex-shrink:0; }
-  .label-body{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:1.6mm; }
-  .label-title{ text-align:center; font-weight:bold; font-size:13px; color:#2F5496; }
-  .label-row{ font-size:12px; color:#000; }
+  .label-body{ flex:1; display:flex; flex-direction:column; justify-content:center; gap:1.3mm; }
+  .label-title{ text-align:center; font-weight:bold; font-size:15px; color:#2F5496; }
+  .label-row{ font-size:15px; color:#000; }
   .label-row .lbl{ font-weight:bold; color:#7030A0; }
   .label-row .val-green{ color:#00B050; font-weight:bold; }
   .label-row .val-red{ color:#FF0000; font-weight:bold; }
