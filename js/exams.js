@@ -984,7 +984,7 @@ async function printStudentLabels() {
     grade_level: r.students ? r.students.grade_level : '',
     grade_label: r.students ? (gradeLabels[r.students.grade_level] || '') : '',
     seat_number: r.seat_number,
-    committee_label: r.is_special ? 'لجنة خاصة' : ('لجنة' + r.committee_number),
+    committee_label: r.is_special ? 'لجنة خاصة' : ('لجنة رقم \u200F' + r.committee_number),
     _committee_key: r.is_special ? 'special' : r.committee_number,
   }));
 
@@ -1012,7 +1012,7 @@ async function printStudentLabelsByGrade() {
     grade_level: r.students ? r.students.grade_level : '',
     grade_label: r.students ? (gradeLabels[r.students.grade_level] || '') : '',
     seat_number: r.seat_number,
-    committee_label: r.is_special ? 'لجنة خاصة' : ('لجنة' + r.committee_number),
+    committee_label: r.is_special ? 'لجنة خاصة' : ('لجنة رقم \u200F' + r.committee_number),
   })).sort((a, b) => GRADE_ORDER.indexOf(a.grade_level) - GRADE_ORDER.indexOf(b.grade_level));
 
   // كل مرحلة (أول متوسط، ثاني متوسط، ثالث متوسط) تبدأ بصفحة جديدة مستقلة
