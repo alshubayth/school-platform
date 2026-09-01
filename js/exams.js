@@ -853,7 +853,26 @@ const LABEL_STYLES = `
   .label-row .lbl{ font-weight:bold; color:#7030A0; }
   .label-row .val-green{ color:#00B050; font-weight:bold; }
   .label-row .val-red{ color:#FF0000; font-weight:bold; }
+  .label-page.page-break{ break-before: page; page-break-before: always; }
 `;
+
+/* يجمع صفوف الملصقات إلى صفحات منفصلة (كل مجموعة تبدأ بصفحة جديدة) ويبني HTML الطباعة الكامل */
+function buildLabelPagesHtml(rows, groupKeyFn) {
+  const groups = [];
+  let currentKey = null, currentGroup = null;
+  rows.forEach(r => {
+    const key = groupKeyFn(r);
+    if (key !== currentKey) {
+      currentGroup = [];
+      groups.push(currentGroup);
+      currentKey = key;
+    }
+    currentGroup.push(r);
+  });
+  return groups.map((g, i) =>
+    `<div class="label-page${i > 0 ? ' page-break' : ''}">` + g.map(studentLabelHtml).join('') + '</div>'
+  ).join('');
+}
 
 const LABEL_STRIP_COLORS = {
   first_intermediate: '#2F5496',   // أول متوسط - أزرق
@@ -896,9 +915,11 @@ async function printStudentLabels(win) {
     grade_label: r.students ? (gradeLabels[r.students.grade_level] || '') : '',
     seat_number: r.seat_number,
     committee_label: r.is_special ? 'لجنة خاصة' : ('لجنة' + r.committee_number),
+    _committee_key: r.is_special ? 'special' : r.committee_number,
   }));
 
-  const innerHtml = '<div class="label-page">' + rows.map(studentLabelHtml).join('') + '</div>';
+  // كل لجنة تبدأ بصفحة جديدة
+  const innerHtml = buildLabelPagesHtml(rows, r => r._committee_key);
 
   win.document.write(`
     <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>ملصقات الطلاب</title>
@@ -907,9 +928,46 @@ async function printStudentLabels(win) {
   win.print();
 }
 
+async function printStudentLabelsByGrade(win) {
+  if (!currentPeriodId) { win.close(); return; }
+
+  const { data } = await sb.from('exam_committee_assignments')
+    .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
+    .eq('period_id', currentPeriodId)
+    .order('committee_number', { ascending: true })
+    .order('seat_number', { ascending: true });
+
+  if (!data || data.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+
+  const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+
+  const rows = data.map(r => ({
+    full_name: r.students ? r.students.full_name : '',
+    national_id: r.students ? r.students.national_id : '',
+    grade_level: r.students ? r.students.grade_level : '',
+    grade_label: r.students ? (gradeLabels[r.students.grade_level] || '') : '',
+    seat_number: r.seat_number,
+    committee_label: r.is_special ? 'لجنة خاصة' : ('لجنة' + r.committee_number),
+  })).sort((a, b) => GRADE_ORDER.indexOf(a.grade_level) - GRADE_ORDER.indexOf(b.grade_level));
+
+  // كل مرحلة (أول متوسط، ثاني متوسط، ثالث متوسط) تبدأ بصفحة جديدة مستقلة
+  const innerHtml = buildLabelPagesHtml(rows, r => r.grade_level);
+
+  win.document.write(`
+    <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>ملصقات الطلاب - مفردة حسب المرحلة</title>
+    <style>${LABEL_STYLES}</style></head><body>${innerHtml}</body></html>`);
+  win.document.close();
+  win.print();
+}
+
 document.getElementById('exam-labels-print-btn').addEventListener('click', () => {
   const win = window.open('', '_blank');
   printStudentLabels(win);
+});
+
+document.getElementById('exam-labels-print-bygrade-btn').addEventListener('click', () => {
+  const win = window.open('', '_blank');
+  printStudentLabelsByGrade(win);
 });
 
 /* ---------- إعداد رسائل أولياء الأمور ---------- */
