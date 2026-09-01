@@ -897,8 +897,45 @@ function studentLabelHtml(r) {
     </div>`;
 }
 
-async function printStudentLabels(win) {
-  if (!currentPeriodId) { win.close(); return; }
+let html2pdfLoadPromise = null;
+function loadHtml2Pdf() {
+  if (window.html2pdf) return Promise.resolve();
+  if (html2pdfLoadPromise) return html2pdfLoadPromise;
+  html2pdfLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js';
+    s.onload = resolve;
+    s.onerror = () => { html2pdfLoadPromise = null; reject(new Error('تعذر تحميل مكتبة إنشاء PDF')); };
+    document.head.appendChild(s);
+  });
+  return html2pdfLoadPromise;
+}
+
+// يبني الملصقات في عنصر مخفي بالصفحة الحالية ثم يحوّلها لملف PDF وينزّله مباشرة
+async function downloadLabelsPdf(innerHtml, filename) {
+  await loadHtml2Pdf();
+
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed; left:-99999px; top:0; width:210mm; background:#fff;';
+  container.innerHTML = `<style>${LABEL_STYLES}</style>${innerHtml}`;
+  document.body.appendChild(container);
+
+  try {
+    await window.html2pdf().set({
+      margin: 0,
+      filename,
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: { scale: 2, useCORS: true },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'] },
+    }).from(container).save();
+  } finally {
+    document.body.removeChild(container);
+  }
+}
+
+async function printStudentLabels() {
+  if (!currentPeriodId) return;
 
   const { data } = await sb.from('exam_committee_assignments')
     .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
@@ -906,7 +943,7 @@ async function printStudentLabels(win) {
     .order('committee_number', { ascending: true })
     .order('seat_number', { ascending: true });
 
-  if (!data || data.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!data || data.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
 
   const rows = data.map(r => ({
     full_name: r.students ? r.students.full_name : '',
@@ -920,16 +957,11 @@ async function printStudentLabels(win) {
 
   // كل لجنة تبدأ بصفحة جديدة
   const innerHtml = buildLabelPagesHtml(rows, r => r._committee_key);
-
-  win.document.write(`
-    <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>ملصقات الطلاب</title>
-    <style>${LABEL_STYLES}</style></head><body>${innerHtml}</body></html>`);
-  win.document.close();
-  win.print();
+  await downloadLabelsPdf(innerHtml, 'ملصقات-الطلاب.pdf');
 }
 
-async function printStudentLabelsByGrade(win) {
-  if (!currentPeriodId) { win.close(); return; }
+async function printStudentLabelsByGrade() {
+  if (!currentPeriodId) return;
 
   const { data } = await sb.from('exam_committee_assignments')
     .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
@@ -937,7 +969,7 @@ async function printStudentLabelsByGrade(win) {
     .order('committee_number', { ascending: true })
     .order('seat_number', { ascending: true });
 
-  if (!data || data.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!data || data.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
 
   const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 
@@ -952,22 +984,15 @@ async function printStudentLabelsByGrade(win) {
 
   // كل مرحلة (أول متوسط، ثاني متوسط، ثالث متوسط) تبدأ بصفحة جديدة مستقلة
   const innerHtml = buildLabelPagesHtml(rows, r => r.grade_level);
-
-  win.document.write(`
-    <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>ملصقات الطلاب - مفردة حسب المرحلة</title>
-    <style>${LABEL_STYLES}</style></head><body>${innerHtml}</body></html>`);
-  win.document.close();
-  win.print();
+  await downloadLabelsPdf(innerHtml, 'ملصقات-الطلاب-حسب-المرحلة.pdf');
 }
 
 document.getElementById('exam-labels-print-btn').addEventListener('click', () => {
-  const win = window.open('', '_blank');
-  printStudentLabels(win);
+  printStudentLabels();
 });
 
 document.getElementById('exam-labels-print-bygrade-btn').addEventListener('click', () => {
-  const win = window.open('', '_blank');
-  printStudentLabelsByGrade(win);
+  printStudentLabelsByGrade();
 });
 
 /* ---------- إعداد رسائل أولياء الأمور ---------- */
