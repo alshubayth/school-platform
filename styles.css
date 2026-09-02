@@ -14,6 +14,8 @@
     --white:#FFFFFF;
     --danger:#B3413A;
     --danger-light:#FBEAE8;
+    --green:#2E8B4F;
+    --green-light:#E6F4EA;
     --radius:14px;
   }
   *{box-sizing:border-box;}
@@ -143,6 +145,7 @@
   .diamond-gold{ background:var(--gold); }
   .diamond-purple{ background:var(--purple); }
   .diamond-navy{ background:var(--meadow-dark); }
+  .diamond-green{ background:var(--green); }
 
   .panel{ background:#fff; border-radius:var(--radius); padding:26px; border:1px solid #ECEAE1; }
   .back-link{ color:var(--meadow); cursor:pointer; font-size:14px; margin-bottom:16px; display:inline-flex; align-items:center; gap:6px; font-weight:500; }
@@ -182,6 +185,7 @@
   .badge-gold{ background:var(--gold-light); color:var(--gold); }
   .badge-danger{ background:var(--danger-light); color:var(--danger); }
   .badge-gray{ background:var(--sand); color:var(--slate); }
+  .badge-green{ background:var(--green-light); color:var(--green); }
   .exam-var-chip{ display:inline-block; background:var(--meadow-light); color:var(--meadow); font-size:12.5px; font-weight:600; padding:5px 12px; border-radius:20px; cursor:grab; user-select:none; border:1px dashed var(--meadow); direction:ltr; }
   .exam-var-chip:active{ cursor:grabbing; }
   .ring-wrap{ display:flex; align-items:center; gap:10px; }
