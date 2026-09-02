@@ -78,10 +78,11 @@ document.getElementById('budget-category-submit').addEventListener('click', asyn
 
 /* ---------- صلاحيات القسم (المدير فقط) ---------- */
 async function loadPermsSection() {
-  const [{ data: employees }, { data: perms }] = await Promise.all([
+  const [{ data: employees }, { data: perms, error: permsError }] = await Promise.all([
     sb.from('profiles').select('id, full_name').in('role', ['deputy', 'teacher']).order('full_name'),
-    sb.from('budget_permissions').select('id, profile_id, level, profiles(full_name)'),
+    sb.from('budget_permissions').select('id, profile_id, level, profiles!budget_permissions_profile_id_fkey(full_name)'),
   ]);
+  if (permsError) console.error('budget_permissions fetch error:', permsError);
 
   const grantedIds = new Set((perms || []).map(p => p.profile_id));
   const empSelect = document.getElementById('budget-perm-employee');
@@ -124,7 +125,12 @@ document.getElementById('budget-perm-submit').addEventListener('click', async ()
   const level = document.getElementById('budget-perm-level').value;
 
   const { error } = await sb.from('budget_permissions').insert({ profile_id: profileId, level, granted_by: currentUserId });
-  if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return; }
+  if (error) {
+    errEl.textContent = error.message.includes('duplicate') ? 'هذا الموظف عنده صلاحية بالقسم بالفعل — احذفها من القائمة تحت لو تبي تغيّرها' : 'حدث خطأ: ' + error.message;
+    errEl.style.display = 'block';
+    await loadPermsSection(); // نحدّث القائمة عشان تنعكس الحالة الفعلية بقاعدة البيانات
+    return;
+  }
   await loadPermsSection();
 });
 
