@@ -10,6 +10,7 @@ import { loadExamTrackingTile } from './exam-tracking.js';
 import { loadScheduleModule } from './schedule.js';
 import './schedule-pdf.js';
 import { loadStudentFollowupsModule } from './student-followups.js';
+import { loadBudgetModule } from './budget.js';
 
 export const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
@@ -28,6 +29,9 @@ export const roleLabels = { admin: 'مدير', deputy: 'وكيل', teacher: 'م�
 export const gradeLabels = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
 export let isOpPlanMember = false;
 export function setOpPlanMember(v) { isOpPlanMember = v; }
+// صلاحية قسم "ميزانية المدرسة": null (بدون صلاحية) | 'full' | 'request_only' — مستقلة عن دور المستخدم العام
+export let myBudgetAccess = null;
+export function setMyBudgetAccess(v) { myBudgetAccess = v; }
 export const isAdminOrDeputy = () => ['admin','deputy'].includes(currentProfile.role);
 export const isStaff = () => ['admin','deputy','teacher'].includes(currentProfile.role);
 export function setupCollapsible(toggleId, bodyId, chevronId) {
@@ -56,6 +60,7 @@ const icons = {
   tracking: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   schedule: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18"/><path d="M7.5 14.5h2M7.5 17.5h2M12 14.5h2M12 17.5h2M16.5 14.5h1M16.5 17.5h1"/></svg>',
   followups: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="7" r="3.2"/><path d="M3.5 20c1.2-3.6 4-5.3 5.5-5.3s4.3 1.7 5.5 5.3"/><path d="M16 5h5M16 9h5M15 13.5h6M15 17.5h6"/></svg>',
+  budget: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v2M12 20v2"/><circle cx="12" cy="12" r="9"/><path d="M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1.1-3 2.5S10.3 12 12 12s3 1.1 3 2.5-1.3 2.5-3 2.5-3-1.1-3-2.5"/></svg>',
 };
 
 export const tiles = [
@@ -70,6 +75,7 @@ export const tiles = [
   { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy'], color: 'diamond-navy' },
   { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple' },
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy' },
+  { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin'], color: 'diamond-green' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold' },
 ];
 
@@ -107,6 +113,11 @@ export async function loadProfileAndShowDashboard(userId) {
     isOpPlanMember = !!membership;
   }
 
+  if (profile.role !== 'admin' && profile.role !== 'parent') {
+    const { data: budgetPerm } = await sb.from('budget_permissions').select('level').eq('profile_id', userId).maybeSingle();
+    myBudgetAccess = budgetPerm ? budgetPerm.level : null;
+  }
+
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('dashboard-screen').classList.remove('hidden');
   document.getElementById('user-name').textContent = profile.full_name;
@@ -122,6 +133,8 @@ document.getElementById('logout-btn').addEventListener('click', async () => { aw
 sb.auth.getSession().then(({ data }) => { if (data.session) loadProfileAndShowDashboard(data.session.user.id); });
 
 export function isTileAllowed(t) {
+  // ميزانية المدرسة: صلاحية مستقلة عن الدور العام - المدير دايمًا، وأي حد ثاني بس لو المدير أعطاه صلاحية بالقسم
+  if (t.key === 'budget') return currentProfile.role === 'admin' || !!myBudgetAccess;
   if (!t.roles.includes(currentProfile.role)) return false;
   if (t.key === 'plan' && currentProfile.role === 'teacher' && !isOpPlanMember) return false;
   return true;
@@ -156,6 +169,7 @@ export function hideAllModules() {
   document.getElementById('exam-tracking-module').classList.add('hidden');
   document.getElementById('schedule-module').classList.add('hidden');
   document.getElementById('followups-module').classList.add('hidden');
+  document.getElementById('budget-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -203,6 +217,9 @@ export function openTile(key, title) {
   } else if (key === 'followups') {
     document.getElementById('followups-module').classList.remove('hidden');
     loadStudentFollowupsModule();
+  } else if (key === 'budget') {
+    document.getElementById('budget-module').classList.remove('hidden');
+    loadBudgetModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
