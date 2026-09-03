@@ -754,6 +754,34 @@
           <p style="font-size:11px; color:var(--slate); margin:8px 0 0;">سقف الصرف % هو نسبة من إجمالي الإيراد — يرتفع تلقائيًا كلما زاد الإيراد، ويظهر له مؤشر لوني بلوحة الميزانية (اخضر حتى 50%، أصفر حتى 80%، أحمر بعدها)</p>
           <div id="budget-categories-list" style="margin-top:10px;"></div>
         </details>
+
+        <details class="form-card" style="margin-top:18px; background:var(--sand);" id="budget-share-section">
+          <summary style="cursor:pointer; font-weight:700; font-size:15px;">نصيب الإدارة والمدوَّر (تُحسب آخر كل فصل دراسي)</summary>
+
+          <p style="font-size:12px; color:var(--slate); margin:10px 0;">نسبتان % من إجمالي إيراد الفصل، تُحسبان وتُخصمان من الرصيد عند إقفال الفصل — يمكنك تعديلهما وقت ما تبي</p>
+          <div class="form-row">
+            <div>
+              <label style="font-size:12px; color:var(--slate);">نسبة الإدارة %</label>
+              <input type="number" id="budget-share-admin-pct" min="0" max="100" step="0.5" style="margin-top:4px;" />
+            </div>
+            <div>
+              <label style="font-size:12px; color:var(--slate);">نسبة المدوَّر %</label>
+              <input type="number" id="budget-share-carry-pct" min="0" max="100" step="0.5" style="margin-top:4px;" />
+            </div>
+          </div>
+          <button class="btn-primary" id="budget-share-settings-save" style="width:auto; padding:9px 16px; margin-top:8px; background:var(--slate);">حفظ النسب</button>
+
+          <hr style="margin:16px 0; border:none; border-top:1px solid #ECEAE1;" />
+
+          <p style="font-size:13px; font-weight:700; margin:0 0 8px;">إقفال فصل دراسي</p>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="budget-share-close-semester" style="flex:1; margin:0;"></select>
+            <button class="btn-primary" id="budget-share-close-submit" style="width:auto; padding:9px 16px;">تسجيل نصيب الإدارة والمدوَّر</button>
+          </div>
+          <div class="error-msg" id="budget-share-error"></div>
+
+          <div id="budget-share-closures-list" style="margin-top:14px;"></div>
+        </details>
       </div>
 
       <!-- تقديم طلب صرف (بيان صرف): يظهر لأي صاحب صلاحية (كاملة أو طلبات فقط) -->
