@@ -825,10 +825,11 @@ async function loadCharts(revList, expList, byCategory) {
     },
     options: {
       responsive: true,
-      plugins: { legend: { position: 'bottom', labels: { font: { family: 'IBM Plex Sans Arabic' }, usePointStyle: true } } },
+      maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { family: 'IBM Plex Sans Arabic', size: 10 }, usePointStyle: true, boxWidth: 8 } } },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { family: 'IBM Plex Sans Arabic', size: 11 } } },
-        y: { grid: { color: '#F1EFE7' }, ticks: { font: { family: 'IBM Plex Sans Arabic', size: 11 } } },
+        x: { grid: { display: false }, ticks: { font: { family: 'IBM Plex Sans Arabic', size: 9 } } },
+        y: { grid: { color: '#F1EFE7' }, ticks: { font: { family: 'IBM Plex Sans Arabic', size: 9 } } },
       },
     },
   });
@@ -842,7 +843,7 @@ async function loadCharts(revList, expList, byCategory) {
   donutChartInstance = new Chart(donutCtx, {
     type: 'doughnut',
     data: { labels: catLabels.length ? catLabels : ['لا توجد مصروفات معتمدة بعد'], datasets: [{ data: catData.length ? catData : [1], backgroundColor: catData.length ? catColors : ['#E3E1D8'], borderWidth: 0 }] },
-    options: { responsive: true, cutout: '68%', plugins: { legend: { display: false } } },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '68%', plugins: { legend: { display: false } } },
   });
 
   const legendWrap = document.getElementById('budget-donut-legend');
