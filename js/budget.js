@@ -15,6 +15,7 @@ function todayIso() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 function fmtDate(iso) {
+  if (!iso) return '-';
   const d = new Date(iso + 'T00:00:00');
   return d.toLocaleDateString('ar-SA-u-ca-gregory', { day: 'numeric', month: 'numeric', year: 'numeric' });
 }
@@ -24,6 +25,9 @@ function fmtAmount(n) {
 function accessLevel() {
   if (currentProfile.role === 'admin') return 'full';
   return myBudgetAccess; // 'full' | 'request_only' | null
+}
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 export async function loadBudgetModule() {
@@ -40,6 +44,8 @@ export async function loadBudgetModule() {
   document.getElementById('budget-exp-date').value = todayIso();
   document.getElementById('budget-rev-date') && (document.getElementById('budget-rev-date').value = todayIso());
 
+  resetExpenseForm();
+
   await loadCategories();
 
   if (isAdmin) await loadPermsSection();
@@ -47,13 +53,14 @@ export async function loadBudgetModule() {
   if (hasAny) await loadExpensesList(hasFull);
 }
 
-/* ---------- بنود المصروفات ---------- */
+/* ---------- بنود المصروفات (الاختيارية - للتصنيف/الرسم البياني) ---------- */
 async function loadCategories() {
   const { data } = await sb.from('budget_categories').select('id, name').order('name');
   categoriesCache = data || [];
 
   const expSelect = document.getElementById('budget-exp-category');
-  expSelect.innerHTML = categoriesCache.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+  expSelect.innerHTML = '<option value="">بدون بند (اختياري)</option>' +
+    categoriesCache.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
 
   const listEl = document.getElementById('budget-categories-list');
   if (listEl) {
@@ -61,7 +68,7 @@ async function loadCategories() {
     categoriesCache.forEach(c => {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #ECEAE1; font-size:13px;';
-      row.innerHTML = `<span>${c.name}</span>`;
+      row.innerHTML = `<span>${esc(c.name)}</span>`;
       listEl.appendChild(row);
     });
   }
@@ -88,7 +95,7 @@ async function loadPermsSection() {
   const empSelect = document.getElementById('budget-perm-employee');
   const available = (employees || []).filter(e => !grantedIds.has(e.id));
   empSelect.innerHTML = available.length
-    ? available.map(e => `<option value="${e.id}">${e.full_name}</option>`).join('')
+    ? available.map(e => `<option value="${e.id}">${esc(e.full_name)}</option>`).join('')
     : '<option value="">لا يوجد موظفون متاحون</option>';
 
   const list = document.getElementById('budget-perms-list');
@@ -103,8 +110,8 @@ async function loadPermsSection() {
     const name = p.profiles ? p.profiles.full_name : '-';
     const initials = (name || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join('');
     row.innerHTML = `
-      <div class="avatar-circle" style="background:var(--purple-light); color:var(--purple);">${initials}</div>
-      <div class="info"><div class="name">${name}</div>
+      <div class="avatar-circle" style="background:var(--purple-light); color:var(--purple);">${esc(initials)}</div>
+      <div class="info"><div class="name">${esc(name)}</div>
       <div class="title">${p.level === 'full' ? 'صلاحية كاملة (إيرادات + مصروفات + اعتماد)' : 'إضافة طلبات صرف فقط'}</div></div>
       <button class="logout-icon" data-id="${p.id}" title="إلغاء الصلاحية" style="color:var(--danger);">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
@@ -159,31 +166,127 @@ document.getElementById('budget-rev-submit').addEventListener('click', async () 
   await loadExpensesList(true);
 });
 
-/* ---------- تقديم طلب صرف ---------- */
+/* ---------- مجال الصرف / جهة الصرف: إظهار حقل "أخرى" عند الحاجة ---------- */
+document.getElementById('budget-exp-area').addEventListener('change', (e) => {
+  document.getElementById('budget-exp-area-other').style.display = e.target.value === 'أخرى' ? 'block' : 'none';
+});
+document.getElementById('budget-exp-source').addEventListener('change', (e) => {
+  document.getElementById('budget-exp-source-other').style.display = e.target.value === 'أخرى' ? 'block' : 'none';
+});
+
+/* ---------- سطور الفواتير (فاتورة أو أكثر لكل طلب صرف) ---------- */
+function addExpenseItemRow() {
+  const wrap = document.getElementById('budget-exp-items');
+  const row = document.createElement('div');
+  row.className = 'budget-item-row';
+  row.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:var(--white); border:1px solid #ECEAE1; border-radius:10px; padding:10px; margin-bottom:8px;';
+  row.innerHTML = `
+    <input type="text" class="item-invoice-number" placeholder="رقم الفاتورة" style="flex:1 1 110px; min-width:100px;" />
+    <input type="date" class="item-invoice-date" style="flex:1 1 130px; min-width:120px;" />
+    <input type="text" class="item-source" placeholder="مصدرها" style="flex:1 1 120px; min-width:110px;" />
+    <input type="text" class="item-description" placeholder="البيان" style="flex:2 1 160px; min-width:140px;" />
+    <input type="number" class="item-amount" placeholder="المبلغ" style="flex:1 1 100px; min-width:90px;" />
+    <button type="button" class="item-remove" title="حذف الفاتورة" style="flex:0 0 auto; width:30px; height:30px; border-radius:50%; border:none; background:var(--danger-light); color:var(--danger); font-size:14px; cursor:pointer;">✕</button>
+  `;
+  row.querySelector('.item-amount').addEventListener('input', recalcExpenseTotal);
+  row.querySelector('.item-remove').addEventListener('click', () => {
+    row.remove();
+    recalcExpenseTotal();
+  });
+  wrap.appendChild(row);
+}
+
+function recalcExpenseTotal() {
+  const rows = document.querySelectorAll('#budget-exp-items .budget-item-row');
+  let total = 0;
+  rows.forEach(r => { total += parseFloat(r.querySelector('.item-amount').value) || 0; });
+  document.getElementById('budget-exp-total').textContent = fmtAmount(total);
+}
+
+function collectExpenseItems() {
+  const rows = document.querySelectorAll('#budget-exp-items .budget-item-row');
+  const items = [];
+  rows.forEach((r, i) => {
+    const amount = parseFloat(r.querySelector('.item-amount').value);
+    const description = r.querySelector('.item-description').value.trim();
+    if (!amount && !description) return; // صف فارغ بالكامل - تجاهله
+    items.push({
+      invoice_number: r.querySelector('.item-invoice-number').value.trim() || null,
+      invoice_date: r.querySelector('.item-invoice-date').value || null,
+      source: r.querySelector('.item-source').value.trim() || null,
+      description,
+      amount,
+      sort_order: i,
+    });
+  });
+  return items;
+}
+
+function resetExpenseForm() {
+  document.getElementById('budget-exp-area').value = '';
+  document.getElementById('budget-exp-area-other').value = '';
+  document.getElementById('budget-exp-area-other').style.display = 'none';
+  document.getElementById('budget-exp-source').value = '';
+  document.getElementById('budget-exp-source-other').value = '';
+  document.getElementById('budget-exp-source-other').style.display = 'none';
+  document.getElementById('budget-exp-beneficiary').value = '';
+  document.getElementById('budget-exp-semester').value = '';
+  document.getElementById('budget-exp-date').value = todayIso();
+  document.getElementById('budget-exp-items').innerHTML = '';
+  addExpenseItemRow();
+  recalcExpenseTotal();
+}
+
+document.getElementById('budget-exp-add-item').addEventListener('click', addExpenseItemRow);
+
+/* ---------- تقديم طلب صرف (بيان صرف) ---------- */
 document.getElementById('budget-exp-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('budget-exp-error');
   errEl.style.display = 'none';
-  const categoryId = document.getElementById('budget-exp-category').value;
-  const amount = parseFloat(document.getElementById('budget-exp-amount').value);
-  const paidTo = document.getElementById('budget-exp-paidto').value.trim();
+
+  const area = document.getElementById('budget-exp-area').value;
+  const areaOther = document.getElementById('budget-exp-area-other').value.trim();
+  const categoryId = document.getElementById('budget-exp-category').value || null;
+  const beneficiary = document.getElementById('budget-exp-beneficiary').value.trim();
+  const source = document.getElementById('budget-exp-source').value;
+  const sourceOther = document.getElementById('budget-exp-source-other').value.trim();
+  const semester = document.getElementById('budget-exp-semester').value.trim();
   const date = document.getElementById('budget-exp-date').value || todayIso();
-  const purpose = document.getElementById('budget-exp-purpose').value.trim();
+  const items = collectExpenseItems();
 
-  if (!categoryId) { errEl.textContent = 'اختر بند المصروف'; errEl.style.display = 'block'; return; }
-  if (!amount || amount <= 0) { errEl.textContent = 'أدخل مبلغ صحيح'; errEl.style.display = 'block'; return; }
-  if (!paidTo) { errEl.textContent = 'اكتب الجهة/الشخص المصروف له'; errEl.style.display = 'block'; return; }
-  if (!purpose) { errEl.textContent = 'اكتب الغرض من الصرف'; errEl.style.display = 'block'; return; }
+  if (!area) { errEl.textContent = 'اختر مجال الصرف'; errEl.style.display = 'block'; return; }
+  if (area === 'أخرى' && !areaOther) { errEl.textContent = 'اكتب مجال الصرف'; errEl.style.display = 'block'; return; }
+  if (!beneficiary) { errEl.textContent = 'اكتب اسم المستفيد (يُصرف لـ)'; errEl.style.display = 'block'; return; }
+  if (!source) { errEl.textContent = 'اختر جهة الصرف'; errEl.style.display = 'block'; return; }
+  if (source === 'أخرى' && !sourceOther) { errEl.textContent = 'اكتب جهة الصرف'; errEl.style.display = 'block'; return; }
+  if (items.length === 0) { errEl.textContent = 'أضف فاتورة واحدة على الأقل'; errEl.style.display = 'block'; return; }
+  for (const it of items) {
+    if (!it.description) { errEl.textContent = 'اكتب البيان لكل فاتورة'; errEl.style.display = 'block'; return; }
+    if (!it.amount || it.amount <= 0) { errEl.textContent = 'أدخل مبلغ صحيح لكل فاتورة'; errEl.style.display = 'block'; return; }
+  }
 
-  const { error } = await sb.from('budget_expenses').insert({
-    category_id: categoryId, amount, paid_to: paidTo, purpose, expense_date: date,
-    requested_by: currentUserId, status: 'pending',
-  });
+  const { data: inserted, error } = await sb.from('budget_expense_requests').insert({
+    spending_area: area,
+    spending_area_other: area === 'أخرى' ? areaOther : null,
+    category_id: categoryId,
+    beneficiary_name: beneficiary,
+    funding_source: source,
+    funding_source_other: source === 'أخرى' ? sourceOther : null,
+    semester: semester || null,
+    request_date: date,
+    requested_by: currentUserId,
+    status: 'pending',
+  }).select().single();
+
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
-  document.getElementById('budget-exp-amount').value = '';
-  document.getElementById('budget-exp-paidto').value = '';
-  document.getElementById('budget-exp-purpose').value = '';
-  document.getElementById('budget-exp-date').value = todayIso();
+  const requestId = inserted.id;
+  const { error: itemsError } = await sb.from('budget_expense_items').insert(
+    items.map(it => ({ ...it, request_id: requestId }))
+  );
+  if (itemsError) { errEl.textContent = 'تعذر حفظ الفواتير: ' + itemsError.message; errEl.style.display = 'block'; return; }
+
+  resetExpenseForm();
   await loadExpensesList(accessLevel() === 'full');
 });
 
@@ -192,12 +295,18 @@ async function loadExpensesList(canManage) {
   const container = document.getElementById('budget-expenses-list');
   container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
-  let query = sb.from('budget_expenses')
-    .select('id, amount, paid_to, purpose, expense_date, status, requested_by, budget_categories(name), profiles!budget_expenses_requested_by_fkey(full_name)')
+  let query = sb.from('budget_expense_requests')
+    .select(`id, statement_number, spending_area, spending_area_other, beneficiary_name, funding_source, funding_source_other,
+      semester, request_date, status, requested_by, confirmed_by, confirmed_at,
+      budget_categories(name),
+      requester:profiles!budget_expense_requests_requested_by_fkey(full_name),
+      confirmer:profiles!budget_expense_requests_confirmed_by_fkey(full_name),
+      budget_expense_items(id, invoice_number, invoice_date, source, description, amount, sort_order)`)
     .order('created_at', { ascending: false });
   if (!canManage) query = query.eq('requested_by', currentUserId);
 
-  const { data } = await query;
+  const { data, error } = await query;
+  if (error) console.error('budget_expense_requests fetch error:', error);
   const rows = data || [];
 
   if (rows.length === 0) {
@@ -207,44 +316,139 @@ async function loadExpensesList(canManage) {
 
   container.innerHTML = '';
   rows.forEach(r => {
+    const items = (r.budget_expense_items || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
+    const total = items.reduce((s, it) => s + Number(it.amount || 0), 0);
+    const areaLabel = r.spending_area === 'أخرى' ? (r.spending_area_other || 'أخرى') : r.spending_area;
+    const catName = r.budget_categories ? r.budget_categories.name : null;
+    const reqName = r.requester ? r.requester.full_name : '-';
+
     const card = document.createElement('div');
     card.className = 'form-card';
     card.style.marginBottom = '10px';
-    const catName = r.budget_categories ? r.budget_categories.name : '-';
-    const reqName = r.profiles ? r.profiles.full_name : '-';
     card.innerHTML = `
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div style="min-width:0;">
-          <div style="font-weight:700; font-size:14px; margin-bottom:4px;">${catName} <span class="badge ${STATUS_BADGE[r.status]}">${STATUS_LABELS[r.status]}</span></div>
-          <div style="font-size:12.5px; color:var(--slate);">صرف لـ: ${r.paid_to} — الغرض: ${r.purpose}</div>
-          ${canManage ? `<div style="font-size:11.5px; color:var(--slate); margin-top:4px;">مقدّم الطلب: ${reqName} — ${fmtDate(r.expense_date)}</div>` : `<div style="font-size:11.5px; color:var(--slate); margin-top:4px;">${fmtDate(r.expense_date)}</div>`}
+          <div style="font-weight:700; font-size:14px; margin-bottom:4px;">
+            بيان رقم ${r.statement_number} — ${esc(areaLabel)}
+            <span class="badge ${STATUS_BADGE[r.status]}">${STATUS_LABELS[r.status]}</span>
+          </div>
+          <div style="font-size:12.5px; color:var(--slate);">
+            يُصرف لـ: ${esc(r.beneficiary_name)} — جهة الصرف: ${esc(r.funding_source === 'أخرى' ? (r.funding_source_other || 'أخرى') : r.funding_source)}
+            ${catName ? ` — البند: ${esc(catName)}` : ''}
+          </div>
+          <div style="font-size:11.5px; color:var(--slate); margin-top:4px;">
+            ${canManage ? `مقدّم الطلب: ${esc(reqName)} — ` : ''}${fmtDate(r.request_date)} — ${items.length} فاتورة/فواتير
+          </div>
         </div>
         <div style="text-align:left; flex-shrink:0;">
-          <div style="font-weight:800; font-family:'Tajawal'; font-size:16px; color:var(--danger);">${fmtAmount(r.amount)}</div>
+          <div style="font-weight:800; font-family:'Tajawal'; font-size:16px; color:var(--danger);">${fmtAmount(total)}</div>
         </div>
       </div>`;
 
+    const actions = document.createElement('div');
+    actions.style.cssText = 'display:flex; gap:8px; margin-top:12px; flex-wrap:wrap;';
+    const printBtn = document.createElement('button');
+    printBtn.className = 'btn-primary';
+    printBtn.style.cssText = 'width:auto; padding:8px 16px; background:var(--meadow);';
+    printBtn.textContent = 'طباعة السند';
+    printBtn.addEventListener('click', () => printVoucher(r, items, total));
+    actions.appendChild(printBtn);
+
     if (canManage && r.status === 'pending') {
-      const actions = document.createElement('div');
-      actions.style.cssText = 'display:flex; gap:8px; margin-top:12px;';
-      actions.innerHTML = `
-        <button class="btn-primary confirm-btn" style="width:auto; padding:8px 16px; background:var(--green);">تأكيد الصرف</button>
-        <button class="btn-primary reject-btn" style="width:auto; padding:8px 16px; background:var(--danger);">رفض</button>`;
-      actions.querySelector('.confirm-btn').addEventListener('click', () => updateExpenseStatus(r.id, 'confirmed'));
-      actions.querySelector('.reject-btn').addEventListener('click', () => updateExpenseStatus(r.id, 'rejected'));
-      card.appendChild(actions);
+      const confirmBtn = document.createElement('button');
+      confirmBtn.className = 'btn-primary';
+      confirmBtn.style.cssText = 'width:auto; padding:8px 16px; background:var(--green);';
+      confirmBtn.textContent = 'تأكيد الصرف';
+      confirmBtn.addEventListener('click', () => updateExpenseStatus(r.id, 'confirmed'));
+      const rejectBtn = document.createElement('button');
+      rejectBtn.className = 'btn-primary';
+      rejectBtn.style.cssText = 'width:auto; padding:8px 16px; background:var(--danger);';
+      rejectBtn.textContent = 'رفض';
+      rejectBtn.addEventListener('click', () => updateExpenseStatus(r.id, 'rejected'));
+      actions.appendChild(confirmBtn);
+      actions.appendChild(rejectBtn);
     }
+    card.appendChild(actions);
     container.appendChild(card);
   });
 }
 
 async function updateExpenseStatus(id, status) {
   if (status === 'rejected' && !confirm('متأكد تبي ترفض طلب الصرف هذا؟')) return;
-  await sb.from('budget_expenses').update({
+  await sb.from('budget_expense_requests').update({
     status, confirmed_by: currentUserId, confirmed_at: new Date().toISOString(),
   }).eq('id', id);
   await loadDashboard();
   await loadExpensesList(true);
+}
+
+/* ---------- طباعة السند (بيان الصرف) ---------- */
+function printVoucher(r, items, total) {
+  const areaLabel = r.spending_area === 'أخرى' ? (r.spending_area_other || 'أخرى') : r.spending_area;
+  const sourceLabel = r.funding_source === 'أخرى' ? (r.funding_source_other || 'أخرى') : r.funding_source;
+
+  const itemsRows = items.map((it, i) => `
+    <tr>
+      <td>${i + 1}</td>
+      <td>${esc(it.invoice_number || '-')}</td>
+      <td>${it.invoice_date ? fmtDate(it.invoice_date) : '-'}</td>
+      <td>${esc(it.source || '-')}</td>
+      <td>${esc(it.description)}</td>
+      <td>${fmtAmount(it.amount)}</td>
+    </tr>`).join('');
+
+  const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>بيان صرف رقم ${r.statement_number}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: 'Tahoma', 'Arial', sans-serif; padding: 30px; color:#16233A; }
+  h1 { font-size: 20px; text-align:center; margin-bottom: 4px; }
+  .sub { text-align:center; color:#555; font-size:12px; margin-bottom: 24px; }
+  table.meta { width:100%; border-collapse:collapse; margin-bottom:22px; }
+  table.meta td { border:1px solid #ccc; padding:8px 10px; font-size:13px; }
+  table.meta td.label { background:#f3f3f0; font-weight:bold; width:150px; }
+  table.items { width:100%; border-collapse:collapse; margin-bottom: 20px; }
+  table.items th, table.items td { border:1px solid #999; padding:7px 8px; font-size:12.5px; text-align:center; }
+  table.items th { background:#eef1f6; }
+  table.items td:nth-child(5) { text-align:right; }
+  tfoot td { font-weight:bold; background:#f7f7f2; }
+  .sign { display:flex; justify-content:space-between; margin-top:60px; }
+  .sign div { width:30%; text-align:center; font-size:13px; }
+  .sign .line { margin-top:50px; border-top:1px solid #333; padding-top:6px; }
+  @media print { body { padding: 10px; } }
+</style>
+</head>
+<body>
+  <h1>بيان صرف</h1>
+  <div class="sub">مدرسة المروج — رقم البيان: ${r.statement_number}</div>
+  <table class="meta">
+    <tr><td class="label">مجال الصرف</td><td>${esc(areaLabel)}</td><td class="label">التاريخ</td><td>${fmtDate(r.request_date)}</td></tr>
+    <tr><td class="label">يُصرف لـ</td><td>${esc(r.beneficiary_name)}</td><td class="label">جهة الصرف</td><td>${esc(sourceLabel)}</td></tr>
+    <tr><td class="label">الفصل الدراسي</td><td colspan="3">${esc(r.semester || '-')}</td></tr>
+  </table>
+  <table class="items">
+    <thead><tr><th>م</th><th>رقم الفاتورة</th><th>تاريخ الفاتورة</th><th>مصدرها</th><th>البيان</th><th>المبلغ</th></tr></thead>
+    <tbody>${itemsRows}</tbody>
+    <tfoot><tr><td colspan="5">الإجمالي</td><td>${fmtAmount(total)}</td></tr></tfoot>
+  </table>
+  <div class="sign">
+    <div>مقدّم الطلب<div class="line">${esc(r.requester ? r.requester.full_name : '')}</div></div>
+    <div>اعتماد المدير<div class="line">${esc(r.confirmer ? r.confirmer.full_name : '')}</div></div>
+    <div>استلمت المبلغ المستحق<div class="line"></div></div>
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('يرجى السماح بفتح نافذة منبثقة للطباعة'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
 }
 
 /* ---------- لوحة الإحصائيات والرسوم البيانية ---------- */
@@ -260,22 +464,32 @@ async function loadDashboard() {
   const statsEl = document.getElementById('budget-stats');
   statsEl.innerHTML = '<div class="placeholder" style="padding:20px; grid-column:1/-1;"><p>جارٍ التحميل...</p></div>';
 
-  const [{ data: revenues }, { data: expenses }] = await Promise.all([
+  const [{ data: revenues }, { data: requests }] = await Promise.all([
     sb.from('budget_revenues').select('amount, revenue_date'),
-    sb.from('budget_expenses').select('amount, expense_date, status, category_id, budget_categories(name)').eq('status', 'confirmed'),
+    sb.from('budget_expense_requests')
+      .select('request_date, status, budget_categories(name), budget_expense_items(amount)')
+      .eq('status', 'confirmed'),
   ]);
 
   const revList = revenues || [];
-  const expList = expenses || [];
+  const reqList = requests || [];
+
+  // نبني قائمة "مصروفات" مسطّحة (كل فاتورة كسطر) من طلبات الصرف المعتمدة فقط
+  const expList = [];
+  reqList.forEach(r => {
+    const catName = r.budget_categories ? r.budget_categories.name : 'غير مصنّف';
+    (r.budget_expense_items || []).forEach(it => {
+      expList.push({ amount: Number(it.amount || 0), expense_date: r.request_date, category_name: catName });
+    });
+  });
 
   const totalRevenue = revList.reduce((s, r) => s + Number(r.amount), 0);
-  const totalExpense = expList.reduce((s, e) => s + Number(e.amount), 0);
+  const totalExpense = expList.reduce((s, e) => s + e.amount, 0);
   const balance = totalRevenue - totalExpense;
 
   const byCategory = new Map();
   expList.forEach(e => {
-    const name = e.budget_categories ? e.budget_categories.name : 'غير مصنّف';
-    byCategory.set(name, (byCategory.get(name) || 0) + Number(e.amount));
+    byCategory.set(e.category_name, (byCategory.get(e.category_name) || 0) + e.amount);
   });
   let topCategory = '-', topAmount = 0;
   byCategory.forEach((amt, name) => { if (amt > topAmount) { topAmount = amt; topCategory = name; } });
@@ -325,7 +539,7 @@ async function loadCharts(revList, expList, byCategory) {
   expList.forEach(e => {
     const key = e.expense_date.slice(0, 7);
     if (!monthMap.has(key)) monthMap.set(key, { label: monthLabel(e.expense_date), rev: 0, exp: 0 });
-    monthMap.get(key).exp += Number(e.amount);
+    monthMap.get(key).exp += e.amount;
   });
   const monthKeys = Array.from(monthMap.keys()).sort();
   const monthLabels = monthKeys.map(k => monthMap.get(k).label);
@@ -372,7 +586,7 @@ async function loadCharts(revList, expList, byCategory) {
     const pct = total ? Math.round(catData[i] / total * 100) : 0;
     const row = document.createElement('div');
     row.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:12.5px; margin-top:6px;';
-    row.innerHTML = `<span style="width:9px; height:9px; border-radius:50%; flex-shrink:0; background:${catColors[i]};"></span><span style="flex:1;">${l}</span><span style="color:var(--slate);">${pct}%</span>`;
+    row.innerHTML = `<span style="width:9px; height:9px; border-radius:50%; flex-shrink:0; background:${catColors[i]};"></span><span style="flex:1;">${esc(l)}</span><span style="color:var(--slate);">${pct}%</span>`;
     legendWrap.appendChild(row);
   });
 }
