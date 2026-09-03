@@ -16,6 +16,25 @@ const REFERENCE_STRINGS = new Set([...Object.keys(DAY_MAP), ...Object.keys(GRADE
 const ARABIC_RE = /[؀-ۿﭐ-﷿ﹰ-﻿]/;
 const EASTERN_DIGITS = '٠١٢٣٤٥٦٧٨٩';
 
+// نصوص ثابتة تتكرر بترويسة/تذييل كل صفحة (اسم المدرسة بالإنجليزي، عنوان الجدول، بيانات الإصدار/الأسبوع،
+// اسم برنامج aSc Timetables) - مو جزء من محتوى الجدول أبدًا. نستبعدها من البداية بدل ما نعتمد بس على
+// المسافة الهندسية عن أقرب يوم (اللي أحيانًا ما تكفي لو التذييل قريب من صف "الخميس" آخر صف بالجدول).
+// ملاحظة: سطر التذييل نفسه ينقسم أحيانًا لعدة عناصر منفصلة (مثلاً "هـ )رقم" و"٢" و"١٤٤٨" لحالها) ما
+// فيها كلمة نميّزها، فبدل ما نفحص كل عنصر لحاله، نلقط أول العناصر اللي فيها كلمة مفتاحية واضحة (جدول/
+// الأسبوع/Timetables/اسم المدرسة بالإنجليزي)، ونستبعد كل عنصر ثاني موجود بنفس سطرها (نفس y) - عشان
+// نمسح السطر كامل حتى أجزاءه اللي بلا كلمات مميزة.
+function filterBoilerplateItems(items) {
+  const boilerplateYs = new Set();
+  items.forEach(it => {
+    const norm = it.str.normalize('NFKC').trim();
+    if (/^[A-Za-z][A-Za-z0-9\s,.\-:]*$/.test(norm) || /جدول|الأسبوع|Timetables|aSc/.test(norm)) {
+      boilerplateYs.add(Math.round(it.y));
+    }
+  });
+  if (boilerplateYs.size === 0) return items;
+  return items.filter(it => !boilerplateYs.has(Math.round(it.y)));
+}
+
 let parsedClasses = []; // [{page, grade, section, map}]
 
 function translateDigits(s) {
@@ -39,15 +58,39 @@ function calibratePage(items) {
   return revScore >= normScore ? 'reversed' : 'normal';
 }
 
+// ملاحظة مهمة (اكتشفناها بتشخيص مباشر مع ملف حقيقي فيه تذييل "...رقم 2 من الأسبوع الثالث"): بعض
+// الصفحات فيها رقم منفرد بمنطقة العنوان/التذييل (مثلاً رقم الأسبوع) يطابق صدفة أحد أرقام الحصص (1-7)
+// ولو اعتمدنا أول عنصر نلقاه لكل رقم بس (بدون التحقق من موقعه)، ممكن هالرقم الغريب يسرق مكان عمود حصة
+// حقيقي ويطلع عمودين قريبين من بعض بالغلط - وهذا يسبب تكرار/تبادل حصص متجاورة بكل أيام الصفحة.
+// الحل: نجمع كل المرشحين (كل الأرقام 1-7 المتكررة بأي مكان بالصفحة) حسب سطرهم (y)، ونختار السطر اللي
+// فيه أكبر عدد أرقام مختلفة (السطر الحقيقي لرؤوس الحصص لازم يحتوي كل الأرقام 1-7 مرة وحدة)، ونتجاهل
+// أي رقم بره هالسطر مهما كان قريب أو مطابق.
 function findColumnAnchors(items) {
-  const byPeriod = {};
+  const candidates = [];
   items.forEach(it => {
     const t = translateDigits(it.str.normalize('NFKC')).trim();
     if (/^[1-7]$/.test(t)) {
-      const period = parseInt(t);
-      if (!(period in byPeriod)) byPeriod[period] = { x: (it.x0 + it.x1) / 2, item: it };
+      candidates.push({ period: parseInt(t), x: (it.x0 + it.x1) / 2, y: it.y, item: it });
     }
   });
+  if (candidates.length === 0) return {};
+
+  const byY = new Map();
+  candidates.forEach(c => {
+    const yKey = Math.round(c.y);
+    if (!byY.has(yKey)) byY.set(yKey, []);
+    byY.get(yKey).push(c);
+  });
+  let bestY = null, bestCount = -1;
+  byY.forEach((arr, y) => {
+    const distinctPeriods = new Set(arr.map(a => a.period)).size;
+    if (distinctPeriods > bestCount) { bestCount = distinctPeriods; bestY = y; }
+  });
+
+  const byPeriod = {};
+  candidates
+    .filter(c => Math.abs(c.y - bestY) < 3)
+    .forEach(c => { if (!(c.period in byPeriod)) byPeriod[c.period] = { x: c.x, item: c.item }; });
   return byPeriod;
 }
 
@@ -203,7 +246,7 @@ async function parsePdfFile(file) {
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
-    const items = await extractPageItems(page);
+    const items = filterBoilerplateItems(await extractPageItems(page));
 
     if (items.length === 0) {
       issues.push({ page: pageNum, reason: 'ما فيه أي نص قابل للقراءة بهذي الصفحة — يحتمل إن الملف صورة ممسوحة ضوئيًا (سكان) أو تم ضغطه بطريقة حوّلت الصفحات لصور بدل نص. جرّب ملف PDF الأصلي غير المضغوط.' });
