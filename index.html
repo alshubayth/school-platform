@@ -699,6 +699,14 @@
 
       <!-- لوحة الميزانية: تظهر للمدير ولصاحب صلاحية "كاملة" -->
       <div id="budget-dashboard-section" class="hidden">
+        <div class="form-row" style="grid-template-columns:220px 1fr; align-items:center; margin-bottom:12px;">
+          <select id="budget-semester-filter">
+            <option value="">كل السنة (الفصلين)</option>
+            <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+            <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
+          </select>
+          <span></span>
+        </div>
         <div class="stat-grid" id="budget-stats" style="grid-template-columns:repeat(4,1fr);"></div>
 
         <div class="form-row" style="align-items:stretch; margin-top:18px;">
@@ -721,7 +729,14 @@
           </div>
           <div class="form-row">
             <input type="date" id="budget-rev-date" />
-            <input type="text" id="budget-rev-notes" placeholder="ملاحظات (اختياري)" />
+            <select id="budget-rev-semester">
+              <option value="">الفصل الدراسي...</option>
+              <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+              <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
+            </select>
+          </div>
+          <div class="form-row">
+            <input type="text" id="budget-rev-notes" placeholder="ملاحظات (اختياري)" style="grid-column:1/-1;" />
           </div>
           <button class="btn-primary" id="budget-rev-submit" style="width:auto; padding:10px 18px;">+ إضافة الإيراد</button>
           <div class="error-msg" id="budget-rev-error"></div>
@@ -757,7 +772,9 @@
         </div>
         <div class="form-row">
           <select id="budget-exp-category"></select>
-          <input type="text" id="budget-exp-beneficiary" placeholder="يُصرف لـ (اسم المستفيد)" />
+          <select id="budget-exp-beneficiary">
+            <option value="">يُصرف لـ (اختر الموظف)...</option>
+          </select>
         </div>
         <div class="form-row">
           <select id="budget-exp-source">
@@ -770,7 +787,11 @@
         </div>
         <div class="form-row">
           <input type="date" id="budget-exp-date" />
-          <input type="text" id="budget-exp-semester" placeholder="الفصل الدراسي (اختياري)" />
+          <select id="budget-exp-semester">
+            <option value="">الفصل الدراسي...</option>
+            <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+            <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
+          </select>
         </div>
 
         <h4 style="margin:18px 0 8px; font-size:13.5px;">الفواتير</h4>
