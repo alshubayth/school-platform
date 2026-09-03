@@ -76,7 +76,7 @@ async function loadCategories() {
   categoriesCache = data || [];
 
   const expSelect = document.getElementById('budget-exp-category');
-  expSelect.innerHTML = '<option value="">بدون بند (اختياري)</option>' +
+  expSelect.innerHTML = '<option value="">اختر البند...</option>' +
     categoriesCache.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
 
   const listEl = document.getElementById('budget-categories-list');
@@ -197,10 +197,7 @@ document.getElementById('budget-rev-submit').addEventListener('click', async () 
   await loadExpensesList(true);
 });
 
-/* ---------- مجال الصرف / جهة الصرف: إظهار حقل "أخرى" عند الحاجة ---------- */
-document.getElementById('budget-exp-area').addEventListener('change', (e) => {
-  document.getElementById('budget-exp-area-other').style.display = e.target.value === 'أخرى' ? 'block' : 'none';
-});
+/* ---------- جهة الصرف: إظهار حقل "أخرى" عند الحاجة ---------- */
 document.getElementById('budget-exp-source').addEventListener('change', (e) => {
   document.getElementById('budget-exp-source-other').style.display = e.target.value === 'أخرى' ? 'block' : 'none';
 });
@@ -254,9 +251,7 @@ function collectExpenseItems() {
 }
 
 function resetExpenseForm() {
-  document.getElementById('budget-exp-area').value = '';
-  document.getElementById('budget-exp-area-other').value = '';
-  document.getElementById('budget-exp-area-other').style.display = 'none';
+  document.getElementById('budget-exp-category').value = '';
   document.getElementById('budget-exp-source').value = '';
   document.getElementById('budget-exp-source-other').value = '';
   document.getElementById('budget-exp-source-other').style.display = 'none';
@@ -275,8 +270,6 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
   const errEl = document.getElementById('budget-exp-error');
   errEl.style.display = 'none';
 
-  const area = document.getElementById('budget-exp-area').value;
-  const areaOther = document.getElementById('budget-exp-area-other').value.trim();
   const categoryId = document.getElementById('budget-exp-category').value || null;
   const beneficiary = document.getElementById('budget-exp-beneficiary').value;
   const source = document.getElementById('budget-exp-source').value;
@@ -285,8 +278,7 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
   const date = document.getElementById('budget-exp-date').value || todayIso();
   const items = collectExpenseItems();
 
-  if (!area) { errEl.textContent = 'اختر مجال الصرف'; errEl.style.display = 'block'; return; }
-  if (area === 'أخرى' && !areaOther) { errEl.textContent = 'اكتب مجال الصرف'; errEl.style.display = 'block'; return; }
+  if (!categoryId) { errEl.textContent = 'اختر البند'; errEl.style.display = 'block'; return; }
   if (!beneficiary) { errEl.textContent = 'اختر الموظف (يُصرف لـ)'; errEl.style.display = 'block'; return; }
   if (!source) { errEl.textContent = 'اختر جهة الصرف'; errEl.style.display = 'block'; return; }
   if (source === 'أخرى' && !sourceOther) { errEl.textContent = 'اكتب جهة الصرف'; errEl.style.display = 'block'; return; }
@@ -298,8 +290,6 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
   }
 
   const { data: inserted, error } = await sb.from('budget_expense_requests').insert({
-    spending_area: area,
-    spending_area_other: area === 'أخرى' ? areaOther : null,
     category_id: categoryId,
     beneficiary_name: beneficiary,
     funding_source: source,
@@ -328,7 +318,7 @@ async function loadExpensesList(canManage) {
   container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
   let query = sb.from('budget_expense_requests')
-    .select(`id, statement_number, spending_area, spending_area_other, beneficiary_name, funding_source, funding_source_other,
+    .select(`id, statement_number, beneficiary_name, funding_source, funding_source_other,
       semester, request_date, status, requested_by, confirmed_by, confirmed_at,
       budget_categories(name),
       requester:profiles!budget_expense_requests_requested_by_fkey(full_name),
@@ -350,8 +340,7 @@ async function loadExpensesList(canManage) {
   rows.forEach(r => {
     const items = (r.budget_expense_items || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     const total = items.reduce((s, it) => s + Number(it.amount || 0), 0);
-    const areaLabel = r.spending_area === 'أخرى' ? (r.spending_area_other || 'أخرى') : r.spending_area;
-    const catName = r.budget_categories ? r.budget_categories.name : null;
+    const catName = r.budget_categories ? r.budget_categories.name : 'بدون بند';
     const reqName = r.requester ? r.requester.full_name : '-';
 
     const card = document.createElement('div');
@@ -361,12 +350,11 @@ async function loadExpensesList(canManage) {
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div style="min-width:0;">
           <div style="font-weight:700; font-size:14px; margin-bottom:4px;">
-            بيان رقم ${r.statement_number} — ${esc(areaLabel)}
+            بيان رقم ${r.statement_number} — ${esc(catName)}
             <span class="badge ${STATUS_BADGE[r.status]}">${STATUS_LABELS[r.status]}</span>
           </div>
           <div style="font-size:12.5px; color:var(--slate);">
             يُصرف لـ: ${esc(r.beneficiary_name)} — جهة الصرف: ${esc(r.funding_source === 'أخرى' ? (r.funding_source_other || 'أخرى') : r.funding_source)}
-            ${catName ? ` — البند: ${esc(catName)}` : ''}
           </div>
           <div style="font-size:11.5px; color:var(--slate); margin-top:4px;">
             ${canManage ? `مقدّم الطلب: ${esc(reqName)} — ` : ''}${fmtDate(r.request_date)} — ${items.length} فاتورة/فواتير${r.semester ? ` — ${esc(r.semester)}` : ''}
@@ -437,7 +425,7 @@ const VOUCHER_MANAGER_TITLE = 'مدير المدرسة';
 const VOUCHER_MANAGER_NAME = 'منيف بن محمد النفيعي';
 
 function printVoucher(r, items, total) {
-  const areaLabel = r.spending_area === 'أخرى' ? (r.spending_area_other || 'أخرى') : r.spending_area;
+  const catName = r.budget_categories ? r.budget_categories.name : 'بدون بند';
   const sourceLabel = r.funding_source === 'أخرى' ? (r.funding_source_other || 'أخرى') : r.funding_source;
 
   const itemsRows = items.map((it, i) => `
@@ -515,7 +503,7 @@ function printVoucher(r, items, total) {
     </div>
 
     <table class="meta">
-      <tr><td class="label">مجال الصرف</td><td>${esc(areaLabel)}</td><td class="label">التاريخ</td><td>${fmtDate(r.request_date)}</td></tr>
+      <tr><td class="label">البند</td><td>${esc(catName)}</td><td class="label">التاريخ</td><td>${fmtDate(r.request_date)}</td></tr>
       <tr><td class="label">يُصرف لـ</td><td>${esc(r.beneficiary_name)}</td><td class="label">جهة الصرف</td><td>${esc(sourceLabel)}</td></tr>
       <tr><td class="label">الفصل الدراسي</td><td colspan="3">${esc(r.semester || '-')}</td></tr>
     </table>
