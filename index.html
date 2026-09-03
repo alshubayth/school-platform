@@ -742,14 +742,14 @@
           <div class="error-msg" id="budget-rev-error"></div>
         </div>
 
-        <div class="form-card" style="margin-top:18px; background:var(--sand);">
-          <h4>إدارة بنود المصروفات</h4>
-          <div style="display:flex; gap:8px; align-items:center;">
+        <details class="form-card" style="margin-top:18px; background:var(--sand);">
+          <summary style="cursor:pointer; font-weight:700; font-size:15px;">إدارة بنود المصروفات</summary>
+          <div style="display:flex; gap:8px; align-items:center; margin-top:14px;">
             <input type="text" id="budget-category-name" placeholder="اسم بند جديد" style="flex:1; margin:0;" />
             <button class="btn-primary" id="budget-category-submit" style="width:auto; padding:9px 16px;">+ إضافة بند</button>
           </div>
           <div id="budget-categories-list" style="margin-top:10px;"></div>
-        </div>
+        </details>
       </div>
 
       <!-- تقديم طلب صرف (بيان صرف): يظهر لأي صاحب صلاحية (كاملة أو طلبات فقط) -->
