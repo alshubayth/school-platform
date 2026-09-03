@@ -72,7 +72,7 @@ async function loadBeneficiaries() {
 
 /* ---------- بنود المصروفات (الاختيارية - للتصنيف/الرسم البياني) ---------- */
 async function loadCategories() {
-  const { data } = await sb.from('budget_categories').select('id, name').order('name');
+  const { data } = await sb.from('budget_categories').select('id, name, cap_percentage').order('name');
   categoriesCache = data || [];
 
   const expSelect = document.getElementById('budget-exp-category');
@@ -84,9 +84,24 @@ async function loadCategories() {
     listEl.innerHTML = '';
     categoriesCache.forEach(c => {
       const row = document.createElement('div');
-      row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; padding:8px 0; border-bottom:1px solid #ECEAE1; font-size:13px;';
-      row.innerHTML = `<span>${esc(c.name)}</span>
+      row.style.cssText = 'display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 0; border-bottom:1px solid #ECEAE1; font-size:13px;';
+      row.innerHTML = `<span style="flex:1;">${esc(c.name)}</span>
+        <span style="display:flex; align-items:center; gap:4px; color:var(--slate);">
+          <input type="number" class="cat-cap-input" data-id="${c.id}" min="0" max="100" step="0.5" value="${c.cap_percentage != null ? c.cap_percentage : ''}" placeholder="بلا سقف" style="width:78px; margin:0; padding:5px 6px; font-size:12px;" title="سقف الصرف (% من إجمالي الإيراد)" />
+          <span style="font-size:11px;">%</span>
+        </span>
         <button type="button" class="cat-delete-btn" data-id="${c.id}" title="حذف البند" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:14px; padding:2px 6px;">✕</button>`;
+      row.querySelector('.cat-cap-input').addEventListener('change', async (e) => {
+        const raw = e.currentTarget.value.trim();
+        const val = raw === '' ? null : Math.max(0, Math.min(100, parseFloat(raw)));
+        const { error } = await sb.from('budget_categories').update({ cap_percentage: val }).eq('id', c.id);
+        if (error) {
+          alert('تعذر حفظ السقف: ' + error.message);
+          return;
+        }
+        await loadCategories();
+        if (accessLevel() === 'full') await loadDashboard();
+      });
       row.querySelector('.cat-delete-btn').addEventListener('click', async () => {
         if (!confirm(`متأكد تبي تحذف بند "${c.name}"؟ الطلبات السابقة المرتبطة به بتصير بدون بند.`)) return;
         const { error } = await sb.from('budget_categories').delete().eq('id', c.id);
@@ -104,10 +119,16 @@ async function loadCategories() {
 
 document.getElementById('budget-category-submit').addEventListener('click', async () => {
   const input = document.getElementById('budget-category-name');
+  const capInput = document.getElementById('budget-category-cap');
   const name = input.value.trim();
   if (!name) return;
-  const { error } = await sb.from('budget_categories').insert({ name });
-  if (!error) input.value = '';
+  const capRaw = capInput ? capInput.value.trim() : '';
+  const cap_percentage = capRaw === '' ? null : Math.max(0, Math.min(100, parseFloat(capRaw)));
+  const { error } = await sb.from('budget_categories').insert({ name, cap_percentage });
+  if (!error) {
+    input.value = '';
+    if (capInput) capInput.value = '';
+  }
   await loadCategories();
 });
 
@@ -550,7 +571,7 @@ async function loadDashboard() {
   const [{ data: revenues }, { data: requests }] = await Promise.all([
     sb.from('budget_revenues').select('amount, revenue_date, semester'),
     sb.from('budget_expense_requests')
-      .select('request_date, status, semester, budget_categories(name), budget_expense_items(amount)')
+      .select('request_date, status, semester, category_id, budget_categories(name), budget_expense_items(amount)')
       .eq('status', 'confirmed'),
   ]);
 
@@ -566,7 +587,7 @@ async function loadDashboard() {
   reqList.forEach(r => {
     const catName = r.budget_categories ? r.budget_categories.name : 'غير مصنّف';
     (r.budget_expense_items || []).forEach(it => {
-      expList.push({ amount: Number(it.amount || 0), expense_date: r.request_date, category_name: catName });
+      expList.push({ amount: Number(it.amount || 0), expense_date: r.request_date, category_name: catName, category_id: r.category_id });
     });
   });
 
@@ -588,7 +609,51 @@ async function loadDashboard() {
     statCard('الرصيد الحالي', fmtAmount(balance), 'var(--meadow)') +
     statCard('أكبر بند صرف', topCategory, 'var(--ink)', topAmount ? `${fmtAmount(topAmount)} (${topPct}%)` : null);
 
+  renderCategoryCaps(totalRevenue, expList);
+
   await loadCharts(revList, expList, byCategory);
+}
+
+/* ---------- مؤشرات سقف الصرف لكل بند (% من إجمالي الإيراد) ---------- */
+function renderCategoryCaps(totalRevenue, expList) {
+  const wrap = document.getElementById('budget-category-caps');
+  if (!wrap) return;
+
+  const spentByCategory = new Map();
+  expList.forEach(e => {
+    if (e.category_id == null) return;
+    spentByCategory.set(e.category_id, (spentByCategory.get(e.category_id) || 0) + e.amount);
+  });
+
+  const capped = categoriesCache.filter(c => c.cap_percentage != null && c.cap_percentage !== '');
+  if (capped.length === 0) {
+    wrap.innerHTML = '';
+    wrap.classList.add('hidden');
+    return;
+  }
+  wrap.classList.remove('hidden');
+
+  const rows = capped.map(c => {
+    const cap = totalRevenue * (Number(c.cap_percentage) / 100);
+    const spent = spentByCategory.get(c.id) || 0;
+    const pct = cap > 0 ? (spent / cap) * 100 : (spent > 0 ? 100 : 0);
+    const clampedPct = Math.max(0, Math.min(100, pct));
+    let color = 'var(--green)', bg = 'var(--green-light)';
+    if (pct > 80) { color = 'var(--danger)'; bg = 'var(--danger-light)'; }
+    else if (pct > 50) { color = '#B8860B'; bg = '#FBF3D9'; }
+
+    return `<div style="margin-bottom:12px;">
+      <div style="display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:4px;">
+        <span style="font-weight:600;">${esc(c.name)}</span>
+        <span style="color:${color}; font-weight:700;">${fmtAmount(spent)} / ${fmtAmount(cap)} (${Math.round(pct)}%)</span>
+      </div>
+      <div style="height:9px; border-radius:6px; background:${bg}; overflow:hidden;">
+        <div style="height:100%; width:${clampedPct}%; background:${color}; border-radius:6px;"></div>
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = `<h4 style="margin-bottom:10px;">نسب الصرف حسب سقف كل بند</h4>${rows}`;
 }
 
 let chartLibPromise = null;
