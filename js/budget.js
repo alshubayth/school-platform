@@ -400,6 +400,20 @@ async function loadExpensesList(canManage) {
       actions.appendChild(confirmBtn);
       actions.appendChild(rejectBtn);
     }
+    if (canManage) {
+      const deleteBtn = document.createElement('button');
+      deleteBtn.className = 'btn-primary';
+      deleteBtn.style.cssText = 'width:auto; padding:8px 16px; background:#fff; color:var(--danger); border:1px solid var(--danger);';
+      deleteBtn.textContent = 'حذف';
+      deleteBtn.addEventListener('click', async () => {
+        if (!confirm(`متأكد تبي تحذف بيان الصرف رقم ${r.statement_number}؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
+        const { error } = await sb.from('budget_expense_requests').delete().eq('id', r.id);
+        if (error) { alert('تعذر الحذف: ' + error.message); return; }
+        await loadDashboard();
+        await loadExpensesList(true);
+      });
+      actions.appendChild(deleteBtn);
+    }
     card.appendChild(actions);
     container.appendChild(card);
   });
@@ -446,7 +460,7 @@ function printVoucher(r, items, total) {
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8" />
-<title>بيان صرف رقم ${r.statement_number}</title>
+<title>سند صرف رقم ${r.statement_number}</title>
 <style>
   * { box-sizing: border-box; }
   @page { size: A4; margin: 12mm; }
@@ -458,12 +472,12 @@ function printVoucher(r, items, total) {
   .header .logo-side img { max-width: 44mm; max-height: 13mm; }
   .header .logo-side .logo-placeholder { width:40mm; height:13mm; border:1px dashed #999; border-radius:6px; display:flex; align-items:center; justify-content:center; font-size:10px; color:#999; }
   .header .titles { flex: 1; text-align:center; }
-  .header .titles h1 { font-size: 19px; margin: 0 0 3px; }
+  .header .titles h1 { font-size: 19px; margin: 0 0 3px; color:#B3413A; }
   .header .titles .org { font-size: 13px; color:#444; margin: 0; }
   .header .titles .org-sub { font-size: 11px; color:#777; margin: 2px 0 0; }
-  .header .num-side { width: 110px; flex-shrink:0; text-align:left; font-size: 12px; }
-  .header .num-side .num-box { border:1px solid #16233A; border-radius:6px; padding:6px 10px; display:inline-block; }
-  .header .num-side .num-box b { font-size: 16px; display:block; }
+  .header .num-side { width: 110px; flex-shrink:0; text-align:center; font-size: 12px; }
+  .header .num-side .num-box { border:1px solid #16233A; border-radius:6px; padding:6px 10px; display:inline-block; text-align:center; }
+  .header .num-side .num-box b { font-size: 16px; display:block; text-align:center; }
 
   table.meta { width:100%; border-collapse:collapse; margin-bottom:18px; }
   table.meta td { border:1px solid #ccc; padding:8px 10px; font-size:13px; }
@@ -491,7 +505,7 @@ function printVoucher(r, items, total) {
     <div class="header">
       <div class="logo-side">${logoHtml}</div>
       <div class="titles">
-        <h1>بيان صرف</h1>
+        <h1>سند صرف</h1>
         <p class="org">${esc(VOUCHER_ORG_NAME)}</p>
         ${VOUCHER_ORG_SUB ? `<p class="org-sub">${esc(VOUCHER_ORG_SUB)}</p>` : ''}
       </div>
@@ -513,9 +527,8 @@ function printVoucher(r, items, total) {
     </table>
 
     <div class="sign">
-      <div>مقدّم الطلب<div class="box">${esc(r.requester ? r.requester.full_name : '')}</div></div>
       <div>اعتماد المدير<div class="box">${esc(r.confirmer ? r.confirmer.full_name : '')}</div></div>
-      <div>استلمت المبلغ المستحق<div class="box"></div></div>
+      <div>استلام المبلغ (الموظف المصروف له)<div class="box">${esc(r.beneficiary_name)}</div></div>
     </div>
 
     <div class="footer-note">تمت الطباعة من نظام إدارة المدرسة — ${fmtDate(todayIso())}</div>
