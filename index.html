@@ -737,22 +737,48 @@
         </div>
       </div>
 
-      <!-- تقديم طلب صرف: يظهر لأي صاحب صلاحية (كاملة أو طلبات فقط) -->
+      <!-- تقديم طلب صرف (بيان صرف): يظهر لأي صاحب صلاحية (كاملة أو طلبات فقط) -->
       <div class="form-card hidden" id="budget-expense-form-section" style="margin-top:18px;">
-        <h4 style="margin-bottom:2px;">تقديم طلب صرف</h4>
-        <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">يُحفظ الطلب بحالة "بانتظار الاعتماد" ولا يُخصم من الميزانية إلا بعد موافقة المدير</p>
+        <h4 style="margin-bottom:2px;">تقديم طلب صرف (بيان صرف)</h4>
+        <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">يمكن إضافة أكثر من فاتورة بنفس طلب الصرف — يُحفظ الطلب بحالة "بانتظار الاعتماد" ولا يُخصم من الميزانية إلا بعد موافقة المدير</p>
+
+        <div class="form-row">
+          <select id="budget-exp-area">
+            <option value="">مجال الصرف...</option>
+            <option>المصروفات الإدارية</option>
+            <option>النشاط المدرسي</option>
+            <option>تكريم المعلمين</option>
+            <option>تكريم الطلاب</option>
+            <option>مساعدة الطلاب ذوي الحاجة</option>
+            <option>دعم التعليم الإلكتروني</option>
+            <option value="أخرى">أخرى</option>
+          </select>
+          <input type="text" id="budget-exp-area-other" placeholder="اكتب مجال الصرف" style="display:none;" />
+        </div>
         <div class="form-row">
           <select id="budget-exp-category"></select>
-          <input type="number" id="budget-exp-amount" placeholder="المبلغ (ر.س)" />
+          <input type="text" id="budget-exp-beneficiary" placeholder="يُصرف لـ (اسم المستفيد)" />
         </div>
         <div class="form-row">
-          <input type="text" id="budget-exp-paidto" placeholder="صرف لـ (الجهة/الشخص)" />
+          <select id="budget-exp-source">
+            <option value="">جهة الصرف...</option>
+            <option>المقصف</option>
+            <option>السلفة</option>
+            <option value="أخرى">أخرى</option>
+          </select>
+          <input type="text" id="budget-exp-source-other" placeholder="اكتب جهة الصرف" style="display:none;" />
+        </div>
+        <div class="form-row">
           <input type="date" id="budget-exp-date" />
+          <input type="text" id="budget-exp-semester" placeholder="الفصل الدراسي (اختياري)" />
         </div>
-        <div class="form-row">
-          <textarea id="budget-exp-purpose" placeholder="الغرض من الصرف" rows="2" style="grid-column:1/-1; resize:vertical;"></textarea>
-        </div>
-        <button class="btn-primary" id="budget-exp-submit" style="width:auto; padding:10px 18px;">حفظ وإرسال للاعتماد</button>
+
+        <h4 style="margin:18px 0 8px; font-size:13.5px;">الفواتير</h4>
+        <div id="budget-exp-items"></div>
+        <button type="button" class="btn-primary" id="budget-exp-add-item" style="width:auto; padding:8px 14px; background:var(--slate);">+ إضافة فاتورة</button>
+        <div style="text-align:left; margin-top:10px; font-weight:800; font-size:15px;">الإجمالي: <span id="budget-exp-total">0 ر.س</span></div>
+
+        <button class="btn-primary" id="budget-exp-submit" style="width:auto; padding:10px 18px; margin-top:14px;">حفظ وإرسال للاعتماد</button>
         <div class="error-msg" id="budget-exp-error"></div>
       </div>
 
