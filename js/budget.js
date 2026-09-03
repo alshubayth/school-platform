@@ -52,6 +52,7 @@ export async function loadBudgetModule() {
   if (hasAny) await loadBeneficiaries();
 
   if (isAdmin) await loadPermsSection();
+  if (hasFull) await loadShareSection();
   if (hasFull) await loadDashboard();
   if (hasAny) await loadExpensesList(hasFull);
 }
@@ -568,18 +569,21 @@ async function loadDashboard() {
 
   const semesterFilter = document.getElementById('budget-semester-filter') ? document.getElementById('budget-semester-filter').value : '';
 
-  const [{ data: revenues }, { data: requests }] = await Promise.all([
+  const [{ data: revenues }, { data: requests }, { data: closures }] = await Promise.all([
     sb.from('budget_revenues').select('amount, revenue_date, semester'),
     sb.from('budget_expense_requests')
       .select('request_date, status, semester, category_id, budget_categories(name), budget_expense_items(amount)')
       .eq('status', 'confirmed'),
+    sb.from('budget_semester_closures').select('semester, admin_share_amount, carryover_amount'),
   ]);
 
   let revList = revenues || [];
   let reqList = requests || [];
+  let closureList = closures || [];
   if (semesterFilter) {
     revList = revList.filter(r => r.semester === semesterFilter);
     reqList = reqList.filter(r => r.semester === semesterFilter);
+    closureList = closureList.filter(c => c.semester === semesterFilter);
   }
 
   // نبني قائمة "مصروفات" مسطّحة (كل فاتورة كسطر) من طلبات الصرف المعتمدة فقط
@@ -593,7 +597,9 @@ async function loadDashboard() {
 
   const totalRevenue = revList.reduce((s, r) => s + Number(r.amount), 0);
   const totalExpense = expList.reduce((s, e) => s + e.amount, 0);
-  const balance = totalRevenue - totalExpense;
+  const totalAdminShare = closureList.reduce((s, c) => s + Number(c.admin_share_amount || 0), 0);
+  const totalCarryover = closureList.reduce((s, c) => s + Number(c.carryover_amount || 0), 0);
+  const balance = totalRevenue - totalExpense - totalAdminShare - totalCarryover;
 
   const byCategory = new Map();
   expList.forEach(e => {
@@ -607,12 +613,120 @@ async function loadDashboard() {
     statCard('إجمالي الإيرادات', fmtAmount(totalRevenue), 'var(--green)') +
     statCard('إجمالي المصروفات (المعتمدة)', fmtAmount(totalExpense), 'var(--danger)') +
     statCard('الرصيد الحالي', fmtAmount(balance), 'var(--meadow)') +
-    statCard('أكبر بند صرف', topCategory, 'var(--ink)', topAmount ? `${fmtAmount(topAmount)} (${topPct}%)` : null);
+    statCard('أكبر بند صرف', topCategory, 'var(--ink)', topAmount ? `${fmtAmount(topAmount)} (${topPct}%)` : null) +
+    statCard('نصيب الإدارة (مخصوم)', fmtAmount(totalAdminShare), 'var(--purple)') +
+    statCard('المدوَّر (محتجز)', fmtAmount(totalCarryover), 'var(--teal)');
 
   renderCategoryCaps(totalRevenue, expList);
 
   await loadCharts(revList, expList, byCategory);
 }
+
+/* ---------- نصيب الإدارة + المدوَّر (تُحسب آخر كل فصل دراسي) ---------- */
+async function loadShareSection() {
+  const wrap = document.getElementById('budget-share-section');
+  if (!wrap) return;
+
+  const [{ data: settingsRows }, { data: closures }] = await Promise.all([
+    sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).single(),
+    sb.from('budget_semester_closures').select('*').order('closed_at', { ascending: false }),
+  ]);
+  const settings = settingsRows || { admin_share_percentage: 10, carryover_percentage: 0 };
+  const closureList = closures || [];
+
+  const adminInput = document.getElementById('budget-share-admin-pct');
+  const carryInput = document.getElementById('budget-share-carry-pct');
+  if (adminInput) adminInput.value = settings.admin_share_percentage;
+  if (carryInput) carryInput.value = settings.carryover_percentage;
+
+  const semSelect = document.getElementById('budget-share-close-semester');
+  if (semSelect && !semSelect.dataset.filled) {
+    semSelect.innerHTML = '<option value="">اختر الفصل...</option>' + SEMESTERS.map(s => `<option value="${s}">${s}</option>`).join('');
+    semSelect.dataset.filled = '1';
+  }
+
+  const listEl = document.getElementById('budget-share-closures-list');
+  if (listEl) {
+    if (closureList.length === 0) {
+      listEl.innerHTML = '<p style="font-size:12px; color:var(--slate); margin:8px 0 0;">ما فيه فصل مُقفل بعد</p>';
+    } else {
+      listEl.innerHTML = closureList.map(c => `
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:8px 0; border-bottom:1px solid #ECEAE1;">
+          <span style="font-weight:600;">${esc(c.semester)}</span>
+          <span style="color:var(--slate);">الإيراد: ${fmtAmount(c.total_revenue)} — الإدارة: ${fmtAmount(c.admin_share_amount)} (${c.admin_share_percentage}%) — المدوَّر: ${fmtAmount(c.carryover_amount)} (${c.carryover_percentage}%)</span>
+        </div>`).join('');
+    }
+  }
+}
+
+document.getElementById('budget-share-settings-save') && document.getElementById('budget-share-settings-save').addEventListener('click', async () => {
+  const errEl = document.getElementById('budget-share-error');
+  errEl.style.display = 'none';
+  const admin_share_percentage = parseFloat(document.getElementById('budget-share-admin-pct').value);
+  const carryover_percentage = parseFloat(document.getElementById('budget-share-carry-pct').value);
+  if (isNaN(admin_share_percentage) || isNaN(carryover_percentage)) {
+    errEl.textContent = 'أدخل نسبتين صحيحتين';
+    errEl.style.display = 'block';
+    return;
+  }
+  const { error } = await sb.from('budget_share_settings').update({ admin_share_percentage, carryover_percentage, updated_by: currentUserId }).eq('id', 1);
+  if (error) {
+    errEl.textContent = 'تعذر الحفظ: ' + error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  await loadShareSection();
+});
+
+document.getElementById('budget-share-close-submit') && document.getElementById('budget-share-close-submit').addEventListener('click', async () => {
+  const errEl = document.getElementById('budget-share-error');
+  errEl.style.display = 'none';
+  const semester = document.getElementById('budget-share-close-semester').value;
+  if (!semester) {
+    errEl.textContent = 'اختر الفصل الدراسي المراد إقفاله أولاً';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const [{ data: settingsRows }, { data: revenues }, { data: existing }] = await Promise.all([
+    sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).single(),
+    sb.from('budget_revenues').select('amount, semester').eq('semester', semester),
+    sb.from('budget_semester_closures').select('id').eq('semester', semester).single(),
+  ]);
+  const settings = settingsRows || { admin_share_percentage: 10, carryover_percentage: 0 };
+  const totalRevenue = (revenues || []).reduce((s, r) => s + Number(r.amount), 0);
+  const adminAmount = totalRevenue * (Number(settings.admin_share_percentage) / 100);
+  const carryAmount = totalRevenue * (Number(settings.carryover_percentage) / 100);
+
+  const msg = `سيتم تسجيل نهاية "${semester}":\n` +
+    `إجمالي الإيراد: ${fmtAmount(totalRevenue)}\n` +
+    `نصيب الإدارة (${settings.admin_share_percentage}%): ${fmtAmount(adminAmount)}\n` +
+    `المدوَّر (${settings.carryover_percentage}%): ${fmtAmount(carryAmount)}\n` +
+    (existing && existing.id ? '\nتنبيه: هذا الفصل مُقفل من قبل — بيتم استبدال القيم السابقة.' : '') +
+    '\nهل تؤكد؟';
+  if (!confirm(msg)) return;
+
+  const payload = {
+    semester, total_revenue: totalRevenue,
+    admin_share_percentage: settings.admin_share_percentage, admin_share_amount: adminAmount,
+    carryover_percentage: settings.carryover_percentage, carryover_amount: carryAmount,
+    closed_by: currentUserId, closed_at: new Date().toISOString(),
+  };
+
+  let error;
+  if (existing && existing.id) {
+    ({ error } = await sb.from('budget_semester_closures').update(payload).eq('id', existing.id));
+  } else {
+    ({ error } = await sb.from('budget_semester_closures').insert(payload));
+  }
+  if (error) {
+    errEl.textContent = 'تعذر تسجيل الإقفال: ' + error.message;
+    errEl.style.display = 'block';
+    return;
+  }
+  await loadShareSection();
+  await loadDashboard();
+});
 
 /* ---------- مؤشرات سقف الصرف لكل بند (% من إجمالي الإيراد) ---------- */
 function renderCategoryCaps(totalRevenue, expList) {
