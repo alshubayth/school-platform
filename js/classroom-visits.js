@@ -231,6 +231,11 @@ let cvSection = null;
 let cvView = 'list'; // 'list' | 'form'
 let cvSchedule = {}; // خريطة الحصص المتاحة للفصل المختار: "day-period" -> {subject, teacher}
 let cvEditingId = null; // معرّف الزيارة الجاري تعديلها، أو null لو زيارة جديدة
+let cvTeachers = []; // قائمة حسابات المعلمين المسجلين بالنظام: [{id, full_name}] — تُستخدم لربط الزيارة بحساب معلم فعلي (بدل الاعتماد على تطابق الاسم النصي في جدول الحصص فقط)
+
+function normalizeArName(s) {
+  return (s || '').trim().replace(/\s+/g, ' ');
+}
 
 function isAdminOrDeputyHere() { return ['admin', 'deputy'].includes(currentProfile.role); }
 function canEditVisit(v) { return currentProfile.role === 'admin' || v.visitor_id === currentUserId; }
@@ -362,6 +367,11 @@ async function renderForm(container, existing) {
         </div>
       </div>
       <div id="cv-slot-info" style="margin-top:10px; font-size:13px; color:var(--navy); font-weight:700;"></div>
+      <div style="margin-top:12px;">
+        <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">حساب المعلم على النظام</label>
+        <select id="cv-teacher-select"><option value="">اختر حساب المعلم</option></select>
+        <div id="cv-teacher-hint" style="font-size:11.5px; color:var(--danger); margin-top:4px;"></div>
+      </div>
     </div>
 
     <div class="form-card">
@@ -458,10 +468,12 @@ async function renderForm(container, existing) {
 
   renderGradeTabs();
   await refreshSectionOptions();
+  await loadTeachersList();
   if (isEdit) {
     document.getElementById('cv-section-select').value = String(existing.class_section);
     await loadScheduleForSlotPicker();
     updateSlotInfo();
+    if (existing.teacher_profile_id) document.getElementById('cv-teacher-select').value = existing.teacher_profile_id;
   }
 
   document.getElementById('cv-day-select').addEventListener('change', updateSlotInfo);
@@ -528,10 +540,19 @@ async function loadScheduleForSlotPicker() {
   (data || []).forEach(r => { cvSchedule[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
 }
 
+async function loadTeachersList() {
+  const { data } = await sb.from('profiles').select('id, full_name').eq('role', 'teacher').order('full_name');
+  cvTeachers = data || [];
+  const sel = document.getElementById('cv-teacher-select');
+  if (sel) sel.innerHTML = '<option value="">اختر حساب المعلم</option>' + cvTeachers.map(t => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('');
+}
+
 function updateSlotInfo() {
   const day = document.getElementById('cv-day-select').value;
   const period = document.getElementById('cv-period-select').value;
   const infoEl = document.getElementById('cv-slot-info');
+  const teacherSel = document.getElementById('cv-teacher-select');
+  const hintEl = document.getElementById('cv-teacher-hint');
   if (!cvSection || !day || !period) { infoEl.textContent = ''; return; }
   const cell = cvSchedule[day + '-' + period];
   if (!cell || !cell.subject) {
@@ -539,6 +560,18 @@ function updateSlotInfo() {
     return;
   }
   infoEl.innerHTML = `المادة: <b>${esc(cell.subject)}</b> — المعلم: <b>${esc(cell.teacher || '-')}</b>`;
+
+  // محاولة ربط تلقائي بين اسم المعلم المكتوب بجدول الحصص وحساب معلم فعلي على النظام
+  // (الاسم بجدول الحصص نص حر ممكن ما يطابق حرفيًا اسم الحساب، فهذا الربط ضروري حتى يقدر المعلم يشوف زيارته)
+  if (teacherSel) {
+    const norm = normalizeArName(cell.teacher);
+    const match = cvTeachers.find(t => normalizeArName(t.full_name) === norm);
+    if (match) { teacherSel.value = match.id; if (hintEl) hintEl.textContent = ''; }
+    else {
+      teacherSel.value = '';
+      if (hintEl) hintEl.textContent = 'تعذّر إيجاد حساب معلم مطابق تلقائيًا لاسم "' + (cell.teacher || '') + '" — اختر الحساب الصحيح يدويًا من القائمة أعلاه حتى يقدر المعلم يشوف هذي الزيارة.';
+    }
+  }
 }
 
 async function saveVisit() {
@@ -551,6 +584,9 @@ async function saveVisit() {
   const cell = cvSchedule[day + '-' + period];
   if (!cell || !cell.subject) { errEl.textContent = 'لا توجد مادة مسجلة بهذي الحصة بالجدول الدراسي'; return; }
   if (!cell.teacher) { errEl.textContent = 'لا يوجد اسم معلم مسجل بهذي الحصة بالجدول الدراسي'; return; }
+
+  const teacherProfileId = document.getElementById('cv-teacher-select').value;
+  if (!teacherProfileId) { errEl.textContent = 'اختر حساب المعلم على النظام (بيانات المطابقة التلقائية ما لقت حساب مطابق) — بدون هذا ما يقدر المعلم يشوف الزيارة حتى لو نشرتها'; document.getElementById('cv-teacher-select').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
 
   const visitDate = document.getElementById('cv-visit-date').value;
   if (!visitDate) { errEl.textContent = 'حدد تاريخ الزيارة'; return; }
@@ -581,6 +617,7 @@ async function saveVisit() {
     day_of_week: day,
     period_number: parseInt(period),
     teacher_name: cell.teacher,
+    teacher_profile_id: teacherProfileId,
     subject_name: cell.subject,
     specialization: document.getElementById('cv-specialization').value.trim() || null,
     visit_date: visitDate,
