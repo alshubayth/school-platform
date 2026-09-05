@@ -383,7 +383,18 @@
     <div id="duty-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-8">→ رجوع للرئيسية</span>
 
+      <div id="duty-teacher-view" class="hidden">
+        <div class="form-card">
+          <h4>مناوباتي الثابتة (تتكرر كل أسبوع)</h4>
+          <div id="my-duty-fixed-list"></div>
+        </div>
+        <div class="form-card">
+          <h4>مناوباتي لهذا الأسبوع — يبدأ من: <span id="my-duty-week-label"></span></h4>
+          <div id="my-duty-weekly-list"></div>
+        </div>
+      </div>
 
+      <div id="duty-admin-view">
       <div class="form-card">
         <h4 id="dt-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
           <span>+ إضافة نوع مناوبة</span>
@@ -461,6 +472,7 @@
       <div class="form-card">
         <h4>تسجيل الحضور — اليوم: <span id="today-date-label"></span></h4>
         <div id="today-duty-list"></div>
+      </div>
       </div>
     </div>
 
