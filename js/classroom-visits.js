@@ -278,6 +278,9 @@ async function renderList(container) {
     html += '<div style="display:flex; flex-direction:column; gap:12px;">';
     visits.forEach(v => {
       const dayLabel = (DAYS.find(d => d.key === v.day_of_week) || {}).label || v.day_of_week;
+      const visitorRoleLabel = v.visitor_role === 'admin' ? 'مدير' : 'وكيل';
+      const visitorName = v.profiles?.full_name || null;
+      const visitorTag = visitorName ? `${esc(visitorName)} — ${visitorRoleLabel}` : visitorRoleLabel;
       html += `
         <div class="form-card" style="padding:16px 18px;">
           <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; align-items:center;">
@@ -286,6 +289,7 @@ async function renderList(container) {
               <div style="font-size:12.5px; color:var(--slate); margin-top:4px;">
                 ${gradeLabels[v.grade_level] || v.grade_level} / الفصل ${v.class_section} — ${dayLabel} — الحصة ${v.period_number} — ${fmtDate(v.visit_date)}
               </div>
+              <div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:700;">زار: ${visitorTag}</div>
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <span class="badge ${v.published ? 'badge-green' : 'badge-gold'}" style="padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700; ${v.published ? 'background:#e4f5ea; color:#1f8a4c;' : 'background:#fdf2df; color:#9a6b1e;'}">${v.published ? 'منشورة للمعلم' : 'غير منشورة'}</span>
