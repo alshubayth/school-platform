@@ -11,6 +11,7 @@ import { loadScheduleModule } from './schedule.js';
 import './schedule-pdf.js';
 import { loadStudentFollowupsModule } from './student-followups.js';
 import { loadBudgetModule } from './budget.js';
+import { loadClassroomVisitsModule } from './classroom-visits.js';
 
 export const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
@@ -61,6 +62,7 @@ const icons = {
   schedule: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18"/><path d="M7.5 14.5h2M7.5 17.5h2M12 14.5h2M12 17.5h2M16.5 14.5h1M16.5 17.5h1"/></svg>',
   followups: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="7" r="3.2"/><path d="M3.5 20c1.2-3.6 4-5.3 5.5-5.3s4.3 1.7 5.5 5.3"/><path d="M16 5h5M16 9h5M15 13.5h6M15 17.5h6"/></svg>',
   budget: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v2M12 20v2"/><circle cx="12" cy="12" r="9"/><path d="M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1.1-3 2.5S10.3 12 12 12s3 1.1 3 2.5-1.3 2.5-3 2.5-3-1.1-3-2.5"/></svg>',
+  visits: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M9 3h6v4H9z"/><path d="m14 9 6-6M17 3h3v3"/><path d="M7 13h6M7 17h4"/></svg>',
 };
 
 export const tiles = [
@@ -76,6 +78,7 @@ export const tiles = [
   { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple' },
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy' },
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin'], color: 'diamond-green' },
+  { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold' },
 ];
 
@@ -170,6 +173,7 @@ export function hideAllModules() {
   document.getElementById('schedule-module').classList.add('hidden');
   document.getElementById('followups-module').classList.add('hidden');
   document.getElementById('budget-module').classList.add('hidden');
+  document.getElementById('visits-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -220,6 +224,9 @@ export function openTile(key, title) {
   } else if (key === 'budget') {
     document.getElementById('budget-module').classList.remove('hidden');
     loadBudgetModule();
+  } else if (key === 'visits') {
+    document.getElementById('visits-module').classList.remove('hidden');
+    loadClassroomVisitsModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
