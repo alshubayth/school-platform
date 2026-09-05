@@ -391,12 +391,23 @@
         </h4>
         <div id="dt-body" class="hidden" style="margin-top:14px;">
           <div class="form-row">
-            <input type="text" id="dt-name" placeholder="اسم نوع مناوبة جديد (مثال: تنظيم بيع)" />
-            <input type="text" id="dt-location" placeholder="مكان المناوبة (مثال: جهة الصف الثاني) — اختياري" />
+            <select id="dt-name-select">
+              <option value="">اختر المناوبة الرئيسية</option>
+              <option value="مناوبة الصباح">مناوبة الصباح</option>
+              <option value="مناوبة الفسحة">مناوبة الفسحة</option>
+              <option value="مناوبة المصلى">مناوبة المصلى</option>
+              <option value="مناوبة الحافلات">مناوبة الحافلات</option>
+              <option value="مناوبة الأركان">مناوبة الأركان</option>
+              <option value="__other__">نوع آخر...</option>
+            </select>
+            <input type="text" id="dt-name-other" placeholder="اكتب اسم المناوبة الرئيسية" style="display:none;" />
+          </div>
+          <div class="form-row" style="margin-top:10px;">
+            <input type="text" id="dt-location" placeholder="التفصيل: الموقع أو الحصة (مثال: حافلات / الساحة الداخلية / الممر الأول / نقطة بيع / الحصة الرابعة) — اختياري" />
             <button class="btn-primary" id="dt-add" style="width:auto; padding:11px 20px;">إضافة نوع</button>
           </div>
         </div>
-        <div id="dt-list" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;"></div>
+        <div id="dt-list" style="margin-top:10px;"></div>
       </div>
 
       <div class="form-card">
