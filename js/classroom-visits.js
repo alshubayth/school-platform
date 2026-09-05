@@ -660,9 +660,12 @@ function printVisitReport(v) {
 <meta charset="utf-8" />
 <title>تقرير زيارة صفية — ${esc(v.teacher_name)}</title>
 <style>
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
   @page { size: A4; margin: 10mm; }
   body { font-family: 'Tahoma', 'Arial', sans-serif; padding: 0; margin: 0; color:#16233A; font-size:12px; }
+  @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+  }
   .doc { width: 100%; max-width: 190mm; margin: 0 auto; }
 
   .header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-bottom:8px; }
