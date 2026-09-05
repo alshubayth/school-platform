@@ -205,33 +205,48 @@ const STRATEGIES = [
   'ورقة الدقيقة الواحدة', 'المشاريع العملية', 'أرسل سؤال', 'الاستنتاج',
 ];
 
-// تقدير كل خيار حسب ترتيبه (أول خيار = مميز، آخر خيار حقيقي = فرصة تحسين، والباقي = حقق الهدف)
+// توصيات جاهزة معتمدة من نموذج رسمي فعلي — تُقترح تلقائيًا لما يكون تقدير المؤشر "فرصة تحسين"
+// (ما عندنا توصية رسمية جاهزة لكل المؤشرات، فالباقي يُكتب يدويًا من قِبل الزائر)
+const RECOMMENDATIONS = {
+  16: 'معرفة الطالب بأهداف الدرس يزيد من فرص التعلم وتوجيه الجهود.',
+  20: 'تفعيل دور جميع الطلاب في تنفيذ أنشطة الدرس يسهم في تنمية قدرات المتعلم وتحقيق الأهداف.',
+  27: 'تفعيل سجل المتابعة يسهم في تحفيز وتعزيز تعلم الطلاب وتعديل سلوكهم وتحسين نواتج التعلم.',
+  28: 'تنويع أساليب التقويم وأدواته يسهم في إيجاد بيئة تعلم فاعلة ويحسن من نواتج التعلم.',
+};
+
+// تقدير كل خيار حسب ترتيبه: أول خيار = مميز، آخر خيار حقيقي (قبل "لم يتم تقييم") = فرصة تحسين، والباقي = حقق الهدف
+// الرموز مطابقة للنموذج الرسمي المعتمد: ✓ = حقق الهدف، ➔ = فرصة تحسين، ⭐ = مميز
 // آخر عنصر بكل قائمة دايمًا "لم يتم تقييم..." ولا ياخذ تقدير
 function tierForOption(indicatorNum, optionText) {
   const opts = INDICATORS[indicatorNum].options;
   const idx = opts.indexOf(optionText);
   if (idx === -1 || idx === opts.length - 1) return null;
-  if (idx === 0) return { label: 'مميز', symbol: '✓' };
+  if (idx === 0) return { label: 'مميز', symbol: '⭐' };
   if (idx === opts.length - 2) return { label: 'فرصة تحسين', symbol: '➔' };
-  return { label: 'حقق الهدف', symbol: '—' };
+  return { label: 'حقق الهدف', symbol: '✓' };
 }
 
 let cvGrade = 'first_intermediate';
 let cvSection = null;
 let cvView = 'list'; // 'list' | 'form'
 let cvSchedule = {}; // خريطة الحصص المتاحة للفصل المختار: "day-period" -> {subject, teacher}
+let cvEditingId = null; // معرّف الزيارة الجاري تعديلها، أو null لو زيارة جديدة
 
 function isAdminOrDeputyHere() { return ['admin', 'deputy'].includes(currentProfile.role); }
+function canEditVisit(v) { return currentProfile.role === 'admin' || v.visitor_id === currentUserId; }
 
 export async function loadClassroomVisitsModule() {
   cvView = 'list';
+  cvEditingId = null;
   await renderView();
 }
+
+let cvEditingVisit = null; // كائن الزيارة الكامل لما نكون بوضع تعديل
 
 async function renderView() {
   const container = document.getElementById('cv-container');
   if (cvView === 'form') {
-    await renderForm(container);
+    await renderForm(container, cvEditingVisit);
   } else {
     await renderList(container);
   }
@@ -270,8 +285,9 @@ async function renderList(container) {
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <span class="badge ${v.published ? 'badge-green' : 'badge-gold'}" style="padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700; ${v.published ? 'background:#e4f5ea; color:#1f8a4c;' : 'background:#fdf2df; color:#9a6b1e;'}">${v.published ? 'منشورة للمعلم' : 'غير منشورة'}</span>
               <button class="btn-secondary cv-print-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">طباعة PDF</button>
+              ${canEditVisit(v) ? `<button class="btn-secondary cv-edit-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">تعديل</button>` : ''}
               ${isAdminOrDeputyHere() ? `<button class="btn-secondary cv-publish-btn" data-id="${v.id}" data-current="${v.published}" style="width:auto; padding:8px 14px; font-size:12.5px;">${v.published ? 'إلغاء النشر' : 'نشر للمعلم'}</button>` : ''}
-              ${isAdminOrDeputyHere() ? `<button class="btn-secondary cv-delete-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px; color:var(--danger);">حذف</button>` : ''}
+              ${canEditVisit(v) ? `<button class="btn-secondary cv-delete-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px; color:var(--danger);">حذف</button>` : ''}
             </div>
           </div>
         </div>`;
@@ -282,7 +298,17 @@ async function renderList(container) {
   container.innerHTML = html;
 
   const newBtn = document.getElementById('cv-new-btn');
-  if (newBtn) newBtn.addEventListener('click', () => { cvView = 'form'; renderView(); });
+  if (newBtn) newBtn.addEventListener('click', () => { cvEditingVisit = null; cvView = 'form'; renderView(); });
+
+  container.querySelectorAll('.cv-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const v = visits.find(x => x.id === btn.dataset.id);
+      if (!v) return;
+      cvEditingVisit = v;
+      cvView = 'form';
+      renderView();
+    });
+  });
 
   container.querySelectorAll('.cv-print-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -306,11 +332,16 @@ async function renderList(container) {
   });
 }
 
-/* ================= نموذج زيارة جديدة ================= */
-async function renderForm(container) {
+/* ================= نموذج زيارة جديدة / تعديل زيارة ================= */
+async function renderForm(container, existing) {
+  const isEdit = !!existing;
+  cvEditingId = isEdit ? existing.id : null;
+  if (isEdit) { cvGrade = existing.grade_level; cvSection = existing.class_section; }
+
   container.innerHTML = `
-    <div style="margin-bottom:14px;">
+    <div style="margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
       <button class="btn-secondary" id="cv-back-list-btn" style="width:auto; padding:9px 18px;">→ رجوع لقائمة الزيارات</button>
+      ${isEdit ? '<span style="font-size:12.5px; color:var(--gold); font-weight:700;">وضع التعديل — التغييرات تُحفظ على نفس الزيارة</span>' : ''}
     </div>
 
     <div class="form-card" style="background:var(--sand);">
@@ -323,11 +354,11 @@ async function renderForm(container) {
         </div>
         <div>
           <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">اليوم</label>
-          <select id="cv-day-select"><option value="">اختر اليوم</option>${DAYS.map(d => `<option value="${d.key}">${d.label}</option>`).join('')}</select>
+          <select id="cv-day-select"><option value="">اختر اليوم</option>${DAYS.map(d => `<option value="${d.key}"${isEdit && existing.day_of_week === d.key ? ' selected' : ''}>${d.label}</option>`).join('')}</select>
         </div>
         <div>
           <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الحصة</label>
-          <select id="cv-period-select"><option value="">اختر الحصة</option>${PERIODS.map(p => `<option value="${p}">الحصة ${p}</option>`).join('')}</select>
+          <select id="cv-period-select"><option value="">اختر الحصة</option>${PERIODS.map(p => `<option value="${p}"${isEdit && existing.period_number === p ? ' selected' : ''}>الحصة ${p}</option>`).join('')}</select>
         </div>
       </div>
       <div id="cv-slot-info" style="margin-top:10px; font-size:13px; color:var(--navy); font-weight:700;"></div>
@@ -338,7 +369,7 @@ async function renderForm(container) {
       <div class="form-row">
         <div>
           <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">التخصص</label>
-          <input type="text" id="cv-specialization" placeholder="تخصص المعلم" />
+          <input type="text" id="cv-specialization" placeholder="تخصص المعلم" value="${esc(existing?.specialization || '')}" />
         </div>
         <div>
           <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">تاريخ الزيارة</label>
@@ -346,38 +377,47 @@ async function renderForm(container) {
         </div>
       </div>
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الموضوع</label>
-      <input type="text" id="cv-lesson-topic" placeholder="موضوع الدرس" style="margin-bottom:12px;" />
+      <input type="text" id="cv-lesson-topic" placeholder="موضوع الدرس" value="${esc(existing?.lesson_topic || '')}" style="margin-bottom:12px;" />
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الهدف من الزيارة</label>
-      <input type="text" id="cv-visit-purpose" placeholder="الهدف من الزيارة" />
+      <input type="text" id="cv-visit-purpose" placeholder="الهدف من الزيارة" value="${esc(existing?.visit_purpose || '')}" />
     </div>
 
     <div class="form-card">
       <h4>الاستراتيجيات المطبقة</h4>
       <div id="cv-strategies" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:8px;">
-        ${STRATEGIES.map((s, i) => `
+        ${STRATEGIES.map(s => `
           <label style="font-size:12.5px; display:flex; align-items:center; gap:6px; font-weight:400;">
-            <input type="checkbox" class="cv-strategy-cb" value="${esc(s)}" style="width:auto; margin:0;" /> ${esc(s)}
+            <input type="checkbox" class="cv-strategy-cb" value="${esc(s)}" style="width:auto; margin:0;"${existing?.strategies?.includes(s) ? ' checked' : ''} /> ${esc(s)}
           </label>`).join('')}
       </div>
       <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
         <label style="font-size:12.5px; display:flex; align-items:center; gap:6px; font-weight:400;">
-          <input type="checkbox" id="cv-strategy-other-cb" style="width:auto; margin:0;" /> إجابة أخرى
+          <input type="checkbox" id="cv-strategy-other-cb" style="width:auto; margin:0;"${existing?.strategies_other ? ' checked' : ''} /> إجابة أخرى
         </label>
-        <input type="text" id="cv-strategy-other-text" placeholder="غير ذلك" style="flex:1;" />
+        <input type="text" id="cv-strategy-other-text" placeholder="غير ذلك" value="${esc(existing?.strategies_other || '')}" style="flex:1;" />
       </div>
     </div>
 
     ${SECTIONS.map(sec => `
       <div class="form-card">
         <h4>${esc(sec.title)}</h4>
-        ${sec.nums.map(num => `
+        ${sec.nums.map(num => {
+          const currentVal = existing?.ratings?.[num] || '';
+          const currentRec = existing?.recommendations?.[num] || '';
+          const tier = currentVal ? tierForOption(num, currentVal) : null;
+          const showRec = tier && tier.label === 'فرصة تحسين';
+          return `
           <div style="margin-bottom:14px;">
             <label style="font-size:13px; color:var(--navy); display:block; margin-bottom:6px; font-weight:700;">${num}. ${esc(INDICATORS[num].label)}</label>
             <select class="cv-rating-select" data-indicator="${num}">
               <option value="">اختر التقييم</option>
-              ${INDICATORS[num].options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+              ${INDICATORS[num].options.map(o => `<option value="${esc(o)}"${o === currentVal ? ' selected' : ''}>${esc(o)}</option>`).join('')}
             </select>
-          </div>`).join('')}
+            <div class="cv-rec-wrap" data-indicator="${num}" style="margin-top:6px; ${showRec ? '' : 'display:none;'}">
+              <input type="text" class="cv-rec-input" data-indicator="${num}" placeholder="التوصية (تظهر عند اختيار «فرصة تحسين»)" value="${esc(currentRec)}" style="font-size:12.5px;" />
+            </div>
+          </div>`;
+        }).join('')}
       </div>`).join('')}
 
     <div class="form-card">
@@ -386,41 +426,62 @@ async function renderForm(container) {
       <div style="display:flex; gap:16px; margin-bottom:14px;">
         ${['يوجد', 'لا يوجد', 'لا ينطبق'].map(v => `
           <label style="font-size:13px; display:flex; align-items:center; gap:6px; font-weight:400;">
-            <input type="radio" name="cv-upgrade" value="${v}" style="width:auto;" /> ${v}
+            <input type="radio" name="cv-upgrade" value="${v}" style="width:auto;"${existing?.upgrade_math_lughati === v ? ' checked' : ''} /> ${v}
           </label>`).join('')}
       </div>
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">داعم (مجتمعات التعلم المهنية - علاج التعثر)</label>
       <div style="display:flex; gap:16px; margin-bottom:14px;">
         ${['يوجد', 'لا يوجد'].map(v => `
           <label style="font-size:13px; display:flex; align-items:center; gap:6px; font-weight:400;">
-            <input type="radio" name="cv-support" value="${v}" style="width:auto;" /> ${v}
+            <input type="radio" name="cv-support" value="${v}" style="width:auto;"${existing?.support_plc === v ? ' checked' : ''} /> ${v}
           </label>`).join('')}
       </div>
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الجوانب الإيجابية</label>
-      <textarea id="cv-positive" rows="3" placeholder="يمكنك تركه فارغ" style="margin-bottom:14px;"></textarea>
+      <textarea id="cv-positive" rows="3" placeholder="يمكنك تركه فارغ" style="margin-bottom:14px;">${esc(existing?.positive_aspects || '')}</textarea>
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">فرص التحسين</label>
       <div style="margin-bottom:6px;">
         <label style="font-size:13px; display:flex; align-items:center; gap:6px; font-weight:400;">
-          <input type="checkbox" id="cv-improve-above" style="width:auto;" /> تم ذكرها أعلاه
+          <input type="checkbox" id="cv-improve-above" style="width:auto;"${existing?.improvement_mentioned_above ? ' checked' : ''} /> تم ذكرها أعلاه
         </label>
       </div>
-      <input type="text" id="cv-improve-other" placeholder="غير ذلك" style="margin-bottom:14px;" />
+      <input type="text" id="cv-improve-other" placeholder="غير ذلك" value="${esc(existing?.improvement_other || '')}" style="margin-bottom:14px;" />
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الاحتياج التدريبي المقترح</label>
-      <textarea id="cv-training" rows="3" placeholder="يمكنك تركه فارغ"></textarea>
+      <textarea id="cv-training" rows="3" placeholder="يمكنك تركه فارغ">${esc(existing?.training_need || '')}</textarea>
     </div>
 
     <div class="error-msg" id="cv-save-error"></div>
-    <button class="btn-primary" id="cv-save-btn" style="width:auto; padding:12px 26px;">حفظ الزيارة</button>
+    <button class="btn-primary" id="cv-save-btn" style="width:auto; padding:12px 26px;">${isEdit ? 'حفظ التعديلات' : 'حفظ الزيارة'}</button>
   `;
 
-  document.getElementById('cv-back-list-btn').addEventListener('click', () => { cvView = 'list'; renderView(); });
-  document.getElementById('cv-visit-date').value = todayIso();
+  document.getElementById('cv-back-list-btn').addEventListener('click', () => { cvEditingVisit = null; cvView = 'list'; renderView(); });
+  document.getElementById('cv-visit-date').value = existing?.visit_date || todayIso();
 
   renderGradeTabs();
   await refreshSectionOptions();
+  if (isEdit) {
+    document.getElementById('cv-section-select').value = String(existing.class_section);
+    await loadScheduleForSlotPicker();
+    updateSlotInfo();
+  }
 
   document.getElementById('cv-day-select').addEventListener('change', updateSlotInfo);
   document.getElementById('cv-period-select').addEventListener('change', updateSlotInfo);
+
+  // إظهار/إخفاء حقل "التوصية" وتعبئته تلقائيًا لما يتغيّر التقييم إلى "فرصة تحسين"
+  container.querySelectorAll('.cv-rating-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const num = sel.dataset.indicator;
+      const wrap = container.querySelector(`.cv-rec-wrap[data-indicator="${num}"]`);
+      const input = container.querySelector(`.cv-rec-input[data-indicator="${num}"]`);
+      const tier = sel.value ? tierForOption(num, sel.value) : null;
+      if (tier && tier.label === 'فرصة تحسين') {
+        wrap.style.display = '';
+        if (!input.value && RECOMMENDATIONS[num]) input.value = RECOMMENDATIONS[num];
+      } else {
+        wrap.style.display = 'none';
+      }
+    });
+  });
 
   document.getElementById('cv-save-btn').addEventListener('click', saveVisit);
 }
@@ -495,10 +556,16 @@ async function saveVisit() {
   if (!visitDate) { errEl.textContent = 'حدد تاريخ الزيارة'; return; }
 
   const ratings = {};
+  const recommendations = {};
   const ratingSelects = Array.from(document.querySelectorAll('.cv-rating-select'));
   for (const sel of ratingSelects) {
     if (!sel.value) { errEl.textContent = `أكمل تقييم كل المؤشرات (${INDICATORS[sel.dataset.indicator].label})`; sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
     ratings[sel.dataset.indicator] = sel.value;
+    const recInput = document.querySelector(`.cv-rec-input[data-indicator="${sel.dataset.indicator}"]`);
+    const tier = tierForOption(sel.dataset.indicator, sel.value);
+    if (tier && tier.label === 'فرصة تحسين' && recInput && recInput.value.trim()) {
+      recommendations[sel.dataset.indicator] = recInput.value.trim();
+    }
   }
 
   const strategies = Array.from(document.querySelectorAll('.cv-strategy-cb:checked')).map(cb => cb.value);
@@ -509,8 +576,6 @@ async function saveVisit() {
   const supportEl = document.querySelector('input[name="cv-support"]:checked');
 
   const payload = {
-    visitor_id: currentUserId,
-    visitor_role: currentProfile.role,
     grade_level: cvGrade,
     class_section: cvSection,
     day_of_week: day,
@@ -524,46 +589,64 @@ async function saveVisit() {
     strategies,
     strategies_other: strategiesOther || null,
     ratings,
+    recommendations,
     upgrade_math_lughati: upgradeEl ? upgradeEl.value : null,
     support_plc: supportEl ? supportEl.value : null,
     positive_aspects: document.getElementById('cv-positive').value.trim() || null,
     improvement_mentioned_above: document.getElementById('cv-improve-above').checked,
     improvement_other: document.getElementById('cv-improve-other').value.trim() || null,
     training_need: document.getElementById('cv-training').value.trim() || null,
-    published: false,
   };
 
-  const { error } = await sb.from('classroom_visits').insert(payload);
+  let error;
+  if (cvEditingId) {
+    payload.updated_at = new Date().toISOString();
+    ({ error } = await sb.from('classroom_visits').update(payload).eq('id', cvEditingId));
+  } else {
+    payload.visitor_id = currentUserId;
+    payload.visitor_role = currentProfile.role;
+    payload.published = false;
+    ({ error } = await sb.from('classroom_visits').insert(payload));
+  }
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; return; }
 
+  cvEditingVisit = null;
   cvView = 'list';
   renderView();
 }
 
 /* ================= طباعة تقرير PDF ================= */
+// يطابق تصميم النموذج الرسمي (الهيئة الملكية للجبيل وينبع): شريط كباتن أزرق كنجي، عمود "التوصية" يظهر
+// فقط للمؤشرات اللي تقديرها "فرصة تحسين"، وتذييل بشريط أزرق فيه دليل الرموز.
 function printVisitReport(v) {
   const dayLabel = (DAYS.find(d => d.key === v.day_of_week) || {}).label || v.day_of_week;
 
-  const sectionsHtml = SECTIONS.map(sec => `
-    <h3 class="sec-title">${esc(sec.title)}</h3>
+  const sectionHtml = (title) => `
+    <tr class="sec-row"><td colspan="3">${esc(title)}</td></tr>
+    <tr class="col-heads"><td>مؤشر الأداء</td><td>التقدير</td><td>التوصية</td></tr>`;
+
+  const rowHtml = (num) => {
+    const selected = (v.ratings || {})[num] || '';
+    const tier = selected ? tierForOption(num, selected) : null;
+    const rec = (v.recommendations || {})[num] || '';
+    const tierClass = tier ? ({ 'مميز': 'tier-star', 'حقق الهدف': 'tier-ok', 'فرصة تحسين': 'tier-improve' }[tier.label] || '') : '';
+    return `<tr>
+      <td class="ind-cell"><b>${esc(INDICATORS[num].label)}</b><div class="ind-val">${esc(selected || '-')}</div></td>
+      <td class="tier-cell ${tierClass}">${tier ? `${tier.symbol}<br>${esc(tier.label)}` : '-'}</td>
+      <td class="rec-cell">${esc(rec || '-')}</td>
+    </tr>`;
+  };
+
+  const sectionsHtml = `
     <table class="ratings">
-      <thead><tr><th style="width:26px;">م</th><th>المؤشر</th><th>التقييم</th><th style="width:90px;">التقدير</th></tr></thead>
       <tbody>
-        ${sec.nums.map(num => {
-          const selected = (v.ratings || {})[num] || '-';
-          const tier = v.ratings && v.ratings[num] ? tierForOption(num, v.ratings[num]) : null;
-          return `<tr>
-            <td>${num}</td>
-            <td style="text-align:right;">${esc(INDICATORS[num].label)}</td>
-            <td style="text-align:right;">${esc(selected)}</td>
-            <td>${tier ? `${tier.symbol} ${esc(tier.label)}` : '-'}</td>
-          </tr>`;
-        }).join('')}
+        ${SECTIONS.map(sec => sectionHtml(sec.title) + sec.nums.map(rowHtml).join('')).join('')}
       </tbody>
-    </table>`).join('');
+    </table>`;
 
   const strategiesText = [...(v.strategies || []), v.strategies_other ? `أخرى: ${v.strategies_other}` : null].filter(Boolean).join('، ') || '-';
   const improvementText = [(v.improvement_mentioned_above ? 'تم ذكرها أعلاه' : null), v.improvement_other].filter(Boolean).join('، ') || '-';
+  const visitorLabel = v.visitor_role === 'admin' ? 'مدير المدرسة' : 'وكيل المدرسة';
 
   const logoHtml = VOUCHER_LOGO_DATA_URI
     ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="الشعار" />`
@@ -576,36 +659,49 @@ function printVisitReport(v) {
 <title>تقرير زيارة صفية — ${esc(v.teacher_name)}</title>
 <style>
   * { box-sizing: border-box; }
-  @page { size: A4; margin: 12mm; }
-  body { font-family: 'Tahoma', 'Arial', sans-serif; padding: 8mm; margin: 0; color:#16233A; }
-  .doc { width: 100%; max-width: 186mm; margin: 0 auto; }
+  @page { size: A4; margin: 10mm; }
+  body { font-family: 'Tahoma', 'Arial', sans-serif; padding: 0; margin: 0; color:#16233A; font-size:12px; }
+  .doc { width: 100%; max-width: 190mm; margin: 0 auto; }
 
-  .header { display:flex; align-items:center; justify-content:space-between; border-bottom: 2px solid #16233A; padding-bottom: 12px; margin-bottom: 14px; gap:10px; }
-  .header .logo-side { width: 40mm; flex-shrink:0; }
-  .header .logo-side img { max-width: 40mm; max-height: 13mm; }
-  .header .titles { flex: 1; text-align:center; }
-  .header .titles h1 { font-size: 18px; margin: 0 0 3px; color:#B3413A; }
-  .header .titles .org { font-size: 13px; color:#444; margin: 0; }
+  .header { display:flex; align-items:center; justify-content:space-between; gap:10px; padding-bottom:8px; }
+  .header .logo-side { width: 42mm; flex-shrink:0; }
+  .header .logo-side img { max-width: 42mm; max-height: 15mm; }
+  .header .titles { flex:1; text-align:center; }
+  .header .titles h1 { font-size:17px; margin:0; color:#16233A; }
+  .header .titles .dept { font-size:11px; color:#1D3F73; font-weight:700; margin:2px 0 0; }
+  .header-bar { height:5px; background:linear-gradient(90deg,#16233A,#1D5FA6); border-radius:3px; margin-bottom:12px; }
 
   table.meta { width:100%; border-collapse:collapse; margin-bottom:14px; }
-  table.meta td { border:1px solid #ccc; padding:6px 9px; font-size:12px; }
-  table.meta td.label { background:#f3f3f0; font-weight:bold; width:110px; }
+  table.meta td { border:1px solid #cfd6e0; padding:6px 9px; font-size:11.5px; }
+  table.meta td.label { background:#eef1f6; font-weight:700; color:#16233A; width:110px; }
 
-  h3.sec-title { font-size:14px; color:#16233A; background:#eef1f6; padding:6px 10px; border-radius:4px; margin:16px 0 8px; }
-  table.ratings { width:100%; border-collapse:collapse; margin-bottom:6px; }
-  table.ratings th, table.ratings td { border:1px solid #999; padding:5px 7px; font-size:10.5px; text-align:center; }
-  table.ratings th { background:#16233A; color:#fff; font-weight:600; }
-  table.ratings tbody tr:nth-child(even) { background:#f7f7f2; }
+  table.ratings { width:100%; border-collapse:collapse; margin-bottom:12px; table-layout:fixed; }
+  table.ratings td { border:1px solid #cfd6e0; padding:6px 8px; font-size:10.5px; vertical-align:middle; }
+  tr.sec-row td { background:#16233A; color:#fff; font-weight:700; font-size:12.5px; padding:7px 10px; }
+  tr.col-heads td { background:#dbe3ee; color:#16233A; font-weight:700; text-align:center; font-size:10.5px; }
+  tr.col-heads td:first-child, tr.sec-row td { text-align:right; }
+  td.ind-cell { text-align:right; width:46%; }
+  td.ind-cell .ind-val { font-weight:400; color:#333; margin-top:2px; }
+  td.tier-cell { text-align:center; width:16%; font-weight:700; }
+  td.tier-cell.tier-ok { color:#1f8a4c; }
+  td.tier-cell.tier-improve { color:#c0392b; }
+  td.tier-cell.tier-star { color:#b8860b; }
+  td.rec-cell { text-align:right; width:38%; color:#333; }
 
-  .extra-box { border:1px solid #ccc; border-radius:6px; padding:8px 10px; margin-bottom:10px; font-size:12px; }
-  .extra-box .lbl { font-weight:700; color:#16233A; margin-bottom:3px; display:block; }
+  .extra-box { border:1px solid #cfd6e0; border-radius:5px; padding:7px 10px; margin-bottom:8px; font-size:11.5px; display:flex; gap:8px; }
+  .extra-box .lbl { font-weight:700; color:#16233A; flex-shrink:0; }
+  .extra-box.positive { background:#eaf7ee; }
+  .extra-box.improve { background:#fdecea; }
 
-  .sign { display:flex; justify-content:space-between; margin-top:30px; gap:14px; }
-  .sign > div { flex:1; text-align:center; font-size:12px; }
-  .sign .box { margin-top:8px; border:1px solid #999; border-radius:6px; height:60px; display:flex; flex-direction:column; justify-content:space-between; padding:6px 8px; }
-  .sign .box .name { color:#16233A; font-weight:700; font-size:12.5px; }
+  .sign { display:flex; justify-content:space-between; margin-top:22px; gap:14px; }
+  .sign > div { flex:1; text-align:center; font-size:11.5px; }
+  .sign .box { margin-top:8px; border:1px solid #cfd6e0; border-radius:6px; height:54px; display:flex; flex-direction:column; justify-content:center; padding:6px 8px; }
+  .sign .box .name { color:#16233A; font-weight:700; font-size:12px; }
 
-  @media print { body { padding: 0; } }
+  .footer-bar { margin-top:16px; background:#16233A; color:#fff; border-radius:5px; padding:6px 12px; display:flex; justify-content:space-between; align-items:center; font-size:10.5px; }
+  .footer-bar .legend span { margin-inline-start:12px; }
+
+  @media print { .footer-bar { position: fixed; bottom: 0; left: 10mm; right: 10mm; } }
 </style>
 </head>
 <body>
@@ -614,34 +710,38 @@ function printVisitReport(v) {
       <div class="logo-side">${logoHtml}</div>
       <div class="titles">
         <h1>تقرير زيارة صفية</h1>
-        <p class="org">${esc(ORG_NAME)}</p>
+        <p class="dept">${esc(ORG_NAME)}</p>
       </div>
       <div class="logo-side"></div>
     </div>
+    <div class="header-bar"></div>
 
     <table class="meta">
-      <tr><td class="label">المعلم</td><td>${esc(v.teacher_name)}</td><td class="label">التخصص</td><td>${esc(v.specialization || '-')}</td></tr>
-      <tr><td class="label">المادة</td><td>${esc(v.subject_name)}</td><td class="label">الموضوع</td><td>${esc(v.lesson_topic || '-')}</td></tr>
-      <tr><td class="label">الصف</td><td>${gradeLabels[v.grade_level] || v.grade_level} / ${v.class_section}</td><td class="label">اليوم والحصة</td><td>${dayLabel} — الحصة ${v.period_number}</td></tr>
-      <tr><td class="label">التاريخ</td><td>${fmtDate(v.visit_date)}</td><td class="label">الزائر</td><td>${esc(v.visitor_role === 'admin' ? 'مدير المدرسة' : 'وكيل المدرسة')}</td></tr>
-      <tr><td class="label">الهدف من الزيارة</td><td colspan="3">${esc(v.visit_purpose || '-')}</td></tr>
+      <tr><td class="label">اسم المعلم</td><td>${esc(v.teacher_name)}</td><td class="label">التخصص</td><td>${esc(v.specialization || '-')}</td></tr>
+      <tr><td class="label">مادة التدريس</td><td>${esc(v.subject_name)}</td><td class="label">الموضوع</td><td>${esc(v.lesson_topic || '-')}</td></tr>
+      <tr><td class="label">الصف</td><td>${gradeLabels[v.grade_level] || v.grade_level}</td><td class="label">الشعبة</td><td>${v.class_section}</td></tr>
+      <tr><td class="label">اليوم</td><td>${dayLabel}</td><td class="label">الحصة</td><td>${v.period_number}</td></tr>
+      <tr><td class="label">التاريخ</td><td>${fmtDate(v.visit_date)}</td><td class="label">الهدف من الزيارة</td><td>${esc(v.visit_purpose || '-')}</td></tr>
       <tr><td class="label">الاستراتيجيات المطبقة</td><td colspan="3">${esc(strategiesText)}</td></tr>
     </table>
 
     ${sectionsHtml}
 
-    <div class="extra-box"><span class="lbl">ارتقاء (رياضيات - لغتي)</span>${esc(v.upgrade_math_lughati || '-')}</div>
-    <div class="extra-box"><span class="lbl">داعم (مجتمعات التعلم المهنية - علاج التعثر)</span>${esc(v.support_plc || '-')}</div>
-    <div class="extra-box"><span class="lbl">الجوانب الإيجابية</span>${esc(v.positive_aspects || '-')}</div>
-    <div class="extra-box"><span class="lbl">فرص التحسين</span>${esc(improvementText)}</div>
-    <div class="extra-box"><span class="lbl">الاحتياج التدريبي المقترح</span>${esc(v.training_need || '-')}</div>
+    <div class="extra-box"><span class="lbl">ارتقاء (رياضيات - لغتي):</span>${esc(v.upgrade_math_lughati || '-')}</div>
+    <div class="extra-box"><span class="lbl">داعم (مجتمعات التعلم المهنية - علاج التعثر):</span>${esc(v.support_plc || '-')}</div>
+    <div class="extra-box positive"><span class="lbl">الجوانب الإيجابية:</span>${esc(v.positive_aspects || '-')}</div>
+    <div class="extra-box improve"><span class="lbl">فرص التحسين:</span>${esc(improvementText)}</div>
+    <div class="extra-box"><span class="lbl">الاحتياج التدريبي المقترح:</span>${esc(v.training_need || '-')}</div>
 
     <div class="sign">
-      <div>الزائر<div class="box"><div class="name">${esc(v.visitor_role === 'admin' ? 'مدير المدرسة' : 'وكيل المدرسة')}</div></div></div>
+      <div>الزائر<div class="box"><div class="name">${esc(visitorLabel)}</div></div></div>
       <div>المعلم<div class="box"><div class="name">${esc(v.teacher_name)}</div></div></div>
     </div>
 
-    <div style="margin-top:16px; font-size:10px; color:#999; text-align:center;">تمت الطباعة من نظام إدارة المدرسة — ${fmtDate(todayIso())}</div>
+    <div class="footer-bar">
+      <span>تمت الطباعة من نظام إدارة المدرسة — ${fmtDate(todayIso())}</span>
+      <span class="legend"><span>⭐ مميز</span><span>✓ حقق الهدف</span><span>➔ فرصة تحسين</span></span>
+    </div>
   </div>
 </body>
 </html>`;
