@@ -30,6 +30,8 @@ export const roleLabels = { admin: 'مدير', deputy: 'وكيل', teacher: 'م�
 export const gradeLabels = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
 export let isOpPlanMember = false;
 export function setOpPlanMember(v) { isOpPlanMember = v; }
+// هل عند المعلم أي مهمة فعلية في متابعة الاختبارات (مسؤول مادة، أو ضمن فريق كنترول/تدقيق) بأي فترة اختبار؟
+export let hasExamAssignment = false;
 // صلاحية قسم "ميزانية المدرسة": null (بدون صلاحية) | 'full' | 'request_only' — مستقلة عن دور المستخدم العام
 export let myBudgetAccess = null;
 export function setMyBudgetAccess(v) { myBudgetAccess = v; }
@@ -114,6 +116,12 @@ export async function loadProfileAndShowDashboard(userId) {
   if (profile.role === 'teacher') {
     const { data: membership } = await sb.from('operational_plan_members').select('id').eq('profile_id', userId).maybeSingle();
     isOpPlanMember = !!membership;
+
+    const [{ data: subjectAssign }, { data: teamAssign }] = await Promise.all([
+      sb.from('exam_subject_assignments').select('id').eq('responsible_teacher_id', userId).limit(1),
+      sb.from('exam_period_teams').select('member_id').eq('member_id', userId).limit(1),
+    ]);
+    hasExamAssignment = !!(subjectAssign && subjectAssign.length) || !!(teamAssign && teamAssign.length);
   }
 
   if (profile.role !== 'admin' && profile.role !== 'parent') {
@@ -140,6 +148,7 @@ export function isTileAllowed(t) {
   if (t.key === 'budget') return currentProfile.role === 'admin' || !!myBudgetAccess;
   if (!t.roles.includes(currentProfile.role)) return false;
   if (t.key === 'plan' && currentProfile.role === 'teacher' && !isOpPlanMember) return false;
+  if (t.key === 'tracking' && currentProfile.role === 'teacher' && !hasExamAssignment) return false;
   return true;
 }
 
