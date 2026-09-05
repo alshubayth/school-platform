@@ -256,7 +256,7 @@ async function renderView() {
 async function renderList(container) {
   container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
-  let query = sb.from('classroom_visits').select('*').order('visit_date', { ascending: false }).order('created_at', { ascending: false });
+  let query = sb.from('classroom_visits').select('*, profiles!classroom_visits_visitor_id_fkey(full_name)').order('visit_date', { ascending: false }).order('created_at', { ascending: false });
   const { data, error } = await query;
   const visits = data || [];
 
@@ -648,7 +648,9 @@ function printVisitReport(v) {
 
   const strategiesText = [...(v.strategies || []), v.strategies_other ? `أخرى: ${v.strategies_other}` : null].filter(Boolean).join('، ') || '-';
   const improvementText = [(v.improvement_mentioned_above ? 'تم ذكرها أعلاه' : null), v.improvement_other].filter(Boolean).join('، ') || '-';
-  const visitorLabel = v.visitor_role === 'admin' ? 'مدير المدرسة' : 'وكيل المدرسة';
+  const visitorRoleLabel = v.visitor_role === 'admin' ? 'مدير المدرسة' : 'وكيل المدرسة';
+  const visitorName = v.profiles?.full_name || null;
+  const visitorLabel = visitorName ? `${visitorName} — ${visitorRoleLabel}` : visitorRoleLabel;
 
   const logoHtml = VOUCHER_LOGO_DATA_URI
     ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="الشعار" />`
@@ -703,10 +705,8 @@ function printVisitReport(v) {
   .sign .box { margin-top:8px; border:1px solid #cfd6e0; border-radius:6px; height:54px; display:flex; flex-direction:column; justify-content:center; padding:6px 8px; }
   .sign .box .name { color:#16233A; font-weight:700; font-size:12px; }
 
-  .footer-bar { margin-top:16px; background:#16233A; color:#fff; border-radius:5px; padding:6px 12px; display:flex; justify-content:space-between; align-items:center; font-size:10.5px; }
+  .footer-bar { margin-top:16px; background:#16233A; color:#fff; border-radius:5px; padding:6px 12px; display:flex; justify-content:space-between; align-items:center; font-size:10.5px; page-break-inside: avoid; break-inside: avoid; }
   .footer-bar .legend span { margin-inline-start:12px; }
-
-  @media print { .footer-bar { position: fixed; bottom: 0; left: 10mm; right: 10mm; } }
 </style>
 </head>
 <body>
