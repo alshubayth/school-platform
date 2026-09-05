@@ -192,6 +192,17 @@
   .ring-wrap{ display:flex; align-items:center; gap:10px; }
   .ring-score{ font-family:'Tajawal'; font-weight:700; font-size:15px; }
 
+  .duty-card-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(160px,1fr)); gap:14px; }
+  .duty-card{
+    background:#fff; border:1px solid #ECEAE1; border-radius:var(--radius); padding:20px 14px;
+    text-align:center; transition:0.15s;
+  }
+  .duty-card:hover{ box-shadow:0 8px 24px rgba(19,42,34,0.08); transform:translateY(-2px); }
+  .duty-card .name{ font-weight:700; font-size:14px; margin-top:2px; }
+  .duty-card .loc{ font-size:12px; color:var(--slate); margin-top:3px; }
+  .duty-card .days{ display:flex; flex-wrap:wrap; gap:6px; justify-content:center; margin-top:12px; }
+  .duty-card .day-chip{ font-size:11px; padding:3px 10px; border-radius:20px; background:var(--sand); color:var(--slate); font-weight:500; }
+
   .placeholder{ text-align:center; padding:60px 20px; color:var(--slate); }
   .placeholder .ic-big{ margin-bottom:14px; color:#D8D5C8; }
 
