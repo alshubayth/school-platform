@@ -190,7 +190,9 @@ function renderModuleHeader(key) {
   const header = document.getElementById('module-header');
   const t = tiles.find(x => x.key === key);
   if (!t) { header.classList.add('hidden'); return; }
-  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div><h2>${t.title}</h2><p>${t.desc}</p></div>`;
+  let desc = t.desc;
+  if (key === 'duty' && currentProfile.role === 'teacher') desc = 'المناوبة المسندة لي';
+  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div><h2>${t.title}</h2><p>${desc}</p></div>`;
   header.classList.remove('hidden');
 }
 
