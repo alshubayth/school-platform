@@ -1,4 +1,4 @@
-import { sb, currentUserId, roleLabels, isAdminOrDeputy, backToTiles, setupCollapsible } from './core.js';
+import { sb, currentUserId, currentProfile, roleLabels, isAdminOrDeputy, backToTiles, setupCollapsible } from './core.js';
 
 const dayLabels = { sunday: 'الأحد', monday: 'الاثنين', tuesday: 'الثلاثاء', wednesday: 'الأربعاء', thursday: 'الخميس' };
 const dayOrder = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
@@ -38,6 +38,15 @@ function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' ')
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
 
 export async function loadDutyRosterModule() {
+  if (!isAdminOrDeputy()) {
+    document.getElementById('duty-admin-view').classList.add('hidden');
+    document.getElementById('duty-teacher-view').classList.remove('hidden');
+    await loadMyDutyView();
+    return;
+  }
+  document.getElementById('duty-teacher-view').classList.add('hidden');
+  document.getElementById('duty-admin-view').classList.remove('hidden');
+
   const [{ data: types }, { data: teachers }] = await Promise.all([
     sb.from('duty_types').select('id, name, location').order('name').order('location'),
     sb.from('profiles').select('id, full_name').eq('role', 'teacher'),
@@ -57,6 +66,42 @@ export async function loadDutyRosterModule() {
   await refreshFixedList();
   await refreshWeeklyList();
   await refreshTodayAttendance();
+}
+
+/* ---------- عرض المعلم لمناوباته الخاصة (للقراءة فقط) ---------- */
+function renderMyDutyGroup(containerId, rows, emptyMsg) {
+  const list = document.getElementById(containerId);
+  list.innerHTML = '';
+  if (!rows || rows.length === 0) {
+    list.innerHTML = `<div class="placeholder" style="padding:20px;"><p>${emptyMsg}</p></div>`;
+    return;
+  }
+  // تجميع حسب نوع المناوبة عشان تظهر أيامها مع بعض
+  const byType = new Map();
+  rows.forEach(r => {
+    const key = r.duty_type_id;
+    if (!byType.has(key)) byType.set(key, { label: r.duty_types ? dutyTypeLabel(r.duty_types) : '', days: [] });
+    byType.get(key).days.push(r.day_of_week);
+  });
+  byType.forEach(g => {
+    const row = document.createElement('div');
+    row.className = 'emp-row';
+    row.innerHTML = `
+      <div class="avatar-circle">🕐</div>
+      <div class="info"><div class="name">${g.label}</div>
+      <div class="title">${formatDays(g.days)}</div></div>`;
+    list.appendChild(row);
+  });
+}
+
+async function loadMyDutyView() {
+  document.getElementById('my-duty-week-label').textContent = thisWeekSunday();
+  const [{ data: fixed }, { data: weekly }] = await Promise.all([
+    sb.from('duty_roster').select('duty_type_id, day_of_week, duty_types(name, location)').eq('kind', 'fixed').eq('teacher_profile_id', currentUserId),
+    sb.from('duty_roster').select('duty_type_id, day_of_week, duty_types(name, location)').eq('kind', 'weekly').eq('week_start_date', thisWeekSunday()).eq('teacher_profile_id', currentUserId),
+  ]);
+  renderMyDutyGroup('my-duty-fixed-list', fixed, 'لا توجد لديك مناوبات ثابتة حاليًا');
+  renderMyDutyGroup('my-duty-weekly-list', weekly, 'لا توجد لديك مناوبات مسندة لهذا الأسبوع');
 }
 
 function populateSelect(id, items, labelKey) {
