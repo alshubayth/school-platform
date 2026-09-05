@@ -32,18 +32,20 @@ setupCollapsible('dt-toggle', 'dt-body', 'dt-chevron');
 setupCollapsible('fixed-toggle', 'fixed-body', 'fixed-chevron');
 setupCollapsible('weekly-toggle', 'weekly-body', 'weekly-chevron');
 
+function dutyTypeLabel(t) { return t.location ? `${t.name} — ${t.location}` : t.name; }
+
 export async function loadDutyRosterModule() {
   const [{ data: types }, { data: teachers }] = await Promise.all([
-    sb.from('duty_types').select('id, name').order('name'),
+    sb.from('duty_types').select('id, name, location').order('name').order('location'),
     sb.from('profiles').select('id, full_name').eq('role', 'teacher'),
   ]);
-  dutyTypesCache = types || [];
+  dutyTypesCache = (types || []).map(t => ({ ...t, displayLabel: dutyTypeLabel(t) }));
   teachersCache = teachers || [];
 
   populateSelect('fixed-teacher', teachersCache, 'full_name');
-  populateSelect('fixed-duty-type', dutyTypesCache, 'name');
+  populateSelect('fixed-duty-type', dutyTypesCache, 'displayLabel');
   populateSelect('weekly-teacher', teachersCache, 'full_name');
-  populateSelect('weekly-duty-type', dutyTypesCache, 'name');
+  populateSelect('weekly-duty-type', dutyTypesCache, 'displayLabel');
 
   document.getElementById('week-sunday-label').textContent = thisWeekSunday();
 
@@ -72,31 +74,59 @@ function populateSelect(id, items, labelKey) {
 }
 
 /* ---------- أنواع المناوبة ---------- */
+document.getElementById('dt-name-select').addEventListener('change', (e) => {
+  const otherInput = document.getElementById('dt-name-other');
+  otherInput.style.display = e.target.value === '__other__' ? '' : 'none';
+});
+
 document.getElementById('dt-add').addEventListener('click', async () => {
-  const name = document.getElementById('dt-name').value.trim();
-  if (!name) return;
-  const { error } = await sb.from('duty_types').insert({ name });
+  const sel = document.getElementById('dt-name-select').value;
+  const name = sel === '__other__' ? document.getElementById('dt-name-other').value.trim() : sel;
+  const location = document.getElementById('dt-location').value.trim();
+  if (!name) { alert('اختر المناوبة الرئيسية (أو اكتب اسمها لو "نوع آخر")'); return; }
+  const { error } = await sb.from('duty_types').insert({ name, location: location || null });
   if (error) { alert('تعذر الإضافة: ' + error.message); return; }
-  document.getElementById('dt-name').value = '';
+  document.getElementById('dt-name-select').value = '';
+  document.getElementById('dt-name-other').value = '';
+  document.getElementById('dt-name-other').style.display = 'none';
+  document.getElementById('dt-location').value = '';
   await loadDutyRosterModule();
 });
 
 async function refreshDutyTypesList() {
   const list = document.getElementById('dt-list');
   list.innerHTML = '';
+
+  // تجميع الأنواع حسب المناوبة الرئيسية (name) عشان تظهر مواقعها الفرعية مع بعض تحت عنوان واحد
+  const byMain = new Map();
   dutyTypesCache.forEach(t => {
-    const chip = document.createElement('div');
-    chip.style.cssText = 'display:flex; align-items:center; gap:8px; background:var(--sand); border:1px solid #ECEAE1; border-radius:20px; padding:6px 8px 6px 14px;';
-    chip.innerHTML = `
-      <span style="font-size:13.5px; font-weight:500;">${t.name}</span>
-      <button data-id="${t.id}" style="width:auto; padding:5px !important; background:transparent; color:var(--danger); display:flex; align-items:center; justify-content:center; border-radius:50%;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
-      </button>`;
-    chip.querySelector('button').addEventListener('click', async () => {
-      await sb.from('duty_types').delete().eq('id', t.id);
-      await loadDutyRosterModule();
+    if (!byMain.has(t.name)) byMain.set(t.name, []);
+    byMain.get(t.name).push(t);
+  });
+
+  byMain.forEach((items, mainName) => {
+    const group = document.createElement('div');
+    group.style.cssText = 'margin-bottom:12px;';
+    group.innerHTML = `<div style="font-size:13px; font-weight:700; color:var(--navy); margin-bottom:6px;">${mainName}</div>
+      <div class="dt-chips" style="display:flex; flex-wrap:wrap; gap:8px;"></div>`;
+    const chipsWrap = group.querySelector('.dt-chips');
+
+    items.forEach(t => {
+      const chip = document.createElement('div');
+      chip.style.cssText = 'display:flex; align-items:center; gap:8px; background:var(--sand); border:1px solid #ECEAE1; border-radius:20px; padding:6px 8px 6px 14px;';
+      chip.innerHTML = `
+        <span style="font-size:13.5px; font-weight:500;">${t.location || mainName}</span>
+        <button data-id="${t.id}" style="width:auto; padding:5px !important; background:transparent; color:var(--danger); display:flex; align-items:center; justify-content:center; border-radius:50%;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        </button>`;
+      chip.querySelector('button').addEventListener('click', async () => {
+        await sb.from('duty_types').delete().eq('id', t.id);
+        await loadDutyRosterModule();
+      });
+      chipsWrap.appendChild(chip);
     });
-    list.appendChild(chip);
+
+    list.appendChild(group);
   });
 }
 
@@ -110,7 +140,7 @@ function groupByTeacherAndType(rows) {
         teacherId: r.teacher_profile_id,
         dutyTypeId: r.duty_type_id,
         teacherName: r.profiles ? r.profiles.full_name : '-',
-        dutyTypeName: r.duty_types ? r.duty_types.name : '',
+        dutyTypeName: r.duty_types ? dutyTypeLabel(r.duty_types) : '',
         days: [],
         rowIds: {}, // day_of_week -> row id (للحذف الدقيق)
       });
@@ -211,7 +241,7 @@ document.getElementById('fixed-add').addEventListener('click', async () => {
 
 async function refreshFixedList() {
   const { data } = await sb.from('duty_roster')
-    .select('id, teacher_profile_id, duty_type_id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name)')
+    .select('id, teacher_profile_id, duty_type_id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name, location)')
     .eq('kind', 'fixed');
   const groups = groupByTeacherAndType(data || []);
   renderGroupedList('fixed-list', groups, 'fixed', async () => { await refreshFixedList(); await refreshTodayAttendance(); });
@@ -242,7 +272,7 @@ document.getElementById('weekly-add').addEventListener('click', async () => {
 
 async function refreshWeeklyList() {
   const { data } = await sb.from('duty_roster')
-    .select('id, teacher_profile_id, duty_type_id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name)')
+    .select('id, teacher_profile_id, duty_type_id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name, location)')
     .eq('kind', 'weekly').eq('week_start_date', thisWeekSunday());
   const groups = groupByTeacherAndType(data || []);
   renderGroupedList('weekly-list', groups, 'weekly', async () => { await refreshWeeklyList(); await refreshTodayAttendance(); });
@@ -254,8 +284,8 @@ async function getTodayDutyEntries() {
   if (!dayKey) return [];
 
   const [{ data: fixed }, { data: weekly }] = await Promise.all([
-    sb.from('duty_roster').select('teacher_profile_id, duty_type_id, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name)').eq('kind', 'fixed').eq('day_of_week', dayKey),
-    sb.from('duty_roster').select('teacher_profile_id, duty_type_id, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name)').eq('kind', 'weekly').eq('day_of_week', dayKey).eq('week_start_date', thisWeekSunday()),
+    sb.from('duty_roster').select('teacher_profile_id, duty_type_id, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name, location)').eq('kind', 'fixed').eq('day_of_week', dayKey),
+    sb.from('duty_roster').select('teacher_profile_id, duty_type_id, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name, location)').eq('kind', 'weekly').eq('day_of_week', dayKey).eq('week_start_date', thisWeekSunday()),
   ]);
   return [...(fixed || []), ...(weekly || [])];
 }
@@ -290,7 +320,7 @@ async function refreshTodayAttendance() {
     row.className = 'form-card';
     row.style.marginBottom = '10px';
     row.innerHTML = `
-      <p style="margin:0 0 10px;"><strong>${e.profiles ? e.profiles.full_name : '-'}</strong> — ${e.duty_types ? e.duty_types.name : ''}
+      <p style="margin:0 0 10px;"><strong>${e.profiles ? e.profiles.full_name : '-'}</strong> — ${e.duty_types ? dutyTypeLabel(e.duty_types) : ''}
         ${existing ? `<span class="badge ${existing.status === 'present' ? 'badge-meadow' : existing.status === 'late' ? 'badge-gold' : 'badge-danger'}" style="margin-right:8px;">${existing.status === 'present' ? 'حاضر' : existing.status === 'absent' ? 'غائب' : 'متأخر ' + (existing.late_minutes || 0) + ' د'}</span>` : ''}
       </p>
       <div style="display:flex; align-items:center; gap:16px; flex-wrap:wrap; margin-bottom:10px;">
@@ -326,7 +356,7 @@ async function refreshTodayAttendance() {
         lateMinutes = parseInt(row.querySelector('.late-minutes-input').value) || null;
         if (!lateMinutes) { alert('اكتب عدد دقائق التأخير'); return; }
       }
-      await saveDutyStatus(e.teacher_profile_id, e.duty_type_id, dateStr, status, lateMinutes, e.duty_types ? e.duty_types.name : '');
+      await saveDutyStatus(e.teacher_profile_id, e.duty_type_id, dateStr, status, lateMinutes, e.duty_types ? dutyTypeLabel(e.duty_types) : '');
       await refreshTodayAttendance();
     });
     container.appendChild(row);
@@ -369,13 +399,13 @@ export async function renderMyDutyBanner() {
   if (!dayKey) return;
 
   const [{ data: fixed }, { data: weekly }] = await Promise.all([
-    sb.from('duty_roster').select('duty_type_id, duty_types(name)').eq('kind', 'fixed').eq('day_of_week', dayKey).eq('teacher_profile_id', currentUserId),
-    sb.from('duty_roster').select('duty_type_id, duty_types(name)').eq('kind', 'weekly').eq('day_of_week', dayKey).eq('week_start_date', thisWeekSunday()).eq('teacher_profile_id', currentUserId),
+    sb.from('duty_roster').select('duty_type_id, duty_types(name, location)').eq('kind', 'fixed').eq('day_of_week', dayKey).eq('teacher_profile_id', currentUserId),
+    sb.from('duty_roster').select('duty_type_id, duty_types(name, location)').eq('kind', 'weekly').eq('day_of_week', dayKey).eq('week_start_date', thisWeekSunday()).eq('teacher_profile_id', currentUserId),
   ]);
   const myDuties = [...(fixed || []), ...(weekly || [])];
   if (myDuties.length === 0) return;
 
-  const names = myDuties.map(d => d.duty_types ? d.duty_types.name : '').filter(Boolean).join('، ');
+  const names = myDuties.map(d => d.duty_types ? dutyTypeLabel(d.duty_types) : '').filter(Boolean).join('، ');
   banner.innerHTML = `
     <div style="display:flex; align-items:center; gap:12px; background:var(--gold-light); border:1px solid #F0C9A6; border-radius:14px; padding:14px 18px; margin-bottom:16px;">
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C56A2E" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
