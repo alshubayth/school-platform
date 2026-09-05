@@ -622,19 +622,21 @@ function printVisitReport(v) {
   const dayLabel = (DAYS.find(d => d.key === v.day_of_week) || {}).label || v.day_of_week;
 
   const sectionHtml = (title) => `
-    <tr class="sec-row"><td colspan="3">${esc(title)}</td></tr>
-    <tr class="col-heads"><td>مؤشر الأداء</td><td>التقدير</td><td>التوصية</td></tr>`;
+    <tr class="sec-row"><td colspan="2">${esc(title)}</td></tr>
+    <tr class="col-heads"><td>مؤشر الأداء</td><td>التقدير</td></tr>`;
 
   const rowHtml = (num) => {
     const selected = (v.ratings || {})[num] || '';
     const tier = selected ? tierForOption(num, selected) : null;
     const rec = (v.recommendations || {})[num] || '';
     const tierClass = tier ? ({ 'مميز': 'tier-star', 'حقق الهدف': 'tier-ok', 'فرصة تحسين': 'tier-improve' }[tier.label] || '') : '';
+    const recRow = rec
+      ? `<tr class="rec-row"><td colspan="2"><b>التوصية:</b> ${esc(rec)}</td></tr>`
+      : '';
     return `<tr>
       <td class="ind-cell"><b>${esc(INDICATORS[num].label)}</b><div class="ind-val">${esc(selected || '-')}</div></td>
-      <td class="tier-cell ${tierClass}">${tier ? `${tier.symbol}<br>${esc(tier.label)}` : '-'}</td>
-      <td class="rec-cell">${esc(rec || '-')}</td>
-    </tr>`;
+      <td class="tier-cell ${tierClass}">${tier ? esc(tier.label) : '-'}</td>
+    </tr>${recRow}`;
   };
 
   const sectionsHtml = `
@@ -680,13 +682,13 @@ function printVisitReport(v) {
   tr.sec-row td { background:#16233A; color:#fff; font-weight:700; font-size:12.5px; padding:7px 10px; }
   tr.col-heads td { background:#dbe3ee; color:#16233A; font-weight:700; text-align:center; font-size:10.5px; }
   tr.col-heads td:first-child, tr.sec-row td { text-align:right; }
-  td.ind-cell { text-align:right; width:46%; }
+  td.ind-cell { text-align:right; width:78%; }
   td.ind-cell .ind-val { font-weight:400; color:#333; margin-top:2px; }
-  td.tier-cell { text-align:center; width:16%; font-weight:700; }
+  td.tier-cell { text-align:center; width:22%; font-weight:700; }
   td.tier-cell.tier-ok { color:#1f8a4c; }
   td.tier-cell.tier-improve { color:#c0392b; }
   td.tier-cell.tier-star { color:#b8860b; }
-  td.rec-cell { text-align:right; width:38%; color:#333; }
+  tr.rec-row td { text-align:right; background:#fdf6e8; color:#7a5b00; font-size:10px; padding:5px 8px; }
 
   .extra-box { border:1px solid #cfd6e0; border-radius:5px; padding:7px 10px; margin-bottom:8px; font-size:11.5px; display:flex; gap:8px; }
   .extra-box .lbl { font-weight:700; color:#16233A; flex-shrink:0; }
@@ -740,7 +742,7 @@ function printVisitReport(v) {
 
     <div class="footer-bar">
       <span>تمت الطباعة من نظام إدارة المدرسة — ${fmtDate(todayIso())}</span>
-      <span class="legend"><span>⭐ مميز</span><span>✓ حقق الهدف</span><span>➔ فرصة تحسين</span></span>
+      <span class="legend"><span>مميز</span><span>حقق الهدف</span><span>فرصة تحسين</span></span>
     </div>
   </div>
 </body>
