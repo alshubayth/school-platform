@@ -29,10 +29,13 @@ function formatDays(days) {
 }
 
 setupCollapsible('dt-toggle', 'dt-body', 'dt-chevron');
+setupCollapsible('duty-import-toggle', 'duty-import-body', 'duty-import-chevron');
 setupCollapsible('fixed-toggle', 'fixed-body', 'fixed-chevron');
 setupCollapsible('weekly-toggle', 'weekly-body', 'weekly-chevron');
 
 function dutyTypeLabel(t) { return t.location ? `${t.name} — ${t.location}` : t.name; }
+function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
 
 export async function loadDutyRosterModule() {
   const [{ data: types }, { data: teachers }] = await Promise.all([
@@ -130,6 +133,168 @@ async function refreshDutyTypesList() {
     list.appendChild(group);
   });
 }
+
+/* ---------- استيراد المناوبات من ملف إكسل ---------- */
+const IMPORT_DAY_COLS = [
+  { key: 'sunday', label: 'الأحد' },
+  { key: 'monday', label: 'الاثنين' },
+  { key: 'tuesday', label: 'الثلاثاء' },
+  { key: 'wednesday', label: 'الأربعاء' },
+  { key: 'thursday', label: 'الخميس' },
+];
+
+document.getElementById('duty-template-btn').addEventListener('click', () => {
+  const header = ['اسم الموظف', 'المناوبة الرئيسية', 'التفصيل (الموقع أو الحصة)', 'نوع الجدولة (ثابت / متغيّر)', ...IMPORT_DAY_COLS.map(d => d.label)];
+  const sample1 = ['مثال: اسم المعلم هنا', 'مناوبة الصباح', 'حافلات', 'ثابت', '✓', '✓', '✓', '✓', '✓'];
+  const sample2 = ['مثال: اسم المعلم هنا', 'مناوبة الفسحة', 'نقطة بيع', 'متغيّر', '✓', '', '✓', '', ''];
+  const rows = [header, sample1, sample2];
+
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 26 }, { wch: 22 }, ...IMPORT_DAY_COLS.map(() => ({ wch: 8 }))];
+
+  const notesRows = [
+    ['ملاحظات:'],
+    ['- اسم الموظف لازم يطابق اسم حسابه المسجل بالنظام بالضبط.'],
+    ['- المناوبة الرئيسية: مناوبة الصباح / مناوبة الفسحة / مناوبة المصلى / مناوبة الحافلات / مناوبة الأركان — أو أي اسم آخر، بينشئه النظام تلقائيًا لو غير موجود.'],
+    ['- التفصيل اختياري (موقع أو حصة)، اتركه فاضي لو ما ينطبق.'],
+    ['- نوع الجدولة: اكتب "ثابت" لو تتكرر كل أسبوع تلقائيًا، أو "متغيّر" لو خاصة بأسبوع هذا الأسبوع بس.'],
+    ['- حط أي علامة (✓ أو نعم أو 1) بعمود اليوم اللي فيه المناوبة، واتركه فاضي لو ما ينطبق.'],
+    ['- كل صف = موظف واحد + مناوبة واحدة. لو نفس الموظف له أكثر من مناوبة، كرر اسمه بصف جديد.'],
+    ['- احذف صفوف الأمثلة قبل الرفع.'],
+  ];
+  const notesWs = XLSX.utils.aoa_to_sheet(notesRows);
+  notesWs['!cols'] = [{ wch: 90 }];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'المناوبات');
+  XLSX.utils.book_append_sheet(wb, notesWs, 'تعليمات');
+  XLSX.writeFile(wb, 'نموذج_استيراد_المناوبات.xlsx');
+});
+
+function isTruthyCell(v) {
+  const s = normalizeArText(v).toLowerCase();
+  return s !== '' && s !== '0' && s !== 'لا' && s !== 'no' && s !== 'false';
+}
+
+document.getElementById('duty-import-btn').addEventListener('click', async () => {
+  const fileInput = document.getElementById('duty-import-file');
+  const errEl = document.getElementById('duty-import-error');
+  const summaryEl = document.getElementById('duty-import-summary');
+  errEl.style.display = 'none';
+  summaryEl.innerHTML = '';
+  const file = fileInput.files[0];
+  if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    try {
+      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const sheetName = wb.SheetNames.find(n => n !== 'تعليمات') || wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header: 1, defval: '' });
+
+      let headerIdx = -1, colIdx = {};
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const idx = row.findIndex(c => String(c).includes('اسم') && (String(c).includes('موظف') || String(c).includes('معلم')));
+        if (idx !== -1) {
+          headerIdx = i;
+          row.forEach((cell, ci) => {
+            const c = String(cell).trim();
+            if (!c) return;
+            if (c.includes('اسم')) colIdx.name = ci;
+            else if (c.includes('رئيسي')) colIdx.mainType = ci;
+            else if (c.includes('تفصيل') || c.includes('موقع')) colIdx.location = ci;
+            else if (c.includes('جدولة') || c.includes('ثابت') || c.includes('متغي')) colIdx.kind = ci;
+            else {
+              const dayCol = IMPORT_DAY_COLS.find(d => c.includes(d.label));
+              if (dayCol) colIdx[dayCol.key] = ci;
+            }
+          });
+          break;
+        }
+      }
+      if (headerIdx === -1 || colIdx.mainType === undefined) {
+        errEl.textContent = 'ما لقيت أعمدة الملف المتوقعة، حمّل النموذج وتأكد من عدم تغيير أسماء الأعمدة';
+        errEl.style.display = 'block';
+        return;
+      }
+
+      const teacherByName = new Map(teachersCache.map(t => [normalizeArText(t.full_name), t]));
+      const newTypeKey = (name, location) => normalizeArText(name) + '|' + normalizeArText(location);
+      const typeByKey = new Map(dutyTypesCache.map(t => [newTypeKey(t.name, t.location), t]));
+      const typesToCreate = new Map(); // key -> {name, location}
+      const parsedRows = [];
+      const skipped = [];
+
+      for (let i = headerIdx + 1; i < rows.length; i++) {
+        const row = rows[i];
+        const nameRaw = row[colIdx.name];
+        const mainTypeRaw = row[colIdx.mainType];
+        if (!normalizeArText(nameRaw) && !normalizeArText(mainTypeRaw)) continue; // صف فاضي
+
+        const teacherName = normalizeArText(nameRaw);
+        const teacher = teacherByName.get(teacherName);
+        if (!teacher) { skipped.push(`الصف ${i + 1}: اسم الموظف "${teacherName}" غير مطابق لأي حساب معلم`); continue; }
+
+        const mainType = normalizeArText(mainTypeRaw);
+        if (!mainType) { skipped.push(`الصف ${i + 1}: المناوبة الرئيسية فاضية`); continue; }
+        const location = colIdx.location !== undefined ? normalizeArText(row[colIdx.location]) : '';
+
+        const kindRaw = colIdx.kind !== undefined ? normalizeArText(row[colIdx.kind]) : '';
+        let kind = null;
+        if (kindRaw.includes('ثابت')) kind = 'fixed';
+        else if (kindRaw.includes('متغي') || kindRaw.includes('أسبوع')) kind = 'weekly';
+        if (!kind) { skipped.push(`الصف ${i + 1}: نوع الجدولة غير مفهوم ("${kindRaw}") — اكتب "ثابت" أو "متغيّر"`); continue; }
+
+        const days = IMPORT_DAY_COLS.filter(d => colIdx[d.key] !== undefined && isTruthyCell(row[colIdx[d.key]])).map(d => d.key);
+        if (days.length === 0) { skipped.push(`الصف ${i + 1}: ما فيه أي يوم محدد`); continue; }
+
+        const key = newTypeKey(mainType, location);
+        if (!typeByKey.has(key) && !typesToCreate.has(key)) typesToCreate.set(key, { name: mainType, location: location || null });
+
+        parsedRows.push({ teacherId: teacher.id, typeKey: key, kind, days });
+      }
+
+      if (parsedRows.length === 0) {
+        errEl.style.whiteSpace = 'pre-line';
+        errEl.textContent = 'ما لقيت أي صف صالح للاستيراد. الأسباب:\n' + skipped.slice(0, 10).join('\n');
+        errEl.style.display = 'block';
+        return;
+      }
+
+      // إنشاء أنواع المناوبات الناقصة أولاً
+      if (typesToCreate.size > 0) {
+        const { data: createdTypes, error: typesErr } = await sb.from('duty_types').insert(Array.from(typesToCreate.values())).select('id, name, location');
+        if (typesErr) { errEl.textContent = 'تعذر إنشاء أنواع المناوبات الجديدة: ' + typesErr.message; errEl.style.display = 'block'; return; }
+        (createdTypes || []).forEach(t => typeByKey.set(newTypeKey(t.name, t.location), t));
+      }
+
+      const dutyRosterPayload = [];
+      parsedRows.forEach(r => {
+        const type = typeByKey.get(r.typeKey);
+        if (!type) return;
+        r.days.forEach(d => dutyRosterPayload.push({
+          teacher_profile_id: r.teacherId, duty_type_id: type.id, kind: r.kind, day_of_week: d, created_by: currentUserId,
+          week_start_date: r.kind === 'weekly' ? thisWeekSunday() : null,
+        }));
+      });
+
+      const { error: insertErr } = await sb.from('duty_roster').insert(dutyRosterPayload);
+      if (insertErr) { errEl.textContent = 'تعذر استيراد المناوبات: ' + insertErr.message; errEl.style.display = 'block'; return; }
+
+      summaryEl.innerHTML = `
+        <div style="color:var(--meadow); font-weight:700;">تم استيراد ${dutyRosterPayload.length} تعيين مناوبة (${parsedRows.length} صف) بنجاح${typesToCreate.size ? `، وأُنشئ ${typesToCreate.size} نوع مناوبة جديد` : ''}.</div>
+        ${skipped.length ? `<div style="color:var(--danger); margin-top:6px;">تم تجاهل ${skipped.length} صف:<br>${skipped.slice(0, 15).map(s => esc(s)).join('<br>')}</div>` : ''}
+      `;
+      fileInput.value = '';
+      await loadDutyRosterModule();
+    } catch (err) {
+      errEl.textContent = 'تعذرت قراءة الملف: ' + err.message;
+      errEl.style.display = 'block';
+    }
+  };
+  reader.readAsArrayBuffer(file);
+});
 
 /* ---------- أداة مشتركة: تجميع الصفوف حسب المعلم + نوع المناوبة ---------- */
 function groupByTeacherAndType(rows) {
