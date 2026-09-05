@@ -43,9 +43,7 @@ export async function loadDutyRosterModule() {
   teachersCache = teachers || [];
 
   populateSelect('fixed-teacher', teachersCache, 'full_name');
-  populateSelect('fixed-duty-type', dutyTypesCache, 'displayLabel');
   populateSelect('weekly-teacher', teachersCache, 'full_name');
-  populateSelect('weekly-duty-type', dutyTypesCache, 'displayLabel');
 
   document.getElementById('week-sunday-label').textContent = thisWeekSunday();
 
@@ -59,7 +57,10 @@ export async function loadDutyRosterModule() {
 }
 
 function populateSelect(id, items, labelKey) {
-  const sel = document.getElementById(id);
+  populateSelectEl(document.getElementById(id), items, labelKey);
+}
+
+function populateSelectEl(sel, items, labelKey) {
   sel.innerHTML = '';
   if (items.length === 0) {
     sel.innerHTML = '<option value="">لا توجد بيانات بعد</option>';
@@ -215,57 +216,97 @@ async function applyDaysChange(group, newDays, kind) {
   }
 }
 
-/* ---------- المناوبون الثابتون ---------- */
-/* ---------- أداة مشتركة: مجموعة اختيار أيام (تشيك بوكس) + "كل الأيام" ---------- */
-function wireDayCheckboxGroup(allId, checkClass) {
-  const allBox = document.getElementById(allId);
-  const dayBoxes = () => Array.from(document.querySelectorAll('.' + checkClass));
-  allBox.addEventListener('change', () => {
-    dayBoxes().forEach(b => { b.checked = allBox.checked; });
+/* ---------- أداة مشتركة: صف "نوع مناوبة + أيامه" يُضاف بعدد حر لكل موظف قبل الحفظ ---------- */
+function createDayCheckboxes() {
+  const wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex; flex-wrap:wrap; gap:12px; align-items:center; margin-top:8px;';
+  const days = [['sunday', 'الأحد'], ['monday', 'الاثنين'], ['tuesday', 'الثلاثاء'], ['wednesday', 'الأربعاء'], ['thursday', 'الخميس']];
+  wrap.innerHTML = `
+    <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; font-weight:700;">
+      <input type="checkbox" class="row-day-all" style="width:auto;" /> كل الأيام
+    </label>
+    ${days.map(([v, l]) => `<label style="display:flex; align-items:center; gap:5px; font-size:12.5px;">
+      <input type="checkbox" class="row-day-check" value="${v}" style="width:auto;" /> ${l}
+    </label>`).join('')}
+  `;
+  const allBox = wrap.querySelector('.row-day-all');
+  const dayBoxes = () => Array.from(wrap.querySelectorAll('.row-day-check'));
+  allBox.addEventListener('change', () => dayBoxes().forEach(b => { b.checked = allBox.checked; }));
+  dayBoxes().forEach(b => b.addEventListener('change', () => { allBox.checked = dayBoxes().every(x => x.checked); }));
+  return { wrap, getChecked: () => dayBoxes().filter(b => b.checked).map(b => b.value) };
+}
+
+function createDutyRow() {
+  const row = document.createElement('div');
+  row.className = 'duty-add-row';
+  row.style.cssText = 'padding:12px; background:var(--sand); border:1px solid #ECEAE1; border-radius:12px;';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex; justify-content:space-between; align-items:center; gap:8px;';
+
+  const typeSelect = document.createElement('select');
+  typeSelect.className = 'row-duty-type';
+  typeSelect.style.flex = '1';
+  populateSelectEl(typeSelect, dutyTypesCache, 'displayLabel');
+
+  const removeBtn = document.createElement('button');
+  removeBtn.textContent = 'حذف المناوبة';
+  removeBtn.style.cssText = 'width:auto; padding:6px 12px; background:transparent; color:var(--danger); flex-shrink:0;';
+  removeBtn.addEventListener('click', () => row.remove());
+
+  header.appendChild(typeSelect);
+  header.appendChild(removeBtn);
+
+  const { wrap: dayWrap, getChecked } = createDayCheckboxes();
+
+  row.appendChild(header);
+  row.appendChild(dayWrap);
+  row._getData = () => ({ dutyTypeId: typeSelect.value, days: getChecked() });
+  return row;
+}
+
+function wireDutyRowsSection(prefix, kind) {
+  const teacherSel = document.getElementById(prefix + '-teacher');
+  const rowsWrap = document.getElementById(prefix + '-rows');
+  const addRowBtn = document.getElementById(prefix + '-add-row');
+  const saveBtn = document.getElementById(prefix + '-add');
+  const errEl = document.getElementById(prefix + '-error');
+
+  addRowBtn.addEventListener('click', () => {
+    if (dutyTypesCache.length === 0) { alert('أضف نوع مناوبة أولاً من الأعلى'); return; }
+    rowsWrap.appendChild(createDutyRow());
   });
-  dayBoxes().forEach(b => {
-    b.addEventListener('change', () => {
-      allBox.checked = dayBoxes().every(x => x.checked);
-    });
+
+  saveBtn.addEventListener('click', async () => {
+    errEl.style.display = 'none';
+    const teacherId = teacherSel.value;
+    if (!teacherId) { errEl.textContent = 'اختر الموظف أولاً'; errEl.style.display = 'block'; return; }
+
+    const rowEls = Array.from(rowsWrap.querySelectorAll('.duty-add-row'));
+    if (rowEls.length === 0) { errEl.textContent = 'أضف مناوبة واحدة على الأقل لهذا الموظف'; errEl.style.display = 'block'; return; }
+
+    const payload = [];
+    for (const rowEl of rowEls) {
+      const { dutyTypeId, days } = rowEl._getData();
+      if (!dutyTypeId) { errEl.textContent = 'اختر نوع المناوبة لكل صف مضاف'; errEl.style.display = 'block'; return; }
+      if (days.length === 0) { errEl.textContent = 'اختر يوم واحد على الأقل (أو "كل الأيام") لكل صف مضاف'; errEl.style.display = 'block'; return; }
+      days.forEach(d => payload.push({
+        teacher_profile_id: teacherId, duty_type_id: dutyTypeId, kind, day_of_week: d, created_by: currentUserId,
+        week_start_date: kind === 'weekly' ? thisWeekSunday() : null,
+      }));
+    }
+
+    const { error } = await sb.from('duty_roster').insert(payload);
+    if (error) { errEl.textContent = 'تعذر الإضافة: ' + error.message; errEl.style.display = 'block'; return; }
+
+    rowsWrap.innerHTML = '';
+    if (prefix === 'fixed') { await refreshFixedList(); } else { await refreshWeeklyList(); }
+    await refreshTodayAttendance();
   });
 }
-function getCheckedDays(checkClass) {
-  return Array.from(document.querySelectorAll('.' + checkClass + ':checked')).map(c => c.value);
-}
-function resetDayCheckboxGroup(allId, checkClass) {
-  document.getElementById(allId).checked = false;
-  document.querySelectorAll('.' + checkClass).forEach(c => { c.checked = false; });
-}
-wireDayCheckboxGroup('fixed-day-all', 'fixed-day-check');
-wireDayCheckboxGroup('weekly-day-all', 'weekly-day-check');
 
-document.getElementById('fixed-add').addEventListener('click', async () => {
-  const teacherId = document.getElementById('fixed-teacher').value;
-  const dutyTypeId = document.getElementById('fixed-duty-type').value;
-  const daysToAdd = getCheckedDays('fixed-day-check');
-  const errEl = document.getElementById('fixed-error');
-  errEl.style.display = 'none';
-  if (!teacherId || !dutyTypeId) {
-    errEl.textContent = 'أضف معلمًا ونوع مناوبة أولاً';
-    errEl.style.display = 'block';
-    return;
-  }
-  if (daysToAdd.length === 0) {
-    errEl.textContent = 'اختر يوم واحد على الأقل (أو "كل الأيام")';
-    errEl.style.display = 'block';
-    return;
-  }
-
-  const rows = daysToAdd.map(d => ({
-    teacher_profile_id: teacherId, duty_type_id: dutyTypeId, kind: 'fixed', day_of_week: d, created_by: currentUserId,
-  }));
-
-  const { error } = await sb.from('duty_roster').insert(rows);
-  if (error) { errEl.textContent = 'تعذر الإضافة: ' + error.message; errEl.style.display = 'block'; return; }
-  resetDayCheckboxGroup('fixed-day-all', 'fixed-day-check');
-  await refreshFixedList();
-  await refreshTodayAttendance();
-});
+wireDutyRowsSection('fixed', 'fixed');
+wireDutyRowsSection('weekly', 'weekly');
 
 async function refreshFixedList() {
   const { data } = await sb.from('duty_roster')
@@ -276,33 +317,6 @@ async function refreshFixedList() {
 }
 
 /* ---------- المناوبون المتغيرون (هذا الأسبوع) ---------- */
-document.getElementById('weekly-add').addEventListener('click', async () => {
-  const teacherId = document.getElementById('weekly-teacher').value;
-  const dutyTypeId = document.getElementById('weekly-duty-type').value;
-  const daysToAdd = getCheckedDays('weekly-day-check');
-  const errEl = document.getElementById('weekly-error');
-  errEl.style.display = 'none';
-  if (!teacherId || !dutyTypeId) {
-    errEl.textContent = 'أضف معلمًا ونوع مناوبة أولاً';
-    errEl.style.display = 'block';
-    return;
-  }
-  if (daysToAdd.length === 0) {
-    errEl.textContent = 'اختر يوم واحد على الأقل (أو "كل الأيام")';
-    errEl.style.display = 'block';
-    return;
-  }
-  const rows = daysToAdd.map(d => ({
-    teacher_profile_id: teacherId, duty_type_id: dutyTypeId, kind: 'weekly',
-    day_of_week: d, week_start_date: thisWeekSunday(), created_by: currentUserId,
-  }));
-  const { error } = await sb.from('duty_roster').insert(rows);
-  if (error) { errEl.textContent = 'تعذر الإضافة: ' + error.message; errEl.style.display = 'block'; return; }
-  resetDayCheckboxGroup('weekly-day-all', 'weekly-day-check');
-  await refreshWeeklyList();
-  await refreshTodayAttendance();
-});
-
 async function refreshWeeklyList() {
   const { data } = await sb.from('duty_roster')
     .select('id, teacher_profile_id, duty_type_id, day_of_week, profiles!duty_roster_teacher_profile_id_fkey(full_name), duty_types(name, location)')
