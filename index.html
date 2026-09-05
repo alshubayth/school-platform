@@ -411,6 +411,21 @@
       </div>
 
       <div class="form-card">
+        <h4 id="duty-import-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+          <span>+ استيراد المناوبات من ملف إكسل</span>
+          <svg id="duty-import-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+        </h4>
+        <div id="duty-import-body" class="hidden" style="margin-top:14px;">
+          <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">حمّل النموذج، عبّي فيه كل مناوبات الموظفين، وارفعه — النظام يضيف أنواع المناوبات الناقصة تلقائيًا ويربط كل صف بحساب الموظف حسب اسمه.</p>
+          <button class="btn-secondary" id="duty-template-btn" style="width:auto; padding:9px 16px; margin-bottom:12px;">تحميل نموذج إكسل</button>
+          <input type="file" id="duty-import-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
+          <button class="btn-primary" id="duty-import-btn" style="width:auto; padding:11px 20px;">استيراد الملف</button>
+          <div class="error-msg" id="duty-import-error"></div>
+          <div id="duty-import-summary" style="margin-top:10px; font-size:13px;"></div>
+        </div>
+      </div>
+
+      <div class="form-card">
         <h4 id="fixed-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
           <span>+ إضافة مناوب ثابت (تتكرر كل أسبوع تلقائيًا)</span>
           <svg id="fixed-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
