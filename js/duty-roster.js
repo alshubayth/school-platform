@@ -110,7 +110,7 @@ function renderMyDutyGroup(containerId, rows, emptyMsg) {
     const card = document.createElement('div');
     card.className = 'duty-card';
     card.innerHTML = `
-      <div class="ic-diamond ${DUTY_COLORS[cat]}" style="margin:0 auto 12px;">${DUTY_ICONS[cat]}</div>
+      <div class="ic-diamond ${DUTY_COLORS[cat]}">${DUTY_ICONS[cat]}</div>
       <div class="name">${g.name}</div>
       ${g.location ? `<div class="loc">${g.location}</div>` : ''}
       <div class="days">${[...g.days].sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b)).map(d => `<span class="day-chip">${dayLabels[d]}</span>`).join('')}</div>`;
