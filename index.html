@@ -416,22 +416,12 @@
           <svg id="fixed-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
         </h4>
         <div id="fixed-body" class="hidden" style="margin-top:14px;">
-          <div class="form-row">
-            <select id="fixed-teacher"></select>
-            <select id="fixed-duty-type"></select>
-          </div>
-          <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:10px 0;">
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700;">
-              <input type="checkbox" id="fixed-day-all" style="width:auto;" /> كل الأيام
-            </label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="sunday" style="width:auto;" /> الأحد</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="monday" style="width:auto;" /> الاثنين</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="tuesday" style="width:auto;" /> الثلاثاء</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="wednesday" style="width:auto;" /> الأربعاء</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="thursday" style="width:auto;" /> الخميس</label>
-          </div>
+          <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الموظف</label>
+          <select id="fixed-teacher"></select>
+          <div id="fixed-rows" style="margin-top:12px; display:flex; flex-direction:column; gap:10px;"></div>
+          <button class="btn-secondary" id="fixed-add-row" style="width:auto; padding:9px 16px; margin-top:10px;">+ إضافة مناوبة لهذا الموظف</button>
           <div class="error-msg" id="fixed-error"></div>
-          <button class="btn-primary" id="fixed-add" style="width:auto; padding:11px 20px;">إضافة مناوب ثابت</button>
+          <button class="btn-primary" id="fixed-add" style="width:auto; padding:11px 20px; margin-top:12px;">حفظ كل المناوبات</button>
         </div>
         <div id="fixed-list" style="margin-top:14px;"></div>
       </div>
@@ -443,22 +433,12 @@
         </h4>
         <p style="font-size:12.5px; color:var(--slate); margin:4px 0 10px;">أسبوع يبدأ من: <strong id="week-sunday-label"></strong> (الأحد إلى الخميس)</p>
         <div id="weekly-body" class="hidden">
-          <div class="form-row">
-            <select id="weekly-teacher"></select>
-            <select id="weekly-duty-type"></select>
-          </div>
-          <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:10px 0;">
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700;">
-              <input type="checkbox" id="weekly-day-all" style="width:auto;" /> كل الأيام
-            </label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="sunday" style="width:auto;" /> الأحد</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="monday" style="width:auto;" /> الاثنين</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="tuesday" style="width:auto;" /> الثلاثاء</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="wednesday" style="width:auto;" /> الأربعاء</label>
-            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="thursday" style="width:auto;" /> الخميس</label>
-          </div>
+          <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الموظف</label>
+          <select id="weekly-teacher"></select>
+          <div id="weekly-rows" style="margin-top:12px; display:flex; flex-direction:column; gap:10px;"></div>
+          <button class="btn-secondary" id="weekly-add-row" style="width:auto; padding:9px 16px; margin-top:10px;">+ إضافة مناوبة لهذا الموظف</button>
           <div class="error-msg" id="weekly-error"></div>
-          <button class="btn-primary" id="weekly-add" style="width:auto; padding:11px 20px;">إضافة مناوب هذا الأسبوع</button>
+          <button class="btn-primary" id="weekly-add" style="width:auto; padding:11px 20px; margin-top:12px;">حفظ كل المناوبات</button>
         </div>
         <div id="weekly-list" style="margin-top:14px;"></div>
       </div>
