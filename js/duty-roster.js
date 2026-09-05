@@ -68,7 +68,26 @@ export async function loadDutyRosterModule() {
   await refreshTodayAttendance();
 }
 
-/* ---------- عرض المعلم لمناوباته الخاصة (للقراءة فقط) ---------- */
+/* ---------- عرض المعلم لمناوباته الخاصة (للقراءة فقط) — بطاقات بأيقونات حسب نوع المناوبة ---------- */
+const DUTY_ICONS = {
+  morning: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4"/><path d="M4.9 8.9l1.4 1.4"/><path d="M2 17h2"/><path d="M20 17h2"/><path d="M17.7 10.3l1.4-1.4"/><path d="M6 17a6 6 0 0 1 12 0"/><path d="M2 21h20"/></svg>',
+  recess: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 3v3.5M12 17.5V21M3 12h3.5M17.5 12H21M5.6 5.6l2.5 2.5M15.9 15.9l2.5 2.5M18.4 5.6l-2.5 2.5M8.1 15.9l-2.5 2.5"/></svg>',
+  prayer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l2.2 3.2h-4.4L12 2z"/><path d="M5 21v-6.5A7 7 0 0 1 19 14.5V21"/><path d="M3 21h18"/><path d="M9.5 21v-4a2.5 2.5 0 0 1 5 0v4"/></svg>',
+  bus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="11" rx="2"/><path d="M3 11h18"/><circle cx="7.5" cy="18.5" r="1.6"/><circle cx="16.5" cy="18.5" r="1.6"/><path d="M6 8h3M6 13.5h.01M18 13.5h.01"/></svg>',
+  corners: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.2"/></svg>',
+  default: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+};
+function dutyCategory(name) {
+  const n = String(name || '');
+  if (n.includes('صباح')) return 'morning';
+  if (n.includes('فسحة')) return 'recess';
+  if (n.includes('مصلى') || n.includes('صلاة')) return 'prayer';
+  if (n.includes('حافلات') || n.includes('باص')) return 'bus';
+  if (n.includes('أركان') || n.includes('اركان')) return 'corners';
+  return 'default';
+}
+const DUTY_COLORS = { morning: 'diamond-gold', recess: 'diamond-teal', prayer: 'diamond-navy', bus: 'diamond-purple', corners: 'diamond-green', default: 'diamond-navy' };
+
 function renderMyDutyGroup(containerId, rows, emptyMsg) {
   const list = document.getElementById(containerId);
   list.innerHTML = '';
@@ -80,18 +99,24 @@ function renderMyDutyGroup(containerId, rows, emptyMsg) {
   const byType = new Map();
   rows.forEach(r => {
     const key = r.duty_type_id;
-    if (!byType.has(key)) byType.set(key, { label: r.duty_types ? dutyTypeLabel(r.duty_types) : '', days: [] });
+    if (!byType.has(key)) byType.set(key, { name: r.duty_types ? r.duty_types.name : '', location: r.duty_types ? r.duty_types.location : '', days: [] });
     byType.get(key).days.push(r.day_of_week);
   });
+
+  const grid = document.createElement('div');
+  grid.className = 'duty-card-grid';
   byType.forEach(g => {
-    const row = document.createElement('div');
-    row.className = 'emp-row';
-    row.innerHTML = `
-      <div class="avatar-circle">🕐</div>
-      <div class="info"><div class="name">${g.label}</div>
-      <div class="title">${formatDays(g.days)}</div></div>`;
-    list.appendChild(row);
+    const cat = dutyCategory(g.name);
+    const card = document.createElement('div');
+    card.className = 'duty-card';
+    card.innerHTML = `
+      <div class="ic-diamond ${DUTY_COLORS[cat]}" style="margin:0 auto 12px;">${DUTY_ICONS[cat]}</div>
+      <div class="name">${g.name}</div>
+      ${g.location ? `<div class="loc">${g.location}</div>` : ''}
+      <div class="days">${[...g.days].sort((a, b) => dayOrder.indexOf(a) - dayOrder.indexOf(b)).map(d => `<span class="day-chip">${dayLabels[d]}</span>`).join('')}</div>`;
+    grid.appendChild(card);
   });
+  list.appendChild(grid);
 }
 
 async function loadMyDutyView() {
