@@ -420,14 +420,16 @@
             <select id="fixed-teacher"></select>
             <select id="fixed-duty-type"></select>
           </div>
-          <select id="fixed-day">
-            <option value="all_week">طوال الأسبوع (الأحد إلى الخميس)</option>
-            <option value="sunday">الأحد</option>
-            <option value="monday">الاثنين</option>
-            <option value="tuesday">الثلاثاء</option>
-            <option value="wednesday">الأربعاء</option>
-            <option value="thursday">الخميس</option>
-          </select>
+          <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:10px 0;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700;">
+              <input type="checkbox" id="fixed-day-all" style="width:auto;" /> كل الأيام
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="sunday" style="width:auto;" /> الأحد</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="monday" style="width:auto;" /> الاثنين</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="tuesday" style="width:auto;" /> الثلاثاء</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="wednesday" style="width:auto;" /> الأربعاء</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="fixed-day-check" value="thursday" style="width:auto;" /> الخميس</label>
+          </div>
           <div class="error-msg" id="fixed-error"></div>
           <button class="btn-primary" id="fixed-add" style="width:auto; padding:11px 20px;">إضافة مناوب ثابت</button>
         </div>
@@ -445,14 +447,16 @@
             <select id="weekly-teacher"></select>
             <select id="weekly-duty-type"></select>
           </div>
-          <select id="weekly-day">
-            <option value="all_week">طوال الأسبوع (الأحد إلى الخميس)</option>
-            <option value="sunday">الأحد</option>
-            <option value="monday">الاثنين</option>
-            <option value="tuesday">الثلاثاء</option>
-            <option value="wednesday">الأربعاء</option>
-            <option value="thursday">الخميس</option>
-          </select>
+          <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center; margin:10px 0;">
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700;">
+              <input type="checkbox" id="weekly-day-all" style="width:auto;" /> كل الأيام
+            </label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="sunday" style="width:auto;" /> الأحد</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="monday" style="width:auto;" /> الاثنين</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="tuesday" style="width:auto;" /> الثلاثاء</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="wednesday" style="width:auto;" /> الأربعاء</label>
+            <label style="display:flex; align-items:center; gap:6px; font-size:13px;"><input type="checkbox" class="weekly-day-check" value="thursday" style="width:auto;" /> الخميس</label>
+          </div>
           <div class="error-msg" id="weekly-error"></div>
           <button class="btn-primary" id="weekly-add" style="width:auto; padding:11px 20px;">إضافة مناوب هذا الأسبوع</button>
         </div>
