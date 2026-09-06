@@ -144,6 +144,12 @@
     font-family:inherit; font-size:13.5px; font-weight:700; color:var(--ink); cursor:pointer;
     box-shadow:0 4px 14px rgba(16,23,40,0.06); appearance:none; -webkit-appearance:none;
   }
+  .print-btn{
+    display:flex; align-items:center; gap:6px; flex-shrink:0; padding:0 16px; border-radius:14px;
+    background:var(--navy); color:#fff; font-family:inherit; font-size:12.5px; font-weight:700;
+    box-shadow:0 4px 14px rgba(16,23,40,0.06);
+  }
+  .print-btn:disabled{ background:#E7E4F5; color:#B4B9C9; cursor:not-allowed; box-shadow:none; }
 
   .schedule-card{ background:#fff; border-radius:20px; padding:16px; box-shadow:0 4px 14px rgba(16,23,40,0.06); overflow-x:auto; position:relative; z-index:1; }
   .schedule-table{ width:100%; border-collapse:collapse; min-width:600px; }
@@ -198,8 +204,12 @@
       <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
     </div>
 
-    <div class="section-select-wrap">
-      <select id="sch-section-select"><option value="">اختر الفصل</option></select>
+    <div class="section-select-wrap" style="display:flex; gap:10px; align-items:stretch;">
+      <select id="sch-section-select" style="flex:1;"><option value="">اختر الفصل</option></select>
+      <button id="sch-print-btn" class="print-btn" disabled title="طباعة الجدول">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+        <span>طباعة</span>
+      </button>
     </div>
 
     <div id="sch-table-container"></div>
@@ -487,8 +497,10 @@ const SCHEDULE_DAYS = [
   { key: 'thursday', label: 'الخميس' },
 ];
 const SCHEDULE_PERIODS = [1, 2, 3, 4, 5, 6, 7];
+const SCHEDULE_GRADE_LABELS = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
 let schGrade = 'first_intermediate';
 let schSection = null;
+let schCurrentMap = null;
 
 document.getElementById('main-view-tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
@@ -535,6 +547,9 @@ async function refreshScheduleSections() {
 
 async function loadScheduleTable() {
   const container = document.getElementById('sch-table-container');
+  const printBtn = document.getElementById('sch-print-btn');
+  schCurrentMap = null;
+  printBtn.disabled = true;
   if (!schSection) { container.innerHTML = ''; return; }
   container.innerHTML = '<div class="empty-state"><p>جارٍ التحميل...</p></div>';
 
@@ -544,6 +559,8 @@ async function loadScheduleTable() {
 
   const map = {};
   (data || []).forEach(r => { map[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
+  schCurrentMap = map;
+  printBtn.disabled = (data || []).length === 0;
 
   const rowsHtml = SCHEDULE_DAYS.map(d => `
     <tr>
@@ -570,6 +587,74 @@ async function loadScheduleTable() {
       </table>
     </div>`;
 }
+
+/* ---------- طباعة الجدول الدراسي ---------- */
+const SCHEDULE_PRINT_STYLES = `
+  @page{ size: A4 landscape; margin: 12mm; }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{ font-family:'IBM Plex Sans Arabic', Arial, sans-serif; margin:0; padding:0; color:#101728; }
+  .print-header{ display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #0F2447; padding-bottom:10px; margin-bottom:14px; }
+  .print-header img{ height:52px; }
+  .print-header .title{ text-align:center; flex:1; }
+  .print-header h1{ font-size:19px; margin:0 0 4px; color:#0F2447; }
+  .print-header p{ font-size:13px; margin:0; color:#5C6478; font-weight:600; }
+  .print-header .date{ font-size:11px; color:#5C6478; text-align:left; white-space:nowrap; }
+  table{ width:100%; border-collapse:collapse; }
+  th, td{ border:1px solid #C7CBD8; padding:8px 4px; text-align:center; font-size:12px; }
+  th{ background:#0F2447 !important; color:#fff !important; font-size:12.5px; font-weight:700; }
+  td.period-cell{ font-weight:800; font-size:12px; background:#F4F3FB !important; width:60px; white-space:nowrap; }
+  td .subj{ font-weight:700; font-size:12.5px; }
+  td .teacher{ font-size:10px; color:#5C6478; margin-top:2px; }
+  td.empty-cell{ color:#C7CBD8; }
+  .print-footer{ margin-top:16px; font-size:10.5px; color:#8890A0; text-align:center; }
+`;
+
+function buildSchedulePrintHtml() {
+  const gradeLabel = SCHEDULE_GRADE_LABELS[schGrade] || '';
+  const rows = SCHEDULE_DAYS.map(d => `
+    <tr>
+      <td class="period-cell">${d.label}</td>
+      ${SCHEDULE_PERIODS.map(p => {
+        const cell = schCurrentMap ? schCurrentMap[d.key + '-' + p] : null;
+        const subj = cell ? cell.subject : '';
+        const teacher = cell ? cell.teacher : '';
+        if (!subj) return `<td class="empty-cell">-</td>`;
+        return `<td><div class="subj">${subj}</div>${teacher ? `<div class="teacher">${teacher}</div>` : ''}</td>`;
+      }).join('')}
+    </tr>`).join('');
+
+  const printDate = new Date().toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  return `
+    <div class="print-header">
+      <img src="${document.getElementById('hero-logo').src}" />
+      <div class="title">
+        <h1>الجدول الدراسي</h1>
+        <p>مدرسة المروج — ${gradeLabel} — الفصل ${schSection}</p>
+      </div>
+      <div class="date">تاريخ الطباعة<br>${printDate}</div>
+    </div>
+    <table>
+      <thead>
+        <tr><th></th>${SCHEDULE_PERIODS.map(p => `<th>الحصة ${p}</th>`).join('')}</tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="print-footer">مدرسة المروج — نظام إدارة المدرسة</p>`;
+}
+
+document.getElementById('sch-print-btn').addEventListener('click', () => {
+  if (!schCurrentMap) return;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(`<html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>الجدول الدراسي</title>
+    <style>${SCHEDULE_PRINT_STYLES}</style></head><body>${buildSchedulePrintHtml()}</body></html>`);
+  win.document.close();
+  const img = win.document.querySelector('.print-header img');
+  const doPrint = () => { win.focus(); win.print(); };
+  if (!img || img.complete) doPrint();
+  else { img.onload = doPrint; img.onerror = doPrint; }
+});
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
