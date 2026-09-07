@@ -410,7 +410,7 @@ async function loadPlans() {
   }
 
   const { data: plans, error } = await sb.from('weekly_plans')
-    .select('lessons, performance_tasks, homework, has_test, test_sections, subjects(name)')
+    .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections, subjects(name)')
     .eq('grade_level', currentGrade).eq('week_number', currentWeek);
 
   const bentoContainer = document.getElementById('bento-container');
@@ -440,7 +440,7 @@ async function loadPlans() {
     return (sections && sections.length > 0) ? ` (الفصل ${sections.join('، الفصل ')})` : ' (كل الفصول)';
   }
   const testSubjects = plans.filter(p => p.has_test).map(p => p.subjects ? p.subjects.name + testSectionsLabel(p.test_sections) : '').filter(Boolean);
-  const homeworkCount = plans.filter(p => p.homework && p.homework.trim() !== '' && p.homework.trim() !== '-').length;
+  const homeworkCount = plans.filter(p => !p.no_homework && p.homework && p.homework.trim() !== '' && p.homework.trim() !== '-').length;
 
   bentoContainer.innerHTML = `
     <div class="bento">
@@ -483,7 +483,7 @@ async function loadPlans() {
       <div class="body">
         <div class="row"><b>الدرس:</b>${lessonsHtml}</div>
         <div class="row"><b>المهام:</b><span>${p.performance_tasks || '-'}</span></div>
-        <div class="row"><b>الواجب:</b><span>${p.homework || '-'}</span></div>
+        <div class="row"><b>الواجب:</b><span>${p.no_homework ? 'لا يوجد واجب' : (p.homework || '-')}</span></div>
         ${p.has_test ? `<div class="row"><b>الاختبار:</b><span>${testSectionsLabel(p.test_sections).trim().replace(/^\(|\)$/g, '')}</span></div>` : ''}
       </div>`;
     container.appendChild(card);
