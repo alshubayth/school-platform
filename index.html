@@ -159,10 +159,14 @@
         <span class="text-action-btn" id="weekly-add-lesson-btn" style="display:inline-block; margin-bottom:14px;">+ إضافة درس</span>
         <textarea id="weekly-tasks" placeholder="المهام الأدائية" rows="2"></textarea>
         <textarea id="weekly-homework" placeholder="الواجبات المطلوبة" rows="2"></textarea>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:14px; cursor:pointer;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:10px; cursor:pointer;">
           <input type="checkbox" id="weekly-has-test" style="width:auto; margin:0;" />
           يوجد اختبار هذا الأسبوع لهذه المادة
         </label>
+        <div id="weekly-test-sections-wrap" class="hidden" style="background:#fff; border:1px solid #ECEAE1; border-radius:10px; padding:10px 12px; margin-bottom:14px;">
+          <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول اللي عليها الاختبار (لو المادة تُدرّس بأكثر من فصل بمعلمين مختلفين). اتركها كلها فاضية = الاختبار على كل الفصول.</p>
+          <div id="weekly-test-sections-list" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
+        </div>
         <div class="error-msg" id="weekly-error"></div>
         <button class="btn-primary" id="weekly-submit">حفظ خطة المادة</button>
         <div id="weekly-submit-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13.5px; font-weight:600; margin-top:10px;"></div>
