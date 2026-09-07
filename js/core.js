@@ -55,6 +55,7 @@ const icons = {
   followups: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="7" r="3.2"/><path d="M3.5 20c1.2-3.6 4-5.3 5.5-5.3s4.3 1.7 5.5 5.3"/><path d="M16 5h5M16 9h5M15 13.5h6M15 17.5h6"/></svg>',
   budget: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v2M12 20v2"/><circle cx="12" cy="12" r="9"/><path d="M15 9.5c0-1.4-1.3-2.5-3-2.5s-3 1.1-3 2.5S10.3 12 12 12s3 1.1 3 2.5-1.3 2.5-3 2.5-3-1.1-3-2.5"/></svg>',
   visits: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M9 3h6v4H9z"/><path d="m14 9 6-6M17 3h3v3"/><path d="M7 13h6M7 17h4"/></svg>',
+  substitutes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h13l-3-3"/><path d="M20 17H7l3 3"/></svg>',
 };
 
 export const tiles = [
@@ -71,6 +72,7 @@ export const tiles = [
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy' },
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green' },
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal' },
+  { key: 'substitutes', icon: icons.substitutes, title: 'بدلاء اليوم', desc: 'تعويض غياب المعلمين وتبديل الحصص', roles: ['admin','deputy','teacher'], color: 'diamond-gold' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold' },
 ];
 
@@ -262,6 +264,7 @@ export function hideAllModules() {
   document.getElementById('followups-module').classList.add('hidden');
   document.getElementById('budget-module').classList.add('hidden');
   document.getElementById('visits-module').classList.add('hidden');
+  document.getElementById('substitutes-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -332,6 +335,10 @@ export async function openTile(key, title) {
     document.getElementById('visits-module').classList.remove('hidden');
     const { loadClassroomVisitsModule } = await import('./classroom-visits.js');
     loadClassroomVisitsModule();
+  } else if (key === 'substitutes') {
+    document.getElementById('substitutes-module').classList.remove('hidden');
+    const { loadSubstitutionsModule } = await import('./substitutions.js');
+    loadSubstitutionsModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
