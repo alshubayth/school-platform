@@ -36,11 +36,12 @@ export async function loadBudgetModule() {
   const isAdmin = currentProfile.role === 'admin';
   const level = accessLevel();
   const hasFull = level === 'full';
-  const hasAny = level === 'full' || level === 'request_only';
+  // أي موظف (مدير/وكيل/معلم) يقدر يقدّم طلب صرف - باسمه هو فقط ما لم يكن عنده صلاحية فعلية من المدير
+  const canPickAnyone = level === 'full' || level === 'request_only';
 
   document.getElementById('budget-perms-section').classList.toggle('hidden', !isAdmin);
   document.getElementById('budget-dashboard-section').classList.toggle('hidden', !hasFull);
-  document.getElementById('budget-expense-form-section').classList.toggle('hidden', !hasAny);
+  document.getElementById('budget-expense-form-section').classList.remove('hidden');
   document.getElementById('budget-expenses-title').textContent = hasFull ? 'طلبات وحركات الصرف' : 'طلباتي';
 
   document.getElementById('budget-exp-date').value = todayIso();
@@ -49,12 +50,12 @@ export async function loadBudgetModule() {
   resetExpenseForm();
 
   await loadCategories();
-  if (hasAny) await loadBeneficiaries();
+  await loadBeneficiaries(canPickAnyone);
 
   if (isAdmin) await loadPermsSection();
   if (hasFull) await loadShareSection();
   if (hasFull) await loadDashboard();
-  if (hasAny) await loadExpensesList(hasFull);
+  await loadExpensesList(hasFull);
 }
 
 document.getElementById('budget-semester-filter').addEventListener('change', () => {
@@ -62,9 +63,19 @@ document.getElementById('budget-semester-filter').addEventListener('change', () 
 });
 
 /* ---------- قائمة الموظفين لحقل "يُصرف لـ" ---------- */
-async function loadBeneficiaries() {
+// صاحب صلاحية فعلية (كاملة أو طلبات فقط) يقدر يختار أي موظف. غيره (أي موظف عادي بدون صلاحية) يقدّم
+// الطلب باسمه هو فقط - الحقل يتثبّت على اسمه ويصير غير قابل للتعديل (مطابقة لسياسة قاعدة البيانات).
+async function loadBeneficiaries(canPickAnyone) {
   const sel = document.getElementById('budget-exp-beneficiary');
   if (!sel) return;
+  if (!canPickAnyone) {
+    const myName = currentProfile.full_name || '';
+    sel.innerHTML = `<option value="${esc(myName)}">${esc(myName)}</option>`;
+    sel.value = myName;
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = false;
   const { data } = await sb.from('profiles').select('id, full_name').in('role', BENEFICIARY_ROLES).order('full_name');
   const employees = data || [];
   sel.innerHTML = '<option value="">يُصرف لـ (اختر الموظف)...</option>' +
@@ -331,7 +342,9 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
   if (itemsError) { errEl.textContent = 'تعذر حفظ الفواتير: ' + itemsError.message; errEl.style.display = 'block'; return; }
 
   resetExpenseForm();
-  await loadExpensesList(accessLevel() === 'full');
+  const level = accessLevel();
+  await loadBeneficiaries(level === 'full' || level === 'request_only');
+  await loadExpensesList(level === 'full');
 });
 
 /* ---------- قائمة طلبات/حركات الصرف ---------- */
