@@ -896,6 +896,66 @@
       <div id="cv-container"></div>
     </div>
 
+    <div id="substitutes-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-15">→ رجوع للرئيسية</span>
+
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
+        <label style="font-size:12px; color:var(--slate); margin:0;">التاريخ</label>
+        <input type="date" id="sub-date" style="margin:0; width:auto;" />
+      </div>
+
+      <div id="sub-admin-panel" class="hidden">
+        <div class="form-card">
+          <h4 style="margin-bottom:2px;">غياب اليوم</h4>
+          <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">أضف اسم كل معلم غايب بهذا التاريخ، وراح تطلع لك حصصه تلقائيًا لتعيين بديل لكل واحدة</p>
+          <div class="form-row" style="grid-template-columns:1fr auto;">
+            <select id="sub-absence-teacher-select"></select>
+            <button type="button" class="btn-primary" id="sub-absence-add-btn" style="width:auto; padding:9px 18px;">+ إضافة</button>
+          </div>
+          <div class="error-msg" id="sub-absence-error"></div>
+          <div id="sub-absence-list" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;"></div>
+        </div>
+
+        <div id="sub-coverage-wrap" class="hidden" style="margin-top:16px;">
+          <h4 style="font-size:13.5px; margin:0 0 10px;">تعيين بديل لكل حصة</h4>
+          <div id="sub-coverage-list"></div>
+        </div>
+
+        <div class="form-card" style="margin-top:16px; background:var(--sand);">
+          <h4 style="margin-bottom:2px;">تبديل حصتين لنفس الفصل</h4>
+          <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">يبدّل الحصتين مع بعض (المادة والمعلم) بنفس الفصل واليوم — يفيدك لما تبي تحط حصة البديل بمكان مختلف</p>
+          <div class="form-row">
+            <select id="sub-swap-grade">
+              <option value="first_intermediate">أول متوسط</option>
+              <option value="second_intermediate">ثاني متوسط</option>
+              <option value="third_intermediate">ثالث متوسط</option>
+            </select>
+            <select id="sub-swap-section"></select>
+          </div>
+          <div class="form-row">
+            <select id="sub-swap-period-a">
+              <option value="">الحصة الأولى...</option>
+              <option value="1">الحصة 1</option><option value="2">الحصة 2</option><option value="3">الحصة 3</option>
+              <option value="4">الحصة 4</option><option value="5">الحصة 5</option><option value="6">الحصة 6</option><option value="7">الحصة 7</option>
+            </select>
+            <select id="sub-swap-period-b">
+              <option value="">الحصة الثانية...</option>
+              <option value="1">الحصة 1</option><option value="2">الحصة 2</option><option value="3">الحصة 3</option>
+              <option value="4">الحصة 4</option><option value="5">الحصة 5</option><option value="6">الحصة 6</option><option value="7">الحصة 7</option>
+            </select>
+          </div>
+          <button type="button" class="btn-primary" id="sub-swap-btn" style="width:auto; padding:9px 16px;">تبديل</button>
+          <div class="error-msg" id="sub-swap-error"></div>
+          <div id="sub-swap-success" style="display:none; margin-top:8px; color:var(--teal); font-weight:700; font-size:13px;">تم التبديل بنجاح</div>
+        </div>
+      </div>
+
+      <div style="margin-top:22px;">
+        <h4 style="margin-bottom:10px;">بدلاء اليوم</h4>
+        <div id="sub-today-list"></div>
+      </div>
+    </div>
+
     <div id="placeholder-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-2">→ رجوع للرئيسية</span>
       <div class="placeholder">
