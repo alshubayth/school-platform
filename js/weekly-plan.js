@@ -66,6 +66,42 @@ function collectLessons() {
 
 document.getElementById('weekly-add-lesson-btn').addEventListener('click', () => addLessonRow(''));
 
+/* ===== تحديد الفصول اللي عليها الاختبار (لو المادة تُدرّس بأكثر من فصل بمعلمين مختلفين) ===== */
+const sectionsCacheByGrade = {};
+async function getSectionsForGrade(grade) {
+  if (sectionsCacheByGrade[grade]) return sectionsCacheByGrade[grade];
+  const { data } = await sb.from('students').select('class_section').eq('grade_level', grade);
+  let sections = [...new Set((data || []).map(s => s.class_section).filter(n => n > 0))].sort((a, b) => a - b);
+  if (sections.length === 0) sections = [1, 2, 3, 4, 5, 6, 7, 8];
+  sectionsCacheByGrade[grade] = sections;
+  return sections;
+}
+
+async function renderTestSectionsPicker(container, grade, selected) {
+  const sections = await getSectionsForGrade(grade);
+  container.innerHTML = sections.map(n => `
+    <label style="display:flex; align-items:center; gap:5px; font-size:12.5px;">
+      <input type="checkbox" class="test-section-check" value="${n}" style="width:auto;" ${selected && selected.includes(n) ? 'checked' : ''} />
+      الفصل ${n}
+    </label>`).join('');
+}
+function collectTestSections(container) {
+  const checked = Array.from(container.querySelectorAll('.test-section-check:checked')).map(c => parseInt(c.value));
+  return checked.length > 0 ? checked : null; // فاضية = كل الفصول
+}
+function formatTestSections(sections) {
+  return (sections && sections.length > 0) ? 'الفصول: ' + sections.map(n => 'الفصل ' + n).join('، ') : 'كل الفصول';
+}
+
+document.getElementById('weekly-has-test').addEventListener('change', async (e) => {
+  const wrap = document.getElementById('weekly-test-sections-wrap');
+  wrap.classList.toggle('hidden', !e.target.checked);
+  if (e.target.checked) {
+    const grade = document.getElementById('weekly-grade').value;
+    await renderTestSectionsPicker(document.getElementById('weekly-test-sections-list'), grade, null);
+  }
+});
+
 /* تحميل خطة المعلم الحالية (إن وُجدت) للمادة/المرحلة/الأسبوع المحددين، للتعديل بدل الإدخال من الصفر */
 async function loadFormForCurrentSelection() {
   if (currentProfile.role !== 'teacher') return;
@@ -75,20 +111,24 @@ async function loadFormForCurrentSelection() {
   if (!subjectId || !grade) { renderLessonInputs(['']); return; }
 
   const { data: existing } = await sb.from('weekly_plans')
-    .select('lessons, performance_tasks, homework, has_test')
+    .select('lessons, performance_tasks, homework, has_test, test_sections')
     .eq('subject_id', subjectId).eq('grade_level', grade).eq('week_number', currentWeek).maybeSingle();
 
+  const testWrap = document.getElementById('weekly-test-sections-wrap');
   if (existing) {
     renderLessonInputs(existing.lessons || []);
     document.getElementById('weekly-tasks').value = existing.performance_tasks || '';
     document.getElementById('weekly-homework').value = existing.homework || '';
     document.getElementById('weekly-has-test').checked = !!existing.has_test;
+    testWrap.classList.toggle('hidden', !existing.has_test);
+    if (existing.has_test) await renderTestSectionsPicker(document.getElementById('weekly-test-sections-list'), grade, existing.test_sections);
     titleEl.textContent = 'تحديث خطة المادة لهذا الأسبوع';
   } else {
     renderLessonInputs(['']);
     document.getElementById('weekly-tasks').value = '';
     document.getElementById('weekly-homework').value = '';
     document.getElementById('weekly-has-test').checked = false;
+    testWrap.classList.add('hidden');
     titleEl.textContent = 'إضافة خطة المادة لهذا الأسبوع';
   }
 }
@@ -163,7 +203,14 @@ document.getElementById('weekly-admin-note-save').addEventListener('click', asyn
 
 document.getElementById('week-prev').addEventListener('click', () => { if (currentWeek > 1) { currentWeek--; loadWeeklyModule(); } });
 document.getElementById('week-next').addEventListener('click', () => { if (currentWeek < 40) { currentWeek++; loadWeeklyModule(); } });
-document.getElementById('weekly-grade').addEventListener('change', () => { refreshWeeklyList(); if (isAdminOrDeputy()) loadWeeklyAdminNote(); });
+document.getElementById('weekly-grade').addEventListener('change', async () => {
+  refreshWeeklyList();
+  if (isAdminOrDeputy()) loadWeeklyAdminNote();
+  const testWrap = document.getElementById('weekly-test-sections-wrap');
+  if (!testWrap.classList.contains('hidden')) {
+    await renderTestSectionsPicker(document.getElementById('weekly-test-sections-list'), document.getElementById('weekly-grade').value, null);
+  }
+});
 
 document.getElementById('weekly-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('weekly-error');
@@ -172,6 +219,7 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
   errEl.style.display = 'none';
 
   const { data: userData } = await sb.auth.getUser();
+  const hasTest = document.getElementById('weekly-has-test').checked;
   const payload = {
     subject_id: document.getElementById('weekly-subject').value,
     grade_level: document.getElementById('weekly-grade').value,
@@ -179,7 +227,8 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
     lessons: lessons,
     performance_tasks: document.getElementById('weekly-tasks').value.trim(),
     homework: document.getElementById('weekly-homework').value.trim(),
-    has_test: document.getElementById('weekly-has-test').checked,
+    has_test: hasTest,
+    test_sections: hasTest ? collectTestSections(document.getElementById('weekly-test-sections-list')) : null,
     created_by: userData.user.id,
   };
 
@@ -199,6 +248,7 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
   document.getElementById('weekly-tasks').value = '';
   document.getElementById('weekly-homework').value = '';
   document.getElementById('weekly-has-test').checked = false;
+  document.getElementById('weekly-test-sections-wrap').classList.add('hidden');
   await loadFormForCurrentSelection();
   await refreshWeeklyList();
 
@@ -211,7 +261,7 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
 async function refreshWeeklyList() {
   const grade = document.getElementById('weekly-grade').value;
   const { data: plans } = await sb.from('weekly_plans')
-    .select('id, lessons, performance_tasks, homework, has_test, subjects(name)')
+    .select('id, grade_level, lessons, performance_tasks, homework, has_test, test_sections, subjects(name)')
     .eq('grade_level', grade).eq('week_number', currentWeek);
 
   const list = document.getElementById('weekly-list');
@@ -232,7 +282,9 @@ async function refreshWeeklyList() {
 }
 
 function renderPlanViewMode(card, p) {
-  const testBadge = p.has_test ? '<span style="font-size:11.5px; background:var(--danger-light); color:var(--danger); padding:3px 10px; border-radius:20px; font-weight:600; margin-right:8px;">يوجد اختبار</span>' : '';
+  const testBadge = p.has_test
+    ? `<span style="font-size:11.5px; background:var(--danger-light); color:var(--danger); padding:3px 10px; border-radius:20px; font-weight:600; margin-right:8px;">يوجد اختبار — ${formatTestSections(p.test_sections)}</span>`
+    : '';
   const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [];
   const lessonsHtml = lessonsList.length > 1
     ? '<ul style="margin:4px 0 6px; padding-right:18px;">' + lessonsList.map(l => `<li>${l}</li>`).join('') + '</ul>'
@@ -274,13 +326,25 @@ function renderPlanEditMode(card, p) {
     <span class="text-action-btn edit-add-lesson-btn" style="display:inline-block; margin-bottom:14px;">+ إضافة درس</span>
     <textarea class="edit-tasks" rows="2" placeholder="المهام الأدائية">${p.performance_tasks || ''}</textarea>
     <textarea class="edit-homework" rows="2" placeholder="الواجبات">${p.homework || ''}</textarea>
-    <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:14px; cursor:pointer;">
+    <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:10px; cursor:pointer;">
       <input type="checkbox" class="edit-has-test" ${p.has_test ? 'checked' : ''} style="width:auto; margin:0;" />
       يوجد اختبار هذا الأسبوع لهذه المادة
     </label>
+    <div class="edit-test-sections-wrap ${p.has_test ? '' : 'hidden'}" style="background:var(--sand); border-radius:10px; padding:10px 12px; margin-bottom:14px;">
+      <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول اللي عليها الاختبار. اتركها كلها فاضية = الاختبار على كل الفصول.</p>
+      <div class="edit-test-sections-list" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
+    </div>
     <div class="error-msg edit-error"></div>
     <button class="btn-primary edit-save-btn" style="width:auto; padding:10px 18px;">حفظ التعديل</button>
     <span class="text-action-btn edit-cancel-btn" style="margin-right:10px;">إلغاء</span>`;
+
+  const testWrap = card.querySelector('.edit-test-sections-wrap');
+  const testList = card.querySelector('.edit-test-sections-list');
+  if (p.has_test) renderTestSectionsPicker(testList, p.grade_level, p.test_sections);
+  card.querySelector('.edit-has-test').addEventListener('change', async (e) => {
+    testWrap.classList.toggle('hidden', !e.target.checked);
+    if (e.target.checked) await renderTestSectionsPicker(testList, p.grade_level, p.test_sections);
+  });
 
   const lessonsContainer = card.querySelector('.edit-lessons-container');
   function addRow(value = '') {
@@ -305,11 +369,13 @@ function renderPlanEditMode(card, p) {
     const lessons = Array.from(card.querySelectorAll('.edit-lesson-input')).map(t => t.value.trim()).filter(v => v.length > 0);
     if (lessons.length === 0) { errEl.textContent = 'اكتب درس واحد على الأقل'; errEl.style.display = 'block'; return; }
 
+    const editHasTest = card.querySelector('.edit-has-test').checked;
     const payload = {
       lessons,
       performance_tasks: card.querySelector('.edit-tasks').value.trim(),
       homework: card.querySelector('.edit-homework').value.trim(),
-      has_test: card.querySelector('.edit-has-test').checked,
+      has_test: editHasTest,
+      test_sections: editHasTest ? collectTestSections(testList) : null,
     };
     const { error } = await sb.from('weekly_plans').update(payload).eq('id', p.id);
     if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
