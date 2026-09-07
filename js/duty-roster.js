@@ -1,4 +1,5 @@
 import { sb, currentUserId, currentProfile, roleLabels, isAdminOrDeputy, backToTiles, setupCollapsible } from './core.js';
+import { loadXLSX } from './lib-loader.js';
 
 const dayLabels = { sunday: 'الأحد', monday: 'الاثنين', tuesday: 'الثلاثاء', wednesday: 'الأربعاء', thursday: 'الخميس' };
 const dayOrder = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
@@ -213,7 +214,8 @@ const IMPORT_DAY_COLS = [
   { key: 'thursday', label: 'الخميس' },
 ];
 
-document.getElementById('duty-template-btn').addEventListener('click', () => {
+document.getElementById('duty-template-btn').addEventListener('click', async () => {
+  await loadXLSX();
   const header = ['اسم الموظف', 'المناوبة الرئيسية', 'التفصيل (الموقع أو الحصة)', 'نوع الجدولة (ثابت / متغيّر)', ...IMPORT_DAY_COLS.map(d => d.label)];
   const sample1 = ['مثال: اسم المعلم هنا', 'مناوبة الصباح', 'حافلات', 'ثابت', '✓', '✓', '✓', '✓', '✓'];
   const sample2 = ['مثال: اسم المعلم هنا', 'مناوبة الفسحة', 'نقطة بيع', 'متغيّر', '✓', '', '✓', '', ''];
@@ -255,6 +257,7 @@ document.getElementById('duty-import-btn').addEventListener('click', async () =>
   const file = fileInput.files[0];
   if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
 
+  await loadXLSX();
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
