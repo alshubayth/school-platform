@@ -1,5 +1,6 @@
 import { sb, SUPABASE_URL, currentUserId, roleLabels, gradeLabels,
          isAdminOrDeputy, toLoginEmail, STAFF_ID_DOMAIN, setupCollapsible } from './core.js';
+import { loadXLSX } from './lib-loader.js';
 
 /* ================= بوابة الموظفين ================= */
 export async function loadPortalModule() {
@@ -11,7 +12,8 @@ export async function loadPortalModule() {
 setupCollapsible('portal-bulk-toggle', 'portal-bulk-body', 'portal-bulk-chevron');
 
 /* ---------- تنزيل نموذج إكسل لإنشاء حسابات متعددة ---------- */
-document.getElementById('portal-download-template').addEventListener('click', () => {
+document.getElementById('portal-download-template').addEventListener('click', async () => {
+  await loadXLSX();
   const headers = ['الاسم الكامل', 'البريد الإلكتروني أو الرقم الوظيفي', 'كلمة المرور', 'الدور'];
   const example = ['محمد سالم العتيبي', '10234 (أو mohammed.example@school.com)', 'Passw0rd123', 'معلم'];
   const note = ['الدور: اكتب بالضبط أحد هذه الخيارات → معلم / وكيل / مدير (افتراضيًا معلم لو تُرك فاضي). العمود الثاني يقبل رقم وظيفي بدون @ أو إيميل حقيقي.', '', '', ''];
@@ -35,6 +37,7 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
     return;
   }
 
+  await loadXLSX();
   const roleTextMap = { 'معلم': 'teacher', 'وكيل': 'deputy', 'مدير': 'admin' };
   const uploadBtn = document.getElementById('portal-excel-upload');
   const file = fileInput.files[0];
