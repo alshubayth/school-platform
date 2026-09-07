@@ -27,7 +27,7 @@
     <p>منصة إدارة متكاملة لكل خدمات المدرسة — من متابعة الأداء إلى الخطة التشغيلية، في مكان واحد.</p>
   </div>
   <div class="login-panel">
-    <div class="login-card">
+    <div class="login-card" id="login-card">
       <h2>تسجيل الدخول</h2>
       <p class="sub">أدخل بياناتك للمتابعة إلى لوحتك</p>
       <div class="error-msg" id="login-error"></div>
@@ -40,6 +40,35 @@
         <input type="password" id="login-password" placeholder="••••••••" />
       </div>
       <button class="btn-primary" id="login-btn">دخول</button>
+      <p style="text-align:center; margin-top:14px;">
+        <span class="text-action-btn" id="show-reset-link">تغيير كلمة المرور</span>
+      </p>
+    </div>
+    <div class="login-card hidden" id="reset-password-card">
+      <h2>تغيير كلمة المرور</h2>
+      <p class="sub">أدخل بريدك/رقمك الوظيفي وكلمة المرور الحالية، ثم كلمة المرور الجديدة</p>
+      <div class="error-msg" id="reset-error"></div>
+      <div class="success-msg" id="reset-success" style="display:none; background:var(--meadow-light); color:var(--meadow); padding:10px 14px; border-radius:10px; font-size:13.5px; margin-bottom:14px;"></div>
+      <div class="field">
+        <label>البريد الإلكتروني أو الرقم الوظيفي</label>
+        <input type="text" id="reset-email" placeholder="name@example.com أو 12345" />
+      </div>
+      <div class="field">
+        <label>كلمة المرور الحالية</label>
+        <input type="password" id="reset-old-password" placeholder="••••••••" />
+      </div>
+      <div class="field">
+        <label>كلمة المرور الجديدة</label>
+        <input type="password" id="reset-new-password" placeholder="••••••••" />
+      </div>
+      <div class="field">
+        <label>تأكيد كلمة المرور الجديدة</label>
+        <input type="password" id="reset-new-password-confirm" placeholder="••••••••" />
+      </div>
+      <button class="btn-primary" id="reset-submit-btn">تغيير كلمة المرور</button>
+      <p style="text-align:center; margin-top:14px;">
+        <span class="text-action-btn" id="hide-reset-link">رجوع لتسجيل الدخول</span>
+      </p>
     </div>
   </div>
 </div>
