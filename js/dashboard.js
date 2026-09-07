@@ -1,4 +1,83 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels } from './core.js';
+
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
+function classLabel(grade, section) { return `${gradeLabels[grade] || grade} - الفصل ${section}`; }
+
+// جدول اليوم الخاص بالمعلم كما يظهر بصفحته الرئيسية: يقارن جدوله الأصلي بأي تغييرات
+// (تعويض غياب أو تبديل حصص) مسجّلة بـ daily_schedule_changes لنفس التاريخ، ويبرز أي فرق
+async function loadMyTodayScheduleLines(dayKey, dateStr) {
+  const myName = normalizeArText(currentProfile.full_name);
+  const [{ data: baselineRows }, { data: changeRows }] = await Promise.all([
+    sb.from('class_schedules').select('*').eq('day_of_week', dayKey),
+    sb.from('daily_schedule_changes').select('*').eq('change_date', dateStr),
+  ]);
+  const baseline = baselineRows || [];
+  const changes = changeRows || [];
+  const findChange = (r) => changes.find(c => c.grade_level === r.grade_level && c.class_section === r.class_section && c.period_number === r.period_number);
+
+  const myBaseline = baseline.filter(r => normalizeArText(r.teacher_name) === myName);
+  const myEffective = [];
+  baseline.forEach(r => {
+    const change = findChange(r);
+    const effTeacher = normalizeArText(change ? change.teacher_name : r.teacher_name);
+    if (effTeacher === myName) {
+      myEffective.push({
+        period: r.period_number, grade: r.grade_level, section: r.class_section,
+        subject: change ? (change.subject_name || r.subject_name) : r.subject_name,
+        isChange: !!change, note: change ? change.note : null,
+      });
+    }
+  });
+  if (myBaseline.length === 0 && myEffective.length === 0) return null; // ما له جدول تدريس بهذا اليوم أصلًا
+
+  const lostSlots = [];
+  myBaseline.forEach(r => {
+    const change = findChange(r);
+    if (change && normalizeArText(change.teacher_name) !== myName) {
+      lostSlots.push({ period: r.period_number, grade: r.grade_level, section: r.class_section, subject: r.subject_name, newTeacher: change.teacher_name });
+    }
+  });
+
+  const consumed = new Set();
+  const lines = [];
+  lostSlots.forEach(ls => {
+    const moved = myEffective.find(e => e.isChange && e.grade === ls.grade && e.section === ls.section
+      && normalizeArText(e.subject) === normalizeArText(ls.subject) && e.period !== ls.period && !consumed.has(e.period));
+    if (moved) {
+      consumed.add(moved.period);
+      lines.push({ sortKey: Math.min(ls.period, moved.period), highlighted: true,
+        html: `الحصة ${ls.period} — ${esc(classLabel(ls.grade, ls.section))} — ${esc(ls.subject || '-')}: <strong>تبديل إلى الحصة ${moved.period}</strong>` });
+    } else {
+      lines.push({ sortKey: ls.period, highlighted: true,
+        html: `الحصة ${ls.period} — ${esc(classLabel(ls.grade, ls.section))} — ${esc(ls.subject || '-')}: يدرّسها الآن <strong>${esc(ls.newTeacher)}</strong> بدلاً عنك` });
+    }
+  });
+  myEffective.forEach(e => {
+    if (consumed.has(e.period)) return;
+    if (e.isChange) {
+      lines.push({ sortKey: e.period, highlighted: true,
+        html: `الحصة ${e.period} — ${esc(classLabel(e.grade, e.section))}: <strong>${esc(e.subject || 'أشغال')}</strong> — بديل${e.note ? ' (' + esc(e.note) + ')' : ''}` });
+    } else {
+      lines.push({ sortKey: e.period, highlighted: false,
+        html: `الحصة ${e.period} — ${esc(classLabel(e.grade, e.section))} — ${esc(e.subject || '-')}` });
+    }
+  });
+  lines.sort((a, b) => a.sortKey - b.sortKey);
+  return lines;
+}
+
+async function renderMyScheduleWidget(container, dayKey, dateStr) {
+  if (!dayKey) return;
+  const lines = await loadMyTodayScheduleLines(dayKey, dateStr);
+  if (lines === null) return; // ما له حصص بالجدول الدراسي - ما نعرض الودجت
+  const wrap = document.getElementById('dash-my-schedule');
+  if (!wrap) return;
+  const bodyHtml = lines.length === 0
+    ? '<div class="placeholder" style="padding:16px;"><p>ما عندك حصص اليوم</p></div>'
+    : lines.map(l => `<div style="padding:10px 12px; border-radius:8px; margin-bottom:6px; font-size:13px; ${l.highlighted ? 'background:#FDEDEC; color:var(--danger); font-weight:600;' : 'background:#fff; border:1px solid #ECEAE1; color:var(--ink);'}">${l.html}</div>`).join('');
+  wrap.innerHTML = `<p style="font-family:'Tajawal'; font-weight:700; font-size:14px; margin:0 0 10px;">جدولك اليوم</p>${bodyHtml}`;
+}
 
 function renderSectionTilesGrid() {
   const grid = document.getElementById('dash-sections-grid');
@@ -161,7 +240,10 @@ async function renderTeacherDashboard(container) {
     opPlanPendingCount = (myPending || []).length;
   }
 
-  container.innerHTML = `<div id="dash-attention-list"></div>`;
+  container.innerHTML = `<div id="dash-my-schedule" style="margin-bottom:22px;"></div><div id="dash-attention-list"></div>`;
+  const { dayKey, dateStr } = todayInfo();
+  renderMyScheduleWidget(container, dayKey, dateStr);
+
   const list = document.getElementById('dash-attention-list');
   let any = false;
 
