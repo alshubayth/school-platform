@@ -1,5 +1,6 @@
 import { sb, gradeLabels } from './core.js';
 import { SCHEDULE_SUBJECTS, previewInGrid } from './schedule.js';
+import { loadPdfJs } from './lib-loader.js';
 
 /*
  * استيراد جدول الحصص من ملف PDF (بنفس شكل الجدول الرسمي المعتمد من المدرسة - برنامج aSc Timetables).
@@ -235,6 +236,7 @@ async function extractPageItems(page) {
 }
 
 async function parsePdfFile(file) {
+  await loadPdfJs();
   if (!window.pdfjsLib) throw new Error('مكتبة قراءة PDF ما تحمّلت. حدّث الصفحة وجرب مرة ثانية.');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
