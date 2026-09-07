@@ -69,7 +69,7 @@ export const tiles = [
   { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy','teacher'], color: 'diamond-navy' },
   { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple' },
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy' },
-  { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin'], color: 'diamond-green' },
+  { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green' },
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold' },
 ];
@@ -213,12 +213,21 @@ document.getElementById('logout-btn').addEventListener('click', async () => { aw
 sb.auth.getSession().then(({ data }) => { if (data.session) loadProfileAndShowDashboard(data.session.user.id); });
 
 export function isTileAllowed(t) {
-  // ميزانية المدرسة: صلاحية مستقلة عن الدور العام - المدير دايمًا، وأي حد ثاني بس لو المدير أعطاه صلاحية بالقسم
-  if (t.key === 'budget') return currentProfile.role === 'admin' || !!myBudgetAccess;
   if (!t.roles.includes(currentProfile.role)) return false;
   if (t.key === 'plan' && currentProfile.role === 'teacher' && !isOpPlanMember) return false;
   if (t.key === 'tracking' && currentProfile.role === 'teacher' && !hasExamAssignment) return false;
   return true;
+}
+
+// ميزانية المدرسة/طلب صرف فاتورة: العنوان يختلف حسب الصلاحية - المدير وصاحب الصلاحية "الكاملة" يشوفون
+// "ميزانية المدرسة" (اللوحة الكاملة)، وباقي الموظفين يشوفون "طلب صرف فاتورة" (نموذج تقديم طلب باسمهم فقط)
+export function budgetTileTitle() {
+  const isFullBudget = currentProfile.role === 'admin' || myBudgetAccess === 'full';
+  return isFullBudget ? 'ميزانية المدرسة' : 'طلب صرف فاتورة';
+}
+export function budgetTileDesc() {
+  const isFullBudget = currentProfile.role === 'admin' || myBudgetAccess === 'full';
+  return isFullBudget ? 'الإيرادات والمصروفات وطلبات الصرف' : 'تقديم طلب صرف فاتورة باسمك';
 }
 
 export function renderNav(){
@@ -226,10 +235,11 @@ export function renderNav(){
   nav.innerHTML = `<div class="nav-item active" data-key="home">${icons.home}<span>الرئيسية</span></div>`;
   tiles.forEach(t=>{
     if (!isTileAllowed(t)) return;
+    const title = t.key === 'budget' ? budgetTileTitle() : t.title;
     const div = document.createElement('div');
     div.className = 'nav-item';
-    div.innerHTML = `${t.icon}<span>${t.title}</span>`;
-    div.addEventListener('click', ()=>{ setActiveNav(div); openTile(t.key, t.title); });
+    div.innerHTML = `${t.icon}<span>${title}</span>`;
+    div.addEventListener('click', ()=>{ setActiveNav(div); openTile(t.key, title); });
     nav.appendChild(div);
   });
   nav.querySelector('[data-key="home"]').addEventListener('click', (e)=>{ setActiveNav(e.currentTarget); backToTiles(); });
@@ -259,9 +269,11 @@ function renderModuleHeader(key) {
   const header = document.getElementById('module-header');
   const t = tiles.find(x => x.key === key);
   if (!t) { header.classList.add('hidden'); return; }
+  let title = t.title;
   let desc = t.desc;
   if (key === 'duty' && currentProfile.role === 'teacher') desc = 'المناوبة المسندة لي';
-  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div><h2>${t.title}</h2><p>${desc}</p></div>`;
+  if (key === 'budget') { title = budgetTileTitle(); desc = budgetTileDesc(); }
+  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div><h2>${title}</h2><p>${desc}</p></div>`;
   header.classList.remove('hidden');
 }
 
