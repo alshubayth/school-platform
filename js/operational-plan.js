@@ -1,5 +1,6 @@
 import { sb, currentUserId, isAdminOrDeputy, gradeLabels,
          isOpPlanMember, setOpPlanMember, setupCollapsible } from './core.js';
+import { loadXLSX } from './lib-loader.js';
 
 /* ================= الخطة التشغيلية ================= */
 let opPlanWeek = 1;
@@ -284,7 +285,8 @@ document.getElementById('opt-submit').addEventListener('click', async () => {
 });
 
 /* ---------- تنزيل نموذج إكسل فارغ ---------- */
-document.getElementById('opt-download-template').addEventListener('click', () => {
+document.getElementById('opt-download-template').addEventListener('click', async () => {
+  await loadXLSX();
   const headers = ['الهدف العام', 'الهدف التشغيلي', 'البرنامج', 'عنوان المهمة', 'الوصف', 'نوع المدة', 'رقم الأسبوع', 'التكرار'];
   const example = ['(مثال) رفع كفاءة العملية التعليمية', '(مثال) تطوير أداء المعلمين', '(مثال) برنامج التطوير المهني', 'إعداد الجدول الدراسي', 'وصف مختصر للمهمة', 'أسبوع محدد', '3', ''];
   const note = ['نوع المدة: اكتب بالضبط أحد هذه الخيارات → أسبوع محدد / الفصل الأول / الفصل الثاني / طوال العام', '', '', '', '', 'التكرار (لو المدة فصل أو عام): أسبوعي أو يومي — اتركه فاضي إذا أسبوع محدد', '', ''];
@@ -327,6 +329,7 @@ document.getElementById('opt-excel-upload').addEventListener('click', async () =
     return;
   }
 
+  await loadXLSX();
   const file = fileInput.files[0];
   const reader = new FileReader();
 
