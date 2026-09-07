@@ -1,17 +1,7 @@
-import { loadNotesModule } from './evaluation.js';
-import { loadWeeklyTrackingModule } from './weekly-tracking.js';
-import { loadPortalModule, loadPermsModule } from './employees-admin.js';
-import { loadOpPlanModule } from './operational-plan.js';
-import { loadWeeklyModule } from './weekly-plan.js';
-import { loadDutyRosterModule, renderMyDutyBanner } from './duty-roster.js';
 import { renderDashboard } from './dashboard.js';
-import { loadExamsModule } from './exams.js';
-import { loadExamTrackingTile } from './exam-tracking.js';
-import { loadScheduleModule } from './schedule.js';
-import './schedule-pdf.js';
-import { loadStudentFollowupsModule } from './student-followups.js';
-import { loadBudgetModule } from './budget.js';
-import { loadClassroomVisitsModule } from './classroom-visits.js';
+/* باقي وحدات الأقسام تُحمَّل ديناميكيًا (import() عند الحاجة فقط) داخل openTile()
+ * بدل تحميلها كلها مسبقًا عند فتح الصفحة - يقلل حجم التحميل الأولي بشكل كبير
+ * لأن المستخدم غالبًا يفتح قسم أو قسمين بس بكل جلسة. */
 
 export const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
@@ -136,6 +126,7 @@ export async function loadProfileAndShowDashboard(userId) {
   document.getElementById('user-avatar').textContent = (profile.full_name || '؟').trim().charAt(0);
   renderNav();
   renderDashboard();
+  const { renderMyDutyBanner } = await import('./duty-roster.js');
   renderMyDutyBanner();
 }
 
@@ -196,58 +187,72 @@ function renderModuleHeader(key) {
   header.classList.remove('hidden');
 }
 
-export function openTile(key, title) {
+export async function openTile(key, title) {
   hideAllModules();
   renderModuleHeader(key);
   if (key === 'notes') {
     document.getElementById('notes-module').classList.remove('hidden');
+    const { loadNotesModule } = await import('./evaluation.js');
     loadNotesModule();
   } else if (key === 'weekly') {
     document.getElementById('weekly-module').classList.remove('hidden');
+    const { loadWeeklyModule } = await import('./weekly-plan.js');
     loadWeeklyModule();
   } else if (key === 'weekly-tracking') {
     document.getElementById('weekly-tracking-module').classList.remove('hidden');
+    const { loadWeeklyTrackingModule } = await import('./weekly-tracking.js');
     loadWeeklyTrackingModule();
   } else if (key === 'perms') {
     document.getElementById('perms-module').classList.remove('hidden');
+    const { loadPermsModule } = await import('./employees-admin.js');
     loadPermsModule();
   } else if (key === 'portal') {
     document.getElementById('portal-module').classList.remove('hidden');
+    const { loadPortalModule } = await import('./employees-admin.js');
     loadPortalModule();
   } else if (key === 'plan') {
     document.getElementById('opplan-module').classList.remove('hidden');
+    const { loadOpPlanModule } = await import('./operational-plan.js');
     loadOpPlanModule();
   } else if (key === 'duty') {
     document.getElementById('duty-module').classList.remove('hidden');
+    const { loadDutyRosterModule } = await import('./duty-roster.js');
     loadDutyRosterModule();
   } else if (key === 'exams') {
     document.getElementById('exams-module').classList.remove('hidden');
+    const { loadExamsModule } = await import('./exams.js');
     loadExamsModule();
   } else if (key === 'tracking') {
     document.getElementById('exam-tracking-module').classList.remove('hidden');
+    const { loadExamTrackingTile } = await import('./exam-tracking.js');
     loadExamTrackingTile();
   } else if (key === 'schedule') {
     document.getElementById('schedule-module').classList.remove('hidden');
+    const [{ loadScheduleModule }] = await Promise.all([import('./schedule.js'), import('./schedule-pdf.js')]);
     loadScheduleModule();
   } else if (key === 'followups') {
     document.getElementById('followups-module').classList.remove('hidden');
+    const { loadStudentFollowupsModule } = await import('./student-followups.js');
     loadStudentFollowupsModule();
   } else if (key === 'budget') {
     document.getElementById('budget-module').classList.remove('hidden');
+    const { loadBudgetModule } = await import('./budget.js');
     loadBudgetModule();
   } else if (key === 'visits') {
     document.getElementById('visits-module').classList.remove('hidden');
+    const { loadClassroomVisitsModule } = await import('./classroom-visits.js');
     loadClassroomVisitsModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
   }
 }
-export function backToTiles() {
+export async function backToTiles() {
   hideAllModules();
   document.getElementById('module-header').classList.add('hidden');
   document.getElementById('tiles-view').classList.remove('hidden');
   renderDashboard();
+  const { renderMyDutyBanner } = await import('./duty-roster.js');
   renderMyDutyBanner();
 }
 document.getElementById('back-to-tiles').addEventListener('click', backToTiles);
