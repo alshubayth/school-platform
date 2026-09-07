@@ -93,6 +93,84 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   await loadProfileAndShowDashboard(data.user.id);
 });
 
+/* ===== تغيير كلمة المرور من شاشة تسجيل الدخول ===== */
+document.getElementById('show-reset-link').addEventListener('click', () => {
+  document.getElementById('login-card').classList.add('hidden');
+  document.getElementById('reset-password-card').classList.remove('hidden');
+  document.getElementById('reset-error').style.display = 'none';
+  document.getElementById('reset-success').style.display = 'none';
+  document.getElementById('reset-email').value = document.getElementById('login-email').value;
+  document.getElementById('reset-old-password').value = '';
+  document.getElementById('reset-new-password').value = '';
+  document.getElementById('reset-new-password-confirm').value = '';
+});
+document.getElementById('hide-reset-link').addEventListener('click', () => {
+  document.getElementById('reset-password-card').classList.add('hidden');
+  document.getElementById('login-card').classList.remove('hidden');
+});
+
+document.getElementById('reset-submit-btn').addEventListener('click', async () => {
+  const rawInput = document.getElementById('reset-email').value.trim();
+  const oldPassword = document.getElementById('reset-old-password').value;
+  const newPassword = document.getElementById('reset-new-password').value;
+  const newPasswordConfirm = document.getElementById('reset-new-password-confirm').value;
+  const errEl = document.getElementById('reset-error');
+  const successEl = document.getElementById('reset-success');
+  errEl.style.display = 'none';
+  successEl.style.display = 'none';
+
+  if (!rawInput || !oldPassword || !newPassword || !newPasswordConfirm) {
+    errEl.textContent = 'عبّي كل الحقول أولاً';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (newPassword.length < 6) {
+    errEl.textContent = 'كلمة المرور الجديدة لازم تكون 6 أحرف على الأقل';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (newPassword !== newPasswordConfirm) {
+    errEl.textContent = 'كلمة المرور الجديدة وتأكيدها غير متطابقين';
+    errEl.style.display = 'block';
+    return;
+  }
+  if (newPassword === oldPassword) {
+    errEl.textContent = 'كلمة المرور الجديدة لازم تختلف عن الحالية';
+    errEl.style.display = 'block';
+    return;
+  }
+
+  const btn = document.getElementById('reset-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'جاري التحقق...';
+
+  const { data: signInData, error: signInError } = await sb.auth.signInWithPassword({ email: toLoginEmail(rawInput), password: oldPassword });
+  if (signInError) {
+    errEl.textContent = 'كلمة المرور الحالية أو البريد/الرقم الوظيفي غير صحيح';
+    errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = 'تغيير كلمة المرور';
+    return;
+  }
+
+  const { error: updateError } = await sb.auth.updateUser({ password: newPassword });
+  btn.disabled = false;
+  btn.textContent = 'تغيير كلمة المرور';
+  if (updateError) {
+    errEl.textContent = 'تعذر تغيير كلمة المرور: ' + updateError.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  successEl.textContent = 'تم تغيير كلمة المرور بنجاح، جاري الدخول...';
+  successEl.style.display = 'block';
+  setTimeout(async () => {
+    document.getElementById('reset-password-card').classList.add('hidden');
+    document.getElementById('login-card').classList.remove('hidden');
+    await loadProfileAndShowDashboard(signInData.user.id);
+  }, 1200);
+});
+
 export async function loadProfileAndShowDashboard(userId) {
   const { data: profile, error } = await sb.from('profiles').select('full_name, role').eq('id', userId).single();
   if (error || !profile) {
