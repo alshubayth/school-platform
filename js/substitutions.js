@@ -3,7 +3,9 @@
  * بالمنصة (class_schedules) كمصدر أساسي، ويسجل فقط "التغييرات" على تاريخ معيّن بجدول
  * daily_schedule_changes (بدون أي تعديل على الجدول الأصلي) - نفس الجدول يخدم حالتين:
  *   - تعويض غياب معلم: صف واحد يغيّر المعلم فقط ويبقي المادة كما هي
- *   - تبديل حصتين لنفس الفصل: صفّان يتبادلان المادة/المعلم بينهما
+ *   - تبديل حصتين لنفس الفصل: صفّان يتبادلان المادة/المعلم بينهما (تُستخدم أيضًا لـ"نقل"
+ *     حصة معلم غايب لوقت ثاني بنفس الفصل - عشان الفصل ما تضيع عليه حصته)
+ * أي عملية تبديل تتحقق أول من عدم تعارضها مع حصص المعلمين الثانية بنفس الوقت قبل حفظها.
  */
 import { sb, currentUserId, currentProfile, isAdminOrDeputy, gradeLabels, backToTiles } from './core.js';
 
@@ -138,12 +140,83 @@ document.getElementById('sub-absence-add-btn').addEventListener('click', async (
   await refreshForDate();
 });
 
-/* ---------- تعيين بديل لكل حصة ---------- */
+/* ---------- أدوات مشتركة: الوضع الفعلي لأي حصة، التحقق من التعارض، وتنفيذ التبديل ---------- */
+// الوضع الفعلي (بعد أي تغييرات مسجّلة) لحصة معيّنة - المعلم والمادة اللي فعليًا يدرّسونها الآن
+function effectiveAt(grade, section, period) {
+  const base = scheduleCache.find(r => r.grade_level === grade && r.class_section === section && r.period_number === period);
+  if (!base) return null;
+  const override = changesCache.find(c => c.grade_level === grade && c.class_section === section && c.period_number === period);
+  return {
+    teacher: override ? override.teacher_name : base.teacher_name,
+    subject: override ? (override.subject_name || base.subject_name) : base.subject_name,
+  };
+}
+// هل عند هذا المعلم فصل ثاني (غير الفصل المستثنى) مجدول فعليًا بنفس الحصة؟ - تعارض يمنع التبديل
+function findTeacherConflict(teacherName, period, excludeGrade, excludeSection) {
+  const name = normalizeArText(teacherName);
+  for (const r of scheduleCache.filter(x => x.period_number === period)) {
+    if (r.grade_level === excludeGrade && r.class_section === excludeSection) continue;
+    const eff = effectiveAt(r.grade_level, r.class_section, period);
+    if (eff && normalizeArText(eff.teacher) === name) {
+      return { grade: r.grade_level, section: r.class_section, subject: eff.subject };
+    }
+  }
+  return null;
+}
+// يبدّل حصتين لنفس الفصل (المادة والمعلم يتبادلون) بعد التأكد إن ما فيه تعارض على أي معلم منقول
+async function performClassSwap(grade, section, pA, pB) {
+  const dayKey = dayKeyFromDate(subDate);
+  if (!dayKey) return { ok: false, message: 'هذا اليوم إجازة أسبوعية - ما فيه جدول حصص' };
+  if (!pA || !pB || pA === pB) return { ok: false, message: 'اختر حصتين مختلفتين' };
+  const effA = effectiveAt(grade, section, pA);
+  const effB = effectiveAt(grade, section, pB);
+  if (!effA || !effB) return { ok: false, message: 'ما فيه حصة بهذا الفصل بإحدى الحصتين المختارتين حسب الجدول الدراسي' };
+
+  const conflictForA = findTeacherConflict(effB.teacher, pA, grade, section); // effB.teacher راح يصير بالحصة pA
+  const conflictForB = findTeacherConflict(effA.teacher, pB, grade, section); // effA.teacher راح يصير بالحصة pB
+  if (conflictForA || conflictForB) {
+    const parts = [];
+    if (conflictForA) parts.push(`${effB.teacher} عنده أصلاً حصة "${conflictForA.subject || '-'}" بفصل ${classLabel(conflictForA.grade, conflictForA.section)} بالحصة ${pA}`);
+    if (conflictForB) parts.push(`${effA.teacher} عنده أصلاً حصة "${conflictForB.subject || '-'}" بفصل ${classLabel(conflictForB.grade, conflictForB.section)} بالحصة ${pB}`);
+    return { ok: false, message: 'تعارض: ' + parts.join(' — ') + ' — بدّل هذي الحصة أول عشان تكمل' };
+  }
+
+  const rows = [
+    { change_date: subDate, day_of_week: dayKey, grade_level: grade, class_section: section, period_number: pA,
+      teacher_name: effB.teacher, subject_name: effB.subject, reason: 'swap', note: `تبديل مع الحصة ${pB}`, created_by: currentUserId },
+    { change_date: subDate, day_of_week: dayKey, grade_level: grade, class_section: section, period_number: pB,
+      teacher_name: effA.teacher, subject_name: effA.subject, reason: 'swap', note: `تبديل مع الحصة ${pA}`, created_by: currentUserId },
+  ];
+  const { error } = await sb.from('daily_schedule_changes').upsert(rows, { onConflict: 'change_date,grade_level,class_section,period_number' });
+  if (error) return { ok: false, message: 'تعذّر التبديل: ' + error.message };
+  return { ok: true };
+}
+
+/* ---------- تعيين بديل لكل حصة (بنفس الحصة أو بعد نقلها لحصة ثانية) ---------- */
+// كل الحصص اللي لسا معلمها الفعلي (بعد أي تغييرات) هو نفس المعلم الغايب - يعني تحتاج بديل
+function periodsNeedingCoverageFor(absentName) {
+  const name = normalizeArText(absentName);
+  const results = [];
+  for (let period = 1; period <= 7; period++) {
+    scheduleCache.filter(r => r.period_number === period).forEach(r => {
+      const eff = effectiveAt(r.grade_level, r.class_section, period);
+      if (eff && normalizeArText(eff.teacher) === name) {
+        const override = changesCache.find(c => c.grade_level === r.grade_level && c.class_section === r.class_section && c.period_number === period);
+        results.push({
+          grade: r.grade_level, section: r.class_section, period, subject: eff.subject,
+          relocatedNote: override && override.reason === 'swap' ? override.note : null,
+        });
+      }
+    });
+  }
+  return results.sort((a, b) => a.period - b.period);
+}
+
 function availableTeachersAtPeriod(period) {
   const busy = new Set();
   scheduleCache.filter(r => r.period_number === period).forEach(r => {
-    const override = changesCache.find(c => c.grade_level === r.grade_level && c.class_section === r.class_section && c.period_number === period);
-    busy.add(normalizeArText(override ? override.teacher_name : r.teacher_name));
+    const eff = effectiveAt(r.grade_level, r.class_section, period);
+    if (eff) busy.add(normalizeArText(eff.teacher));
   });
   const absentSet = new Set(absencesCache.map(a => normalizeArText(a.teacher_name)));
   return allTeacherNames.filter(n => !busy.has(n) && !absentSet.has(n));
@@ -158,98 +231,86 @@ function renderCoverageList() {
 
   absencesCache.forEach(a => {
     const name = normalizeArText(a.teacher_name);
-    const periods = scheduleCache
-      .filter(r => normalizeArText(r.teacher_name) === name)
-      .sort((x, y) => x.period_number - y.period_number);
+    const periods = periodsNeedingCoverageFor(name);
 
     const card = document.createElement('div');
     card.className = 'form-card';
     card.style.marginBottom = '10px';
     const rowsHtml = periods.length === 0
-      ? '<p style="font-size:12.5px; color:var(--slate);">ما عنده حصص بهذا اليوم حسب الجدول الدراسي</p>'
+      ? '<p style="font-size:12.5px; color:var(--teal);">كل حصص هذا المعلم اليوم معوّضة ✓</p>'
       : periods.map(p => {
-          const existing = changesCache.find(c => c.grade_level === p.grade_level && c.class_section === p.class_section && c.period_number === p.period_number);
-          const label = `الحصة ${p.period_number} — ${esc(classLabel(p.grade_level, p.class_section))} — ${esc(p.subject_name || '-')}`;
-          if (existing) {
-            return `<div class="emp-row" style="align-items:center;">
-              <div class="info" style="font-size:13px;">${label}<br><span style="color:var(--teal); font-weight:700;">البديل: ${esc(existing.teacher_name)}</span></div>
-              <button type="button" class="sub-cancel-cover-btn" data-id="${existing.id}" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:12.5px;">إلغاء</button>
-            </div>`;
-          }
-          const options = availableTeachersAtPeriod(p.period_number);
+          const label = `الحصة ${p.period} — ${esc(classLabel(p.grade, p.section))} — ${esc(p.subject || '-')}`;
+          const options = availableTeachersAtPeriod(p.period);
           const optionsHtml = options.length === 0
             ? '<option value="">لا يوجد معلم متاح بهذي الحصة</option>'
             : '<option value="">اختر البديل...</option>' + options.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
-          return `<div class="emp-row" style="align-items:center; gap:8px;">
-            <div class="info" style="font-size:13px; flex:1;">${label}</div>
-            <select class="sub-cover-select" style="margin:0; width:auto; min-width:160px;"
-              data-grade="${p.grade_level}" data-section="${p.class_section}" data-period="${p.period_number}"
-              data-subject="${esc(p.subject_name || '')}" data-absent="${esc(name)}">${optionsHtml}</select>
-            <button type="button" class="btn-primary sub-assign-btn" style="width:auto; padding:7px 14px;">تعيين</button>
+          const otherPeriods = [1, 2, 3, 4, 5, 6, 7].filter(x => x !== p.period);
+          return `<div class="sub-period-row" data-grade="${p.grade}" data-section="${p.section}" data-period="${p.period}" data-subject="${esc(p.subject || '')}" data-absent="${esc(name)}" style="border-bottom:1px solid #ECEAE1; padding:10px 0;">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <div class="info" style="font-size:13px; flex:1; min-width:220px;">${label}${p.relocatedNote ? `<br><span style="color:var(--slate); font-size:11.5px;">(${esc(p.relocatedNote)})</span>` : ''}</div>
+              <select class="sub-cover-select" style="margin:0; width:auto; min-width:160px;">${optionsHtml}</select>
+              <button type="button" class="btn-primary sub-assign-btn" style="width:auto; padding:7px 14px;">تعيين</button>
+              <button type="button" class="sub-relocate-toggle-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer;">نقل لحصة ثانية بنفس الفصل</button>
+            </div>
+            <div class="sub-relocate-panel hidden" style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <select class="sub-relocate-period" style="margin:0; width:auto;">
+                <option value="">انقلها إلى الحصة...</option>
+                ${otherPeriods.map(x => `<option value="${x}">الحصة ${x}</option>`).join('')}
+              </select>
+              <button type="button" class="btn-primary sub-relocate-confirm-btn" style="width:auto; padding:6px 14px; background:var(--slate);">تأكيد النقل</button>
+              <span class="sub-relocate-error" style="color:var(--danger); font-size:12px;"></span>
+            </div>
           </div>`;
         }).join('');
 
-    card.innerHTML = `<h4 style="margin-bottom:10px;">${esc(a.teacher_name)}</h4>${rowsHtml}`;
+    card.innerHTML = `<h4 style="margin-bottom:6px;">${esc(a.teacher_name)}</h4>${rowsHtml}`;
     list.appendChild(card);
   });
 
-  list.querySelectorAll('.sub-assign-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const sel = btn.previousElementSibling;
+  list.querySelectorAll('.sub-period-row').forEach(rowEl => {
+    rowEl.querySelector('.sub-assign-btn').addEventListener('click', async () => {
+      const sel = rowEl.querySelector('.sub-cover-select');
       const teacherName = sel.value;
       if (!teacherName) return;
       const dayKey = dayKeyFromDate(subDate);
       const { error } = await sb.from('daily_schedule_changes').upsert({
         change_date: subDate, day_of_week: dayKey,
-        grade_level: sel.dataset.grade, class_section: Number(sel.dataset.section), period_number: Number(sel.dataset.period),
-        teacher_name: teacherName, subject_name: sel.dataset.subject || null,
-        reason: 'substitute', note: `بديل عن ${sel.dataset.absent}`, created_by: currentUserId,
+        grade_level: rowEl.dataset.grade, class_section: Number(rowEl.dataset.section), period_number: Number(rowEl.dataset.period),
+        teacher_name: teacherName, subject_name: rowEl.dataset.subject || null,
+        reason: 'substitute', note: `بديل عن ${rowEl.dataset.absent}`, created_by: currentUserId,
       }, { onConflict: 'change_date,grade_level,class_section,period_number' });
       if (!error) await refreshForDate();
     });
-  });
-  list.querySelectorAll('.sub-cancel-cover-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      await sb.from('daily_schedule_changes').delete().eq('id', btn.dataset.id);
+    rowEl.querySelector('.sub-relocate-toggle-btn').addEventListener('click', () => {
+      rowEl.querySelector('.sub-relocate-panel').classList.toggle('hidden');
+    });
+    rowEl.querySelector('.sub-relocate-confirm-btn').addEventListener('click', async () => {
+      const periodSel = rowEl.querySelector('.sub-relocate-period');
+      const errSpan = rowEl.querySelector('.sub-relocate-error');
+      errSpan.textContent = '';
+      const targetPeriod = Number(periodSel.value);
+      if (!targetPeriod) { errSpan.textContent = 'اختر الحصة الهدف'; return; }
+      const result = await performClassSwap(rowEl.dataset.grade, Number(rowEl.dataset.section), Number(rowEl.dataset.period), targetPeriod);
+      if (!result.ok) { errSpan.textContent = result.message; return; }
       await refreshForDate();
     });
   });
 }
 
-/* ---------- تبديل حصتين لنفس الفصل ---------- */
+/* ---------- تبديل حصتين لنفس الفصل (أداة عامة، مو مرتبطة بغياب معيّن) ---------- */
 document.getElementById('sub-swap-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('sub-swap-error');
   const successEl = document.getElementById('sub-swap-success');
   errEl.style.display = 'none';
   successEl.style.display = 'none';
 
-  const dayKey = dayKeyFromDate(subDate);
-  if (!dayKey) { errEl.textContent = 'هذا اليوم إجازة أسبوعية - ما فيه جدول حصص'; errEl.style.display = 'block'; return; }
-
   const grade = document.getElementById('sub-swap-grade').value;
   const section = Number(document.getElementById('sub-swap-section').value);
   const pA = Number(document.getElementById('sub-swap-period-a').value);
   const pB = Number(document.getElementById('sub-swap-period-b').value);
-  if (!pA || !pB) { errEl.textContent = 'اختر الحصتين المراد تبديلهما'; errEl.style.display = 'block'; return; }
-  if (pA === pB) { errEl.textContent = 'اختر حصتين مختلفتين'; errEl.style.display = 'block'; return; }
 
-  const baseA = scheduleCache.find(r => r.grade_level === grade && r.class_section === section && r.period_number === pA);
-  const baseB = scheduleCache.find(r => r.grade_level === grade && r.class_section === section && r.period_number === pB);
-  if (!baseA || !baseB) { errEl.textContent = 'ما فيه حصة بهذا الفصل بإحدى الحصتين المختارتين حسب الجدول الدراسي'; errEl.style.display = 'block'; return; }
-
-  const overrideA = changesCache.find(c => c.grade_level === grade && c.class_section === section && c.period_number === pA);
-  const overrideB = changesCache.find(c => c.grade_level === grade && c.class_section === section && c.period_number === pB);
-  const effA = { teacher: overrideA ? overrideA.teacher_name : baseA.teacher_name, subject: overrideA ? overrideA.subject_name : baseA.subject_name };
-  const effB = { teacher: overrideB ? overrideB.teacher_name : baseB.teacher_name, subject: overrideB ? overrideB.subject_name : baseB.subject_name };
-
-  const rows = [
-    { change_date: subDate, day_of_week: dayKey, grade_level: grade, class_section: section, period_number: pA,
-      teacher_name: effB.teacher, subject_name: effB.subject, reason: 'swap', note: `تبديل مع الحصة ${pB}`, created_by: currentUserId },
-    { change_date: subDate, day_of_week: dayKey, grade_level: grade, class_section: section, period_number: pB,
-      teacher_name: effA.teacher, subject_name: effA.subject, reason: 'swap', note: `تبديل مع الحصة ${pA}`, created_by: currentUserId },
-  ];
-  const { error } = await sb.from('daily_schedule_changes').upsert(rows, { onConflict: 'change_date,grade_level,class_section,period_number' });
-  if (error) { errEl.textContent = 'تعذّر التبديل: ' + error.message; errEl.style.display = 'block'; return; }
+  const result = await performClassSwap(grade, section, pA, pB);
+  if (!result.ok) { errEl.textContent = result.message; errEl.style.display = 'block'; return; }
 
   successEl.style.display = 'block';
   setTimeout(() => { successEl.style.display = 'none'; }, 3000);
@@ -257,6 +318,14 @@ document.getElementById('sub-swap-btn').addEventListener('click', async () => {
 });
 
 /* ---------- بدلاء اليوم (لكل الموظفين) ---------- */
+function findSwapPartner(row) {
+  if (row.reason !== 'swap') return null;
+  const m = /تبديل مع الحصة (\d+)/.exec(row.note || '');
+  if (!m) return null;
+  const period = Number(m[1]);
+  return changesCache.find(c => c.grade_level === row.grade_level && c.class_section === row.class_section && c.period_number === period && c.id !== row.id) || null;
+}
+
 function renderTodayList() {
   const list = document.getElementById('sub-today-list');
   if (!dayKeyFromDate(subDate)) return; // renderNoSchoolDay already handled the message
@@ -264,6 +333,7 @@ function renderTodayList() {
     list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه تغييرات على الجدول بهذا التاريخ</p></div>';
     return;
   }
+  const canManage = isAdminOrDeputy();
   const sorted = changesCache.slice().sort((a, b) => a.period_number - b.period_number);
   list.innerHTML = `<div style="overflow-x:auto;">
     <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
@@ -273,6 +343,7 @@ function renderTodayList() {
         <th style="padding:7px 8px; text-align:right;">المادة</th>
         <th style="padding:7px 8px; text-align:right;">المعلم الحالي</th>
         <th style="padding:7px 8px; text-align:right;">ملاحظة</th>
+        ${canManage ? '<th></th>' : ''}
       </tr></thead>
       <tbody>${sorted.map(c => `
         <tr style="border-bottom:1px solid #ECEAE1;">
@@ -281,7 +352,21 @@ function renderTodayList() {
           <td style="padding:7px 8px;">${esc(c.subject_name || '-')}</td>
           <td style="padding:7px 8px; font-weight:700;">${esc(c.teacher_name)}</td>
           <td style="padding:7px 8px; color:var(--slate);">${esc(c.note || '-')}</td>
+          ${canManage ? `<td style="padding:7px 8px; text-align:center;"><button type="button" class="sub-cancel-change-btn" data-id="${c.id}" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:12px;">إلغاء</button></td>` : ''}
         </tr>`).join('')}</tbody>
     </table>
   </div>`;
+
+  if (canManage) {
+    list.querySelectorAll('.sub-cancel-change-btn').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const row = changesCache.find(c => c.id === btn.dataset.id);
+        if (!row) return;
+        const partner = findSwapPartner(row);
+        await sb.from('daily_schedule_changes').delete().eq('id', row.id);
+        if (partner) await sb.from('daily_schedule_changes').delete().eq('id', partner.id);
+        await refreshForDate();
+      });
+    });
+  }
 }
