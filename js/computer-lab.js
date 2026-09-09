@@ -1,10 +1,11 @@
 /*
- * معمل الحاسب الآلي: معمل واحد بالمدرسة - يجمع طلاب كل الفصول اللي يدرّسها المعلم بمكان
- * واحد، ويوزّعهم على أرقام أجهزة المعمل (تجميعة واحدة، رقم الجهاز فريد على مستوى المعمل
- * كامل مو لكل فصل لحاله). التوزيع يُنشأ أول مرة تلقائيًا (بترتيب إضافة الفصول ثم أبجديًا داخل
- * كل فصل) ويبقى ثابتًا بعدها بجدول lab_seat_assignments - ما يتغيّر عشوائيًا كل مرة، ويقبل
- * تعديل يدوي (تبديل جهازين). لو مجموع الطلاب أكثر من عدد الأجهزة، الزيادة تظهر كتنبيه بدون
- * جهاز بدل ما توزّع أكثر من طالب على نفس الجهاز.
+ * معمل الحاسب الآلي: معمل واحد بالمدرسة بعدد أجهزة ثابت. المهم: فصولك المختلفة ما تكون
+ * بالمعمل بنفس الوقت (كل فصل حصته وحده)، فرقم الجهاز نفسه يُعاد استخدامه بين الفصول - كل
+ * فصل له ترقيمه الخاص من 1 إلى عدد الأجهزة (ثابت، يُحفظ ولا يتغيّر عشوائيًا). يعني جهاز رقم 1
+ * يجلس عليه طالب رقم 1 من ثالث1 وطالب رقم 1 من ثالث2 وطالب رقم 1 من ثالث3... كل وحد بحصته.
+ * الورقة اللي تُلصق على كل جهاز تجمع كل هالأسماء مع بعض (سطر لكل فصل) عشان تصلح لكل الحصص.
+ * لو فصل معيّن عدد طلابه أكثر من عدد الأجهزة، الزيادة (لهذا الفصل بالذات) تظهر كتنبيه بدون
+ * جهاز، بدون ما يأثر على باقي الفصول.
  */
 import { sb, currentUserId, gradeLabels, backToTiles } from './core.js';
 
@@ -115,46 +116,51 @@ function renderClassesChips() {
   });
 }
 
-/* ---------- توزيع الطلاب على أجهزة المعمل (تجميعة واحدة لكل الفصول) ---------- */
-// يجمع طلاب كل الفصول المضافة (بترتيب إضافتها، وأبجديًا داخل كل فصل)، ويضمن كل طالب جديد
-// ياخذ أول رقم جهاز فاضي - بدون ما يغيّر توزيع أي طالب موزّع مسبقًا
-async function ensureSeating() {
-  const allStudents = []; // بترتيب: الفصول حسب تاريخ إضافتها، وداخل كل فصل أبجديًا
-  for (const lc of classesCache) {
-    const { data } = await sb.from('students').select('id, full_name')
-      .eq('grade_level', lc.grade_level).eq('class_section', lc.class_section).order('full_name');
-    (data || []).forEach(s => allStudents.push({ ...s, lab_class_id: lc.id, grade_level: lc.grade_level, class_section: lc.class_section }));
-  }
+/* ---------- توزيع طلاب فصل واحد على أرقام الأجهزة (ترقيم خاص بكل فصل لحاله) ---------- */
+// كل فصل له ترقيمه المستقل من 1 إلى عدد الأجهزة (نفس الأرقام تتكرر بين الفصول لأنها ما
+// تتزامن أبدًا بنفس الوقت بالمعمل). يضمن كل طالب جديد ياخذ أول رقم فاضي *داخل فصله* فقط،
+// بدون ما يغيّر توزيع أي طالب موزّع مسبقًا (لا بفصله ولا بأي فصل ثاني).
+async function ensureSeatingForClass(lc) {
+  const { data: rosterData } = await sb.from('students').select('id, full_name')
+    .eq('grade_level', lc.grade_level).eq('class_section', lc.class_section).order('full_name');
+  const roster = rosterData || [];
+  const rosterIds = new Set(roster.map(s => s.id));
 
-  const validIds = new Set(allStudents.map(s => s.id));
-  const { data: rawSeats } = await sb.from('lab_seat_assignments').select('*').eq('teacher_id', currentUserId);
-  // نحرر أي مقعد بقي لطالب لم يعد ضمن فصول المعمل الحالية (مثلاً انحذف فصله من القائمة،
-  // أو تبدّل مكانه سابقًا مع طالب من فصل آخر ثم انحذف الفصل الأصلي) بدل الاعتماد فقط على
-  // حذف قاعدة البيانات المتسلسل حسب lab_class_id الذي قد لا يطابق الطالب الجالس فعليًا بعد التبديل
-  const orphaned = (rawSeats || []).filter(s => !validIds.has(s.student_id));
+  const { data: rawSeats } = await sb.from('lab_seat_assignments').select('*').eq('lab_class_id', lc.id);
+  // تنظيف أي مقعد لطالب لم يعد موجودًا بروستر الفصل (مثلاً نُقل لفصل ثاني)
+  const orphaned = (rawSeats || []).filter(s => !rosterIds.has(s.student_id));
   for (const seat of orphaned) await sb.from('lab_seat_assignments').delete().eq('id', seat.id);
-  const seats = (rawSeats || []).filter(s => validIds.has(s.student_id));
+  const seats = (rawSeats || []).filter(s => rosterIds.has(s.student_id));
 
-  const assignedStudentIds = new Set(seats.map(s => s.student_id));
-  const usedComputerNumbers = new Set(seats.map(s => s.computer_number));
-  const unassigned = allStudents.filter(s => !assignedStudentIds.has(s.id));
+  const assignedIds = new Set(seats.map(s => s.student_id));
+  const usedNumbers = new Set(seats.map(s => s.computer_number));
+  const unassigned = roster.filter(s => !assignedIds.has(s.id));
 
   const freeNumbers = [];
   if (computerCount) {
     for (let n = 1; n <= computerCount && freeNumbers.length < unassigned.length; n++) {
-      if (!usedComputerNumbers.has(n)) freeNumbers.push(n);
+      if (!usedNumbers.has(n)) freeNumbers.push(n);
     }
   }
   const newRows = unassigned.slice(0, freeNumbers.length).map((s, i) => ({
-    teacher_id: currentUserId, lab_class_id: s.lab_class_id, student_id: s.id, computer_number: freeNumbers[i],
+    teacher_id: currentUserId, lab_class_id: lc.id, student_id: s.id, computer_number: freeNumbers[i],
   }));
   if (newRows.length) await sb.from('lab_seat_assignments').insert(newRows);
 
-  const { data: finalSeats } = await sb.from('lab_seat_assignments').select('*').eq('teacher_id', currentUserId).order('computer_number');
-  const infoById = new Map(allStudents.map(s => [s.id, s]));
+  const { data: finalSeats } = await sb.from('lab_seat_assignments').select('*').eq('lab_class_id', lc.id).order('computer_number');
+  const infoById = new Map(roster.map(s => [s.id, s]));
   const seatedIds = new Set((finalSeats || []).map(s => s.student_id));
-  const overflow = allStudents.filter(s => !seatedIds.has(s.id));
+  const overflow = roster.filter(s => !seatedIds.has(s.id));
   return { seats: finalSeats || [], infoById, overflow };
+}
+
+async function ensureSeatingAllClasses() {
+  const result = [];
+  for (const lc of classesCache) {
+    const data = await ensureSeatingForClass(lc);
+    result.push({ lc, ...data });
+  }
+  return result;
 }
 
 async function renderSeatingSection() {
@@ -168,92 +174,101 @@ async function renderSeatingSection() {
     return;
   }
   container.innerHTML = '<p style="font-size:12.5px; color:var(--slate);">جارٍ تحميل التوزيع...</p>';
-  const { seats, infoById, overflow } = await ensureSeating();
+  const perClass = await ensureSeatingAllClasses();
 
-  const rowsHtml = seats.map(seat => {
-    const info = infoById.get(seat.student_id);
-    return `<tr data-seat-id="${seat.id}" data-computer="${seat.computer_number}">
-      <td style="padding:6px 8px; text-align:center; font-weight:700;">${seat.computer_number}</td>
-      <td style="padding:6px 8px;">${esc(info ? info.full_name : '؟')}</td>
-      <td style="padding:6px 8px; color:var(--slate);">${info ? esc(classLabel(info.grade_level, info.class_section)) : '-'}</td>
-      <td style="padding:6px 8px; text-align:center;">
-        <input type="number" class="lab-move-input" min="1" max="${computerCount}" placeholder="بدّل مع جهاز رقم..." style="width:120px; margin:0; padding:5px 8px; font-size:12.5px;">
-        <button type="button" class="lab-move-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:6px; padding:5px 10px; font-size:12px; cursor:pointer;">نقل/تبديل</button>
-      </td>
-    </tr>`;
+  container.innerHTML = perClass.map(({ lc, seats, infoById, overflow }) => {
+    const rowsHtml = seats.map(seat => {
+      const info = infoById.get(seat.student_id);
+      return `<tr data-seat-id="${seat.id}" data-computer="${seat.computer_number}" data-lab-class="${lc.id}">
+        <td style="padding:6px 8px; text-align:center; font-weight:700;">${seat.computer_number}</td>
+        <td style="padding:6px 8px;">${esc(info ? info.full_name : '؟')}</td>
+        <td style="padding:6px 8px; text-align:center;">
+          <input type="number" class="lab-move-input" min="1" max="${computerCount}" placeholder="بدّل مع جهاز رقم..." style="width:120px; margin:0; padding:5px 8px; font-size:12.5px;">
+          <button type="button" class="lab-move-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:6px; padding:5px 10px; font-size:12px; cursor:pointer;">نقل/تبديل</button>
+        </td>
+      </tr>`;
+    }).join('');
+
+    const overflowHtml = overflow.length === 0 ? '' : `
+      <div style="background:#FDEDEC; border-radius:8px; padding:10px 12px; margin-top:10px;">
+        <p style="margin:0 0 4px; font-size:12.5px; color:var(--danger); font-weight:700;">⚠ عدد طلاب هذا الفصل (${seats.length + overflow.length}) أكثر من عدد أجهزة المعمل (${computerCount}) - الطلاب التاليين بدون جهاز:</p>
+        <p style="margin:0; font-size:12.5px; color:var(--danger);">${overflow.map(s => esc(s.full_name)).join('، ')}</p>
+      </div>`;
+
+    return `
+      <div class="form-card" style="margin-top:14px;">
+        <h4 style="margin:0 0 10px;">${esc(classLabel(lc.grade_level, lc.class_section))}</h4>
+        <div style="overflow-x:auto;">
+          <table style="width:100%; border-collapse:collapse; font-size:13px;">
+            <thead><tr style="background:var(--sand);">
+              <th style="padding:6px 8px; text-align:center;">رقم الجهاز</th>
+              <th style="padding:6px 8px; text-align:right;">الطالب</th>
+              <th style="padding:6px 8px; text-align:center;">تعديل</th>
+            </tr></thead>
+            <tbody>${rowsHtml}</tbody>
+          </table>
+        </div>
+        ${overflowHtml}
+      </div>`;
   }).join('');
-
-  const overflowHtml = overflow.length === 0 ? '' : `
-    <div style="background:#FDEDEC; border-radius:8px; padding:10px 12px; margin-top:12px;">
-      <p style="margin:0 0 4px; font-size:12.5px; color:var(--danger); font-weight:700;">⚠ عدد الطلاب (${seats.length + overflow.length}) أكثر من عدد أجهزة المعمل (${computerCount}) - الطلاب التاليين بدون جهاز:</p>
-      <p style="margin:0; font-size:12.5px; color:var(--danger);">${overflow.map(s => `${esc(s.full_name)} (${esc(classLabel(s.grade_level, s.class_section))})`).join('، ')}</p>
-    </div>`;
-
-  container.innerHTML = `
-    <div style="overflow-x:auto;">
-      <table style="width:100%; border-collapse:collapse; font-size:13px;">
-        <thead><tr style="background:var(--sand);">
-          <th style="padding:6px 8px; text-align:center;">رقم الجهاز</th>
-          <th style="padding:6px 8px; text-align:right;">الطالب</th>
-          <th style="padding:6px 8px; text-align:right;">الفصل</th>
-          <th style="padding:6px 8px; text-align:center;">تعديل</th>
-        </tr></thead>
-        <tbody>${rowsHtml}</tbody>
-      </table>
-    </div>
-    ${overflowHtml}
-  `;
 
   container.querySelectorAll('tr[data-seat-id]').forEach(row => {
     row.querySelector('.lab-move-btn').addEventListener('click', async () => {
+      const labClassId = row.dataset.labClass;
       const fromComputer = Number(row.dataset.computer);
       const toComputer = Number(row.querySelector('.lab-move-input').value);
       if (!toComputer || toComputer === fromComputer) return;
-      await moveOrSwapSeat(fromComputer, toComputer);
+      await moveOrSwapSeat(labClassId, fromComputer, toComputer);
       await renderSeatingSection();
     });
   });
 }
 
-// ينقل طالب الجهاز A لجهاز B الفاضي، أو يبدّل طالبي الجهازين لو B مشغول أصلاً
-async function moveOrSwapSeat(fromComputer, toComputer) {
+// ينقل طالب الجهاز A لجهاز B الفاضي، أو يبدّل طالبي الجهازين لو B مشغول أصلاً - دايمًا داخل
+// نفس الفصل (الفصول ما تتزامن بنفس الوقت أصلًا، فالتبديل بين فصلين ما له معنى)
+async function moveOrSwapSeat(labClassId, fromComputer, toComputer) {
   if (toComputer < 1 || toComputer > computerCount) return;
-  // خريطة طالب → فصله الحالي بالمعمل، عشان نحدّث lab_class_id مع الطالب دايمًا (وإلا يختل حذف
-  // الفصول المتسلسل لاحقًا لو تبدّل طالب من فصل لمقعد كان يخص فصل ثاني)
-  const studentClassId = new Map();
-  for (const lc of classesCache) {
-    const { data } = await sb.from('students').select('id')
-      .eq('grade_level', lc.grade_level).eq('class_section', lc.class_section);
-    (data || []).forEach(s => studentClassId.set(s.id, lc.id));
-  }
-
-  const { data: seats } = await sb.from('lab_seat_assignments').select('*').eq('teacher_id', currentUserId);
+  const { data: seats } = await sb.from('lab_seat_assignments').select('*').eq('lab_class_id', labClassId);
   const fromSeat = (seats || []).find(s => s.computer_number === fromComputer);
   const toSeat = (seats || []).find(s => s.computer_number === toComputer);
   if (!fromSeat) return;
   if (toSeat) {
     const fromStudent = fromSeat.student_id;
-    const toStudent = toSeat.student_id;
-    await sb.from('lab_seat_assignments').update({ student_id: toStudent, lab_class_id: studentClassId.get(toStudent) || fromSeat.lab_class_id }).eq('id', fromSeat.id);
-    await sb.from('lab_seat_assignments').update({ student_id: fromStudent, lab_class_id: studentClassId.get(fromStudent) || toSeat.lab_class_id }).eq('id', toSeat.id);
+    await sb.from('lab_seat_assignments').update({ student_id: toSeat.student_id }).eq('id', fromSeat.id);
+    await sb.from('lab_seat_assignments').update({ student_id: fromStudent }).eq('id', toSeat.id);
   } else {
     await sb.from('lab_seat_assignments').update({ computer_number: toComputer }).eq('id', fromSeat.id);
   }
 }
 
-/* ---------- طباعة أوراق اللصق (ورقة منفصلة لكل جهاز، لكل فصول المعمل مع بعض) ---------- */
+/* ---------- طباعة أوراق اللصق (ورقة واحدة لكل جهاز، تجمع كل الفصول اللي تستخدم نفس الرقم) ---------- */
 document.getElementById('lab-print-btn').addEventListener('click', async () => {
   if (!computerCount || classesCache.length === 0) { alert('حدّد عدد الأجهزة وأضف فصل واحد على الأقل أولاً'); return; }
-  const { seats, infoById } = await ensureSeating();
-  if (seats.length === 0) { alert('ما فيه أي طالب موزّع على جهاز بعد'); return; }
+  const perClass = await ensureSeatingAllClasses();
 
-  const sorted = seats.slice().sort((a, b) => a.computer_number - b.computer_number);
-  const pagesHtml = sorted.map(seat => {
-    const info = infoById.get(seat.student_id);
+  const byNumber = new Map();
+  for (let n = 1; n <= computerCount; n++) byNumber.set(n, []);
+  perClass.forEach(({ lc, seats, infoById }) => {
+    seats.forEach(seat => {
+      const info = infoById.get(seat.student_id);
+      byNumber.get(seat.computer_number).push({
+        name: info ? info.full_name : '؟',
+        cls: classLabel(lc.grade_level, lc.class_section),
+      });
+    });
+  });
+  const usedNumbers = [...byNumber.keys()].filter(n => byNumber.get(n).length > 0).sort((a, b) => a - b);
+  if (usedNumbers.length === 0) { alert('ما فيه أي طالب موزّع على جهاز بعد'); return; }
+
+  const pagesHtml = usedNumbers.map(n => {
+    const entriesHtml = byNumber.get(n).map(e => `
+      <div class="lab-sheet-entry">
+        <div class="lab-sheet-name">${esc(e.name)}</div>
+        <div class="lab-sheet-class">${esc(e.cls)}</div>
+      </div>`).join('');
     return `<div class="lab-sheet">
-      <div class="lab-sheet-computer">جهاز رقم ${seat.computer_number}</div>
-      <div class="lab-sheet-name">${esc(info ? info.full_name : '؟')}</div>
-      <div class="lab-sheet-class">${info ? esc(classLabel(info.grade_level, info.class_section)) : ''}</div>
+      <div class="lab-sheet-computer">جهاز رقم ${n}</div>
+      <div class="lab-sheet-entries">${entriesHtml}</div>
     </div>`;
   }).join('');
 
@@ -265,12 +280,14 @@ document.getElementById('lab-print-btn').addEventListener('click', async () => {
 <style>
   body { font-family: Tahoma, Arial, sans-serif; margin: 0; }
   .lab-sheet {
-    height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
     text-align: center; page-break-after: always; padding: 24px; box-sizing: border-box;
   }
-  .lab-sheet-computer { font-size: 28px; color: #6B4FA0; font-weight: 700; margin-bottom: 18px; }
-  .lab-sheet-name { font-size: 46px; font-weight: 800; color: #222; margin-bottom: 10px; }
-  .lab-sheet-class { font-size: 20px; color: #555; }
+  .lab-sheet-computer { font-size: 30px; color: #6B4FA0; font-weight: 800; margin-bottom: 22px; }
+  .lab-sheet-entries { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 520px; }
+  .lab-sheet-entry { border: 1px solid #ddd; border-radius: 10px; padding: 12px 16px; }
+  .lab-sheet-name { font-size: 30px; font-weight: 800; color: #222; margin-bottom: 4px; }
+  .lab-sheet-class { font-size: 16px; color: #666; }
   @media print { .lab-sheet:last-child { page-break-after: auto; } }
 </style>
 </head>
