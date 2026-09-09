@@ -264,6 +264,12 @@ document.getElementById('lab-print-btn').addEventListener('click', async () => {
   const usedNumbers = [...byNumber.keys()].filter(n => byNumber.get(n).length > 0).sort((a, b) => a - b);
   if (usedNumbers.length === 0) { alert('ما فيه أي طالب موزّع على جهاز بعد'); return; }
 
+  // كثافة الملصق تتحدد حسب أكبر عدد أسطر بجهاز واحد (لو فصولك كثيرة ممكن يوصل الجهاز الواحد
+  // لـ10-15 طالب لأنه يُستخدم بحصص مختلفة) - كل ما زاد العدد صغّرنا الخط والمسافات وقسّمنا
+  // الأسماء لعمودين داخل الملصق نفسه عشان تنعرض منظمة وما تطلع برا حدود الملصق
+  const maxEntries = Math.max(...usedNumbers.map(n => byNumber.get(n).length));
+  const density = maxEntries <= 3 ? 1 : maxEntries <= 6 ? 2 : maxEntries <= 10 ? 3 : maxEntries <= 16 ? 4 : 5;
+
   const LABELS_PER_PAGE = 8;
   const labelHtml = n => {
     const entriesHtml = byNumber.get(n).map(e => `
@@ -308,23 +314,83 @@ document.getElementById('lab-print-btn').addEventListener('click', async () => {
   .label.empty { border-style: dashed; border-color: #eee; }
   .label-head {
     background: linear-gradient(135deg, var(--purple), var(--purple-light)); color: #fff;
-    padding: 7mm 6mm 5mm; display: flex; align-items: center; justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between;
   }
-  .label-head .num { font-size: 15mm; font-weight: 800; line-height: 1; }
-  .label-head .num small { font-size: 4mm; font-weight: 600; display: block; opacity: .85; margin-bottom: 1mm; }
-  .label-head .icon { font-size: 9mm; opacity: .9; }
-  .label-body { flex: 1; padding: 4mm 5mm; display: flex; flex-direction: column; gap: 2.5mm; justify-content: center; }
-  .entry { display: flex; align-items: center; gap: 2.5mm; background: #f7f6fb; border-radius: 8px; padding: 2.2mm 3mm; }
-  .dot { width: 3mm; height: 3mm; border-radius: 50%; flex: none; }
+  .label-head .num { font-weight: 800; line-height: 1; }
+  .label-head .num small { font-weight: 600; display: block; opacity: .85; }
+  .label-head .icon { opacity: .9; }
+  .label-body { flex: 1; overflow: hidden; }
+  .entry { display: flex; align-items: center; background: #f7f6fb; border-radius: 6px; overflow: hidden; }
+  .entry .name { font-weight: 700; color: var(--ink); overflow-wrap: break-word; }
+  .entry .cls { color: var(--muted); }
+  .dot { border-radius: 50%; flex: none; }
   .dot.first { background: var(--first); }
   .dot.second { background: var(--second); }
   .dot.third { background: var(--third); }
-  .entry .name { font-size: 4.6mm; font-weight: 700; color: var(--ink); }
-  .entry .cls { font-size: 3.1mm; color: var(--muted); }
-  .label-foot { text-align: center; font-size: 2.8mm; color: #b6b9c2; padding: 1.5mm 0 2.5mm; letter-spacing: .3px; }
+  .label-foot { text-align: center; color: #b6b9c2; letter-spacing: .3px; }
+
+  /* كثافة 1: 1-3 أسماء بالجهاز - تصميم فسيح بخط كبير */
+  body[data-density="1"] .label-head { padding: 7mm 6mm 5mm; }
+  body[data-density="1"] .label-head .num { font-size: 15mm; }
+  body[data-density="1"] .label-head .num small { font-size: 4mm; margin-bottom: 1mm; }
+  body[data-density="1"] .label-head .icon { font-size: 9mm; }
+  body[data-density="1"] .label-body { padding: 4mm 5mm; display: flex; flex-direction: column; gap: 2.5mm; justify-content: center; }
+  body[data-density="1"] .entry { gap: 2.5mm; padding: 2.2mm 3mm; }
+  body[data-density="1"] .dot { width: 3mm; height: 3mm; }
+  body[data-density="1"] .entry .name { font-size: 4.6mm; }
+  body[data-density="1"] .entry .cls { font-size: 3.1mm; }
+  body[data-density="1"] .label-foot { font-size: 2.8mm; padding: 1.5mm 0 2.5mm; }
+
+  /* كثافة 2: 4-6 أسماء */
+  body[data-density="2"] .label-head { padding: 5mm 5mm 3.5mm; }
+  body[data-density="2"] .label-head .num { font-size: 11mm; }
+  body[data-density="2"] .label-head .num small { font-size: 3.3mm; margin-bottom: .8mm; }
+  body[data-density="2"] .label-head .icon { font-size: 7mm; }
+  body[data-density="2"] .label-body { padding: 2.5mm 3.5mm; display: flex; flex-direction: column; gap: 1.4mm; justify-content: center; }
+  body[data-density="2"] .entry { gap: 1.8mm; padding: 1.3mm 2mm; }
+  body[data-density="2"] .dot { width: 2.4mm; height: 2.4mm; }
+  body[data-density="2"] .entry .name { font-size: 3.5mm; }
+  body[data-density="2"] .entry .cls { font-size: 2.5mm; }
+  body[data-density="2"] .label-foot { font-size: 2.3mm; padding: 1mm 0 1.8mm; }
+
+  /* كثافة 3: 7-10 أسماء - عمودين داخل الملصق */
+  body[data-density="3"] .label-head { padding: 3.5mm 4mm 2.5mm; }
+  body[data-density="3"] .label-head .num { font-size: 8mm; }
+  body[data-density="3"] .label-head .num small { font-size: 2.7mm; margin-bottom: .6mm; }
+  body[data-density="3"] .label-head .icon { font-size: 5.5mm; }
+  body[data-density="3"] .label-body { padding: 1.8mm 2.5mm; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: min-content; align-content: center; gap: .9mm; }
+  body[data-density="3"] .entry { gap: 1.1mm; padding: .8mm 1.2mm; }
+  body[data-density="3"] .dot { width: 1.8mm; height: 1.8mm; }
+  body[data-density="3"] .entry .name { font-size: 2.7mm; line-height: 1.15; }
+  body[data-density="3"] .entry .cls { font-size: 1.9mm; }
+  body[data-density="3"] .label-foot { font-size: 1.9mm; padding: .8mm 0 1.3mm; }
+
+  /* كثافة 4: 11-16 اسم - عمودين، ضغط أكثر */
+  body[data-density="4"] .label-head { padding: 2.5mm 3mm 2mm; }
+  body[data-density="4"] .label-head .num { font-size: 6mm; }
+  body[data-density="4"] .label-head .num small { font-size: 2.2mm; margin-bottom: .4mm; }
+  body[data-density="4"] .label-head .icon { font-size: 4.5mm; }
+  body[data-density="4"] .label-body { padding: 1mm 1.6mm; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: min-content; align-content: center; gap: .5mm; }
+  body[data-density="4"] .entry { gap: .8mm; padding: .5mm .8mm; }
+  body[data-density="4"] .dot { width: 1.4mm; height: 1.4mm; }
+  body[data-density="4"] .entry .name { font-size: 2.2mm; line-height: 1.1; }
+  body[data-density="4"] .entry .cls { font-size: 1.6mm; }
+  body[data-density="4"] .label-foot { display: none; }
+
+  /* كثافة 5: أكثر من 16 اسم - ثلاث أعمدة، أصغر ما يمكن مع بقاء القراءة ممكنة */
+  body[data-density="5"] .label-head { padding: 2mm 2.5mm 1.5mm; }
+  body[data-density="5"] .label-head .num { font-size: 5mm; }
+  body[data-density="5"] .label-head .num small { font-size: 1.9mm; margin-bottom: .3mm; }
+  body[data-density="5"] .label-head .icon { font-size: 4mm; }
+  body[data-density="5"] .label-body { padding: .8mm 1.2mm; display: grid; grid-template-columns: 1fr 1fr 1fr; grid-auto-rows: min-content; align-content: center; gap: .35mm; }
+  body[data-density="5"] .entry { gap: .5mm; padding: .35mm .6mm; }
+  body[data-density="5"] .dot { width: 1.1mm; height: 1.1mm; }
+  body[data-density="5"] .entry .name { font-size: 1.8mm; line-height: 1.05; }
+  body[data-density="5"] .entry .cls { font-size: 1.3mm; }
+  body[data-density="5"] .label-foot { display: none; }
 </style>
 </head>
-<body>${pagesHtml}</body>
+<body data-density="${density}">${pagesHtml}</body>
 </html>`;
   const w = window.open('', '_blank');
   if (!w) { alert('المتصفح منع فتح نافذة الطباعة - يرجى السماح بالنوافذ المنبثقة'); return; }
