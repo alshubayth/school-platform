@@ -250,14 +250,95 @@ function periodsNeedingCoverageFor(absentName) {
   return results.sort((a, b) => a.period - b.period);
 }
 
-function availableTeachersAtPeriod(period) {
-  const busy = new Set();
+// كل المعلمين (ما عدا الغائبين) مع توضيح المشغول منهم بنفس الحصة ووين - تستخدم لأدوات التعيين والدمج
+// (بعض المواد زي التربية البدنية يقدر معلمها يشرف على فصلين بنفس الوقت، فنسمح باختيار معلم مشغول عمدًا)
+function teachersAtPeriodWithBusyInfo(period, excludeName) {
+  const busyMap = new Map();
   scheduleCache.filter(r => r.period_number === period).forEach(r => {
     const eff = effectiveAt(r.grade_level, r.class_section, period);
-    if (eff) busy.add(normalizeArText(eff.teacher));
+    if (eff) busyMap.set(normalizeArText(eff.teacher), { grade: r.grade_level, section: r.class_section, subject: eff.subject });
   });
   const absentSet = new Set(absencesCache.map(a => normalizeArText(a.teacher_name)));
-  return allTeacherNames.filter(n => !busy.has(n) && !absentSet.has(n));
+  const exclude = normalizeArText(excludeName);
+  return allTeacherNames
+    .filter(n => n !== exclude && !absentSet.has(n))
+    .map(n => ({ name: n, busyWith: busyMap.get(n) || null }));
+}
+
+// دمج حصة الغائب مع حصة معلم آخر بنفس الوقت (مثل التربية البدنية) - يسجّل صفّين مرتبطين
+// إن كان المعلم المختار فعلاً مشغول بحصة ثانية بنفس الوقت، أو صف واحد عادي لو كان متاحًا أصلاً
+async function performMerge(grade, section, period, absentSubject, absentName, mergeTeacherName) {
+  const dayKey = dayKeyFromDate(subDate);
+  if (!dayKey) return { ok: false, message: 'هذا اليوم إجازة أسبوعية - ما فيه جدول حصص' };
+  const busy = findTeacherConflict(mergeTeacherName, period, grade, section);
+  const rows = [];
+  if (busy) {
+    rows.push({
+      change_date: subDate, day_of_week: dayKey, grade_level: grade, class_section: section, period_number: period,
+      teacher_name: mergeTeacherName, subject_name: absentSubject || null, reason: 'merge',
+      note: `دمج مع ${classLabel(busy.grade, busy.section)}`, created_by: currentUserId,
+    });
+    rows.push({
+      change_date: subDate, day_of_week: dayKey, grade_level: busy.grade, class_section: busy.section, period_number: period,
+      teacher_name: mergeTeacherName, subject_name: busy.subject || null, reason: 'merge',
+      note: `دمج مع ${classLabel(grade, section)}`, created_by: currentUserId,
+    });
+  } else {
+    rows.push({
+      change_date: subDate, day_of_week: dayKey, grade_level: grade, class_section: section, period_number: period,
+      teacher_name: mergeTeacherName, subject_name: absentSubject || null, reason: 'substitute',
+      note: `بديل عن ${absentName}`, created_by: currentUserId,
+    });
+  }
+  const { error } = await sb.from('daily_schedule_changes').upsert(rows, { onConflict: 'change_date,grade_level,class_section,period_number' });
+  if (error) return { ok: false, message: 'تعذّر الدمج: ' + error.message };
+  await reloadChangesCache();
+  return { ok: true };
+}
+
+// تعيين معلم بديل عادي بحصة معيّنة (بدون أي تحقق تعارض - يُستدعى بعد التأكد إن المعلم متاح)
+async function assignSubstitute(grade, section, period, absentSubject, absentName, teacherName) {
+  const dayKey = dayKeyFromDate(subDate);
+  const { error } = await sb.from('daily_schedule_changes').upsert({
+    change_date: subDate, day_of_week: dayKey,
+    grade_level: grade, class_section: section, period_number: period,
+    teacher_name: teacherName, subject_name: absentSubject || null,
+    reason: 'substitute', note: `بديل عن ${absentName}`, created_by: currentUserId,
+  }, { onConflict: 'change_date,grade_level,class_section,period_number' });
+  if (error) return { ok: false, message: 'تعذّرت الإضافة: ' + error.message };
+  await reloadChangesCache();
+  return { ok: true };
+}
+
+// تعيين بديل حتى لو كان مشغول بحصة ثانية بنفس الوقت - بدل ما يُمنع، يفتح حل تعارض مباشر
+// (ينقل حصة المعلم المشغول لمكان ثاني) قبل ما يكمل التعيين تلقائيًا - نفس أسلوب حل تعارض التبديل
+async function attemptAssignWithResolution(container, grade, section, period, absentSubject, absentName, teacherName, onDone) {
+  const busy = findTeacherConflict(teacherName, period, grade, section);
+  if (!busy) {
+    const result = await assignSubstitute(grade, section, period, absentSubject, absentName, teacherName);
+    if (!result.ok) { container.innerHTML = `<p style="color:var(--danger); font-size:12px; margin:6px 0 0;">${esc(result.message)}</p>`; return; }
+    container.innerHTML = '';
+    await onDone();
+    return;
+  }
+  const periods = [1, 2, 3, 4, 5, 6, 7].filter(p => p !== period);
+  container.innerHTML = `
+    <div style="background:#FDEDEC; border-radius:8px; padding:10px 12px; margin-top:8px;">
+      <p style="margin:0 0 8px; font-size:12.5px; color:var(--danger);">⚠ ${esc(teacherName)} عنده أصلاً حصة "${esc(busy.subject || '-')}" بفصل ${esc(classLabel(busy.grade, busy.section))} بالحصة ${period} — انقلها إلى:</p>
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <select class="nested-period-select" style="margin:0; width:auto;"><option value="">اختر الحصة...</option>${periods.map(p => `<option value="${p}">الحصة ${p}</option>`).join('')}</select>
+        <button type="button" class="btn-primary nested-confirm-btn" style="width:auto; padding:6px 14px;">تأكيد</button>
+      </div>
+      <div class="nested-sub-container"></div>
+    </div>`;
+  container.querySelector('.nested-confirm-btn').addEventListener('click', async () => {
+    const target = Number(container.querySelector('.nested-period-select').value);
+    if (!target) return;
+    const subContainer = container.querySelector('.nested-sub-container');
+    await attemptSwapWithResolution(subContainer, busy.grade, busy.section, period, target, async () => {
+      await attemptAssignWithResolution(container, grade, section, period, absentSubject, absentName, teacherName, onDone);
+    });
+  });
 }
 
 function renderCoverageList() {
@@ -278,18 +359,25 @@ function renderCoverageList() {
       ? '<p style="font-size:12.5px; color:var(--teal);">كل حصص هذا المعلم اليوم معوّضة ✓</p>'
       : periods.map(p => {
           const label = `الحصة ${p.period} — ${esc(classLabel(p.grade, p.section))} — ${esc(p.subject || '-')}`;
-          const options = availableTeachersAtPeriod(p.period);
-          const optionsHtml = options.length === 0
-            ? '<option value="">لا يوجد معلم متاح بهذي الحصة</option>'
-            : '<option value="">اختر البديل...</option>' + options.map(n => `<option value="${esc(n)}">${esc(n)}</option>`).join('');
+          // نعرض كل المعلمين (مو المتاحين فقط) - لو اخترت معلم مشغول يفتح النظام حل تعارض مباشر بدل ما يمنعك
+          const periodTeachers = teachersAtPeriodWithBusyInfo(p.period, name);
+          const teacherOptionsHtml = (list, placeholder) => list.length === 0
+            ? '<option value="">ما فيه معلمين لهذي الحصة</option>'
+            : `<option value="">${placeholder}</option>` + list.map(t =>
+                `<option value="${esc(t.name)}">${esc(t.name)}${t.busyWith ? ` — مشغول: ${esc(classLabel(t.busyWith.grade, t.busyWith.section))} (${esc(t.busyWith.subject || '-')})` : ' — متاح'}</option>`
+              ).join('');
+          const optionsHtml = teacherOptionsHtml(periodTeachers, 'اختر البديل...');
           const otherPeriods = [1, 2, 3, 4, 5, 6, 7].filter(x => x !== p.period);
+          const mergeOptionsHtml = teacherOptionsHtml(periodTeachers, 'اختر المعلم...');
           return `<div class="sub-period-row" data-grade="${p.grade}" data-section="${p.section}" data-period="${p.period}" data-subject="${esc(p.subject || '')}" data-absent="${esc(name)}" style="border-bottom:1px solid #ECEAE1; padding:10px 0;">
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <div class="info" style="font-size:13px; flex:1; min-width:220px;">${label}${p.relocatedNote ? `<br><span style="color:var(--slate); font-size:11.5px;">(${esc(p.relocatedNote)})</span>` : ''}</div>
-              <select class="sub-cover-select" style="margin:0; width:auto; min-width:160px;">${optionsHtml}</select>
+              <select class="sub-cover-select" style="margin:0; width:auto; min-width:220px;">${optionsHtml}</select>
               <button type="button" class="btn-primary sub-assign-btn" style="width:auto; padding:7px 14px;">تعيين</button>
               <button type="button" class="sub-relocate-toggle-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer;">نقل لحصة ثانية بنفس الفصل</button>
+              <button type="button" class="sub-merge-toggle-btn" style="border:1px solid #6B4FA0; background:none; color:#6B4FA0; border-radius:8px; padding:6px 12px; font-size:12px; cursor:pointer;">دمج مع معلم آخر</button>
             </div>
+            <div class="sub-assign-resolution" style="width:100%;"></div>
             <div class="sub-relocate-panel hidden" style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
               <select class="sub-relocate-period" style="margin:0; width:auto;">
                 <option value="">انقلها إلى الحصة...</option>
@@ -298,6 +386,11 @@ function renderCoverageList() {
               <button type="button" class="btn-primary sub-relocate-confirm-btn" style="width:auto; padding:6px 14px; background:var(--slate);">تأكيد النقل</button>
             </div>
             <div class="sub-relocate-resolution" style="width:100%;"></div>
+            <div class="sub-merge-panel hidden" style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+              <select class="sub-merge-select" style="margin:0; width:auto; min-width:260px;">${mergeOptionsHtml}</select>
+              <button type="button" class="btn-primary sub-merge-confirm-btn" style="width:auto; padding:6px 14px; background:#6B4FA0;">تأكيد الدمج</button>
+            </div>
+            <div class="sub-merge-error" style="width:100%; color:var(--danger); font-size:12px; margin-top:4px;"></div>
           </div>`;
         }).join('');
 
@@ -306,18 +399,18 @@ function renderCoverageList() {
   });
 
   list.querySelectorAll('.sub-period-row').forEach(rowEl => {
+    const grade = rowEl.dataset.grade;
+    const section = Number(rowEl.dataset.section);
+    const period = Number(rowEl.dataset.period);
+    const subject = rowEl.dataset.subject || '';
+    const absentName = rowEl.dataset.absent;
+
     rowEl.querySelector('.sub-assign-btn').addEventListener('click', async () => {
       const sel = rowEl.querySelector('.sub-cover-select');
       const teacherName = sel.value;
-      if (!teacherName) return;
-      const dayKey = dayKeyFromDate(subDate);
-      const { error } = await sb.from('daily_schedule_changes').upsert({
-        change_date: subDate, day_of_week: dayKey,
-        grade_level: rowEl.dataset.grade, class_section: Number(rowEl.dataset.section), period_number: Number(rowEl.dataset.period),
-        teacher_name: teacherName, subject_name: rowEl.dataset.subject || null,
-        reason: 'substitute', note: `بديل عن ${rowEl.dataset.absent}`, created_by: currentUserId,
-      }, { onConflict: 'change_date,grade_level,class_section,period_number' });
-      if (!error) await refreshForDate();
+      const resolutionEl = rowEl.querySelector('.sub-assign-resolution');
+      if (!teacherName) { resolutionEl.innerHTML = '<p style="color:var(--danger); font-size:12px; margin:6px 0 0;">اختر معلم أولاً</p>'; return; }
+      await attemptAssignWithResolution(resolutionEl, grade, section, period, subject, absentName, teacherName, refreshForDate);
     });
     rowEl.querySelector('.sub-relocate-toggle-btn').addEventListener('click', () => {
       rowEl.querySelector('.sub-relocate-panel').classList.toggle('hidden');
@@ -327,7 +420,20 @@ function renderCoverageList() {
       const resolutionEl = rowEl.querySelector('.sub-relocate-resolution');
       const targetPeriod = Number(periodSel.value);
       if (!targetPeriod) { resolutionEl.innerHTML = '<p style="color:var(--danger); font-size:12px; margin:6px 0 0;">اختر الحصة الهدف</p>'; return; }
-      await attemptSwapWithResolution(resolutionEl, rowEl.dataset.grade, Number(rowEl.dataset.section), Number(rowEl.dataset.period), targetPeriod, refreshForDate);
+      await attemptSwapWithResolution(resolutionEl, grade, section, period, targetPeriod, refreshForDate);
+    });
+    rowEl.querySelector('.sub-merge-toggle-btn').addEventListener('click', () => {
+      rowEl.querySelector('.sub-merge-panel').classList.toggle('hidden');
+    });
+    rowEl.querySelector('.sub-merge-confirm-btn').addEventListener('click', async () => {
+      const mergeSel = rowEl.querySelector('.sub-merge-select');
+      const errEl = rowEl.querySelector('.sub-merge-error');
+      errEl.textContent = '';
+      const mergeTeacherName = mergeSel.value;
+      if (!mergeTeacherName) { errEl.textContent = 'اختر المعلم أولاً'; return; }
+      const result = await performMerge(grade, section, period, subject, absentName, mergeTeacherName);
+      if (!result.ok) { errEl.textContent = result.message; return; }
+      await refreshForDate();
     });
   });
 }
@@ -355,16 +461,30 @@ document.getElementById('sub-swap-btn').addEventListener('click', async () => {
 });
 
 /* ---------- بدلاء اليوم (لكل الموظفين) ---------- */
-function findSwapPartner(row) {
-  if (row.reason !== 'swap') return null;
-  const m = /تبديل مع الحصة (\d+)/.exec(row.note || '');
-  if (!m) return null;
-  const period = Number(m[1]);
-  return changesCache.find(c => c.grade_level === row.grade_level && c.class_section === row.class_section && c.period_number === period && c.id !== row.id) || null;
+// يوجد الصف المرتبط بصف معيّن (شريك التبديل أو شريك الدمج) عشان نحذفهم/نديرهم مع بعض
+function findLinkedPartner(row) {
+  if (row.reason === 'swap') {
+    const m = /تبديل مع الحصة (\d+)/.exec(row.note || '');
+    if (!m) return null;
+    const period = Number(m[1]);
+    return changesCache.find(c => c.grade_level === row.grade_level && c.class_section === row.class_section && c.period_number === period && c.id !== row.id) || null;
+  }
+  if (row.reason === 'merge') {
+    return changesCache.find(c => c.reason === 'merge' && c.period_number === row.period_number && c.id !== row.id
+      && (c.note || '').includes(classLabel(row.grade_level, row.class_section))) || null;
+  }
+  return null;
 }
-// تصنيف الصف للتقرير: "أشغال" = معلم بديل مكان معلم غائب، "تبديل" = تبادل حصتين
+// تصنيف الصف للتقرير: "أشغال" = معلم بديل مكان معلم غائب، "تبديل" = تبادل حصتين، "دمج" = فصلين مع معلم واحد بنفس الوقت
 function changeTypeLabel(reason) {
-  return reason === 'swap' ? 'تبديل' : 'أشغال';
+  if (reason === 'swap') return 'تبديل';
+  if (reason === 'merge') return 'دمج';
+  return 'أشغال';
+}
+function changeTypeColors(reason) {
+  if (reason === 'swap') return { bg: '#EAF4FB', fg: '#2C6E9B' };
+  if (reason === 'merge') return { bg: '#F3ECFB', fg: '#6B4FA0' };
+  return { bg: '#FDF3E3', fg: '#9A6B1E' };
 }
 
 function renderTodayList() {
@@ -393,7 +513,7 @@ function renderTodayList() {
           <td style="padding:7px 8px;">${esc(classLabel(c.grade_level, c.class_section))}</td>
           <td style="padding:7px 8px;">${esc(c.subject_name || '-')}</td>
           <td style="padding:7px 8px; font-weight:700;">${esc(c.teacher_name)}</td>
-          <td style="padding:7px 8px;"><span style="background:${c.reason === 'swap' ? '#EAF4FB' : '#FDF3E3'}; color:${c.reason === 'swap' ? '#2C6E9B' : '#9A6B1E'}; border-radius:6px; padding:2px 8px; font-size:11.5px; font-weight:700;">${changeTypeLabel(c.reason)}</span></td>
+          <td style="padding:7px 8px;"><span style="background:${changeTypeColors(c.reason).bg}; color:${changeTypeColors(c.reason).fg}; border-radius:6px; padding:2px 8px; font-size:11.5px; font-weight:700;">${changeTypeLabel(c.reason)}</span></td>
           <td style="padding:7px 8px; color:var(--slate);">${esc(c.note || '-')}</td>
           ${canManage ? `<td style="padding:7px 8px; text-align:center;"><button type="button" class="sub-cancel-change-btn" data-id="${c.id}" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:12px;">إلغاء</button></td>` : ''}
         </tr>`).join('')}</tbody>
@@ -405,7 +525,7 @@ function renderTodayList() {
       btn.addEventListener('click', async () => {
         const row = changesCache.find(c => c.id === btn.dataset.id);
         if (!row) return;
-        const partner = findSwapPartner(row);
+        const partner = findLinkedPartner(row);
         await sb.from('daily_schedule_changes').delete().eq('id', row.id);
         if (partner) await sb.from('daily_schedule_changes').delete().eq('id', partner.id);
         await refreshForDate();
@@ -424,7 +544,7 @@ document.getElementById('sub-print-btn').addEventListener('click', () => {
       <td>${esc(classLabel(c.grade_level, c.class_section))}</td>
       <td>${esc(c.subject_name || '-')}</td>
       <td>${esc(c.teacher_name)}</td>
-      <td class="type-${c.reason === 'swap' ? 'swap' : 'sub'}">${changeTypeLabel(c.reason)}</td>
+      <td class="type-${c.reason === 'swap' ? 'swap' : c.reason === 'merge' ? 'merge' : 'sub'}">${changeTypeLabel(c.reason)}</td>
       <td>${esc(c.note || '-')}</td>
     </tr>`).join('');
   const html = `<!DOCTYPE html>
@@ -441,6 +561,7 @@ document.getElementById('sub-print-btn').addEventListener('click', () => {
   th { background: #EFEAE0; }
   td.type-sub { color: #9A6B1E; font-weight: 700; }
   td.type-swap { color: #2C6E9B; font-weight: 700; }
+  td.type-merge { color: #6B4FA0; font-weight: 700; }
   @media print { body { padding: 0; } }
 </style>
 </head>
