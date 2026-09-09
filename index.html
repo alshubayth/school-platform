@@ -964,23 +964,38 @@
       <span class="back-link" id="back-to-tiles-16">→ رجوع للرئيسية</span>
 
       <div class="form-card" style="background:var(--sand);">
-        <h4>إضافة فصل بالمعمل</h4>
+        <h4>عدد أجهزة المعمل</h4>
+        <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">رقم واحد ثابت للمعمل كامل - يُستخدم لتوزيع طلاب كل الفصول اللي تضيفها تحت مع بعض على نفس مجموعة الأجهزة.</p>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <input type="number" id="lab-computer-count" min="1" style="width:140px;" placeholder="مثلاً 30" />
+          <button class="btn-primary" id="lab-save-settings-btn" style="width:auto; padding:9px 18px;">حفظ</button>
+        </div>
+        <div class="error-msg" id="lab-settings-error" style="display:none;"></div>
+      </div>
+
+      <div class="form-card" style="margin-top:14px;">
+        <h4>الفصول اللي تدرّسها بالمعمل</h4>
         <div class="tabs" id="lab-grade-tabs"></div>
         <div class="form-row">
           <div>
             <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الفصل</label>
             <select id="lab-section-select"><option value="">اختر الفصل</option></select>
           </div>
-          <div>
-            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">عدد الأجهزة المتاحة لهذه الحصة</label>
-            <input type="number" id="lab-computer-count" min="1" value="30" />
+          <div style="display:flex; align-items:flex-end;">
+            <button class="btn-primary" id="lab-add-class-btn" style="width:auto; padding:9px 18px;">+ إضافة</button>
           </div>
         </div>
-        <button class="btn-primary" id="lab-add-class-btn" style="width:auto; padding:9px 18px; margin-top:10px;">+ إضافة</button>
         <div class="error-msg" id="lab-add-error" style="display:none;"></div>
+        <div id="lab-classes-chips"></div>
       </div>
 
-      <div id="lab-classes-list" style="margin-top:18px;"></div>
+      <div style="margin-top:18px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <h4 style="margin:0;">توزيع الطلاب على الأجهزة</h4>
+          <button type="button" id="lab-print-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:8px; padding:6px 14px; font-size:12.5px; cursor:pointer;">🖨 طباعة أوراق اللصق</button>
+        </div>
+        <div id="lab-seating-area"></div>
+      </div>
     </div>
 
     <div id="placeholder-module" class="panel hidden">
