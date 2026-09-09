@@ -947,11 +947,15 @@
           <button type="button" class="btn-primary" id="sub-swap-btn" style="width:auto; padding:9px 16px;">تبديل</button>
           <div class="error-msg" id="sub-swap-error"></div>
           <div id="sub-swap-success" style="display:none; margin-top:8px; color:var(--teal); font-weight:700; font-size:13px;">تم التبديل بنجاح</div>
+          <div id="sub-swap-resolution"></div>
         </div>
       </div>
 
       <div style="margin-top:22px;">
-        <h4 style="margin-bottom:10px;">بدلاء اليوم</h4>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+          <h4 style="margin:0;">بدلاء اليوم</h4>
+          <button type="button" id="sub-print-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:8px; padding:6px 14px; font-size:12.5px; cursor:pointer;">🖨 طباعة التقرير</button>
+        </div>
         <div id="sub-today-list"></div>
       </div>
     </div>
