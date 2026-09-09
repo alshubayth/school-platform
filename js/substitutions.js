@@ -163,6 +163,29 @@ function findTeacherConflict(teacherName, period, excludeGrade, excludeSection) 
   }
   return null;
 }
+// يبني خيارات "انقلها إلى" لنقل حصة داخل نفس الفصل (قبل معرفة أي تعارض بعد) - يوضّح مسبقًا لكل حصة مرشّحة:
+// هل أصلاً فيها حصة بجدول هذا الفصل، وهل نقل معلمها الحالي لمكان الحصة الأصلية بيصادف تعارض معروف سلفًا
+function buildRelocateOptions(grade, section, currentPeriod) {
+  const periods = [1, 2, 3, 4, 5, 6, 7].filter(p => p !== currentPeriod);
+  return '<option value="">انقلها إلى الحصة...</option>' + periods.map(p => {
+    const eff = effectiveAt(grade, section, p);
+    if (!eff) return `<option value="${p}" disabled>الحصة ${p} — لا يوجد حصة بهذا الفصل</option>`;
+    const conflict = findTeacherConflict(eff.teacher, currentPeriod, grade, section);
+    if (conflict) return `<option value="${p}">الحصة ${p} — ⚠ ${esc(eff.teacher)} سيتعارض مع ${esc(classLabel(conflict.grade, conflict.section))}</option>`;
+    return `<option value="${p}">الحصة ${p} — متاحة</option>`;
+  }).join('');
+}
+// يبني خيارات "انقلها إلى" لحل تعارض معلم محدد (يُستخدم بلوحتي حل تعارض النقل/التبديل والتعيين) -
+// يوضّح لكل حصة مرشّحة هل فيها حصة أصلاً بهذا الفصل، وهل نفس المعلم عنده تعارض ثاني فيها (بدل ما يكتشفها بعد التأكيد)
+function buildTeacherMoveOptions(teacherName, currentPeriod, grade, section) {
+  const periods = [1, 2, 3, 4, 5, 6, 7].filter(p => p !== currentPeriod);
+  return '<option value="">اختر الحصة...</option>' + periods.map(p => {
+    if (!effectiveAt(grade, section, p)) return `<option value="${p}" disabled>الحصة ${p} — لا يوجد حصة بهذا الفصل</option>`;
+    const conflict = findTeacherConflict(teacherName, p, grade, section);
+    if (conflict) return `<option value="${p}">الحصة ${p} — ⚠ سيتعارض: ${esc(classLabel(conflict.grade, conflict.section))} (${esc(conflict.subject || '-')})</option>`;
+    return `<option value="${p}">الحصة ${p} — متاحة</option>`;
+  }).join('');
+}
 // يعيد تحميل daily_schedule_changes فقط (بعد أي كتابة) عشان الكاش يبقى محدّث أثناء سلسلة تبديلات متتالية
 async function reloadChangesCache() {
   const { data } = await sb.from('daily_schedule_changes').select('*').eq('change_date', subDate).order('period_number');
@@ -209,12 +232,12 @@ async function attemptSwapWithResolution(container, grade, section, pA, pB, onDo
     return;
   }
   const c = result.conflict;
-  const periods = [1, 2, 3, 4, 5, 6, 7].filter(p => p !== c.atPeriod);
+  const moveOptionsHtml = buildTeacherMoveOptions(c.teacherName, c.atPeriod, c.blockingGrade, c.blockingSection);
   container.innerHTML = `
     <div style="background:#FDEDEC; border-radius:8px; padding:10px 12px; margin-top:8px;">
       <p style="margin:0 0 8px; font-size:12.5px; color:var(--danger);">⚠ ${esc(c.teacherName)} عنده أصلاً حصة "${esc(c.blockingSubject || '-')}" بفصل ${esc(classLabel(c.blockingGrade, c.blockingSection))} بالحصة ${c.atPeriod} — انقلها إلى:</p>
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <select class="nested-period-select" style="margin:0; width:auto;"><option value="">اختر الحصة...</option>${periods.map(p => `<option value="${p}">الحصة ${p}</option>`).join('')}</select>
+        <select class="nested-period-select" style="margin:0; width:auto; min-width:260px;">${moveOptionsHtml}</select>
         <button type="button" class="btn-primary nested-confirm-btn" style="width:auto; padding:6px 14px;">تأكيد</button>
       </div>
       <div class="nested-sub-container"></div>
@@ -321,12 +344,12 @@ async function attemptAssignWithResolution(container, grade, section, period, ab
     await onDone();
     return;
   }
-  const periods = [1, 2, 3, 4, 5, 6, 7].filter(p => p !== period);
+  const moveOptionsHtml = buildTeacherMoveOptions(teacherName, period, busy.grade, busy.section);
   container.innerHTML = `
     <div style="background:#FDEDEC; border-radius:8px; padding:10px 12px; margin-top:8px;">
       <p style="margin:0 0 8px; font-size:12.5px; color:var(--danger);">⚠ ${esc(teacherName)} عنده أصلاً حصة "${esc(busy.subject || '-')}" بفصل ${esc(classLabel(busy.grade, busy.section))} بالحصة ${period} — انقلها إلى:</p>
       <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-        <select class="nested-period-select" style="margin:0; width:auto;"><option value="">اختر الحصة...</option>${periods.map(p => `<option value="${p}">الحصة ${p}</option>`).join('')}</select>
+        <select class="nested-period-select" style="margin:0; width:auto; min-width:260px;">${moveOptionsHtml}</select>
         <button type="button" class="btn-primary nested-confirm-btn" style="width:auto; padding:6px 14px;">تأكيد</button>
       </div>
       <div class="nested-sub-container"></div>
@@ -367,7 +390,7 @@ function renderCoverageList() {
                 `<option value="${esc(t.name)}">${esc(t.name)}${t.busyWith ? ` — مشغول: ${esc(classLabel(t.busyWith.grade, t.busyWith.section))} (${esc(t.busyWith.subject || '-')})` : ' — متاح'}</option>`
               ).join('');
           const optionsHtml = teacherOptionsHtml(periodTeachers, 'اختر البديل...');
-          const otherPeriods = [1, 2, 3, 4, 5, 6, 7].filter(x => x !== p.period);
+          const relocateOptionsHtml = buildRelocateOptions(p.grade, p.section, p.period);
           const mergeOptionsHtml = teacherOptionsHtml(periodTeachers, 'اختر المعلم...');
           return `<div class="sub-period-row" data-grade="${p.grade}" data-section="${p.section}" data-period="${p.period}" data-subject="${esc(p.subject || '')}" data-absent="${esc(name)}" style="border-bottom:1px solid #ECEAE1; padding:10px 0;">
             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -379,10 +402,7 @@ function renderCoverageList() {
             </div>
             <div class="sub-assign-resolution" style="width:100%;"></div>
             <div class="sub-relocate-panel hidden" style="margin-top:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-              <select class="sub-relocate-period" style="margin:0; width:auto;">
-                <option value="">انقلها إلى الحصة...</option>
-                ${otherPeriods.map(x => `<option value="${x}">الحصة ${x}</option>`).join('')}
-              </select>
+              <select class="sub-relocate-period" style="margin:0; width:auto; min-width:260px;">${relocateOptionsHtml}</select>
               <button type="button" class="btn-primary sub-relocate-confirm-btn" style="width:auto; padding:6px 14px; background:var(--slate);">تأكيد النقل</button>
             </div>
             <div class="sub-relocate-resolution" style="width:100%;"></div>
