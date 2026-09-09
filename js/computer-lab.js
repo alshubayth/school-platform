@@ -241,7 +241,10 @@ async function moveOrSwapSeat(labClassId, fromComputer, toComputer) {
   }
 }
 
-/* ---------- طباعة أوراق اللصق (ورقة واحدة لكل جهاز، تجمع كل الفصول اللي تستخدم نفس الرقم) ---------- */
+/* ---------- طباعة أوراق اللصق (ملصق واحد لكل جهاز، يجمع كل الفصول اللي تستخدم نفس الرقم؛
+   ثمان ملصقات بكل ورقة A4 - عمودين × 4 صفوف) ---------- */
+const GRADE_DOT_CLASS = { first_intermediate: 'first', second_intermediate: 'second', third_intermediate: 'third' };
+
 document.getElementById('lab-print-btn').addEventListener('click', async () => {
   if (!computerCount || classesCache.length === 0) { alert('حدّد عدد الأجهزة وأضف فصل واحد على الأقل أولاً'); return; }
   const perClass = await ensureSeatingAllClasses();
@@ -254,23 +257,33 @@ document.getElementById('lab-print-btn').addEventListener('click', async () => {
       byNumber.get(seat.computer_number).push({
         name: info ? info.full_name : '؟',
         cls: classLabel(lc.grade_level, lc.class_section),
+        dot: GRADE_DOT_CLASS[lc.grade_level] || 'first',
       });
     });
   });
   const usedNumbers = [...byNumber.keys()].filter(n => byNumber.get(n).length > 0).sort((a, b) => a - b);
   if (usedNumbers.length === 0) { alert('ما فيه أي طالب موزّع على جهاز بعد'); return; }
 
-  const pagesHtml = usedNumbers.map(n => {
+  const LABELS_PER_PAGE = 8;
+  const labelHtml = n => {
     const entriesHtml = byNumber.get(n).map(e => `
-      <div class="lab-sheet-entry">
-        <div class="lab-sheet-name">${esc(e.name)}</div>
-        <div class="lab-sheet-class">${esc(e.cls)}</div>
+      <div class="entry">
+        <span class="dot ${e.dot}"></span>
+        <div><div class="name">${esc(e.name)}</div><div class="cls">${esc(e.cls)}</div></div>
       </div>`).join('');
-    return `<div class="lab-sheet">
-      <div class="lab-sheet-computer">جهاز رقم ${n}</div>
-      <div class="lab-sheet-entries">${entriesHtml}</div>
+    return `<div class="label">
+      <div class="label-head"><div class="num"><small>جهاز رقم</small>${n}</div><div class="icon">🖥️</div></div>
+      <div class="label-body">${entriesHtml}</div>
+      <div class="label-foot">معمل الحاسب الآلي</div>
     </div>`;
-  }).join('');
+  };
+
+  let pagesHtml = '';
+  for (let i = 0; i < usedNumbers.length; i += LABELS_PER_PAGE) {
+    const chunk = usedNumbers.slice(i, i + LABELS_PER_PAGE);
+    const cells = chunk.map(labelHtml).join('') + '<div class="label empty"></div>'.repeat(LABELS_PER_PAGE - chunk.length);
+    pagesHtml += `<div class="page">${cells}</div>`;
+  }
 
   const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -278,17 +291,37 @@ document.getElementById('lab-print-btn').addEventListener('click', async () => {
 <meta charset="UTF-8">
 <title>أوراق أجهزة معمل الحاسب</title>
 <style>
-  body { font-family: Tahoma, Arial, sans-serif; margin: 0; }
-  .lab-sheet {
-    min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
-    text-align: center; page-break-after: always; padding: 24px; box-sizing: border-box;
+  :root {
+    --purple: #6B4FA0; --purple-light: #8A6FC4;
+    --first: #1F9D8F; --second: #C9962B; --third: #2C3E70;
+    --ink: #24262b; --muted: #7a7f8a;
   }
-  .lab-sheet-computer { font-size: 30px; color: #6B4FA0; font-weight: 800; margin-bottom: 22px; }
-  .lab-sheet-entries { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 520px; }
-  .lab-sheet-entry { border: 1px solid #ddd; border-radius: 10px; padding: 12px 16px; }
-  .lab-sheet-name { font-size: 30px; font-weight: 800; color: #222; margin-bottom: 4px; }
-  .lab-sheet-class { font-size: 16px; color: #666; }
-  @media print { .lab-sheet:last-child { page-break-after: auto; } }
+  * { box-sizing: border-box; }
+  body { font-family: Tahoma, Arial, sans-serif; margin: 0; color: var(--ink); }
+  .page {
+    width: 210mm; height: 297mm; page-break-after: always;
+    display: grid; grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(4, 1fr);
+    gap: 4mm; padding: 10mm 8mm;
+  }
+  @media print { .page:last-child { page-break-after: auto; } }
+  .label { border: 1.5px dashed #cfd2da; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; }
+  .label.empty { border-style: dashed; border-color: #eee; }
+  .label-head {
+    background: linear-gradient(135deg, var(--purple), var(--purple-light)); color: #fff;
+    padding: 7mm 6mm 5mm; display: flex; align-items: center; justify-content: space-between;
+  }
+  .label-head .num { font-size: 15mm; font-weight: 800; line-height: 1; }
+  .label-head .num small { font-size: 4mm; font-weight: 600; display: block; opacity: .85; margin-bottom: 1mm; }
+  .label-head .icon { font-size: 9mm; opacity: .9; }
+  .label-body { flex: 1; padding: 4mm 5mm; display: flex; flex-direction: column; gap: 2.5mm; justify-content: center; }
+  .entry { display: flex; align-items: center; gap: 2.5mm; background: #f7f6fb; border-radius: 8px; padding: 2.2mm 3mm; }
+  .dot { width: 3mm; height: 3mm; border-radius: 50%; flex: none; }
+  .dot.first { background: var(--first); }
+  .dot.second { background: var(--second); }
+  .dot.third { background: var(--third); }
+  .entry .name { font-size: 4.6mm; font-weight: 700; color: var(--ink); }
+  .entry .cls { font-size: 3.1mm; color: var(--muted); }
+  .label-foot { text-align: center; font-size: 2.8mm; color: #b6b9c2; padding: 1.5mm 0 2.5mm; letter-spacing: .3px; }
 </style>
 </head>
 <body>${pagesHtml}</body>
