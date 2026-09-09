@@ -163,7 +163,13 @@ function findTeacherConflict(teacherName, period, excludeGrade, excludeSection) 
   }
   return null;
 }
+// يعيد تحميل daily_schedule_changes فقط (بعد أي كتابة) عشان الكاش يبقى محدّث أثناء سلسلة تبديلات متتالية
+async function reloadChangesCache() {
+  const { data } = await sb.from('daily_schedule_changes').select('*').eq('change_date', subDate).order('period_number');
+  changesCache = data || [];
+}
 // يبدّل حصتين لنفس الفصل (المادة والمعلم يتبادلون) بعد التأكد إن ما فيه تعارض على أي معلم منقول
+// عند وجود تعارض يرجع تفاصيله (مو مجرد رسالة) عشان الواجهة تقدر تفتح حل مباشر (تبديل متسلسل) بدل ما توقف بس
 async function performClassSwap(grade, section, pA, pB) {
   const dayKey = dayKeyFromDate(subDate);
   if (!dayKey) return { ok: false, message: 'هذا اليوم إجازة أسبوعية - ما فيه جدول حصص' };
@@ -173,12 +179,12 @@ async function performClassSwap(grade, section, pA, pB) {
   if (!effA || !effB) return { ok: false, message: 'ما فيه حصة بهذا الفصل بإحدى الحصتين المختارتين حسب الجدول الدراسي' };
 
   const conflictForA = findTeacherConflict(effB.teacher, pA, grade, section); // effB.teacher راح يصير بالحصة pA
+  if (conflictForA) {
+    return { ok: false, conflict: { teacherName: effB.teacher, atPeriod: pA, blockingGrade: conflictForA.grade, blockingSection: conflictForA.section, blockingSubject: conflictForA.subject } };
+  }
   const conflictForB = findTeacherConflict(effA.teacher, pB, grade, section); // effA.teacher راح يصير بالحصة pB
-  if (conflictForA || conflictForB) {
-    const parts = [];
-    if (conflictForA) parts.push(`${effB.teacher} عنده أصلاً حصة "${conflictForA.subject || '-'}" بفصل ${classLabel(conflictForA.grade, conflictForA.section)} بالحصة ${pA}`);
-    if (conflictForB) parts.push(`${effA.teacher} عنده أصلاً حصة "${conflictForB.subject || '-'}" بفصل ${classLabel(conflictForB.grade, conflictForB.section)} بالحصة ${pB}`);
-    return { ok: false, message: 'تعارض: ' + parts.join(' — ') + ' — بدّل هذي الحصة أول عشان تكمل' };
+  if (conflictForB) {
+    return { ok: false, conflict: { teacherName: effA.teacher, atPeriod: pB, blockingGrade: conflictForB.grade, blockingSection: conflictForB.section, blockingSubject: conflictForB.subject } };
   }
 
   const rows = [
@@ -189,7 +195,39 @@ async function performClassSwap(grade, section, pA, pB) {
   ];
   const { error } = await sb.from('daily_schedule_changes').upsert(rows, { onConflict: 'change_date,grade_level,class_section,period_number' });
   if (error) return { ok: false, message: 'تعذّر التبديل: ' + error.message };
+  await reloadChangesCache();
   return { ok: true };
+}
+
+// يحاول تنفيذ تبديل، ولو صادف تعارض يعرض بنفس المكان حل مباشر (اختيار حصة ثانية لنقل المعلم المتعارض)
+// بدل ما يوقف بس - ولو الحل نفسه صادف تعارض ثاني يفتح حل متداخل، وهكذا لين تنحل السلسلة كاملة
+async function attemptSwapWithResolution(container, grade, section, pA, pB, onDone) {
+  const result = await performClassSwap(grade, section, pA, pB);
+  if (result.ok) { container.innerHTML = ''; await onDone(); return; }
+  if (!result.conflict) {
+    container.innerHTML = `<p style="color:var(--danger); font-size:12px; margin:6px 0 0;">${esc(result.message || 'خطأ غير متوقع')}</p>`;
+    return;
+  }
+  const c = result.conflict;
+  const periods = [1, 2, 3, 4, 5, 6, 7].filter(p => p !== c.atPeriod);
+  container.innerHTML = `
+    <div style="background:#FDEDEC; border-radius:8px; padding:10px 12px; margin-top:8px;">
+      <p style="margin:0 0 8px; font-size:12.5px; color:var(--danger);">⚠ ${esc(c.teacherName)} عنده أصلاً حصة "${esc(c.blockingSubject || '-')}" بفصل ${esc(classLabel(c.blockingGrade, c.blockingSection))} بالحصة ${c.atPeriod} — انقلها إلى:</p>
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <select class="nested-period-select" style="margin:0; width:auto;"><option value="">اختر الحصة...</option>${periods.map(p => `<option value="${p}">الحصة ${p}</option>`).join('')}</select>
+        <button type="button" class="btn-primary nested-confirm-btn" style="width:auto; padding:6px 14px;">تأكيد</button>
+      </div>
+      <div class="nested-sub-container"></div>
+    </div>`;
+  container.querySelector('.nested-confirm-btn').addEventListener('click', async () => {
+    const target = Number(container.querySelector('.nested-period-select').value);
+    if (!target) return;
+    const subContainer = container.querySelector('.nested-sub-container');
+    await attemptSwapWithResolution(subContainer, c.blockingGrade, c.blockingSection, c.atPeriod, target, async () => {
+      // انحل هذا التعارض - نعيد محاولة التبديل الأصلي (ممكن يظهر تعارض ثاني فيفتح حل جديد بنفس الطريقة)
+      await attemptSwapWithResolution(container, grade, section, pA, pB, onDone);
+    });
+  });
 }
 
 /* ---------- تعيين بديل لكل حصة (بنفس الحصة أو بعد نقلها لحصة ثانية) ---------- */
@@ -258,8 +296,8 @@ function renderCoverageList() {
                 ${otherPeriods.map(x => `<option value="${x}">الحصة ${x}</option>`).join('')}
               </select>
               <button type="button" class="btn-primary sub-relocate-confirm-btn" style="width:auto; padding:6px 14px; background:var(--slate);">تأكيد النقل</button>
-              <span class="sub-relocate-error" style="color:var(--danger); font-size:12px;"></span>
             </div>
+            <div class="sub-relocate-resolution" style="width:100%;"></div>
           </div>`;
         }).join('');
 
@@ -286,13 +324,10 @@ function renderCoverageList() {
     });
     rowEl.querySelector('.sub-relocate-confirm-btn').addEventListener('click', async () => {
       const periodSel = rowEl.querySelector('.sub-relocate-period');
-      const errSpan = rowEl.querySelector('.sub-relocate-error');
-      errSpan.textContent = '';
+      const resolutionEl = rowEl.querySelector('.sub-relocate-resolution');
       const targetPeriod = Number(periodSel.value);
-      if (!targetPeriod) { errSpan.textContent = 'اختر الحصة الهدف'; return; }
-      const result = await performClassSwap(rowEl.dataset.grade, Number(rowEl.dataset.section), Number(rowEl.dataset.period), targetPeriod);
-      if (!result.ok) { errSpan.textContent = result.message; return; }
-      await refreshForDate();
+      if (!targetPeriod) { resolutionEl.innerHTML = '<p style="color:var(--danger); font-size:12px; margin:6px 0 0;">اختر الحصة الهدف</p>'; return; }
+      await attemptSwapWithResolution(resolutionEl, rowEl.dataset.grade, Number(rowEl.dataset.section), Number(rowEl.dataset.period), targetPeriod, refreshForDate);
     });
   });
 }
@@ -301,20 +336,22 @@ function renderCoverageList() {
 document.getElementById('sub-swap-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('sub-swap-error');
   const successEl = document.getElementById('sub-swap-success');
+  const resolutionEl = document.getElementById('sub-swap-resolution');
   errEl.style.display = 'none';
   successEl.style.display = 'none';
+  if (resolutionEl) resolutionEl.innerHTML = '';
 
   const grade = document.getElementById('sub-swap-grade').value;
   const section = Number(document.getElementById('sub-swap-section').value);
   const pA = Number(document.getElementById('sub-swap-period-a').value);
   const pB = Number(document.getElementById('sub-swap-period-b').value);
 
-  const result = await performClassSwap(grade, section, pA, pB);
-  if (!result.ok) { errEl.textContent = result.message; errEl.style.display = 'block'; return; }
-
-  successEl.style.display = 'block';
-  setTimeout(() => { successEl.style.display = 'none'; }, 3000);
-  await refreshForDate();
+  if (!grade || !section || !pA || !pB) { errEl.textContent = 'اختر الفصل والحصتين أولاً'; errEl.style.display = 'block'; return; }
+  await attemptSwapWithResolution(resolutionEl, grade, section, pA, pB, async () => {
+    successEl.style.display = 'block';
+    setTimeout(() => { successEl.style.display = 'none'; }, 3000);
+    await refreshForDate();
+  });
 });
 
 /* ---------- بدلاء اليوم (لكل الموظفين) ---------- */
@@ -324,6 +361,10 @@ function findSwapPartner(row) {
   if (!m) return null;
   const period = Number(m[1]);
   return changesCache.find(c => c.grade_level === row.grade_level && c.class_section === row.class_section && c.period_number === period && c.id !== row.id) || null;
+}
+// تصنيف الصف للتقرير: "أشغال" = معلم بديل مكان معلم غائب، "تبديل" = تبادل حصتين
+function changeTypeLabel(reason) {
+  return reason === 'swap' ? 'تبديل' : 'أشغال';
 }
 
 function renderTodayList() {
@@ -342,6 +383,7 @@ function renderTodayList() {
         <th style="padding:7px 8px; text-align:right;">الفصل</th>
         <th style="padding:7px 8px; text-align:right;">المادة</th>
         <th style="padding:7px 8px; text-align:right;">المعلم الحالي</th>
+        <th style="padding:7px 8px; text-align:right;">النوع</th>
         <th style="padding:7px 8px; text-align:right;">ملاحظة</th>
         ${canManage ? '<th></th>' : ''}
       </tr></thead>
@@ -351,6 +393,7 @@ function renderTodayList() {
           <td style="padding:7px 8px;">${esc(classLabel(c.grade_level, c.class_section))}</td>
           <td style="padding:7px 8px;">${esc(c.subject_name || '-')}</td>
           <td style="padding:7px 8px; font-weight:700;">${esc(c.teacher_name)}</td>
+          <td style="padding:7px 8px;"><span style="background:${c.reason === 'swap' ? '#EAF4FB' : '#FDF3E3'}; color:${c.reason === 'swap' ? '#2C6E9B' : '#9A6B1E'}; border-radius:6px; padding:2px 8px; font-size:11.5px; font-weight:700;">${changeTypeLabel(c.reason)}</span></td>
           <td style="padding:7px 8px; color:var(--slate);">${esc(c.note || '-')}</td>
           ${canManage ? `<td style="padding:7px 8px; text-align:center;"><button type="button" class="sub-cancel-change-btn" data-id="${c.id}" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:12px;">إلغاء</button></td>` : ''}
         </tr>`).join('')}</tbody>
@@ -370,3 +413,50 @@ function renderTodayList() {
     });
   }
 }
+
+/* ---------- طباعة تقرير بدلاء اليوم ---------- */
+document.getElementById('sub-print-btn').addEventListener('click', () => {
+  if (changesCache.length === 0) { alert('ما فيه تغييرات على الجدول بهذا التاريخ لطباعتها'); return; }
+  const sorted = changesCache.slice().sort((a, b) => a.period_number - b.period_number);
+  const rowsHtml = sorted.map(c => `
+    <tr>
+      <td>${c.period_number}</td>
+      <td>${esc(classLabel(c.grade_level, c.class_section))}</td>
+      <td>${esc(c.subject_name || '-')}</td>
+      <td>${esc(c.teacher_name)}</td>
+      <td class="type-${c.reason === 'swap' ? 'swap' : 'sub'}">${changeTypeLabel(c.reason)}</td>
+      <td>${esc(c.note || '-')}</td>
+    </tr>`).join('');
+  const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>تقرير بدلاء اليوم - ${esc(subDate)}</title>
+<style>
+  body { font-family: Tahoma, Arial, sans-serif; padding: 24px; color: #222; }
+  h1 { font-size: 20px; margin-bottom: 2px; }
+  .sub-date { color: #555; font-size: 13px; margin-bottom: 18px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #999; padding: 6px 8px; text-align: right; }
+  th { background: #EFEAE0; }
+  td.type-sub { color: #9A6B1E; font-weight: 700; }
+  td.type-swap { color: #2C6E9B; font-weight: 700; }
+  @media print { body { padding: 0; } }
+</style>
+</head>
+<body>
+  <h1>تقرير بدلاء اليوم</h1>
+  <div class="sub-date">التاريخ: ${esc(subDate)}</div>
+  <table>
+    <thead><tr><th>الحصة</th><th>الفصل</th><th>المادة</th><th>المعلم الحالي</th><th>النوع</th><th>ملاحظة</th></tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+</body>
+</html>`;
+  const w = window.open('', '_blank');
+  if (!w) { alert('المتصفح منع فتح نافذة الطباعة - يرجى السماح بالنوافذ المنبثقة'); return; }
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+  w.onload = () => w.print();
+});
