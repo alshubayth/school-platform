@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS } from './core.js';
 
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
 function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
@@ -83,18 +83,31 @@ function renderSectionTilesGrid() {
   const grid = document.getElementById('dash-sections-grid');
   if (!grid) return;
   grid.innerHTML = '';
-  tiles.filter(isTileAllowed).forEach(t => {
-    const title = t.key === 'budget' ? budgetTileTitle() : t.title;
-    const desc = t.key === 'budget' ? budgetTileDesc() : t.desc;
-    const div = document.createElement('div');
-    div.className = 'tile';
-    div.innerHTML = `
-      <div class="ic-diamond ${t.color}" style="margin-bottom:14px;">${t.icon}</div>
-      <h3>${title}</h3>
-      <p>${desc}</p>
-      <span class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span>`;
-    div.addEventListener('click', () => openTile(t.key, title));
-    grid.appendChild(div);
+  GROUPS.forEach(g => {
+    const groupTiles = tiles.filter(t => t.group === g.key && isTileAllowed(t));
+    if (!groupTiles.length) return;
+
+    const heading = document.createElement('p');
+    heading.className = 'tiles-group-label';
+    heading.textContent = g.title;
+    grid.appendChild(heading);
+
+    const row = document.createElement('div');
+    row.className = 'tiles';
+    groupTiles.forEach(t => {
+      const title = t.key === 'budget' ? budgetTileTitle() : t.title;
+      const desc = t.key === 'budget' ? budgetTileDesc() : t.desc;
+      const div = document.createElement('div');
+      div.className = 'tile';
+      div.innerHTML = `
+        <div class="ic-diamond ${t.color}" style="margin-bottom:14px;">${t.icon}</div>
+        <h3>${title}</h3>
+        <p>${desc}</p>
+        <span class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span>`;
+      div.addEventListener('click', () => openTile(t.key, title));
+      row.appendChild(div);
+    });
+    grid.appendChild(row);
   });
 }
 
