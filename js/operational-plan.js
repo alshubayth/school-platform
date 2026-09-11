@@ -4,9 +4,34 @@ import { loadXLSX } from './lib-loader.js';
 
 /* ================= الخطة التشغيلية ================= */
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+// نفس فكرة الحماية بـ setupCollapsible بملف core.js: لو عنصر بالصفحة مفقود (نسخة index.html
+// ما تحدّثت مع هذا الملف) نتجاهل ربط الحدث بهدوء بدل ما نرمي خطأ يوقف تحميل باقي الوحدة كاملة.
+function onEl(id, event, handler) {
+  const el = document.getElementById(id);
+  if (!el) { console.warn('operational-plan: عنصر مفقود بالصفحة', id); return; }
+  el.addEventListener(event, handler);
+}
 
 let opPlanWeek = 1;
 let goalsCache = [], objectivesCache = [], programsCache = [];
+let totalProgramsCount = 0; // إجمالي البرامج الرسمية بدون فلترة (43) - للمقارنة بالإحصائية فقط
+
+// ترتيب الأهداف الاستراتيجية الستة الرسمية ثابت (بنفس ترتيب زرعها بقاعدة البيانات) - نستخدمه
+// لتلوين كل هدف بلون تصنيفي ثابت (--goal-1..6 بملف styles.css) بدل ما يتغير اللون حسب ترتيب
+// وصول البيانات من قاعدة البيانات (اللي مو مضمون ترتيبه)
+const GOAL_TITLE_ORDER = [
+  'تمكين الطلاب من المعارف والمهارات والقيم اللازمة لاحتياجات سوق العمل المستقبلية',
+  'تطوير قدرات الكوادر التعليمية',
+  'تحقيق التميز على المستوى المحلي والدولي',
+  'تهيئة بيئة تعليمية نموذجية محفزة للإبداع والابتكار',
+  'تعزيز الشراكة المجتمعية بما يحقق التنمية المستدامة',
+  'تحقيق الاستدامة المالية في منظومة التعليم العام',
+];
+function goalColorVar(goalTitle) {
+  const idx = GOAL_TITLE_ORDER.indexOf((goalTitle || '').trim());
+  const slot = idx >= 0 ? idx + 1 : 1;
+  return `var(--goal-${slot})`;
+}
 
 export async function loadOpPlanModule() {
   document.getElementById('opplan-admin-view').classList.add('hidden');
@@ -35,11 +60,15 @@ async function refreshStructureCaches() {
   const [{ data: goals }, { data: objectives }, { data: programs }] = await Promise.all([
     sb.from('strategic_goals').select('id, title'),
     sb.from('operational_objectives').select('id, title, strategic_goal_id'),
-    sb.from('programs').select('id, title, operational_objective_id, department, school_indicator, plan_code'),
+    sb.from('programs').select('id, title, operational_objective_id, department, school_indicator, plan_code, applies_to_intermediate'),
   ]);
   goalsCache = goals || [];
   objectivesCache = objectives || [];
-  programsCache = programs || [];
+  const allPrograms = programs || [];
+  totalProgramsCount = allPrograms.length;
+  // نعرض وندوّر بس البرامج المتعلقة بمرحلة المتوسط - العمود قد ما يكون موجود لبرامج مضافة يدويًا
+  // قبل هذا التحديث (تُعامل null/undefined كـ "تنطبق" افتراضيًا، مو كاستبعاد)
+  programsCache = allPrograms.filter(p => p.applies_to_intermediate !== false);
 }
 
 /* ---------- شاشة المدير ---------- */
@@ -66,14 +95,30 @@ async function loadOpPlanAdminData() {
   await renderOpPlanGuide();
 }
 
-/* ---------- دليل الخطة الرسمية ومتابعة نسبة تنفيذ كل برنامج ---------- */
+/* ---------- دليل الخطة الرسمية: داشبورد متابعة تنفيذ مدرستنا (مرحلة المتوسط فقط) ---------- */
 // نسبة التنفيذ لكل برنامج = عدد مهامه الأسبوعية (op_tasks) المعتمدة واللي لها إنجاز معتمد، من
 // إجمالي مهامه الأسبوعية المعتمدة - محسوبة تلقائيًا من نفس بيانات المهام الأسبوعية الموجودة،
 // بدل ما يحتاج أحد يسجّل نسبة يدويًا لكل برنامج
+function statusInfo(myTasksCount, pct) {
+  if (myTasksCount === 0) return { cls: 'idle', icon: '○', label: 'لم يبدأ' };
+  if (pct >= 70) return { cls: 'good', icon: '✓', label: pct + '%' };
+  if (pct >= 30) return { cls: 'warn', icon: '◐', label: pct + '%' };
+  return { cls: 'bad', icon: '!', label: pct + '%' };
+}
+function statusBarColor(cls) {
+  return cls === 'good' ? 'var(--status-good)' : cls === 'warn' ? 'var(--status-warn)' : cls === 'bad' ? 'var(--status-bad)' : 'var(--status-idle)';
+}
+
 async function renderOpPlanGuide() {
+  const statsEl = document.getElementById('opplan-guide-stats');
+  const goalsEl = document.getElementById('opplan-guide-goals');
+  const legendEl = document.getElementById('opplan-guide-legend');
   const container = document.getElementById('opplan-guide-list');
   if (!container) return;
   container.innerHTML = '<p style="font-size:12.5px; color:var(--slate);">جارٍ التحميل...</p>';
+  if (statsEl) statsEl.innerHTML = '';
+  if (goalsEl) goalsEl.innerHTML = '';
+  if (legendEl) legendEl.innerHTML = '';
 
   if (programsCache.length === 0) {
     container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه برامج رسمية مضافة بعد</p></div>';
@@ -100,36 +145,105 @@ async function renderOpPlanGuide() {
   const objById = new Map(objectivesCache.map(o => [o.id, o]));
   const goalById = new Map(goalsCache.map(g => [g.id, g]));
 
-  const sorted = programsCache.slice().sort((a, b) => (a.plan_code || '').localeCompare(b.plan_code || '', 'en', { numeric: true }));
-
-  container.innerHTML = sorted.map(p => {
+  // نحسب نسبة كل برنامج مرة وحدة ونعيد استخدامها بالإحصائيات وبطاقات الأهداف وبطاقات البرامج
+  const programStats = programsCache.map(p => {
     const obj = objById.get(p.operational_objective_id);
     const goal = obj ? goalById.get(obj.strategic_goal_id) : null;
     const myTasks = tasksByProgram.get(p.id) || [];
     const approvedTasks = myTasks.filter(t => t.plan_status === 'approved');
     const doneCount = approvedTasks.filter(t => (completionsByTask.get(t.id) || []).some(c => c.status === 'approved')).length;
     const pct = approvedTasks.length ? Math.round((doneCount / approvedTasks.length) * 100) : 0;
-    const statusLabel = myTasks.length === 0 ? 'ما بدأ العمل عليه بعد' : `${doneCount} من ${approvedTasks.length} مهمة أسبوعية منجزة`;
-    const barColor = myTasks.length === 0 ? 'var(--slate)' : pct >= 70 ? 'var(--meadow)' : pct >= 30 ? '#C9962B' : 'var(--danger)';
+    return { program: p, obj, goal, myTasksCount: myTasks.length, approvedCount: approvedTasks.length, doneCount, pct };
+  });
 
-    return `
-      <div class="form-card" style="margin-top:10px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-          <div>
-            ${p.plan_code ? `<span style="font-size:11px; color:var(--slate); background:var(--sand); border-radius:6px; padding:2px 7px;">${esc(p.plan_code)}</span>` : ''}
-            <strong style="margin-right:6px;">${esc(p.title)}</strong>
+  /* ---- 1) بطاقات الإحصائيات العلوية ---- */
+  if (statsEl) {
+    const started = programStats.filter(s => s.myTasksCount > 0);
+    const avgPct = started.length ? Math.round(started.reduce((sum, s) => sum + s.pct, 0) / started.length) : 0;
+    const inProgress = programStats.filter(s => s.myTasksCount > 0 && s.pct < 100).length;
+    const activeGoals = new Set(programStats.filter(s => s.goal).map(s => s.goal.id)).size;
+    statsEl.innerHTML = `
+      <div class="op-stat-tile" style="--op-accent:var(--meadow);">
+        <div class="lbl">البرامج المتابَعة</div>
+        <div class="val">${programsCache.length}</div>
+        <div class="sub">${totalProgramsCount > programsCache.length ? `من أصل ${totalProgramsCount} برنامج رسمي (${totalProgramsCount - programsCache.length} خاصة بمرحلة ثانية)` : 'كل البرامج الرسمية'}</div>
+      </div>
+      <div class="op-stat-tile" style="--op-accent:var(--status-good);">
+        <div class="lbl">متوسط نسبة الإنجاز</div>
+        <div class="val">${avgPct}%</div>
+        <div class="sub">عبر البرامج اللي بدأ العمل عليها</div>
+      </div>
+      <div class="op-stat-tile" style="--op-accent:var(--gold);">
+        <div class="lbl">قيد التنفيذ الآن</div>
+        <div class="val">${inProgress}</div>
+        <div class="sub">برنامج له مهام أسبوعية معتمدة</div>
+      </div>
+      <div class="op-stat-tile" style="--op-accent:var(--purple);">
+        <div class="lbl">الأهداف الاستراتيجية</div>
+        <div class="val">${activeGoals}</div>
+        <div class="sub">${objectivesCache.length} هدف تشغيلي تحتها</div>
+      </div>`;
+  }
+
+  /* ---- 2) بطاقات الأهداف الاستراتيجية (تقدم مجمّع) ---- */
+  if (goalsEl) {
+    const byGoal = new Map();
+    programStats.forEach(s => {
+      if (!s.goal) return;
+      if (!byGoal.has(s.goal.id)) byGoal.set(s.goal.id, { goal: s.goal, objIds: new Set(), programs: [] });
+      const g = byGoal.get(s.goal.id);
+      if (s.obj) g.objIds.add(s.obj.id);
+      g.programs.push(s);
+    });
+    const goalCards = Array.from(byGoal.values()).sort((a, b) => GOAL_TITLE_ORDER.indexOf(a.goal.title) - GOAL_TITLE_ORDER.indexOf(b.goal.title));
+    goalsEl.innerHTML = goalCards.map(g => {
+      const started = g.programs.filter(s => s.myTasksCount > 0);
+      const pct = started.length ? Math.round(started.reduce((sum, s) => sum + s.pct, 0) / started.length) : 0;
+      const st = statusInfo(started.length, pct);
+      const color = goalColorVar(g.goal.title);
+      return `
+        <div class="op-goal-card" style="--goal-color:${color};">
+          <div class="gtitle"><span class="goal-dot"></span><h5>${esc(g.goal.title)}</h5></div>
+          <div class="gmeta">${g.objIds.size} ${g.objIds.size === 1 ? 'هدف تشغيلي' : 'أهداف تشغيلية'} · ${g.programs.length} ${g.programs.length === 1 ? 'برنامج متابَع' : 'برامج متابَعة'}</div>
+          <div class="gring">
+            <span class="gpct">${pct}%</span>
+            <div class="op-bar-track"><div class="op-bar-fill" style="width:${pct}%; background:${statusBarColor(st.cls)};"></div></div>
           </div>
-          <span style="font-size:11.5px; color:#fff; background:${barColor}; padding:3px 10px; border-radius:20px; white-space:nowrap;">${pct}%</span>
+        </div>`;
+    }).join('');
+
+    if (legendEl) {
+      legendEl.innerHTML = goalCards.map(g => `
+        <div class="op-legend-item"><span class="op-legend-dot" style="background:${goalColorVar(g.goal.title)};"></span>${esc(g.goal.title)}</div>
+      `).join('');
+    }
+  }
+
+  /* ---- 3) شبكة البرامج ---- */
+  const sorted = programStats.slice().sort((a, b) => (a.program.plan_code || '').localeCompare(b.program.plan_code || '', 'en', { numeric: true }));
+
+  container.innerHTML = sorted.map(s => {
+    const { program: p, obj, goal, myTasksCount, pct } = s;
+    const st = statusInfo(myTasksCount, pct);
+    const color = goal ? goalColorVar(goal.title) : 'var(--meadow)';
+    return `
+      <div class="op-program-card" style="--goal-color:${color};" title="${esc(goal ? goal.title : '')}${obj ? ' ← ' + esc(obj.title) : ''}">
+        <div class="phead">
+          ${p.plan_code ? `<span class="op-plan-code">${esc(p.plan_code)}</span>` : '<span></span>'}
+          <span class="op-status-chip ${st.cls}">${st.icon} ${st.label}</span>
         </div>
-        <p style="margin:6px 0 4px; font-size:12px; color:var(--slate);">${esc(goal ? goal.title : '')}${obj ? ' ← ' + esc(obj.title) : ''}</p>
-        ${p.department ? `<p style="margin:0 0 4px; font-size:12px;"><strong>القسم المسؤول:</strong> ${esc(p.department)}</p>` : ''}
-        ${p.school_indicator ? `<p style="margin:0 0 6px; font-size:12px; color:#444; white-space:pre-line;">${esc(p.school_indicator)}</p>` : ''}
-        <p style="margin:0; font-size:12px; color:var(--slate);">${statusLabel}</p>
+        <h5>${esc(p.title)}</h5>
+        ${p.department ? `<div class="op-program-dept">${esc(p.department)}</div>` : ''}
+        <div class="op-program-progress">
+          <span class="ppct">${pct}%</span>
+          <div class="op-bar-track"><div class="op-bar-fill" style="width:${pct}%; background:${statusBarColor(st.cls)};"></div></div>
+        </div>
+        ${p.school_indicator ? `<p style="margin:8px 0 0; font-size:11px; color:#444; white-space:pre-line;">${esc(p.school_indicator)}</p>` : ''}
       </div>`;
   }).join('');
 }
 
-document.getElementById('opm-add-member').addEventListener('click', async () => {
+onEl('opm-add-member', 'click', async () => {
   const profileId = document.getElementById('opm-employee').value;
   const empName = document.getElementById('opm-employee').selectedOptions[0]?.textContent || '';
   if (!profileId) return;
@@ -168,14 +282,14 @@ async function refreshMembersList() {
   });
 }
 
-document.getElementById('og-add').addEventListener('click', async () => {
+onEl('og-add', 'click', async () => {
   const title = document.getElementById('og-title').value.trim();
   if (!title) return;
   await sb.from('strategic_goals').insert({ title });
   document.getElementById('og-title').value = '';
   await loadOpPlanAdminData();
 });
-document.getElementById('oo-add').addEventListener('click', async () => {
+onEl('oo-add', 'click', async () => {
   const title = document.getElementById('oo-title').value.trim();
   const goalId = document.getElementById('oo-goal').value;
   if (!title || !goalId) return;
@@ -183,7 +297,7 @@ document.getElementById('oo-add').addEventListener('click', async () => {
   document.getElementById('oo-title').value = '';
   await loadOpPlanAdminData();
 });
-document.getElementById('pr-add').addEventListener('click', async () => {
+onEl('pr-add', 'click', async () => {
   const title = document.getElementById('pr-title').value.trim();
   const objId = document.getElementById('pr-objective').value;
   if (!title || !objId) return;
@@ -336,15 +450,15 @@ function updateProgramInfo() {
     ${prog.department ? `<strong>القسم المسؤول:</strong> ${esc(prog.department)}<br>` : ''}
     ${prog.school_indicator ? `<span style="white-space:pre-line;">${esc(prog.school_indicator)}</span>` : ''}`;
 }
-document.getElementById('opt-program').addEventListener('change', updateProgramInfo);
+onEl('opt-program', 'change', updateProgramInfo);
 
-document.getElementById('opt-duration').addEventListener('change', (e) => {
+onEl('opt-duration', 'change', (e) => {
   const val = e.target.value;
   document.getElementById('opt-week-wrap').classList.toggle('hidden', val !== 'single_week');
   document.getElementById('opt-recurrence-wrap').classList.toggle('hidden', val === 'single_week');
 });
 
-document.getElementById('opt-submit').addEventListener('click', async () => {
+onEl('opt-submit', 'click', async () => {
   const title = document.getElementById('opt-title').value.trim();
   const errEl = document.getElementById('opt-error');
   if (!title) { errEl.textContent = 'اكتب عنوان المهمة'; errEl.style.display = 'block'; return; }
@@ -375,7 +489,7 @@ document.getElementById('opt-submit').addEventListener('click', async () => {
 });
 
 /* ---------- تنزيل نموذج إكسل فارغ ---------- */
-document.getElementById('opt-download-template').addEventListener('click', async () => {
+onEl('opt-download-template', 'click', async () => {
   await loadXLSX();
   const headers = ['الهدف العام', 'الهدف التشغيلي', 'البرنامج', 'عنوان المهمة', 'الوصف', 'نوع المدة', 'رقم الأسبوع', 'التكرار'];
   const example = ['(مثال) رفع كفاءة العملية التعليمية', '(مثال) تطوير أداء المعلمين', '(مثال) برنامج التطوير المهني', 'إعداد الجدول الدراسي', 'وصف مختصر للمهمة', 'أسبوع محدد', '3', ''];
@@ -406,7 +520,7 @@ function resolveProgramId(goalTitle, objTitle, progTitle) {
   return candidates[0].id;
 }
 
-document.getElementById('opt-excel-upload').addEventListener('click', async () => {
+onEl('opt-excel-upload', 'click', async () => {
   const fileInput = document.getElementById('opt-excel-file');
   const errEl = document.getElementById('opt-excel-error');
   const successEl = document.getElementById('opt-excel-success');
@@ -488,8 +602,8 @@ document.getElementById('opt-excel-upload').addEventListener('click', async () =
   reader.readAsArrayBuffer(file);
 });
 
-document.getElementById('opplan-week-prev').addEventListener('click', () => { if (opPlanWeek > 1) { opPlanWeek--; document.getElementById('opplan-week-label').textContent = 'الأسبوع ' + opPlanWeek; refreshMyTasks(); } });
-document.getElementById('opplan-week-next').addEventListener('click', () => { if (opPlanWeek < 40) { opPlanWeek++; document.getElementById('opplan-week-label').textContent = 'الأسبوع ' + opPlanWeek; refreshMyTasks(); } });
+onEl('opplan-week-prev', 'click', () => { if (opPlanWeek > 1) { opPlanWeek--; document.getElementById('opplan-week-label').textContent = 'الأسبوع ' + opPlanWeek; refreshMyTasks(); } });
+onEl('opplan-week-next', 'click', () => { if (opPlanWeek < 40) { opPlanWeek++; document.getElementById('opplan-week-label').textContent = 'الأسبوع ' + opPlanWeek; refreshMyTasks(); } });
 
 async function refreshMyTasks() {
   const { data: tasks } = await sb.from('op_tasks')
