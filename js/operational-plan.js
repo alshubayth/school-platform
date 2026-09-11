@@ -16,6 +16,32 @@ let opPlanWeek = 1;
 let goalsCache = [], objectivesCache = [], programsCache = [];
 let totalProgramsCount = 0; // إجمالي البرامج الرسمية بدون فلترة (43) - للمقارنة بالإحصائية فقط
 
+// تحميل مكتبة Chart.js عند الحاجة بس (نفس أسلوب budget.js) - أرسم الرسوم البيانية فقط
+// لو نجح التحميل، وإلا نكتفي بالبطاقات والأشرطة بهدوء بدون كسر باقي الصفحة
+let chartLibPromise = null;
+function loadChartLib() {
+  if (window.Chart) return Promise.resolve();
+  if (chartLibPromise) return chartLibPromise;
+  chartLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
+    s.onload = resolve;
+    s.onerror = () => { chartLibPromise = null; reject(new Error('تعذر تحميل مكتبة الرسوم البيانية')); };
+    document.head.appendChild(s);
+  });
+  return chartLibPromise;
+}
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+// يقسّم عنوان الهدف الطويل لأسطر قصيرة (كلمتين بالسطر) عشان يتقرأ تحت أعمدة الرسم البياني
+function wrapGoalLabel(title) {
+  const words = (title || '').trim().split(/\s+/);
+  const lines = [];
+  for (let i = 0; i < words.length; i += 2) lines.push(words.slice(i, i + 2).join(' '));
+  return lines;
+}
+let goalsBarChartInstance = null;
+let statusDonutChartInstance = null;
+
 // ترتيب الأهداف الاستراتيجية الستة الرسمية ثابت (بنفس ترتيب زرعها بقاعدة البيانات) - نستخدمه
 // لتلوين كل هدف بلون تصنيفي ثابت (--goal-1..6 بملف styles.css) بدل ما يتغير اللون حسب ترتيب
 // وصول البيانات من قاعدة البيانات (اللي مو مضمون ترتيبه)
@@ -156,6 +182,17 @@ async function renderOpPlanGuide() {
     return { program: p, obj, goal, myTasksCount: myTasks.length, approvedCount: approvedTasks.length, doneCount, pct };
   });
 
+  const scopeNoteEl = document.getElementById('opplan-scope-note');
+  if (scopeNoteEl) {
+    const hiddenCount = totalProgramsCount - programsCache.length;
+    if (hiddenCount > 0) {
+      scopeNoteEl.textContent = `المعروض هنا برامج المرحلة المتوسطة فقط — أُخفيت ${hiddenCount} ${hiddenCount === 1 ? 'برنامج خاص' : 'برامج خاصة'} بالابتدائي والثانوي`;
+      scopeNoteEl.classList.remove('hidden');
+    } else {
+      scopeNoteEl.classList.add('hidden');
+    }
+  }
+
   /* ---- 1) بطاقات الإحصائيات العلوية ---- */
   if (statsEl) {
     const started = programStats.filter(s => s.myTasksCount > 0);
@@ -186,28 +223,33 @@ async function renderOpPlanGuide() {
   }
 
   /* ---- 2) بطاقات الأهداف الاستراتيجية (تقدم مجمّع) ---- */
-  if (goalsEl) {
-    const byGoal = new Map();
-    programStats.forEach(s => {
-      if (!s.goal) return;
-      if (!byGoal.has(s.goal.id)) byGoal.set(s.goal.id, { goal: s.goal, objIds: new Set(), programs: [] });
-      const g = byGoal.get(s.goal.id);
-      if (s.obj) g.objIds.add(s.obj.id);
-      g.programs.push(s);
-    });
-    const goalCards = Array.from(byGoal.values()).sort((a, b) => GOAL_TITLE_ORDER.indexOf(a.goal.title) - GOAL_TITLE_ORDER.indexOf(b.goal.title));
-    goalsEl.innerHTML = goalCards.map(g => {
+  const byGoal = new Map();
+  programStats.forEach(s => {
+    if (!s.goal) return;
+    if (!byGoal.has(s.goal.id)) byGoal.set(s.goal.id, { goal: s.goal, objIds: new Set(), programs: [] });
+    const g = byGoal.get(s.goal.id);
+    if (s.obj) g.objIds.add(s.obj.id);
+    g.programs.push(s);
+  });
+  const goalCards = Array.from(byGoal.values())
+    .map(g => {
       const started = g.programs.filter(s => s.myTasksCount > 0);
       const pct = started.length ? Math.round(started.reduce((sum, s) => sum + s.pct, 0) / started.length) : 0;
-      const st = statusInfo(started.length, pct);
+      return { ...g, startedCount: started.length, pct };
+    })
+    .sort((a, b) => GOAL_TITLE_ORDER.indexOf(a.goal.title) - GOAL_TITLE_ORDER.indexOf(b.goal.title));
+
+  if (goalsEl) {
+    goalsEl.innerHTML = goalCards.map(g => {
+      const st = statusInfo(g.startedCount, g.pct);
       const color = goalColorVar(g.goal.title);
       return `
         <div class="op-goal-card" style="--goal-color:${color};">
           <div class="gtitle"><span class="goal-dot"></span><h5>${esc(g.goal.title)}</h5></div>
           <div class="gmeta">${g.objIds.size} ${g.objIds.size === 1 ? 'هدف تشغيلي' : 'أهداف تشغيلية'} · ${g.programs.length} ${g.programs.length === 1 ? 'برنامج متابَع' : 'برامج متابَعة'}</div>
           <div class="gring">
-            <span class="gpct">${pct}%</span>
-            <div class="op-bar-track"><div class="op-bar-fill" style="width:${pct}%; background:${statusBarColor(st.cls)};"></div></div>
+            <span class="gpct">${g.pct}%</span>
+            <div class="op-bar-track"><div class="op-bar-fill" style="width:${g.pct}%; background:${statusBarColor(st.cls)};"></div></div>
           </div>
         </div>`;
     }).join('');
@@ -218,6 +260,8 @@ async function renderOpPlanGuide() {
       `).join('');
     }
   }
+
+  renderOpPlanCharts(goalCards, programStats);
 
   /* ---- 3) شبكة البرامج ---- */
   const sorted = programStats.slice().sort((a, b) => (a.program.plan_code || '').localeCompare(b.program.plan_code || '', 'en', { numeric: true }));
@@ -241,6 +285,64 @@ async function renderOpPlanGuide() {
         ${p.school_indicator ? `<p style="margin:8px 0 0; font-size:11px; color:#444; white-space:pre-line;">${esc(p.school_indicator)}</p>` : ''}
       </div>`;
   }).join('');
+}
+
+/* ---- 4) رسمين تفاعليين (Chart.js): إنجاز كل هدف، وتوزيع حالة البرامج ---- */
+async function renderOpPlanCharts(goalCards, programStats) {
+  const barCanvas = document.getElementById('opplan-goals-bar-chart');
+  const donutCanvas = document.getElementById('opplan-status-donut-chart');
+  if (!barCanvas || !donutCanvas) return;
+  try {
+    await loadChartLib();
+  } catch (e) {
+    return; // ما فيه اتصال بالإنترنت أو فشل تحميل المكتبة - نكتفي بالبطاقات والأشرطة
+  }
+
+  const barLabels = goalCards.map(g => wrapGoalLabel(g.goal.title));
+  const barData = goalCards.map(g => g.pct);
+  const barColors = goalCards.map(g => cssVar(goalColorVar(g.goal.title).replace('var(', '').replace(')', '')));
+
+  if (goalsBarChartInstance) goalsBarChartInstance.destroy();
+  goalsBarChartInstance = new Chart(barCanvas, {
+    type: 'bar',
+    data: { labels: barLabels, datasets: [{ data: barData, backgroundColor: barColors, borderRadius: 6, maxBarThickness: 34 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: (ctx) => ctx.parsed.y + '% إنجاز' } } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family: 'Tajawal', size: 10 } } },
+        y: { beginAtZero: true, max: 100, grid: { color: '#EEF1F6' }, ticks: { font: { family: 'Tajawal', size: 9 }, callback: (v) => v + '%' } },
+      },
+    },
+  });
+
+  const statusGroups = { good: 0, warn: 0, bad: 0, idle: 0 };
+  programStats.forEach(s => { statusGroups[statusInfo(s.myTasksCount, s.pct).cls]++; });
+  const statusLabels = ['منجز (٧٠%+)', 'قيد التنفيذ', 'متأخر', 'لم يبدأ'];
+  const statusKeys = ['good', 'warn', 'bad', 'idle'];
+  const statusData = statusKeys.map(k => statusGroups[k]);
+  const statusColors = statusKeys.map(k => cssVar(`--status-${k}`));
+
+  if (statusDonutChartInstance) statusDonutChartInstance.destroy();
+  statusDonutChartInstance = new Chart(donutCanvas, {
+    type: 'doughnut',
+    data: { labels: statusLabels, datasets: [{ data: statusData, backgroundColor: statusColors, borderWidth: 0 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '72%', plugins: { legend: { display: false } } },
+  });
+
+  const totalEl = document.getElementById('opplan-donut-total');
+  if (totalEl) totalEl.textContent = String(programStats.length);
+
+  const legendWrap = document.getElementById('opplan-donut-legend');
+  if (legendWrap) {
+    legendWrap.innerHTML = '';
+    statusLabels.forEach((l, i) => {
+      const row = document.createElement('div');
+      row.className = 'row';
+      row.innerHTML = `<span class="sw" style="background:${statusColors[i]};"></span><span class="n">${esc(l)}</span><span class="v">${statusData[i]}</span>`;
+      legendWrap.appendChild(row);
+    });
+  }
 }
 
 onEl('opm-add-member', 'click', async () => {
@@ -386,7 +488,6 @@ async function refreshOpPlanApprovals() {
 /* ---------- شاشة الموظف المشارك ---------- */
 setupCollapsible('opt-manual-toggle', 'opt-manual-body', 'opt-manual-chevron');
 setupCollapsible('opt-excel-toggle', 'opt-excel-body', 'opt-excel-chevron');
-setupCollapsible('opplan-guide-toggle', 'opplan-guide-body', 'opplan-guide-chevron');
 
 async function loadOpPlanEmployeeData() {
   await refreshStructureCaches();
