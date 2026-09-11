@@ -76,6 +76,51 @@ function correctAgainstVocab(text, vocab) {
   return text;
 }
 
+// مطابقة اسم المعلم بالذات على مستوى "الكلمة" مو الحرف: أسماء المعلمين بالجدول أحيانًا تكتب
+// ثلاثية (الاسم الأول + اسم الأب + العائلة) بينما المسجّل بالمنصة (profiles.full_name) ثنائي
+// (الاسم الأول + العائلة بس) - أو العكس. الفرق هنا مو حرف ناقص جوا كلمة، هو كلمة كاملة زايدة/ناقصة.
+// نحاول نطابق كلمات الاسمين بالترتيب (نتجاوز كلمة وسط زايدة بأي الاتجاهين)، وكل كلمة نطابقها بنفس
+// أسلوب التسلسل الفرعي عشان نتحمل كمان حرف ناقص داخل الكلمة نفسها (نفس عيب الخط). نرجّع دايمًا
+// الاسم المسجّل بالمنصة (الشكل المعتمد) لما نلقى تطابق واضح.
+function wordsMatch(a, b) {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  if (a.length >= b.length) return isSubsequence(b, a) && (a.length - b.length) <= Math.max(2, Math.ceil(b.length * 0.4));
+  return isSubsequence(a, b) && (b.length - a.length) <= Math.max(2, Math.ceil(a.length * 0.4));
+}
+function alignWordCount(longerWords, shorterWords) {
+  let ci = 0;
+  for (let ri = 0; ri < longerWords.length && ci < shorterWords.length; ri++) {
+    if (wordsMatch(longerWords[ri], shorterWords[ci])) ci++;
+  }
+  return ci;
+}
+function correctTeacherName(text, teacherNames) {
+  const raw = String(text || '').trim();
+  if (!raw) return text;
+  if (teacherNames.includes(raw)) return raw;
+  const rawWords = raw.split(/\s+/).map(w => normalizeAr(w)).filter(Boolean);
+  if (rawWords.length === 0) return text;
+
+  let best = null, bestExtra = Infinity;
+  for (const candidate of teacherNames) {
+    const candWords = candidate.trim().split(/\s+/).map(w => normalizeAr(w)).filter(Boolean);
+    if (candWords.length === 0) continue;
+
+    if (alignWordCount(rawWords, candWords) === candWords.length) {
+      const extra = rawWords.length - candWords.length; // كلمة زايدة بالجدول (زي اسم الأب) مو موجودة بالمنصة
+      if (extra < bestExtra) { bestExtra = extra; best = candidate; }
+    }
+    if (alignWordCount(candWords, rawWords) === rawWords.length) {
+      const extra = candWords.length - rawWords.length; // كلمة انسقطت من الاستخراج
+      if (extra < bestExtra) { bestExtra = extra; best = candidate; }
+    }
+  }
+  // نسمح بفرق كلمة أو كلمتين بس (زي اسم أب واحد) - مو أكثر، عشان ما نطابق معلم بمعلم ثاني بالغلط
+  if (best && bestExtra <= 2) return best;
+  return text;
+}
+
 function translateDigits(s) {
   return s.replace(/[٠-٩]/g, ch => String(EASTERN_DIGITS.indexOf(ch)));
 }
@@ -382,7 +427,7 @@ async function parsePdfFile(file) {
       groupByColumn(teachItems, byX, false).forEach(g => {
         const raw = joinCellText(g.items, decode);
         if (!raw) return;
-        const text = correctAgainstVocab(raw, teacherNames);
+        const text = correctTeacherName(raw, teacherNames);
         if (text !== raw) { pageCorrected++; correctedCount++; }
         g.periods.forEach(p => {
           const key = day + '-' + p;
