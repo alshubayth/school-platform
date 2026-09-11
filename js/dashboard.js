@@ -4,6 +4,78 @@ function esc(s) { const d = document.createElement('div'); d.textContent = Strin
 function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
 function classLabel(grade, section) { return `${gradeLabels[grade] || grade} - الفصل ${section}`; }
 
+// نفس أيام وحصص جدول الحصص بملف schedule.js - معرّفة هنا محليًا (بدل استيراد schedule.js)
+// عشان نتفادى تنفيذ أحداثه الجانبية (ربط أزرار رجوع) بمجرد تحميل لوحة التحكم للجميع
+const SCHEDULE_DAYS = [
+  { key: 'sunday', label: 'الأحد' },
+  { key: 'monday', label: 'الاثنين' },
+  { key: 'tuesday', label: 'الثلاثاء' },
+  { key: 'wednesday', label: 'الأربعاء' },
+  { key: 'thursday', label: 'الخميس' },
+];
+const SCHEDULE_PERIODS = [1, 2, 3, 4, 5, 6, 7];
+// نفس عائلة الألوان التصنيفية الثابتة المستخدمة بداشبورد الخطة التشغيلية (--goal-1..6) - نلوّن
+// بها فصول المعلم بالجدول الأسبوعي عشان تتناسق الألوان مع باقي المنصة، وتدور لو الفصول أكثر من 6
+const CLASS_COLOR_VARS = ['--goal-1', '--goal-2', '--goal-3', '--goal-4', '--goal-5', '--goal-6'];
+function classColorVar(i) { return `var(${CLASS_COLOR_VARS[i % CLASS_COLOR_VARS.length]})`; }
+
+// الجدول الدراسي الأسبوعي الكامل لكل فصول المعلم - يظهر بالصفحة الرئيسية بمجرد فتح حسابه،
+// كل فصل بلون ثابت مميز له عبر كل الجدول
+async function renderMyWeeklyScheduleGrid() {
+  const wrap = document.getElementById('dash-weekly-schedule');
+  if (!wrap) return;
+  const { data: rows } = await sb.from('class_schedules')
+    .select('day_of_week, period_number, grade_level, class_section, subject_name, teacher_name');
+  const myName = normalizeArText(currentProfile.full_name);
+  const mine = (rows || []).filter(r => normalizeArText(r.teacher_name) === myName);
+  if (mine.length === 0) { wrap.innerHTML = ''; return; }
+
+  const classKeys = [];
+  mine.forEach(r => {
+    const k = r.grade_level + '::' + r.class_section;
+    if (!classKeys.includes(k)) classKeys.push(k);
+  });
+  const colorByClass = new Map(classKeys.map((k, i) => [k, classColorVar(i)]));
+
+  const cellMap = new Map();
+  mine.forEach(r => cellMap.set(r.day_of_week + '-' + r.period_number, r));
+
+  const legendHtml = classKeys.map(k => {
+    const [grade, section] = k.split('::');
+    return `<span class="wp-legend-item">
+      <span class="wp-legend-dot" style="background:${colorByClass.get(k)};"></span>${esc(classLabel(grade, section))}
+    </span>`;
+  }).join('');
+
+  const gridHtml = `
+    <div style="overflow-x:auto;">
+      <table class="weekly-sched-table">
+        <thead><tr><th></th>${SCHEDULE_DAYS.map(d => `<th>${d.label}</th>`).join('')}</tr></thead>
+        <tbody>
+          ${SCHEDULE_PERIODS.map(p => `
+            <tr>
+              <td class="wp-num">${p}</td>
+              ${SCHEDULE_DAYS.map(d => {
+                const r = cellMap.get(d.key + '-' + p);
+                if (!r) return `<td class="wp-cell wp-empty"></td>`;
+                const k = r.grade_level + '::' + r.class_section;
+                const color = colorByClass.get(k);
+                return `<td class="wp-cell" style="--cell-color:${color};">
+                  <div class="wp-subject">${esc(r.subject_name || '-')}</div>
+                  <div class="wp-class">${esc(classLabel(r.grade_level, r.class_section))}</div>
+                </td>`;
+              }).join('')}
+            </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+
+  wrap.innerHTML = `
+    <p style="font-family:'Tajawal'; font-weight:700; font-size:14px; margin:0 0 10px;">جدولك الدراسي الأسبوعي</p>
+    <div class="wp-legend-row">${legendHtml}</div>
+    ${gridHtml}`;
+}
+
 // جدول اليوم الخاص بالمعلم كما يظهر بصفحته الرئيسية: يقارن جدوله الأصلي بأي تغييرات
 // (تعويض غياب أو تبديل حصص) مسجّلة بـ daily_schedule_changes لنفس التاريخ، ويبرز أي فرق
 async function loadMyTodayScheduleLines(dayKey, dateStr) {
@@ -253,7 +325,8 @@ async function renderTeacherDashboard(container) {
     opPlanPendingCount = (myPending || []).length;
   }
 
-  container.innerHTML = `<div id="dash-my-schedule" style="margin-bottom:22px;"></div><div id="dash-attention-list"></div>`;
+  container.innerHTML = `<div id="dash-weekly-schedule" style="margin-bottom:22px;"></div><div id="dash-my-schedule" style="margin-bottom:22px;"></div><div id="dash-attention-list"></div>`;
+  renderMyWeeklyScheduleGrid();
   const { dayKey, dateStr } = todayInfo();
   renderMyScheduleWidget(container, dayKey, dateStr);
 
