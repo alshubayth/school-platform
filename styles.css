@@ -115,6 +115,34 @@
   .nav-item.active{ color:var(--meadow); border-bottom-color:var(--meadow); }
   .nav-item.locked{ opacity:0.35; cursor:not-allowed; }
   .nav-item .ic{ width:18px; height:18px; flex-shrink:0; }
+
+  /* مجموعات القوائم بالهيدر العلوي (إدارة المدرسة / شؤون الطلاب / شؤون المعلمين / خدمات إضافية) */
+  .nav-group{ position:relative; height:100%; display:flex; align-items:center; flex-shrink:0; }
+  .nav-group-btn{
+    display:flex; align-items:center; gap:6px; padding:0 14px; height:100%; cursor:pointer;
+    color:var(--slate); font-size:13.5px; font-weight:600; white-space:nowrap;
+    border-bottom:3px solid transparent; transition:0.15s;
+  }
+  .nav-group-btn:hover{ color:var(--meadow); background:var(--sand); }
+  .nav-group-btn .chev{ transition:transform 0.15s; flex-shrink:0; }
+  .nav-group.open .nav-group-btn .chev{ transform:rotate(180deg); }
+  .nav-group.active-group .nav-group-btn{ color:var(--meadow); border-bottom-color:var(--meadow); }
+  .nav-dropdown{
+    display:none; flex-direction:column; gap:2px; min-width:230px;
+    background:#fff; border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow-md);
+    padding:8px; z-index:100;
+  }
+  .nav-group.open .nav-dropdown{ display:flex; }
+  .nav-dropdown .nav-item{
+    height:auto; padding:10px 12px; border-radius:8px; border-bottom:none; color:var(--ink); justify-content:flex-start;
+  }
+  .nav-dropdown .nav-item span{ display:inline; }
+  .nav-dropdown .nav-item:hover{ background:var(--sand); color:var(--meadow); }
+  .nav-dropdown .nav-item.active{ background:var(--meadow-light); color:var(--meadow); }
+
+  .tiles-groups{ display:flex; flex-direction:column; gap:24px; }
+  .tiles-group-label{ font-family:'Tajawal'; font-weight:700; font-size:13.5px; color:var(--slate); margin:0 0 12px; }
+
   .sidebar-footer{
     flex-shrink:0; display:flex; align-items:center; gap:10px;
     padding-inline-start:14px; border-inline-start:1px solid var(--border);
