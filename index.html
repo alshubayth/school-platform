@@ -304,6 +304,42 @@
 
       <!-- ===== شاشة المدير ===== -->
       <div id="opplan-admin-view" class="hidden">
+        <div class="op-dashboard">
+          <div class="op-page-head">
+            <h2>الخطة التشغيلية الرسمية 1448هـ</h2>
+            <p>متابعة تنفيذ مدرستنا للبرامج الرسمية المعتمدة من إدارة التعليم — النسبة تُحسب تلقائيًا من المهام الأسبوعية المعتمدة والمنجزة تحت كل برنامج، بدون تسجيل يدوي</p>
+            <span class="op-scope-note hidden" id="opplan-scope-note"></span>
+          </div>
+
+          <div id="opplan-guide-stats" class="op-stat-row"></div>
+
+          <div class="op-chart-row">
+            <div class="op-chart-card">
+              <h3>نسبة الإنجاز حسب الهدف الاستراتيجي</h3>
+              <p class="op-chart-sub">متوسط إنجاز برامج كل هدف، محسوب تلقائيًا من المهام الأسبوعية المعتمدة</p>
+              <div class="op-chart-box"><canvas id="opplan-goals-bar-chart"></canvas></div>
+            </div>
+            <div class="op-chart-card">
+              <h3>حالة البرامج</h3>
+              <p class="op-chart-sub">توزيع البرامج المتابَعة حسب حالة التنفيذ</p>
+              <div class="op-donut-wrap">
+                <div class="op-donut-box">
+                  <canvas id="opplan-status-donut-chart"></canvas>
+                  <div class="op-donut-center"><div class="big" id="opplan-donut-total">0</div><div class="small">برنامج</div></div>
+                </div>
+                <div class="op-donut-legend" id="opplan-donut-legend"></div>
+              </div>
+            </div>
+          </div>
+
+          <h3 class="op-section-title">التقدم حسب الهدف الاستراتيجي</h3>
+          <div id="opplan-guide-goals" class="op-goal-grid"></div>
+
+          <h3 class="op-section-title">البرامج (متابعة تنفيذ مدرستنا)</h3>
+          <div id="opplan-guide-legend" class="op-legend"></div>
+          <div id="opplan-guide-list" class="op-program-grid"></div>
+        </div>
+
         <div class="form-card">
           <h4>المشاركون بالخطة</h4>
           <div class="form-row">
@@ -331,24 +367,10 @@
           <button class="btn-primary" id="pr-add" style="width:auto; padding:11px 20px;">إضافة برنامج</button>
         </div>
 
-        <div class="stat-grid">
-          <div class="stat-card"><div class="label">مهام بانتظار اعتماد الإضافة</div><div class="value" id="opplan-stat-pending-plan">-</div></div>
-          <div class="stat-card"><div class="label">إنجازات بانتظار الاعتماد</div><div class="value" id="opplan-stat-pending-completion">-</div></div>
-          <div class="stat-card"><div class="label">نسبة الإنجاز المعتمد</div><div class="value" id="opplan-stat-rate">-</div></div>
-        </div>
-
-        <div class="form-card">
-          <h4 id="opplan-guide-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-            <span>📋 دليل الخطة الرسمية 1448هـ ومتابعة تنفيذ مدرستنا</span>
-            <svg id="opplan-guide-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
-          </h4>
-          <div id="opplan-guide-body" class="hidden" style="margin-top:14px;">
-            <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">النسبة تُحسب تلقائيًا من المهام الأسبوعية المعتمدة والمنجزة تحت كل برنامج رسمي — بدون تسجيل يدوي. المعروض هنا برامج المرحلة المتوسطة فقط.</p>
-            <div id="opplan-guide-stats" class="op-stat-row"></div>
-            <div id="opplan-guide-goals" class="op-goal-grid"></div>
-            <div id="opplan-guide-legend" class="op-legend"></div>
-            <div id="opplan-guide-list" class="op-program-grid"></div>
-          </div>
+        <div class="op-stat-row" style="margin-bottom:26px;">
+          <div class="op-stat-tile" style="--op-accent:var(--gold);"><div class="lbl">مهام بانتظار اعتماد الإضافة</div><div class="val" id="opplan-stat-pending-plan">-</div></div>
+          <div class="op-stat-tile" style="--op-accent:var(--purple);"><div class="lbl">إنجازات بانتظار الاعتماد</div><div class="val" id="opplan-stat-pending-completion">-</div></div>
+          <div class="op-stat-tile" style="--op-accent:var(--status-good);"><div class="lbl">نسبة الإنجاز المعتمد</div><div class="val" id="opplan-stat-rate">-</div></div>
         </div>
 
         <h4 style="margin-bottom:14px;">بانتظار اعتماد إضافة المهمة</h4>
