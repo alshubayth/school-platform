@@ -38,6 +38,44 @@ function filterBoilerplateItems(items) {
 
 let parsedClasses = []; // [{page, grade, section, map}]
 
+/*
+ * تصحيح تلقائي للأسماء الناقصة الحروف: بعض ملفات aSc Timetables تُصدَّر بخط عربي ناقص جدول
+ * ToUnicode لبعض الحروف (تأكدنا منها بالتشخيص المباشر على ملف حقيقي) - فأي أداة قراءة PDF،
+ * حتى pdf.js، ما تقدر تسترجع تلك الحروف لأن المعلومة نفسها غير موجودة بالملف أصلاً، مو خلل
+ * بكودنا. الحل: أسماء المواد والمعلمين قائمة مغلقة معروفة عندنا (SCHEDULE_SUBJECTS وقائمة
+ * معلمي المدرسة الفعليين)، والنص المستخرج الناقص يبقى دايمًا "تسلسل فرعي" (subsequence) من
+ * النص الصحيح - يعني الحروف الموجودة بترتيبها الصح، بس ناقصها حروف - فنقارنه بكل القائمة
+ * المعروفة ونستبدله بأقرب تطابق تام لو لقينا وحد واضح.
+ */
+function normalizeAr(s) {
+  return String(s || '').replace(/[\sـ]/g, ''); // نشيل المسافات والتطويل بس، نحتفظ بكل الحروف
+}
+function isSubsequence(needle, hay) {
+  let i = 0;
+  for (let j = 0; j < hay.length && i < needle.length; j++) {
+    if (hay[j] === needle[i]) i++;
+  }
+  return i === needle.length;
+}
+// يرجّع أقرب كلمة من القائمة لو النص المستخرج (بعد إزالة المسافات) تسلسل فرعي منها بوضوح
+// (فرق طول معقول، مو تطابق باهت لكلمة طويلة جدًا) - وإلا يرجّع النص الأصلي كما هو
+function correctAgainstVocab(text, vocab) {
+  const norm = normalizeAr(text);
+  if (!norm) return text;
+  if (vocab.includes(text)) return text; // مطابقة تامة أصلاً، ما يحتاج تصحيح
+  let best = null, bestExtra = Infinity;
+  for (const candidate of vocab) {
+    const cNorm = normalizeAr(candidate);
+    if (cNorm.length < norm.length) continue; // ما يمكن يكون الأصل أقصر من المستخرج
+    if (!isSubsequence(norm, cNorm)) continue;
+    const extra = cNorm.length - norm.length; // عدد الحروف "الناقصة" اللي رجّعناها
+    if (extra < bestExtra) { bestExtra = extra; best = candidate; }
+  }
+  // نقبل التصحيح فقط لو الفرق معقول (حروف قليلة ناقصة، مو نص مختلف كليًا صار يطابق بالصدفة)
+  if (best && bestExtra <= Math.max(3, Math.ceil(normalizeAr(best).length * 0.4))) return best;
+  return text;
+}
+
 function translateDigits(s) {
   return s.replace(/[٠-٩]/g, ch => String(EASTERN_DIGITS.indexOf(ch)));
 }
@@ -240,11 +278,17 @@ async function parsePdfFile(file) {
   if (!window.pdfjsLib) throw new Error('مكتبة قراءة PDF ما تحمّلت. حدّث الصفحة وجرب مرة ثانية.');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
+  // قائمة معلمي المدرسة الفعليين - نستخدمها لتصحيح أسماء المعلمين الناقصة الحروف بنفس أسلوب
+  // تصحيح المواد (راجع correctAgainstVocab أعلاه)
+  const { data: staff } = await sb.from('profiles').select('full_name').in('role', ['teacher', 'deputy']);
+  const teacherNames = [...new Set((staff || []).map(p => p.full_name).filter(Boolean))];
+
   const buf = await file.arrayBuffer();
   const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
 
   const classes = [];
   const issues = [];
+  let correctedCount = 0;
 
   for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
     const page = await pdf.getPage(pageNum);
@@ -307,6 +351,7 @@ async function parsePdfFile(file) {
 
     const classMap = {};
     let filledCount = 0;
+    let pageCorrected = 0;
 
     Object.entries(rows).forEach(([day, rowItems]) => {
       if (rowItems.length === 0) return;
@@ -324,8 +369,10 @@ async function parsePdfFile(file) {
       const teachItems = rowItems.filter(it => it.size <= splitPoint);
 
       groupByColumn(subjItems, byX, true).forEach(g => {
-        const text = joinCellText(g.items, decode);
-        if (!text) return;
+        const raw = joinCellText(g.items, decode);
+        if (!raw) return;
+        const text = correctAgainstVocab(raw, SCHEDULE_SUBJECTS);
+        if (text !== raw) { pageCorrected++; correctedCount++; }
         g.periods.forEach(p => {
           const key = day + '-' + p;
           if (!classMap[key]) { classMap[key] = { subject: '', teacher: '' }; filledCount++; }
@@ -333,8 +380,10 @@ async function parsePdfFile(file) {
         });
       });
       groupByColumn(teachItems, byX, false).forEach(g => {
-        const text = joinCellText(g.items, decode);
-        if (!text) return;
+        const raw = joinCellText(g.items, decode);
+        if (!raw) return;
+        const text = correctAgainstVocab(raw, teacherNames);
+        if (text !== raw) { pageCorrected++; correctedCount++; }
         g.periods.forEach(p => {
           const key = day + '-' + p;
           if (!classMap[key]) classMap[key] = { subject: '', teacher: '' };
@@ -355,13 +404,13 @@ async function parsePdfFile(file) {
       }
     });
 
-    classes.push({ page: pageNum, grade: title.grade, section: title.section, map: classMap, filledCount });
+    classes.push({ page: pageNum, grade: title.grade, section: title.section, map: classMap, filledCount, correctedCount: pageCorrected });
   }
 
-  return { classes, issues };
+  return { classes, issues, correctedCount };
 }
 
-function renderSummary({ classes, issues }) {
+function renderSummary({ classes, issues, correctedCount }) {
   parsedClasses = classes;
   const el = document.getElementById('sc-pdf-summary');
 
@@ -369,6 +418,9 @@ function renderSummary({ classes, issues }) {
   const sorted = [...classes].sort((a, b) => (order[a.grade] - order[b.grade]) || (a.section - b.section));
 
   let html = `<p style="font-size:12.5px; color:var(--slate); margin:10px 0;">تم التعرف على <b>${classes.length}</b> فصل${issues.length ? ` (وتعذّر التعرف على ${issues.length} صفحة، راجعها يدويًا)` : ''}.</p>`;
+  if (correctedCount > 0) {
+    html += `<p style="font-size:12px; color:var(--warning, #b8860b); background:#fff8e6; border-radius:8px; padding:6px 10px; margin:0 0 10px;">⚠ تم تصحيح <b>${correctedCount}</b> خلية تلقائيًا (كان فيها حروف ناقصة بسبب عيب بترميز حروف ملف الـ PDF الأصلي) — راجعها للتأكد.</p>`;
+  }
 
   if (classes.length > 0) {
     html += `<div style="max-height:280px; overflow-y:auto; border-radius:10px; background:#fff; padding:6px;">`;
@@ -377,7 +429,7 @@ function renderSummary({ classes, issues }) {
       const warn = c.filledCount < totalCells - 4; // فرق واضح عن المتوقع
       html += `
         <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; border-bottom:1px solid var(--sand);">
-          <span style="font-size:12.5px; font-weight:600;">${gradeLabels[c.grade]} - الفصل ${c.section} ${warn ? '<span style="color:var(--danger);">⚠ عدد خلايا قليل، راجعها</span>' : ''}</span>
+          <span style="font-size:12.5px; font-weight:600;">${gradeLabels[c.grade]} - الفصل ${c.section} ${warn ? '<span style="color:var(--danger);">⚠ عدد خلايا قليل، راجعها</span>' : ''}${c.correctedCount ? `<span style="color:#b8860b; font-weight:500; font-size:11.5px;"> (تصحيح ${c.correctedCount})</span>` : ''}</span>
           <button type="button" class="text-action-btn sc-preview-btn" data-idx="${idx}" style="width:auto;">معاينة</button>
         </div>`;
     });
