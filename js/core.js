@@ -31,6 +31,9 @@ export function setupCollapsible(toggleId, bodyId, chevronId) {
   const toggle = document.getElementById(toggleId);
   const body = document.getElementById(bodyId);
   const chevron = document.getElementById(chevronId);
+  // لو أي عنصر من الثلاثة مو موجود بالصفحة (مثلًا نسخة index.html قديمة ما تحدّثت مع ملف الجافاسكربت)
+  // نتجاهل الإعداد بهدوء بدل ما نرمي خطأ يوقف تحميل باقي الوحدة (module) كاملة ويسبب صفحة فاضية.
+  if (!toggle || !body || !chevron) { console.warn('setupCollapsible: عنصر مفقود بالصفحة', { toggleId, bodyId, chevronId }); return; }
   toggle.addEventListener('click', () => {
     const isHidden = body.classList.contains('hidden');
     body.classList.toggle('hidden');
@@ -59,23 +62,31 @@ const icons = {
   computerlab: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
 };
 
+// تجميع الأقسام لأربع مجموعات بالهيدر العلوي وبشبكة الرئيسية بدل عرضها كلها بصف واحد طويل
+export const GROUPS = [
+  { key: 'admin',    title: 'إدارة المدرسة' },
+  { key: 'students', title: 'شؤون الطلاب' },
+  { key: 'teachers', title: 'شؤون المعلمين' },
+  { key: 'extra',    title: 'خدمات إضافية' },
+];
+
 export const tiles = [
-  { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal' },
-  { key: 'schedule', icon: icons.schedule, title: 'الجدول الدراسي', desc: 'جدول الحصص لكل فصل',            roles: ['admin','deputy'], color: 'diamond-teal' },
-  { key: 'followups', icon: icons.followups, title: 'كشوف متابعة الطلاب', desc: 'ملاحظات وسلوك ودرجات مشاركة/اختبارات لكل فصل', roles: ['admin','deputy'], color: 'diamond-gold' },
-  { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy'], color: 'diamond-navy' },
-  { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'], color: 'diamond-gold' },
-  { key: 'notes',  icon: icons.notes,  title: 'متابعة أداء الموظفين', desc: 'ملاحظات ومؤشرات وتقييم',       roles: ['admin','deputy'], color: 'diamond-purple' },
-  { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'], color: 'diamond-purple' },
-  { key: 'perms',  icon: icons.perms,  title: 'إدارة الصلاحيات',     desc: 'إضافة مستخدمين وأدوار',        roles: ['admin'], color: 'diamond-navy' },
-  { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy','teacher'], color: 'diamond-navy' },
-  { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple' },
-  { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy' },
-  { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green' },
-  { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal' },
-  { key: 'substitutes', icon: icons.substitutes, title: 'بدلاء اليوم', desc: 'تعويض غياب المعلمين وتبديل الحصص', roles: ['admin','deputy','teacher'], color: 'diamond-gold' },
-  { key: 'computerlab', icon: icons.computerlab, title: 'معمل الحاسب الآلي', desc: 'توزيع الطلاب على أجهزة المعمل وطباعة الملصقات', roles: ['admin','deputy','teacher'], color: 'diamond-teal' },
-  { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold' },
+  { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal', group: 'students' },
+  { key: 'schedule', icon: icons.schedule, title: 'الجدول الدراسي', desc: 'جدول الحصص لكل فصل',            roles: ['admin','deputy'], color: 'diamond-teal', group: 'admin' },
+  { key: 'followups', icon: icons.followups, title: 'كشوف متابعة الطلاب', desc: 'ملاحظات وسلوك ودرجات مشاركة/اختبارات لكل فصل', roles: ['admin','deputy'], color: 'diamond-gold', group: 'students' },
+  { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy'], color: 'diamond-navy', group: 'teachers' },
+  { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'admin' },
+  { key: 'notes',  icon: icons.notes,  title: 'متابعة أداء الموظفين', desc: 'ملاحظات ومؤشرات وتقييم',       roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
+  { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
+  { key: 'perms',  icon: icons.perms,  title: 'إدارة الصلاحيات',     desc: 'إضافة مستخدمين وأدوار',        roles: ['admin'], color: 'diamond-navy', group: 'admin' },
+  { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
+  { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
+  { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students' },
+  { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green', group: 'admin' },
+  { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
+  { key: 'substitutes', icon: icons.substitutes, title: 'بدلاء اليوم', desc: 'تعويض غياب المعلمين وتبديل الحصص', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
+  { key: 'computerlab', icon: icons.computerlab, title: 'معمل الحاسب الآلي', desc: 'توزيع الطلاب على أجهزة المعمل وطباعة الملصقات', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'extra' },
+  { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold', group: 'extra' },
 ];
 
 document.getElementById('login-btn').addEventListener('click', async () => {
@@ -234,21 +245,65 @@ export function budgetTileDesc() {
   return isFullBudget ? 'الإيرادات والمصروفات وطلبات الصرف' : 'تقديم طلب صرف فاتورة باسمك';
 }
 
+function closeAllNavDropdowns(){ document.querySelectorAll('.nav-group.open').forEach(g=>g.classList.remove('open')); }
+document.addEventListener('click', closeAllNavDropdowns);
+
 export function renderNav(){
   const nav = document.getElementById('nav-list');
   nav.innerHTML = `<div class="nav-item active" data-key="home">${icons.home}<span>الرئيسية</span></div>`;
-  tiles.forEach(t=>{
-    if (!isTileAllowed(t)) return;
-    const title = t.key === 'budget' ? budgetTileTitle() : t.title;
-    const div = document.createElement('div');
-    div.className = 'nav-item';
-    div.innerHTML = `${t.icon}<span>${title}</span>`;
-    div.addEventListener('click', ()=>{ setActiveNav(div); openTile(t.key, title); });
-    nav.appendChild(div);
+  nav.querySelector('[data-key="home"]').addEventListener('click', (e)=>{ setActiveNav(e.currentTarget); closeAllNavDropdowns(); backToTiles(); });
+
+  GROUPS.forEach(g => {
+    const groupTiles = tiles.filter(t => t.group === g.key && isTileAllowed(t));
+    if (!groupTiles.length) return;
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'nav-group';
+
+    const btn = document.createElement('div');
+    btn.className = 'nav-group-btn';
+    btn.innerHTML = `<span>${g.title}</span><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>`;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasOpen = groupEl.classList.contains('open');
+      closeAllNavDropdowns();
+      if (!wasOpen) {
+        groupEl.classList.add('open');
+        const r = btn.getBoundingClientRect();
+        dd.style.position = 'fixed';
+        dd.style.top = (r.bottom + 6) + 'px';
+        dd.style.left = r.left + 'px';
+      }
+    });
+
+    const dd = document.createElement('div');
+    dd.className = 'nav-dropdown';
+    groupTiles.forEach(t => {
+      const title = t.key === 'budget' ? budgetTileTitle() : t.title;
+      const item = document.createElement('div');
+      item.className = 'nav-item';
+      item.innerHTML = `${t.icon}<span>${title}</span>`;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setActiveNav(item);
+        closeAllNavDropdowns();
+        openTile(t.key, title);
+      });
+      dd.appendChild(item);
+    });
+
+    groupEl.appendChild(btn);
+    groupEl.appendChild(dd);
+    nav.appendChild(groupEl);
   });
-  nav.querySelector('[data-key="home"]').addEventListener('click', (e)=>{ setActiveNav(e.currentTarget); backToTiles(); });
 }
-export function setActiveNav(el){ document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active')); el.classList.add('active'); }
+export function setActiveNav(el){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  document.querySelectorAll('.nav-group').forEach(n=>n.classList.remove('active-group'));
+  el.classList.add('active');
+  const parentGroup = el.closest('.nav-group');
+  if (parentGroup) parentGroup.classList.add('active-group');
+}
 
 
 export function hideAllModules() {
