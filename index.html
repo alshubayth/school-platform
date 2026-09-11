@@ -337,6 +337,17 @@
           <div class="stat-card"><div class="label">نسبة الإنجاز المعتمد</div><div class="value" id="opplan-stat-rate">-</div></div>
         </div>
 
+        <div class="form-card">
+          <h4 id="opplan-guide-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
+            <span>📋 دليل الخطة الرسمية 1448هـ ومتابعة تنفيذ مدرستنا</span>
+            <svg id="opplan-guide-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
+          </h4>
+          <div id="opplan-guide-body" class="hidden" style="margin-top:14px;">
+            <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">النسبة تُحسب تلقائيًا من المهام الأسبوعية المعتمدة والمنجزة تحت كل برنامج رسمي — بدون تسجيل يدوي.</p>
+            <div id="opplan-guide-list"></div>
+          </div>
+        </div>
+
         <h4 style="margin-bottom:14px;">بانتظار اعتماد إضافة المهمة</h4>
         <div id="opplan-pending-plan-list"></div>
 
@@ -357,7 +368,8 @@
             <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">الهدف التشغيلي</label>
             <select id="opt-objective" style="margin-bottom:10px;"></select>
             <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">البرنامج</label>
-            <select id="opt-program" style="margin-bottom:14px;"></select>
+            <select id="opt-program" style="margin-bottom:8px;"></select>
+            <div id="opt-program-info" class="hidden" style="background:var(--sand); border-radius:8px; padding:9px 12px; margin-bottom:14px; font-size:12.5px; color:#444; line-height:1.6;"></div>
 
             <input type="text" id="opt-title" placeholder="عنوان المهمة" style="margin-bottom:10px;" />
             <textarea id="opt-desc" placeholder="الوصف" rows="2"></textarea>
