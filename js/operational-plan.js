@@ -3,6 +3,8 @@ import { sb, currentUserId, isAdminOrDeputy, gradeLabels,
 import { loadXLSX } from './lib-loader.js';
 
 /* ================= الخطة التشغيلية ================= */
+function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+
 let opPlanWeek = 1;
 let goalsCache = [], objectivesCache = [], programsCache = [];
 
@@ -33,7 +35,7 @@ async function refreshStructureCaches() {
   const [{ data: goals }, { data: objectives }, { data: programs }] = await Promise.all([
     sb.from('strategic_goals').select('id, title'),
     sb.from('operational_objectives').select('id, title, strategic_goal_id'),
-    sb.from('programs').select('id, title, operational_objective_id'),
+    sb.from('programs').select('id, title, operational_objective_id, department, school_indicator, plan_code'),
   ]);
   goalsCache = goals || [];
   objectivesCache = objectives || [];
@@ -61,6 +63,70 @@ async function loadOpPlanAdminData() {
 
   await refreshMembersList();
   await refreshOpPlanApprovals();
+  await renderOpPlanGuide();
+}
+
+/* ---------- دليل الخطة الرسمية ومتابعة نسبة تنفيذ كل برنامج ---------- */
+// نسبة التنفيذ لكل برنامج = عدد مهامه الأسبوعية (op_tasks) المعتمدة واللي لها إنجاز معتمد، من
+// إجمالي مهامه الأسبوعية المعتمدة - محسوبة تلقائيًا من نفس بيانات المهام الأسبوعية الموجودة،
+// بدل ما يحتاج أحد يسجّل نسبة يدويًا لكل برنامج
+async function renderOpPlanGuide() {
+  const container = document.getElementById('opplan-guide-list');
+  if (!container) return;
+  container.innerHTML = '<p style="font-size:12.5px; color:var(--slate);">جارٍ التحميل...</p>';
+
+  if (programsCache.length === 0) {
+    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه برامج رسمية مضافة بعد</p></div>';
+    return;
+  }
+
+  const [{ data: allTasks }, { data: allCompletions }] = await Promise.all([
+    sb.from('op_tasks').select('id, program_id, plan_status'),
+    sb.from('op_task_completions').select('id, task_id, status'),
+  ]);
+
+  const tasksByProgram = new Map();
+  (allTasks || []).forEach(t => {
+    if (!t.program_id) return;
+    if (!tasksByProgram.has(t.program_id)) tasksByProgram.set(t.program_id, []);
+    tasksByProgram.get(t.program_id).push(t);
+  });
+  const completionsByTask = new Map();
+  (allCompletions || []).forEach(c => {
+    if (!completionsByTask.has(c.task_id)) completionsByTask.set(c.task_id, []);
+    completionsByTask.get(c.task_id).push(c);
+  });
+
+  const objById = new Map(objectivesCache.map(o => [o.id, o]));
+  const goalById = new Map(goalsCache.map(g => [g.id, g]));
+
+  const sorted = programsCache.slice().sort((a, b) => (a.plan_code || '').localeCompare(b.plan_code || '', 'en', { numeric: true }));
+
+  container.innerHTML = sorted.map(p => {
+    const obj = objById.get(p.operational_objective_id);
+    const goal = obj ? goalById.get(obj.strategic_goal_id) : null;
+    const myTasks = tasksByProgram.get(p.id) || [];
+    const approvedTasks = myTasks.filter(t => t.plan_status === 'approved');
+    const doneCount = approvedTasks.filter(t => (completionsByTask.get(t.id) || []).some(c => c.status === 'approved')).length;
+    const pct = approvedTasks.length ? Math.round((doneCount / approvedTasks.length) * 100) : 0;
+    const statusLabel = myTasks.length === 0 ? 'ما بدأ العمل عليه بعد' : `${doneCount} من ${approvedTasks.length} مهمة أسبوعية منجزة`;
+    const barColor = myTasks.length === 0 ? 'var(--slate)' : pct >= 70 ? 'var(--meadow)' : pct >= 30 ? '#C9962B' : 'var(--danger)';
+
+    return `
+      <div class="form-card" style="margin-top:10px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <div>
+            ${p.plan_code ? `<span style="font-size:11px; color:var(--slate); background:var(--sand); border-radius:6px; padding:2px 7px;">${esc(p.plan_code)}</span>` : ''}
+            <strong style="margin-right:6px;">${esc(p.title)}</strong>
+          </div>
+          <span style="font-size:11.5px; color:#fff; background:${barColor}; padding:3px 10px; border-radius:20px; white-space:nowrap;">${pct}%</span>
+        </div>
+        <p style="margin:6px 0 4px; font-size:12px; color:var(--slate);">${esc(goal ? goal.title : '')}${obj ? ' ← ' + esc(obj.title) : ''}</p>
+        ${p.department ? `<p style="margin:0 0 4px; font-size:12px;"><strong>القسم المسؤول:</strong> ${esc(p.department)}</p>` : ''}
+        ${p.school_indicator ? `<p style="margin:0 0 6px; font-size:12px; color:#444; white-space:pre-line;">${esc(p.school_indicator)}</p>` : ''}
+        <p style="margin:0; font-size:12px; color:var(--slate);">${statusLabel}</p>
+      </div>`;
+  }).join('');
 }
 
 document.getElementById('opm-add-member').addEventListener('click', async () => {
@@ -206,6 +272,7 @@ async function refreshOpPlanApprovals() {
 /* ---------- شاشة الموظف المشارك ---------- */
 setupCollapsible('opt-manual-toggle', 'opt-manual-body', 'opt-manual-chevron');
 setupCollapsible('opt-excel-toggle', 'opt-excel-body', 'opt-excel-chevron');
+setupCollapsible('opplan-guide-toggle', 'opplan-guide-body', 'opplan-guide-chevron');
 
 async function loadOpPlanEmployeeData() {
   await refreshStructureCaches();
@@ -236,8 +303,12 @@ async function loadOpPlanEmployeeData() {
     const progSelect = document.getElementById('opt-program');
     progSelect.innerHTML = '<option value="">بدون برنامج محدد</option>';
     programsCache.filter(p => p.operational_objective_id === objId).forEach(p => {
-      const o = document.createElement('option'); o.value = p.id; o.textContent = p.title; progSelect.appendChild(o);
+      const o = document.createElement('option');
+      o.value = p.id;
+      o.textContent = p.plan_code ? `${p.plan_code} - ${p.title}` : p.title;
+      progSelect.appendChild(o);
     });
+    updateProgramInfo();
   }
 
   goalSelect.addEventListener('change', refreshObjectivesForGoal);
@@ -247,6 +318,25 @@ async function loadOpPlanEmployeeData() {
   document.getElementById('opplan-week-label').textContent = 'الأسبوع ' + opPlanWeek;
   await refreshMyTasks();
 }
+
+// يعرض القسم المسؤول والمؤشر المستهدف الرسمي للبرنامج المختار، عشان الموظف (مثلاً رائد
+// النشاط) يعرف بالضبط إيش الهدف قبل ما يوزّع تنفيذه على مهام أسبوعية
+function updateProgramInfo() {
+  const infoEl = document.getElementById('opt-program-info');
+  if (!infoEl) return;
+  const progId = document.getElementById('opt-program').value;
+  const prog = programsCache.find(p => p.id === progId);
+  if (!prog || (!prog.department && !prog.school_indicator)) {
+    infoEl.classList.add('hidden');
+    infoEl.innerHTML = '';
+    return;
+  }
+  infoEl.classList.remove('hidden');
+  infoEl.innerHTML = `
+    ${prog.department ? `<strong>القسم المسؤول:</strong> ${esc(prog.department)}<br>` : ''}
+    ${prog.school_indicator ? `<span style="white-space:pre-line;">${esc(prog.school_indicator)}</span>` : ''}`;
+}
+document.getElementById('opt-program').addEventListener('change', updateProgramInfo);
 
 document.getElementById('opt-duration').addEventListener('change', (e) => {
   const val = e.target.value;
