@@ -5,72 +5,88 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>خطة الأسبوع - مدرسة المروج</title>
 <link rel="manifest" href="manifest-parent.json">
-<meta name="theme-color" content="#6D4FE0">
+<meta name="theme-color" content="#2455A4">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
+  /* نفس هوية الألوان المستخدمة بمنصة المدرسة الرئيسية (لوحة تحكم الإدارة/المعلمين) - عشان صفحة
+     أولياء الأمور تحس إنها جزء من نفس المنصة، مو تطبيق منفصل بألوان مختلفة */
   :root{
-    --navy:#0F2447; --violet:#6D4FE0; --violet-light:#F1EDFD;
-    --teal:#0EA5A0; --teal-light:#E1F7F5;
-    --coral:#FF6B5B; --coral-light:#FFEDEA;
-    --gold:#FFB020; --gold-light:#FFF4DE;
-    --ink:#101728; --slate:#5C6478; --sand:#F4F3FB; --white:#fff; --radius:16px;
+    --navy:#0F2447; --meadow:#2455A4; --meadow-light:#EAF1FC;
+    --violet:#6249A6; --violet-light:#EFEBFB;
+    --teal:#0E93A8; --teal-light:#E3F4F7;
+    --coral:#C0453D; --coral-light:#FBEAE9;
+    --gold:#E07A34; --gold-light:#FDEFE3;
+    --ink:#152238; --slate:#6B7684; --sand:#F3F6FB; --white:#fff; --radius:16px;
   }
   *{box-sizing:border-box;}
   body{ font-family:'IBM Plex Sans Arabic', sans-serif; margin:0; color:var(--ink); background:#fff; }
   h1,h2,h3,h4{ font-family:'Tajawal', sans-serif; margin:0; }
   button{ border:none; font-family:inherit; cursor:pointer; }
 
-  #screen{ max-width:820px; margin:0 auto; padding:18px 16px 60px; position:relative; }
+  #screen{ max-width:820px; margin:0 auto; padding:18px 16px calc(84px + env(safe-area-inset-bottom)); position:relative; }
 
   .blob{ position:absolute; border-radius:50%; filter:blur(40px); opacity:0.3; z-index:0; }
 
+  /* هيدر رسمي وبسيط (نفس روح شريط لوحة تحكم الإدارة/المعلمين) بدل التدرج اللوني الكبير السابق -
+     خلفية بيضاء، حدّ رفيع، وشريط لون واحد رفيع للهوية بدل التدرج الكامل */
   .hero{
-    position:relative; z-index:1; border-radius:26px; padding:24px 22px; margin-bottom:16px; overflow:hidden;
-    background: linear-gradient(135deg, #0F2447 0%, #1D6FA6 55%, #0EA5A0 100%);
-    color:#fff; display:flex; align-items:center; gap:16px; min-height:100px;
+    position:relative; z-index:1; border-radius:14px; padding:14px 18px; margin-bottom:16px;
+    background:#fff; border:1px solid #E7E8EC; border-inline-start:4px solid var(--meadow);
+    display:flex; align-items:center; gap:14px; min-height:0;
   }
-  .hero img{ height:48px; background:#fff; border-radius:10px; padding:7px 9px; flex-shrink:0; }
-  .hero h1{ font-size:22px; font-weight:900; color:#fff; }
-  .hero p.sub{ font-size:14px; font-weight:600; color:#fff; margin:4px 0 0; opacity:0.9; }
+  .hero img{ height:42px; background:#fff; border-radius:8px; padding:4px 6px; flex-shrink:0; }
+  .hero h1{ font-size:16.5px; font-weight:800; color:var(--ink); }
+  .hero p.sub{ font-size:12px; font-weight:600; color:var(--slate); margin:2px 0 0; }
 
-  .bento{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:12px; }
-  .bento-cell{ display:flex; align-items:center; gap:10px; background:#fff; border-radius:14px; padding:12px 14px; box-shadow:0 4px 14px rgba(16,23,40,0.06); }
-  .bento-cell .ic{ width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .bento-cell.c-coral .ic{ background:var(--coral-light); color:var(--coral); }
-  .bento-cell.c-teal .ic{ background:var(--teal-light); color:var(--teal); }
-  .bento-cell .num{ font-family:'Tajawal'; font-weight:900; font-size:19px; line-height:1; }
-  .bento-cell .lbl{ font-size:11px; color:var(--slate); margin-top:3px; font-weight:600; }
+  /* ===== شريط الاختصارات: صار فعليًا أزرار تنقلك للمحتوى، مو بس عرض أرقام ===== */
+  .shortcuts-row{ display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+  @media (max-width:380px){ .shortcuts-row{ grid-template-columns:repeat(2,1fr); } }
+  .shortcut-tile{
+    display:flex; flex-direction:column; align-items:center; gap:5px; background:#fff; border-radius:14px;
+    padding:12px 6px 10px; box-shadow:0 4px 14px rgba(16,23,40,0.06); text-align:center; transition:transform .12s;
+  }
+  .shortcut-tile:active{ transform:scale(0.96); }
+  .shortcut-tile:disabled{ opacity:0.45; }
+  .shortcut-tile .ic{ width:32px; height:32px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .shortcut-tile.sc-coral .ic{ background:var(--coral-light); color:var(--coral); }
+  .shortcut-tile.sc-teal .ic{ background:var(--teal-light); color:var(--teal); }
+  .shortcut-tile.sc-meadow .ic{ background:var(--meadow-light); color:var(--meadow); }
+  .shortcut-tile.sc-gold .ic{ background:var(--gold-light); color:var(--gold); }
+  .shortcut-tile .num{ font-family:'Tajawal'; font-weight:900; font-size:16px; line-height:1; color:var(--ink); }
+  .shortcut-tile .lbl{ font-size:9.5px; color:var(--slate); font-weight:700; line-height:1.3; }
+  @keyframes tileFlash{ 0%{ box-shadow:0 0 0 0 rgba(36,85,164,0.45); } 100%{ box-shadow:0 0 0 10px rgba(36,85,164,0); } }
+  .flash-highlight{ animation:tileFlash 0.9s ease-out; border-radius:20px; }
 
   .alert-glass{
     display:flex; align-items:center; gap:12px;
-    background:linear-gradient(100deg, var(--coral-light), #fff); border:1.5px solid #FFD4CB;
+    background:linear-gradient(100deg, var(--coral-light), #fff); border:1.5px solid color-mix(in srgb, var(--coral) 35%, white);
     border-radius:18px; padding:14px 16px; margin-bottom:16px;
   }
   .alert-glass .ic{ width:38px; height:38px; border-radius:12px; background:var(--coral); color:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .alert-glass h4{ font-size:13.5px; color:#B8351F; margin-bottom:2px; }
+  .alert-glass h4{ font-size:13.5px; color:var(--coral); margin-bottom:2px; }
   .alert-glass p{ font-size:12.5px; margin:0; color:var(--ink); }
 
   .admin-note{
-    display:flex; align-items:flex-start; gap:12px; background:var(--gold-light); border:1px solid #F0C9A6;
+    display:flex; align-items:flex-start; gap:12px; background:var(--gold-light); border:1px solid color-mix(in srgb, var(--gold) 40%, white);
     border-radius:18px; padding:16px 18px; margin-bottom:16px;
   }
-  .admin-note .ic{ color:#C56A2E; flex-shrink:0; margin-top:2px; }
-  .admin-note h4{ font-size:14px; color:#8A4A1F; margin-bottom:4px; }
+  .admin-note .ic{ color:var(--gold); flex-shrink:0; margin-top:2px; }
+  .admin-note h4{ font-size:14px; color:var(--gold); margin-bottom:4px; }
   .admin-note p{ font-size:13.5px; color:var(--ink); margin:0; line-height:1.7; }
 
   .tabs{ display:flex; gap:8px; background:#fff; border-radius:16px; padding:6px; margin-bottom:12px; box-shadow:0 4px 14px rgba(16,23,40,0.06); }
   .tab{ flex:1; padding:11px 8px; text-align:center; border-radius:12px; font-size:13.5px; font-weight:700; color:var(--slate); background:transparent; }
-  .tab.active{ background:linear-gradient(120deg, #0F2447, #1D8FA6); color:#fff; }
+  .tab.active{ background:linear-gradient(120deg, var(--navy), var(--meadow)); color:#fff; }
 
   .filters-sticky{ position:sticky; top:0; z-index:6; background:#fff; padding-top:6px; margin-bottom:6px; }
 
   .week-tabs{ display:flex; gap:8px; background:#fff; border-radius:16px; padding:8px; margin-bottom:18px; box-shadow:0 4px 14px rgba(16,23,40,0.06); overflow-x:auto; }
   .week-tab{ flex:1; min-width:78px; padding:10px 8px; text-align:center; border-radius:12px; font-size:12.5px; font-weight:700; color:var(--slate); background:transparent; white-space:nowrap; }
-  .week-tab.active{ background:linear-gradient(120deg, #0F2447, #1D8FA6); color:#fff; }
+  .week-tab.active{ background:linear-gradient(120deg, var(--navy), var(--meadow)); color:#fff; }
 
   #plans-container{ display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:14px; position:relative; z-index:1; }
   @media (max-width:520px){ #plans-container{ grid-template-columns:1fr; } }
@@ -98,15 +114,18 @@
   .tip-card h4{ font-size:13px; margin-bottom:3px; }
   .tip-card p{ font-size:12.5px; margin:0; color:#CBD3E3; line-height:1.6; }
 
-  /* ---------- زر التواصل العائم + ورقة التواصل ---------- */
-  .fab{
-    position:fixed; bottom:20px; left:16px; z-index:20;
-    display:flex; align-items:center; gap:8px;
-    background:var(--violet); color:#fff; border:0; border-radius:999px;
-    padding:14px 18px; font-size:13px; font-weight:800; cursor:pointer;
-    box-shadow:0 10px 26px rgba(109,79,224,0.38);
+  /* ---------- شريط تنقل سفلي ثابت (خطة / جدول / تواصل) بدل التبويبات العلوية + الزر العائم ---------- */
+  .bottom-nav{
+    position:fixed; bottom:0; left:0; right:0; z-index:20; max-width:820px; margin:0 auto;
+    background:#fff; box-shadow:0 -6px 20px rgba(16,23,40,0.09); border-radius:20px 20px 0 0;
+    display:flex; gap:4px; padding:8px 10px calc(8px + env(safe-area-inset-bottom));
   }
-  .fab svg{ flex-shrink:0; }
+  .bn-item{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; background:transparent;
+    color:var(--slate); border-radius:14px; padding:7px 4px; font-size:10.5px; font-weight:700; cursor:pointer;
+  }
+  .bn-item svg{ width:21px; height:21px; }
+  .bn-item.active{ color:var(--meadow); background:var(--meadow-light); }
 
   .sheet-overlay{ position:fixed; inset:0; background:rgba(16,20,35,0.46); z-index:30; opacity:0; pointer-events:none; transition:opacity .2s; }
   .sheet-overlay.open{ opacity:1; pointer-events:auto; }
@@ -161,6 +180,8 @@
   }
   .schedule-table .subj-cell.empty{ color:#C7CBD8; font-weight:500; }
   .schedule-table .teacher-name{ font-size:9.5px; font-weight:500; color:var(--slate); margin-top:3px; }
+  .schedule-table tr.today-row .period-cell{ color:var(--meadow); }
+  .schedule-table tr.today-row .subj-cell:not(.empty){ border:1.5px solid var(--meadow); }
 </style>
 </head>
 <body>
@@ -172,11 +193,6 @@
       <h1>خطة الأسبوع الدراسي</h1>
       <p class="sub">مدرسة المروج المتوسطة</p>
     </div>
-  </div>
-
-  <div class="tabs" id="main-view-tabs">
-    <button class="tab active" data-view="weekly">الخطة الأسبوعية</button>
-    <button class="tab" data-view="schedule">الجدول الدراسي</button>
   </div>
 
   <div id="weekly-view">
@@ -217,10 +233,20 @@
 
 </div>
 
-<button class="fab" id="contact-fab">
-  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-  تواصل مع المدرسة
-</button>
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bn-item active" data-view="weekly">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>
+    <span>الخطة</span>
+  </button>
+  <button class="bn-item" data-view="schedule">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 15h3M8 15h.01"/></svg>
+    <span>الجدول</span>
+  </button>
+  <button class="bn-item" id="bn-contact">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+    <span>تواصل</span>
+  </button>
+</nav>
 
 <div class="sheet-overlay" id="sheet-overlay"></div>
 <div class="contact-sheet" id="contact-sheet">
@@ -327,6 +353,14 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 let publishedWeeks = [];
 let currentWeekIndex = 0;
 let currentGrade = 'first_intermediate';
+let lastPlans = [];
+const GRADE_LABELS = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
+const WEEK_NAMES_AR = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
+// مفتاح اليوم الحالي بنفس مفاتيح SCHEDULE_DAYS (جمعة/سبت تعتبر خارج أيام الدوام فما تطابق شي)
+function todayDayKey() {
+  const map = { 0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday' };
+  return map[new Date().getDay()] || null;
+}
 
 const subjectIcons = {
   'الرياضيات': '<path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5M8 17h3"/>',
@@ -340,17 +374,25 @@ const subjectIcons = {
   'التربية البدنية': '<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/>',
 };
 const defaultIcon = '<path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/>';
-const accentCycle = ['#6D4FE0', '#0EA5A0', '#FF6B5B', '#FFB020'];
-const accentLightCycle = ['#F1EDFD', '#E1F7F5', '#FFEDEA', '#FFF4DE'];
+const accentCycle = ['#2455A4', '#0E93A8', '#E07A34', '#6249A6']; // meadow, teal, gold, purple - نفس هوية المنصة
+const accentLightCycle = ['#EAF1FC', '#E3F4F7', '#FDEFE3', '#EFEBFB'];
 
 const sheetOverlay = document.getElementById('sheet-overlay');
 const contactSheet = document.getElementById('contact-sheet');
 function openContactSheet() { sheetOverlay.classList.add('open'); contactSheet.classList.add('open'); document.body.style.overflow = 'hidden'; }
 function closeContactSheet() { sheetOverlay.classList.remove('open'); contactSheet.classList.remove('open'); document.body.style.overflow = ''; }
-document.getElementById('contact-fab').addEventListener('click', openContactSheet);
+document.getElementById('bn-contact').addEventListener('click', openContactSheet);
 document.getElementById('sheet-close').addEventListener('click', closeContactSheet);
 sheetOverlay.addEventListener('click', closeContactSheet);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeContactSheet(); });
+
+// وميض قصير يلفت الانتباه لعنصر معيّن بعد تمرير الصفحة له (اختصارات الاختبارات/الواجبات)
+function scrollToAndFlash(el) {
+  if (!el) return;
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  el.classList.add('flash-highlight');
+  setTimeout(() => el.classList.remove('flash-highlight'), 950);
+}
 
 document.getElementById('grade-tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
@@ -382,6 +424,7 @@ function renderWeekTabs() {
 
 async function loadPlans() {
   if (publishedWeeks.length === 0) {
+    lastPlans = [];
     document.getElementById('week-tabs').innerHTML = '';
     document.getElementById('bento-container').innerHTML = '';
     document.getElementById('alert-container').innerHTML = '';
@@ -419,6 +462,7 @@ async function loadPlans() {
   container.innerHTML = '';
 
   if (error) {
+    lastPlans = [];
     bentoContainer.innerHTML = '';
     alertContainer.innerHTML = '';
     container.innerHTML = `<div class="empty-state">
@@ -428,6 +472,7 @@ async function loadPlans() {
   }
 
   if (!plans || plans.length === 0) {
+    lastPlans = [];
     bentoContainer.innerHTML = '';
     alertContainer.innerHTML = '';
     container.innerHTML = `<div class="empty-state">
@@ -436,23 +481,43 @@ async function loadPlans() {
     return;
   }
 
+  lastPlans = plans;
+
   function testSectionsLabel(sections) {
     return (sections && sections.length > 0) ? ` (الفصل ${sections.join('، الفصل ')})` : ' (كل الفصول)';
   }
   const testSubjects = plans.filter(p => p.has_test).map(p => p.subjects ? p.subjects.name + testSectionsLabel(p.test_sections) : '').filter(Boolean);
   const homeworkCount = plans.filter(p => !p.no_homework && p.homework && p.homework.trim() !== '' && p.homework.trim() !== '-').length;
 
+  const todayLabel = (SCHEDULE_DAYS.find(d => d.key === todayDayKey()) || {}).label || '-';
   bentoContainer.innerHTML = `
-    <div class="bento">
-      <div class="bento-cell c-coral">
+    <div class="shortcuts-row">
+      <button class="shortcut-tile sc-coral" id="sc-tests" ${testSubjects.length === 0 ? 'disabled' : ''}>
         <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.7 3.86a2 2 0 00-3.4 0z"/></svg></div>
-        <div><div class="num">${testSubjects.length}</div><div class="lbl">اختبار هذا الأسبوع</div></div>
-      </div>
-      <div class="bento-cell c-teal">
+        <div class="num">${testSubjects.length}</div>
+        <div class="lbl">الاختبارات</div>
+      </button>
+      <button class="shortcut-tile sc-teal" id="sc-homework" ${homeworkCount === 0 ? 'disabled' : ''}>
         <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="3"/><path d="M8 2v4M16 2v4M3 10h18"/></svg></div>
-        <div><div class="num">${homeworkCount}</div><div class="lbl">عدد الواجبات</div></div>
-      </div>
+        <div class="num">${homeworkCount}</div>
+        <div class="lbl">الواجبات</div>
+      </button>
+      <button class="shortcut-tile sc-meadow" id="sc-today-schedule">
+        <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <div class="num" style="font-size:12.5px;">${todayLabel}</div>
+        <div class="lbl">جدول اليوم</div>
+      </button>
+      <button class="shortcut-tile sc-gold" id="sc-share-plan" ${plans.length === 0 ? 'disabled' : ''}>
+        <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></div>
+        <div class="num" style="font-size:12.5px;">PDF</div>
+        <div class="lbl">مشاركة الخطة</div>
+      </button>
     </div>`;
+
+  document.getElementById('sc-tests').addEventListener('click', () => scrollToAndFlash(document.querySelector('.subject-card.has-test')));
+  document.getElementById('sc-homework').addEventListener('click', () => scrollToAndFlash(document.querySelector('.subject-card[data-has-homework="1"]')));
+  document.getElementById('sc-today-schedule').addEventListener('click', () => document.querySelector('#bottom-nav .bn-item[data-view="schedule"]').click());
+  document.getElementById('sc-share-plan').addEventListener('click', shareWeeklyPlanPdf);
 
   if (testSubjects.length > 0) {
     alertContainer.innerHTML = `
@@ -473,8 +538,10 @@ async function loadPlans() {
     const lessonsHtml = lessonsList.length > 1
       ? '<ul>' + lessonsList.map(l => `<li>${l}</li>`).join('') + '</ul>'
       : `<span>${lessonsList[0] || '-'}</span>`;
+    const hasHomework = !p.no_homework && p.homework && p.homework.trim() !== '' && p.homework.trim() !== '-';
     const card = document.createElement('div');
     card.className = 'subject-card' + (p.has_test ? ' has-test' : '');
+    card.dataset.hasHomework = hasHomework ? '1' : '0';
     card.innerHTML = `
       <div class="top" style="--accent:${accent}; --accent-light:${accentLight};">
         <div class="icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${iconPath}</svg></div>
@@ -488,6 +555,77 @@ async function loadPlans() {
       </div>`;
     container.appendChild(card);
   });
+}
+
+/* ---------- مشاركة/تحميل الخطة الأسبوعية كـ PDF ---------- */
+// نفس أسلوب طباعة الجدول الدراسي بالأسفل (نافذة طباعة حقيقية بدل مكتبة PDF خارجية) - يقدر ولي
+// الأمر يختار "حفظ كـ PDF" من نافذة الطباعة، والملف الناتج يقدر يرسله لمن يبغى بأي وسيلة
+const PLAN_PRINT_STYLES = `
+  @page{ size: A4; margin: 14mm; }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{ font-family:'IBM Plex Sans Arabic', Arial, sans-serif; margin:0; padding:0; color:#152238; }
+  .print-header{ display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #0F2447; padding-bottom:10px; margin-bottom:14px; }
+  .print-header img{ height:52px; }
+  .print-header .title{ text-align:center; flex:1; }
+  .print-header h1{ font-size:19px; margin:0 0 4px; color:#0F2447; }
+  .print-header p{ font-size:13px; margin:0; color:#6B7684; font-weight:600; }
+  .print-header .date{ font-size:11px; color:#6B7684; text-align:left; white-space:nowrap; }
+  .plan-note{ background:#FDEFE3; border:1px solid #E07A34; border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:12px; }
+  table{ width:100%; border-collapse:collapse; }
+  th, td{ border:1px solid #C7CBD8; padding:7px 8px; text-align:right; font-size:11.5px; vertical-align:top; }
+  th{ background:#0F2447 !important; color:#fff !important; font-size:12px; font-weight:700; text-align:center; }
+  td.subj-name{ font-weight:800; white-space:nowrap; }
+  td.test-yes{ color:#C0453D; font-weight:700; }
+  .print-footer{ margin-top:16px; font-size:10.5px; color:#8890A0; text-align:center; }
+`;
+function buildWeeklyPlanPrintHtml() {
+  const gradeLabel = GRADE_LABELS[currentGrade] || '';
+  const weekNum = publishedWeeks[currentWeekIndex];
+  const weekLabel = 'الأسبوع ' + (WEEK_NAMES_AR[weekNum - 1] || weekNum);
+  const noteEl = document.querySelector('#admin-note-container .admin-note p');
+  const rows = lastPlans.map(p => {
+    const subjectName = p.subjects ? p.subjects.name : '-';
+    const lessons = (p.lessons && p.lessons.length > 0) ? p.lessons.join('، ') : '-';
+    const homework = p.no_homework ? 'لا يوجد واجب' : (p.homework || '-');
+    const testNote = p.has_test
+      ? 'نعم' + ((p.test_sections && p.test_sections.length > 0) ? ` (الفصل ${p.test_sections.join('، الفصل ')})` : ' (كل الفصول)')
+      : 'لا';
+    return `<tr>
+      <td class="subj-name">${subjectName}</td>
+      <td>${lessons}</td>
+      <td>${p.performance_tasks || '-'}</td>
+      <td>${homework}</td>
+      <td class="${p.has_test ? 'test-yes' : ''}">${testNote}</td>
+    </tr>`;
+  }).join('');
+  const printDate = new Date().toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+  return `
+    <div class="print-header">
+      <img src="${document.getElementById('hero-logo').src}" />
+      <div class="title">
+        <h1>الخطة الأسبوعية</h1>
+        <p>مدرسة المروج — ${gradeLabel} — ${weekLabel}</p>
+      </div>
+      <div class="date">تاريخ الطباعة<br>${printDate}</div>
+    </div>
+    ${noteEl ? `<div class="plan-note"><b>تعليمات الإدارة:</b> ${noteEl.textContent}</div>` : ''}
+    <table>
+      <thead><tr><th>المادة</th><th>الدرس</th><th>المهام الأدائية</th><th>الواجب</th><th>اختبار؟</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="print-footer">مدرسة المروج — نظام إدارة المدرسة</p>`;
+}
+function shareWeeklyPlanPdf() {
+  if (!lastPlans || lastPlans.length === 0) return;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(`<html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>الخطة الأسبوعية</title>
+    <style>${PLAN_PRINT_STYLES}</style></head><body>${buildWeeklyPlanPrintHtml()}</body></html>`);
+  win.document.close();
+  const img = win.document.querySelector('.print-header img');
+  const doPrint = () => { win.focus(); win.print(); };
+  if (!img || img.complete) doPrint();
+  else { img.onload = doPrint; img.onerror = doPrint; }
 }
 
 loadPublishedWeeks().then(loadPlans);
@@ -506,10 +644,10 @@ let schGrade = 'first_intermediate';
 let schSection = null;
 let schCurrentMap = null;
 
-document.getElementById('main-view-tabs').addEventListener('click', (e) => {
-  const btn = e.target.closest('.tab');
+document.getElementById('bottom-nav').addEventListener('click', (e) => {
+  const btn = e.target.closest('.bn-item[data-view]');
   if (!btn) return;
-  document.querySelectorAll('#main-view-tabs .tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#bottom-nav .bn-item[data-view]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   const view = btn.dataset.view;
   document.getElementById('weekly-view').classList.toggle('hidden-view', view !== 'weekly');
@@ -566,9 +704,10 @@ async function loadScheduleTable() {
   schCurrentMap = map;
   printBtn.disabled = (data || []).length === 0;
 
+  const todayKey = todayDayKey();
   const rowsHtml = SCHEDULE_DAYS.map(d => `
-    <tr>
-      <td class="period-cell">${d.label}</td>
+    <tr${d.key === todayKey ? ' class="today-row"' : ''}>
+      <td class="period-cell">${d.label}${d.key === todayKey ? ' (اليوم)' : ''}</td>
       ${SCHEDULE_PERIODS.map(p => {
         const cell = map[d.key + '-' + p];
         const subj = cell ? cell.subject : '';
