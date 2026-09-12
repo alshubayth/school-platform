@@ -501,7 +501,7 @@ const durationLabels = { single_week: 'أسبوع محدد', semester_1: 'الف
 
 async function refreshOpPlanApprovals() {
   const { data: pendingPlans, error: pendingPlansErr } = await sb.from('op_tasks')
-    .select('id, title, description, duration_type, week_number, profiles!op_tasks_employee_profile_id_fkey(full_name)')
+    .select('id, title, description, duration_type, week_number, profiles!op_tasks_employee_profile_id_fkey(full_name), programs(title, plan_code)')
     .eq('plan_status', 'pending');
   if (pendingPlansErr) console.error('opplan pendingPlans error:', pendingPlansErr);
 
@@ -517,6 +517,7 @@ async function refreshOpPlanApprovals() {
       card.className = 'form-card';
       card.innerHTML = `
         <p style="margin:0 0 4px;"><strong>${t.title}</strong> — ${t.profiles ? t.profiles.full_name : ''}</p>
+        ${t.programs ? `<p style="margin:0 0 4px; font-size:12px; color:var(--meadow); font-weight:700;">${t.programs.plan_code ? esc(t.programs.plan_code) + ' - ' : ''}${esc(t.programs.title)}</p>` : '<p style="margin:0 0 4px; font-size:12px; color:var(--slate);">بدون برنامج محدد</p>'}
         <p style="margin:0 0 10px; font-size:13px; color:var(--slate);">${durationLabels[t.duration_type]}${t.week_number ? ' (الأسبوع ' + t.week_number + ')' : ''} — ${t.description || ''}</p>
         <div style="display:flex; gap:8px;">
           <button class="approve-btn" style="width:auto; padding:8px 16px; background:var(--meadow); color:#fff;">اعتماد</button>
@@ -536,7 +537,7 @@ async function refreshOpPlanApprovals() {
   }
 
   const { data: pendingCompletions } = await sb.from('op_task_completions')
-    .select('id, period_label, status, op_tasks(title, profiles!op_tasks_employee_profile_id_fkey(full_name))')
+    .select('id, period_label, status, op_tasks(title, profiles!op_tasks_employee_profile_id_fkey(full_name), programs(title, plan_code))')
     .eq('status', 'pending');
 
   const compList = document.getElementById('opplan-pending-completion-list');
@@ -549,8 +550,10 @@ async function refreshOpPlanApprovals() {
     pendingCompletions.forEach(c => {
       const card = document.createElement('div');
       card.className = 'form-card';
+      const prog = c.op_tasks ? c.op_tasks.programs : null;
       card.innerHTML = `
-        <p style="margin:0 0 10px;"><strong>${c.op_tasks ? c.op_tasks.title : ''}</strong> — ${c.op_tasks && c.op_tasks.profiles ? c.op_tasks.profiles.full_name : ''} · ${c.period_label}</p>
+        <p style="margin:0 0 4px;"><strong>${c.op_tasks ? c.op_tasks.title : ''}</strong> — ${c.op_tasks && c.op_tasks.profiles ? c.op_tasks.profiles.full_name : ''} · ${c.period_label}</p>
+        ${prog ? `<p style="margin:0 0 10px; font-size:12px; color:var(--meadow); font-weight:700;">${prog.plan_code ? esc(prog.plan_code) + ' - ' : ''}${esc(prog.title)}</p>` : '<p style="margin:0 0 10px; font-size:12px; color:var(--slate);">بدون برنامج محدد</p>'}
         <div style="display:flex; gap:8px;">
           <button class="approve-btn" style="width:auto; padding:8px 16px; background:var(--meadow); color:#fff;">اعتماد الإنجاز</button>
           <button class="reject-btn" style="width:auto; padding:8px 16px; background:var(--danger-light); color:var(--danger);">إرجاع</button>
