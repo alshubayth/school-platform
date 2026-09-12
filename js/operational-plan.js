@@ -82,11 +82,18 @@ export async function loadOpPlanModule() {
 }
 
 /* ---------- بيانات الهيكل (مشتركة) ---------- */
+// عدد أسابيع الفصل الدراسي الواحد بمدرستنا (فصلين × 19 أسبوع لكل واحد) - الترقيم يرجع لـ1 من
+// جديد كل فصل، فـ"أسبوع 5" لازم يترافق دايمًا مع تحديد الفصل (currentSemester) لما يكون النوع
+// "أسبوع محدد"، وإلا يتلخبط أسبوع الفصل الأول مع نظيره بالفصل الثاني
+const WEEKS_PER_SEMESTER = 19;
+let currentSemester = 'semester_1';
+
 async function refreshStructureCaches() {
-  const [{ data: goals }, { data: objectives }, { data: programs }] = await Promise.all([
+  const [{ data: goals }, { data: objectives }, { data: programs }, { data: settings }] = await Promise.all([
     sb.from('strategic_goals').select('id, title'),
     sb.from('operational_objectives').select('id, title, strategic_goal_id'),
     sb.from('programs').select('id, title, operational_objective_id, department, school_indicator, plan_code, applies_to_intermediate'),
+    sb.from('op_plan_settings').select('current_semester').eq('id', 1).maybeSingle(),
   ]);
   goalsCache = goals || [];
   objectivesCache = objectives || [];
@@ -95,11 +102,15 @@ async function refreshStructureCaches() {
   // نعرض وندوّر بس البرامج المتعلقة بمرحلة المتوسط - العمود قد ما يكون موجود لبرامج مضافة يدويًا
   // قبل هذا التحديث (تُعامل null/undefined كـ "تنطبق" افتراضيًا، مو كاستبعاد)
   programsCache = allPrograms.filter(p => p.applies_to_intermediate !== false);
+  currentSemester = (settings && settings.current_semester) || 'semester_1';
 }
 
 /* ---------- شاشة المدير ---------- */
 async function loadOpPlanAdminData() {
   await refreshStructureCaches();
+
+  const semSel = document.getElementById('opplan-semester-select');
+  if (semSel) semSel.value = currentSemester;
 
   // قائمة المشاركين المتاحين للإضافة
   const { data: allStaff } = await sb.from('profiles').select('id, full_name').in('role', ['teacher','deputy']);
@@ -121,6 +132,12 @@ async function loadOpPlanAdminData() {
   await refreshOpPlanApprovals();
   await renderOpPlanGuide();
 }
+
+onEl('opplan-semester-select', 'change', async (e) => {
+  const val = e.target.value;
+  await sb.from('op_plan_settings').update({ current_semester: val, updated_by: currentUserId }).eq('id', 1);
+  currentSemester = val;
+});
 
 /* ---------- إسناد البرامج للمشاركين (لوحة المدير) ----------
    بدل ما كل موظف يختار الهدف العام/التشغيلي/البرنامج يدويًا لكل مهمة (تعب مع 44 برنامج)،
@@ -673,9 +690,12 @@ function openNextIncompleteProgram() {
 
 async function renderProgramEditor(body, assignment, program) {
   body.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
+  // نعرض مهام "أسبوع محدد" الخاصة بالفصل الحالي بس (أسابيع الفصل الثاني السابقة، إن وجدت،
+  // ترقيمها منفصل تمامًا) + كل المهام المتكررة (فصل/سنة) بغض النظر عن الفصل
   const { data: existing } = await sb.from('op_tasks')
     .select('id, title, duration_type, week_number, plan_status')
     .eq('employee_profile_id', currentUserId).eq('program_id', program.id)
+    .or(`and(duration_type.eq.single_week,semester.eq.${currentSemester}),duration_type.neq.single_week`)
     .order('week_number', { ascending: true });
 
   const statusLabel = { approved: 'معتمدة', rejected: 'مرفوضة', pending: 'بانتظار الاعتماد' };
@@ -716,7 +736,7 @@ async function renderProgramEditor(body, assignment, program) {
         <option value="semester_2">الفصل الثاني</option>
         <option value="full_year">طوال العام</option>
       </select>
-      <input type="number" class="mp-week" placeholder="رقم الأسبوع" min="1" max="40" />
+      <input type="number" class="mp-week" placeholder="رقم الأسبوع (1-${WEEKS_PER_SEMESTER})" min="1" max="${WEEKS_PER_SEMESTER}" />
       <input type="text" class="mp-title" placeholder="عنوان المهمة" />
       <button type="button" class="mp-remove" title="حذف الصف">✕</button>`;
     row.querySelector('.mp-duration').addEventListener('change', (e) => {
@@ -743,8 +763,9 @@ async function renderProgramEditor(body, assignment, program) {
       };
       if (duration === 'single_week') {
         const wk = parseInt(row.querySelector('.mp-week').value);
-        if (!wk || wk < 1 || wk > 40) { errEl.textContent = `حدد رقم أسبوع صحيح (1-40) للمهمة "${title}"`; errEl.style.display = 'block'; return false; }
+        if (!wk || wk < 1 || wk > WEEKS_PER_SEMESTER) { errEl.textContent = `حدد رقم أسبوع صحيح (1-${WEEKS_PER_SEMESTER}) للمهمة "${title}"`; errEl.style.display = 'block'; return false; }
         payload.week_number = wk;
+        payload.semester = currentSemester;
       } else {
         payload.recurrence = 'weekly';
       }
@@ -857,6 +878,7 @@ onEl('opt-excel-upload', 'click', async () => {
         };
         if (durationType === 'single_week') {
           payload.week_number = parseInt(weekNum) || null;
+          payload.semester = currentSemester;
         } else {
           payload.recurrence = recurrenceText === 'يومي' ? 'daily' : 'weekly';
         }
@@ -896,7 +918,7 @@ function renderWeekStrip() {
   const strip = document.getElementById('opplan-week-strip');
   if (!strip) return;
   strip.innerHTML = '';
-  for (let w = 1; w <= 40; w++) {
+  for (let w = 1; w <= WEEKS_PER_SEMESTER; w++) {
     const pill = document.createElement('button');
     pill.type = 'button';
     pill.className = 'myop-week-pill' + (w === opPlanWeek ? ' active' : '');
@@ -936,10 +958,12 @@ function setMyOpRing(doneCount, actionableCount) {
 
 async function refreshMyTasks() {
   renderWeekStrip();
+  // "أسبوع محدد" لازم يترافق بفلترة الفصل الحالي (الترقيم يرجع لـ1 كل فصل) - المهام المتكررة
+  // (فصل/سنة) تطلع دايمًا بغض النظر عن الفصل الحالي
   const { data: tasks } = await sb.from('op_tasks')
     .select('id, title, description, duration_type, week_number, plan_status, plan_review_note')
     .eq('employee_profile_id', currentUserId)
-    .or(`week_number.eq.${opPlanWeek},duration_type.neq.single_week`);
+    .or(`and(duration_type.eq.single_week,semester.eq.${currentSemester},week_number.eq.${opPlanWeek}),duration_type.neq.single_week`);
 
   const kanban = document.getElementById('opplan-my-tasks');
   kanban.innerHTML = '';
