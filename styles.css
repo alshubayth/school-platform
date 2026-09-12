@@ -353,6 +353,66 @@
     .op-chart-row{ grid-template-columns:1fr; }
   }
 
+  /* ===== "مهامي الأسبوعية" (شاشة الموظف المشارك بالخطة التشغيلية) =====
+     حلقة تقدم شخصية + شريط أسابيع أفقي بدل زر تالي/سابق نصي + لوحة كانبان 3 أعمدة
+     بدل قائمة نصية طويلة - نفس منطق البيانات (plan_status/completion status) بس بعرض مرئي أوضح */
+  .myop-ring-card{
+    display:flex; align-items:center; gap:16px; background:#fff; border:1px solid var(--border);
+    border-radius:14px; padding:14px 16px; margin-bottom:16px; box-shadow:var(--shadow-sm);
+  }
+  .myop-ring{ position:relative; width:64px; height:64px; flex-shrink:0; }
+  .myop-ring svg{ width:100%; height:100%; transform:rotate(-90deg); }
+  .myop-ring .track{ fill:none; stroke:var(--sand); stroke-width:7; }
+  .myop-ring .fill{ fill:none; stroke:var(--meadow); stroke-width:7; stroke-linecap:round; transition:stroke-dasharray 0.4s, stroke 0.4s; }
+  .myop-ring-pct{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:800; }
+  .myop-ring-title{ margin:0 0 3px; font-size:13.5px; font-weight:700; }
+  .myop-ring-sub{ margin:0; font-size:11.5px; color:var(--slate); }
+
+  .myop-week-strip-wrap{ margin-bottom:18px; }
+  .myop-week-strip{ display:flex; gap:6px; overflow-x:auto; padding:2px 2px 8px; scrollbar-width:thin; }
+  .myop-week-pill{
+    flex-shrink:0; min-width:38px; height:38px; border-radius:12px; border:1px solid var(--border);
+    background:#fff; color:var(--ink); font-size:12.5px; font-weight:700; display:flex; align-items:center;
+    justify-content:center; padding:0 6px; transition:0.15s;
+  }
+  .myop-week-pill.active{ background:var(--meadow); border-color:var(--meadow); color:#fff; }
+  .myop-week-pill.has-tasks:not(.active)::after{ content:''; }
+
+  .op-kanban{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; align-items:start; }
+  .op-kanban-col{ background:var(--sand); border-radius:14px; padding:10px; min-height:60px; }
+  .op-kanban-col .colhead{ display:flex; align-items:center; gap:6px; padding:4px 6px 10px; font-size:12.5px; font-weight:800; }
+  .op-kanban-col .colhead .dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .op-kanban-col .colhead .count{ margin-inline-start:auto; background:#fff; border-radius:20px; padding:1px 8px; font-size:11px; color:var(--slate); }
+  .op-kanban-col.needs .colhead .dot{ background:var(--status-warn); }
+  .op-kanban-col.waiting .colhead .dot{ background:var(--status-idle); }
+  .op-kanban-col.done .colhead .dot{ background:var(--status-good); }
+
+  .myop-task-card{
+    background:#fff; border-radius:12px; padding:11px 12px; margin-bottom:8px; box-shadow:var(--shadow-sm);
+    border-inline-start:3px solid var(--border);
+  }
+  .op-kanban-col.needs .myop-task-card{ border-inline-start-color:var(--status-warn); }
+  .op-kanban-col.waiting .myop-task-card{ border-inline-start-color:var(--status-idle); }
+  .op-kanban-col.done .myop-task-card{ border-inline-start-color:var(--status-good); }
+  .myop-task-card.overdue{ border-inline-start-color:var(--status-bad); background:var(--danger-light); }
+  .myop-task-card h6{ margin:0 0 5px; font-size:13px; font-weight:700; line-height:1.4; }
+  .myop-task-card .desc{ font-size:11.5px; color:var(--slate); margin:0 0 8px; line-height:1.5; }
+  .myop-duration-chip{
+    display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; color:var(--purple);
+    background:var(--purple-light); border-radius:20px; padding:2px 8px; margin-bottom:8px;
+  }
+  .myop-overdue-chip{
+    display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:800; color:var(--status-bad);
+    background:#fff; border-radius:20px; padding:2px 8px; margin-inline-start:6px;
+  }
+  .myop-task-card .badge-row{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .myop-task-card .btn-primary{ width:100%; padding:8px; margin-top:10px; font-size:12.5px; }
+  .op-kanban-empty{ text-align:center; font-size:11.5px; color:var(--slate); padding:16px 6px; }
+
+  @media (max-width: 720px){
+    .op-kanban{ grid-template-columns:1fr; }
+  }
+
   /* ===== الجدول الدراسي الأسبوعي بالصفحة الرئيسية للمعلم ===== */
   .weekly-sched-table{ width:100%; border-collapse:separate; border-spacing:3px; min-width:460px; }
   .weekly-sched-table thead th{ font-size:10px; color:var(--slate); font-weight:700; padding:2px 3px; text-align:center; }
