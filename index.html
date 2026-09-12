@@ -401,6 +401,30 @@
 
         <h4 style="margin:20px 0 14px;">بانتظار اعتماد الإنجاز</h4>
         <div id="opplan-pending-completion-list"></div>
+
+        <div class="form-card" style="border:1px solid var(--danger); background:var(--danger-light); margin-top:26px;">
+          <h4 style="color:var(--danger); margin-bottom:6px;">⚠ منطقة الخطر</h4>
+          <p style="font-size:12.5px; color:#7A2E28; margin:0 0 12px; line-height:1.7;">حذف كل المهام المُدخلة بالخطة التشغيلية من جميع الموظفين المشاركين، بلا رجعة. استخدمه بس لو تبي تبدأ الخطة من الصفر.</p>
+          <button class="btn-primary" id="opplan-reset-btn" style="width:auto; padding:10px 20px; background:var(--danger);">إعادة تهيئة الخطة (حذف كل المهام)</button>
+        </div>
+      </div>
+
+      <div id="opplan-reset-overlay" class="hidden" style="position:fixed; inset:0; background:rgba(21,34,56,0.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:#fff; border-radius:16px; padding:26px 22px; max-width:420px; width:100%; box-shadow:var(--shadow-md); text-align:center;">
+          <div style="width:52px; height:52px; border-radius:50%; background:var(--danger-light); color:var(--danger); display:flex; align-items:center; justify-content:center; margin:0 auto 14px;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+          </div>
+          <h3 style="margin:0 0 8px; font-size:16px;">إعادة تهيئة الخطة التشغيلية؟</h3>
+          <p style="font-size:13px; color:var(--slate); line-height:1.7; margin:0 0 18px;">
+            هذا الإجراء يحذف <strong>كل المهام المُدخلة</strong> من جميع الموظفين المشاركين بالخطة (وأي إنجازات مرتبطة بها)، ولا يمكن التراجع عنه.
+            بالضغط على "أقرّ وأوافق" أنت تُقرّ بأن إعادة التهيئة تتم على مسؤوليتك.
+          </p>
+          <div class="error-msg" id="opplan-reset-error" style="text-align:right;"></div>
+          <div style="display:flex; gap:10px;">
+            <button id="opplan-reset-cancel" style="flex:1; background:var(--sand); color:var(--ink);">إلغاء</button>
+            <button id="opplan-reset-confirm" style="flex:1; background:var(--danger); color:#fff;">أقرّ وأوافق، احذف الكل</button>
+          </div>
+        </div>
       </div>
 
       <!-- ===== شاشة الموظف المشارك ===== -->
