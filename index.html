@@ -352,6 +352,20 @@
         </div>
 
         <div class="form-card">
+          <h4>إسناد البرامج للمشاركين</h4>
+          <p style="font-size:12.5px; color:var(--slate); margin:0 0 12px;">اختر مشاركًا وحدد البرامج المسندة له — يشوفها بصفحته ويدخل مهامها الأسبوعية برنامجًا برنامج</p>
+          <div class="form-row">
+            <select id="opa-employee"></select>
+          </div>
+          <input type="text" id="opa-search" placeholder="بحث باسم البرنامج أو رمزه..." style="margin:10px 0;" />
+          <div id="opa-checklist" class="opa-checklist"></div>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
+            <button class="btn-primary" id="opa-save" style="width:auto; padding:10px 20px;">حفظ الإسناد</button>
+            <span id="opa-save-msg" style="font-size:12.5px; color:var(--meadow); display:none;">تم الحفظ ✓</span>
+          </div>
+        </div>
+
+        <div class="form-card">
           <h4>الهيكل: أهداف عامة ← تشغيلية ← برامج</h4>
           <div class="form-row">
             <input type="text" id="og-title" placeholder="اسم هدف عام جديد" />
@@ -384,42 +398,10 @@
 
       <!-- ===== شاشة الموظف المشارك ===== -->
       <div id="opplan-employee-view" class="hidden">
-        <div class="form-card">
-          <h4 id="opt-manual-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-            <span>+ إضافة مهمة جديدة</span>
-            <svg id="opt-manual-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
-          </h4>
-          <div id="opt-manual-body" class="hidden" style="margin-top:14px;">
-            <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">الهدف العام</label>
-            <select id="opt-goal" style="margin-bottom:10px;"></select>
-            <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">الهدف التشغيلي</label>
-            <select id="opt-objective" style="margin-bottom:10px;"></select>
-            <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">البرنامج</label>
-            <select id="opt-program" style="margin-bottom:8px;"></select>
-            <div id="opt-program-info" class="hidden" style="background:var(--sand); border-radius:8px; padding:9px 12px; margin-bottom:14px; font-size:12.5px; color:#444; line-height:1.6;"></div>
-
-            <input type="text" id="opt-title" placeholder="عنوان المهمة" style="margin-bottom:10px;" />
-            <textarea id="opt-desc" placeholder="الوصف" rows="2"></textarea>
-
-            <label style="display:block; font-size:12.5px; color:var(--slate); margin-bottom:4px;">مدة المهمة</label>
-            <select id="opt-duration">
-              <option value="single_week">أسبوع محدد (الأشيع)</option>
-              <option value="semester_1">الفصل الدراسي الأول (متكررة أسبوعيًا)</option>
-              <option value="semester_2">الفصل الدراسي الثاني (متكررة أسبوعيًا)</option>
-              <option value="full_year">طوال العام الدراسي (متكررة أسبوعيًا)</option>
-            </select>
-            <div id="opt-week-wrap">
-              <input type="number" id="opt-week" placeholder="رقم الأسبوع (1-40)" min="1" max="40" />
-            </div>
-            <div id="opt-recurrence-wrap" class="hidden">
-              <select id="opt-recurrence">
-                <option value="weekly">تتكرر أسبوعيًا (الأشيع)</option>
-                <option value="daily">تتكرر يوميًا (حالة نادرة)</option>
-              </select>
-            </div>
-            <div class="error-msg" id="opt-error"></div>
-            <button class="btn-primary" id="opt-submit">إرسال للاعتماد</button>
-          </div>
+        <div class="form-card" id="myprog-wrap">
+          <h4 style="margin-bottom:4px;">برامجي المسندة</h4>
+          <p style="font-size:12.5px; color:var(--slate); margin:0 0 14px;">افتح كل برنامج وحدد مهامه على مدار أسابيع السنة، ثم أنهِ البرنامج للانتقال تلقائيًا للي بعده</p>
+          <div id="myprog-list"></div>
         </div>
 
         <div class="form-card">
