@@ -40,22 +40,17 @@ async function renderMyWeeklyScheduleGrid() {
   const cellMap = new Map();
   mine.forEach(r => cellMap.set(r.day_of_week + '-' + r.period_number, r));
 
-  const legendHtml = classKeys.map(k => {
-    const [grade, section] = k.split('::');
-    return `<span class="wp-legend-item">
-      <span class="wp-legend-dot" style="background:${colorByClass.get(k)};"></span>${esc(classLabel(grade, section))}
-    </span>`;
-  }).join('');
-
+  // الأيام صفوف والحصص أعمدة (بدل العكس) - أنسب لعرض الجوال وأقرب لشكل الجدول الورقي المعتاد.
+  // الألوان بس (بدون مفتاح ألوان منفصل) - اسم الفصل مكتوب بالخلية نفسها فما يحتاج توضيح إضافي.
   const gridHtml = `
     <div style="overflow-x:auto;">
       <table class="weekly-sched-table">
-        <thead><tr><th></th>${SCHEDULE_DAYS.map(d => `<th>${d.label}</th>`).join('')}</tr></thead>
+        <thead><tr><th></th>${SCHEDULE_PERIODS.map(p => `<th>${p}</th>`).join('')}</tr></thead>
         <tbody>
-          ${SCHEDULE_PERIODS.map(p => `
+          ${SCHEDULE_DAYS.map(d => `
             <tr>
-              <td class="wp-num">${p}</td>
-              ${SCHEDULE_DAYS.map(d => {
+              <td class="wp-day">${d.label}</td>
+              ${SCHEDULE_PERIODS.map(p => {
                 const r = cellMap.get(d.key + '-' + p);
                 if (!r) return `<td class="wp-cell wp-empty"></td>`;
                 const k = r.grade_level + '::' + r.class_section;
@@ -71,8 +66,7 @@ async function renderMyWeeklyScheduleGrid() {
     </div>`;
 
   wrap.innerHTML = `
-    <p style="font-family:'Tajawal'; font-weight:700; font-size:14px; margin:0 0 10px;">جدولك الدراسي الأسبوعي</p>
-    <div class="wp-legend-row">${legendHtml}</div>
+    <p style="font-family:'Tajawal'; font-weight:700; font-size:13px; margin:0 0 8px;">جدولك الدراسي الأسبوعي</p>
     ${gridHtml}`;
 }
 
@@ -226,6 +220,8 @@ export async function renderDashboard() {
   container.innerHTML = '<div class="placeholder" style="padding:30px;"><p>جارٍ التحميل...</p></div>';
 
   if (currentProfile.role === 'admin' || currentProfile.role === 'deputy') {
+    const weeklyWrap = document.getElementById('dash-weekly-schedule');
+    if (weeklyWrap) weeklyWrap.innerHTML = ''; // الجدول الأسبوعي الملوّن خاص بالمعلم فقط
     await renderAdminDashboard(container);
   } else if (currentProfile.role === 'teacher') {
     await renderTeacherDashboard(container);
@@ -325,7 +321,7 @@ async function renderTeacherDashboard(container) {
     opPlanPendingCount = (myPending || []).length;
   }
 
-  container.innerHTML = `<div id="dash-weekly-schedule" style="margin-bottom:22px;"></div><div id="dash-my-schedule" style="margin-bottom:22px;"></div><div id="dash-attention-list"></div>`;
+  container.innerHTML = `<div id="dash-my-schedule" style="margin-bottom:22px;"></div><div id="dash-attention-list"></div>`;
   renderMyWeeklyScheduleGrid();
   const { dayKey, dateStr } = todayInfo();
   renderMyScheduleWidget(container, dayKey, dateStr);
