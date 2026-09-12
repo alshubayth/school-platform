@@ -117,9 +117,96 @@ async function loadOpPlanAdminData() {
   objectivesCache.forEach(o2 => { const o = document.createElement('option'); o.value = o2.id; o.textContent = o2.title; objSelect.appendChild(o); });
 
   await refreshMembersList();
+  await loadProgramAssignAdmin();
   await refreshOpPlanApprovals();
   await renderOpPlanGuide();
 }
+
+/* ---------- إسناد البرامج للمشاركين (لوحة المدير) ----------
+   بدل ما كل موظف يختار الهدف العام/التشغيلي/البرنامج يدويًا لكل مهمة (تعب مع 44 برنامج)،
+   المدير يسند مسبقًا كل موظف بالبرامج الخاصة فيه، وبعدها الموظف بصفحته يفتح برنامجه المسند
+   مباشرة ويدخل مهامه الأسبوعية بدون أي اختيار متكرر */
+let opaMembersCache = [];
+let opaCurrentAssignments = new Set();
+
+async function loadProgramAssignAdmin() {
+  const sel = document.getElementById('opa-employee');
+  if (!sel) return;
+  const { data: members } = await sb.from('operational_plan_members')
+    .select('profile_id, profiles!operational_plan_members_profile_id_fkey(id, full_name)');
+  opaMembersCache = (members || []).map(m => ({ id: m.profile_id, full_name: m.profiles ? m.profiles.full_name : '-' }));
+
+  const prevVal = sel.value;
+  sel.innerHTML = '';
+  if (opaMembersCache.length === 0) {
+    sel.innerHTML = '<option value="">أضف مشاركين بالخطة أولاً</option>';
+    document.getElementById('opa-checklist').innerHTML = '';
+    return;
+  }
+  opaMembersCache.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.full_name; sel.appendChild(o); });
+  if (prevVal && opaMembersCache.some(m => m.id === prevVal)) sel.value = prevVal;
+  await renderOpaChecklist();
+}
+
+async function renderOpaChecklist() {
+  const sel = document.getElementById('opa-employee');
+  const list = document.getElementById('opa-checklist');
+  if (!sel || !list) return;
+  if (!sel.value) { list.innerHTML = ''; return; }
+  const { data: assigned } = await sb.from('program_assignments').select('program_id').eq('profile_id', sel.value);
+  opaCurrentAssignments = new Set((assigned || []).map(a => a.program_id));
+  buildOpaChecklistDom();
+}
+
+function buildOpaChecklistDom() {
+  const list = document.getElementById('opa-checklist');
+  if (!list) return;
+  const q = (document.getElementById('opa-search')?.value || '').trim();
+  const goalById = new Map(goalsCache.map(g => [g.id, g]));
+  const objById = new Map(objectivesCache.map(o => [o.id, o]));
+  const byGoal = new Map();
+  programsCache
+    .filter(p => !q || p.title.includes(q) || (p.plan_code || '').includes(q))
+    .forEach(p => {
+      const obj = objById.get(p.operational_objective_id);
+      const goal = obj ? goalById.get(obj.strategic_goal_id) : null;
+      const key = goal ? goal.title : 'بدون هدف';
+      if (!byGoal.has(key)) byGoal.set(key, []);
+      byGoal.get(key).push(p);
+    });
+  if (byGoal.size === 0) { list.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px;">لا نتائج</p>'; return; }
+  list.innerHTML = Array.from(byGoal.entries()).map(([goalTitle, progs]) => `
+    <div class="opa-goal-heading">${esc(goalTitle)}</div>
+    ${progs.map(p => `
+      <label class="opa-item">
+        <input type="checkbox" data-program-id="${p.id}" ${opaCurrentAssignments.has(p.id) ? 'checked' : ''} />
+        ${p.plan_code ? `<span class="code">${esc(p.plan_code)}</span>` : ''}
+        <span>${esc(p.title)}</span>
+      </label>`).join('')}
+  `).join('');
+}
+
+onEl('opa-employee', 'change', renderOpaChecklist);
+onEl('opa-search', 'input', buildOpaChecklistDom);
+
+onEl('opa-save', 'click', async () => {
+  const sel = document.getElementById('opa-employee');
+  const msgEl = document.getElementById('opa-save-msg');
+  if (!sel || !sel.value) return;
+  const profileId = sel.value;
+  const checked = new Set(Array.from(document.querySelectorAll('#opa-checklist input[type=checkbox]:checked')).map(cb => cb.dataset.programId));
+  const toAdd = Array.from(checked).filter(id => !opaCurrentAssignments.has(id));
+  const toRemove = Array.from(opaCurrentAssignments).filter(id => !checked.has(id));
+
+  if (toAdd.length > 0) {
+    await sb.from('program_assignments').insert(toAdd.map(programId => ({ program_id: programId, profile_id: profileId, assigned_by: currentUserId })));
+  }
+  for (const programId of toRemove) {
+    await sb.from('program_assignments').delete().eq('program_id', programId).eq('profile_id', profileId);
+  }
+  opaCurrentAssignments = checked;
+  if (msgEl) { msgEl.style.display = 'inline'; setTimeout(() => { msgEl.style.display = 'none'; }, 2000); }
+});
 
 /* ---------- دليل الخطة الرسمية: داشبورد متابعة تنفيذ مدرستنا (مرحلة المتوسط فقط) ---------- */
 // نسبة التنفيذ لكل برنامج = عدد مهامه الأسبوعية (op_tasks) المعتمدة واللي لها إنجاز معتمد، من
@@ -356,6 +443,7 @@ onEl('opm-add-member', 'click', async () => {
   }
   alert(`تمت إضافة "${empName}" للخطة التشغيلية بنجاح`);
   await refreshMembersList();
+  await loadProgramAssignAdmin();
 });
 
 async function refreshMembersList() {
@@ -379,6 +467,7 @@ async function refreshMembersList() {
     chip.querySelector('button').addEventListener('click', async () => {
       await sb.from('operational_plan_members').delete().eq('id', m.id);
       await refreshMembersList();
+      await loadProgramAssignAdmin();
     });
     list.appendChild(chip);
   });
@@ -486,107 +575,197 @@ async function refreshOpPlanApprovals() {
 }
 
 /* ---------- شاشة الموظف المشارك ---------- */
-setupCollapsible('opt-manual-toggle', 'opt-manual-body', 'opt-manual-chevron');
 setupCollapsible('opt-excel-toggle', 'opt-excel-body', 'opt-excel-chevron');
 
 async function loadOpPlanEmployeeData() {
   await refreshStructureCaches();
-
-  const goalSelect = document.getElementById('opt-goal');
-  goalSelect.innerHTML = '';
-  if (goalsCache.length === 0) {
-    goalSelect.innerHTML = '<option value="">لا توجد أهداف مضافة بعد، راجع المدير</option>';
-  } else {
-    goalsCache.forEach(g => { const o = document.createElement('option'); o.value = g.id; o.textContent = g.title; goalSelect.appendChild(o); });
-  }
-
-  function refreshObjectivesForGoal() {
-    const goalId = goalSelect.value;
-    const objSelect = document.getElementById('opt-objective');
-    objSelect.innerHTML = '';
-    const filtered = objectivesCache.filter(o => o.strategic_goal_id === goalId);
-    if (filtered.length === 0) {
-      objSelect.innerHTML = '<option value="">لا توجد أهداف تشغيلية لهذا الهدف</option>';
-    } else {
-      filtered.forEach(o2 => { const o = document.createElement('option'); o.value = o2.id; o.textContent = o2.title; objSelect.appendChild(o); });
-    }
-    refreshProgramsForObjective();
-  }
-
-  function refreshProgramsForObjective() {
-    const objId = document.getElementById('opt-objective').value;
-    const progSelect = document.getElementById('opt-program');
-    progSelect.innerHTML = '<option value="">بدون برنامج محدد</option>';
-    programsCache.filter(p => p.operational_objective_id === objId).forEach(p => {
-      const o = document.createElement('option');
-      o.value = p.id;
-      o.textContent = p.plan_code ? `${p.plan_code} - ${p.title}` : p.title;
-      progSelect.appendChild(o);
-    });
-    updateProgramInfo();
-  }
-
-  goalSelect.addEventListener('change', refreshObjectivesForGoal);
-  document.getElementById('opt-objective').addEventListener('change', refreshProgramsForObjective);
-  refreshObjectivesForGoal();
-
+  await loadMyProgramAssignments();
   await refreshMyTasks();
 }
 
-// يعرض القسم المسؤول والمؤشر المستهدف الرسمي للبرنامج المختار، عشان الموظف (مثلاً رائد
-// النشاط) يعرف بالضبط إيش الهدف قبل ما يوزّع تنفيذه على مهام أسبوعية
-function updateProgramInfo() {
-  const infoEl = document.getElementById('opt-program-info');
-  if (!infoEl) return;
-  const progId = document.getElementById('opt-program').value;
-  const prog = programsCache.find(p => p.id === progId);
-  if (!prog || (!prog.department && !prog.school_indicator)) {
-    infoEl.classList.add('hidden');
-    infoEl.innerHTML = '';
+/* ---------- "برامجي المسندة": الموظف يفتح كل برنامج مسند له ويدخل مهامه على مدار
+   الأسابيع دفعة وحدة، بدل ما يختار الهدف العام/التشغيلي/البرنامج يدويًا لكل مهمة على حدة ---------- */
+let myProgAssignments = [];
+
+async function loadMyProgramAssignments() {
+  const { data: assigned } = await sb.from('program_assignments')
+    .select('id, program_id, tasks_entry_complete, programs(id, title, plan_code, department, school_indicator, operational_objective_id)')
+    .eq('profile_id', currentUserId);
+  myProgAssignments = assigned || [];
+  await renderMyProgramList();
+}
+
+async function renderMyProgramList() {
+  const wrap = document.getElementById('myprog-list');
+  if (!wrap) return;
+  if (myProgAssignments.length === 0) {
+    wrap.innerHTML = '<div class="placeholder" style="padding:24px;"><p>ما فيه برامج مسندة لك بعد — راجع المدير</p></div>';
     return;
   }
-  infoEl.classList.remove('hidden');
-  infoEl.innerHTML = `
-    ${prog.department ? `<strong>القسم المسؤول:</strong> ${esc(prog.department)}<br>` : ''}
-    ${prog.school_indicator ? `<span style="white-space:pre-line;">${esc(prog.school_indicator)}</span>` : ''}`;
+
+  // عدّاد المهام المدخلة فعليًا لكل برنامج (بدون فلترة بحالة الاعتماد - هذا للإدخال مو للاعتماد)
+  const { data: myTasks } = await sb.from('op_tasks').select('id, program_id').eq('employee_profile_id', currentUserId);
+  const countByProgram = new Map();
+  (myTasks || []).forEach(t => { if (!t.program_id) return; countByProgram.set(t.program_id, (countByProgram.get(t.program_id) || 0) + 1); });
+
+  const objById = new Map(objectivesCache.map(o => [o.id, o]));
+  const goalById = new Map(goalsCache.map(g => [g.id, g]));
+
+  wrap.innerHTML = '';
+  myProgAssignments.forEach(a => {
+    const prog = a.programs;
+    if (!prog) return;
+    const taskCount = countByProgram.get(prog.id) || 0;
+    const status = a.tasks_entry_complete
+      ? { cls: 'complete', label: 'اكتمل الإدخال ✓' }
+      : (taskCount > 0 ? { cls: 'progress', label: 'قيد الإدخال' } : { cls: 'idle', label: 'لم يبدأ' });
+    const obj = objById.get(prog.operational_objective_id);
+    const goal = obj ? goalById.get(obj.strategic_goal_id) : null;
+
+    const card = document.createElement('div');
+    card.className = 'myprog-card';
+    card.dataset.assignmentId = a.id;
+    card.innerHTML = `
+      <div class="mphead">
+        <div style="flex:1;">
+          <h5>${prog.plan_code ? esc(prog.plan_code) + ' - ' : ''}${esc(prog.title)}</h5>
+          <p class="mpmeta">${goal ? esc(goal.title) : ''}${taskCount > 0 ? ' · ' + taskCount + (taskCount === 1 ? ' مهمة مدخلة' : ' مهام مدخلة') : ''}</p>
+        </div>
+        <span class="myprog-status ${status.cls}">${status.label}</span>
+        <svg class="mpchevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s; flex-shrink:0;"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div class="myprog-body hidden"></div>`;
+    card.querySelector('.mphead').addEventListener('click', () => {
+      const body = card.querySelector('.myprog-body');
+      if (body.classList.contains('hidden')) openProgramCardById(a.id);
+      else { body.classList.add('hidden'); body.innerHTML = ''; const chev = card.querySelector('.mpchevron'); if (chev) chev.style.transform = ''; }
+    });
+    wrap.appendChild(card);
+  });
 }
-onEl('opt-program', 'change', updateProgramInfo);
 
-onEl('opt-duration', 'change', (e) => {
-  const val = e.target.value;
-  document.getElementById('opt-week-wrap').classList.toggle('hidden', val !== 'single_week');
-  document.getElementById('opt-recurrence-wrap').classList.toggle('hidden', val === 'single_week');
-});
+// يفتح بطاقة برنامج معيّن (ويقفل أي بطاقة ثانية مفتوحة عشان ما تتزاحم الشاشة) - يُستخدم عند
+// النقر يدويًا، وأيضًا للانتقال التلقائي للبرنامج التالي غير المكتمل بعد إنهاء برنامج
+function openProgramCardById(assignmentId) {
+  document.querySelectorAll('.myprog-card .myprog-body:not(.hidden)').forEach(b => {
+    b.classList.add('hidden'); b.innerHTML = '';
+    const chev = b.closest('.myprog-card')?.querySelector('.mpchevron');
+    if (chev) chev.style.transform = '';
+  });
+  const card = document.querySelector(`.myprog-card[data-assignment-id="${assignmentId}"]`);
+  const assignment = myProgAssignments.find(a => a.id === assignmentId);
+  if (!card || !assignment || !assignment.programs) return;
+  const body = card.querySelector('.myprog-body');
+  const chevron = card.querySelector('.mpchevron');
+  body.classList.remove('hidden');
+  if (chevron) chevron.style.transform = 'rotate(180deg)';
+  renderProgramEditor(body, assignment, assignment.programs);
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
 
-onEl('opt-submit', 'click', async () => {
-  const title = document.getElementById('opt-title').value.trim();
-  const errEl = document.getElementById('opt-error');
-  if (!title) { errEl.textContent = 'اكتب عنوان المهمة'; errEl.style.display = 'block'; return; }
-  errEl.style.display = 'none';
+function openNextIncompleteProgram() {
+  const next = myProgAssignments.find(a => !a.tasks_entry_complete);
+  if (next) openProgramCardById(next.id);
+}
 
-  const duration = document.getElementById('opt-duration').value;
-  const payload = {
-    employee_profile_id: currentUserId,
-    title,
-    description: document.getElementById('opt-desc').value.trim(),
-    program_id: document.getElementById('opt-program').value || null,
-    duration_type: duration,
-    created_by: currentUserId,
-  };
-  if (duration === 'single_week') {
-    payload.week_number = parseInt(document.getElementById('opt-week').value) || null;
-  } else {
-    payload.recurrence = document.getElementById('opt-recurrence').value;
+async function renderProgramEditor(body, assignment, program) {
+  body.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
+  const { data: existing } = await sb.from('op_tasks')
+    .select('id, title, duration_type, week_number, plan_status')
+    .eq('employee_profile_id', currentUserId).eq('program_id', program.id)
+    .order('week_number', { ascending: true });
+
+  const statusLabel = { approved: 'معتمدة', rejected: 'مرفوضة', pending: 'بانتظار الاعتماد' };
+  const statusColor = { approved: 'var(--status-good)', rejected: 'var(--status-bad)', pending: 'var(--status-idle)' };
+  const existingHtml = (existing && existing.length > 0) ? `
+    <div class="myprog-existing">
+      ${existing.map(t => `
+        <div class="row">
+          <span style="flex-shrink:0; font-weight:700; color:var(--slate); width:74px;">${t.duration_type === 'single_week' ? 'أسبوع ' + t.week_number : durationLabels[t.duration_type]}</span>
+          <span style="flex:1;">${esc(t.title)}</span>
+          <span style="flex-shrink:0; font-size:10.5px; color:${statusColor[t.plan_status] || 'var(--status-idle)'};">${statusLabel[t.plan_status] || t.plan_status}</span>
+        </div>`).join('')}
+    </div>` : '<p style="font-size:12px; color:var(--slate); margin-bottom:10px;">ما فيه مهام مدخلة بعد لهذا البرنامج</p>';
+
+  body.innerHTML = `
+    ${program.department || program.school_indicator ? `
+      <div style="background:var(--sand); border-radius:8px; padding:9px 12px; margin-bottom:12px; font-size:12px; color:#444; line-height:1.6;">
+        ${program.department ? `<strong>القسم المسؤول:</strong> ${esc(program.department)}<br>` : ''}
+        ${program.school_indicator ? `<span style="white-space:pre-line;">${esc(program.school_indicator)}</span>` : ''}
+      </div>` : ''}
+    ${existingHtml}
+    <div class="mprows"></div>
+    <button type="button" class="mp-add-row" style="width:auto; padding:8px 14px; background:var(--sand); color:var(--ink); font-size:12px;">+ إضافة أسبوع</button>
+    <div class="error-msg mp-error"></div>
+    <div class="myprog-actions">
+      <button type="button" class="btn-primary mp-save" style="background:var(--slate);">حفظ ومتابعة الإدخال</button>
+      <button type="button" class="btn-primary mp-finish">✓ حفظ وإنهاء هذا البرنامج</button>
+    </div>`;
+
+  const rowsWrap = body.querySelector('.mprows');
+  function addRow() {
+    const row = document.createElement('div');
+    row.className = 'myprog-row';
+    row.innerHTML = `
+      <select class="mp-duration">
+        <option value="single_week">أسبوع محدد</option>
+        <option value="semester_1">الفصل الأول</option>
+        <option value="semester_2">الفصل الثاني</option>
+        <option value="full_year">طوال العام</option>
+      </select>
+      <input type="number" class="mp-week" placeholder="رقم الأسبوع" min="1" max="40" />
+      <input type="text" class="mp-title" placeholder="عنوان المهمة" />
+      <button type="button" class="mp-remove" title="حذف الصف">✕</button>`;
+    row.querySelector('.mp-duration').addEventListener('change', (e) => {
+      row.querySelector('.mp-week').style.display = e.target.value === 'single_week' ? '' : 'none';
+    });
+    row.querySelector('.mp-remove').addEventListener('click', () => row.remove());
+    rowsWrap.appendChild(row);
+  }
+  addRow();
+  body.querySelector('.mp-add-row').addEventListener('click', addRow);
+
+  async function collectAndSave() {
+    const errEl = body.querySelector('.mp-error');
+    errEl.style.display = 'none';
+    const rows = Array.from(rowsWrap.querySelectorAll('.myprog-row'));
+    const payloads = [];
+    for (const row of rows) {
+      const title = row.querySelector('.mp-title').value.trim();
+      if (!title) continue;
+      const duration = row.querySelector('.mp-duration').value;
+      const payload = {
+        employee_profile_id: currentUserId, title, description: '', program_id: program.id,
+        duration_type: duration, created_by: currentUserId,
+      };
+      if (duration === 'single_week') {
+        const wk = parseInt(row.querySelector('.mp-week').value);
+        if (!wk || wk < 1 || wk > 40) { errEl.textContent = `حدد رقم أسبوع صحيح (1-40) للمهمة "${title}"`; errEl.style.display = 'block'; return false; }
+        payload.week_number = wk;
+      } else {
+        payload.recurrence = 'weekly';
+      }
+      payloads.push(payload);
+    }
+    if (payloads.length === 0) return true;
+    const { error } = await sb.from('op_tasks').insert(payloads);
+    if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return false; }
+    return true;
   }
 
-  const { error } = await sb.from('op_tasks').insert(payload);
-  if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return; }
+  body.querySelector('.mp-save').addEventListener('click', async () => {
+    const ok = await collectAndSave();
+    if (ok) { await loadMyProgramAssignments(); openProgramCardById(assignment.id); }
+  });
 
-  document.getElementById('opt-title').value = '';
-  document.getElementById('opt-desc').value = '';
-  document.getElementById('opt-week').value = '';
-  await refreshMyTasks();
-});
+  body.querySelector('.mp-finish').addEventListener('click', async () => {
+    const ok = await collectAndSave();
+    if (!ok) return;
+    await sb.from('program_assignments').update({ tasks_entry_complete: true }).eq('id', assignment.id);
+    await loadMyProgramAssignments();
+    openNextIncompleteProgram();
+  });
+}
 
 /* ---------- تنزيل نموذج إكسل فارغ ---------- */
 onEl('opt-download-template', 'click', async () => {
