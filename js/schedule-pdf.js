@@ -37,6 +37,25 @@ function filterBoilerplateItems(items) {
 }
 
 let parsedClasses = []; // [{page, grade, section, map}]
+let teacherProfiles = [];
+let teacherLinkMap = new Map(); // اسم المعلم الخام من الملف -> id حساب المعلم المختار يدويًا (أو '' = خليه كما هو)
+
+function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
+function escHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+
+// كل أسماء المعلمين المختلفة (بعد تطبيع بسيط) اللي طلعت بأي خلية بأي فصل بالملف كامل
+function collectDistinctTeacherNames(classes) {
+  const names = new Map(); // normalized -> raw (أول ظهور)
+  classes.forEach(c => {
+    Object.values(c.map).forEach(cell => {
+      const raw = (cell.teacher || '').trim();
+      if (!raw) return;
+      const norm = normalizeArText(raw);
+      if (!names.has(norm)) names.set(norm, raw);
+    });
+  });
+  return [...names.entries()].map(([norm, raw]) => ({ norm, raw }));
+}
 
 /*
  * تصحيح تلقائي للأسماء الناقصة الحروف: بعض ملفات aSc Timetables تُصدَّر بخط عربي ناقص جدول
@@ -405,16 +424,43 @@ async function parsePdfFile(file) {
   return { classes, issues, correctedCount };
 }
 
-function renderSummary({ classes, issues, correctedCount }) {
+async function renderSummary({ classes, issues, correctedCount }) {
   parsedClasses = classes;
   const el = document.getElementById('sc-pdf-summary');
 
   const order = { first_intermediate: 0, second_intermediate: 1, third_intermediate: 2 };
   const sorted = [...classes].sort((a, b) => (order[a.grade] - order[b.grade]) || (a.section - b.section));
 
+  const { data: profiles } = await sb.from('profiles').select('id, full_name').in('role', ['teacher', 'deputy']);
+  teacherProfiles = (profiles || []).slice().sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
+  const profileByNorm = new Map(teacherProfiles.map(p => [normalizeArText(p.full_name), p]));
+
+  const distinctTeachers = collectDistinctTeacherNames(classes);
+  teacherLinkMap = new Map();
+  const unmatched = [];
+  distinctTeachers.forEach(({ norm, raw }) => {
+    const matched = profileByNorm.get(norm) || null;
+    if (matched) teacherLinkMap.set(norm, matched.id);
+    else unmatched.push({ norm, raw });
+  });
+
   let html = `<p style="font-size:12.5px; color:var(--slate); margin:10px 0;">تم التعرف على <b>${classes.length}</b> فصل${issues.length ? ` (وتعذّر التعرف على ${issues.length} صفحة، راجعها يدويًا)` : ''}.</p>`;
   if (correctedCount > 0) {
     html += `<p style="font-size:12px; color:var(--warning, #b8860b); background:#fff8e6; border-radius:8px; padding:6px 10px; margin:0 0 10px;">⚠ تم تصحيح <b>${correctedCount}</b> خلية تلقائيًا (كان فيها حروف ناقصة بسبب عيب بترميز حروف ملف الـ PDF الأصلي) — راجعها للتأكد.</p>`;
+  }
+
+  if (unmatched.length > 0) {
+    html += `<div style="background:var(--sand); border-radius:10px; padding:10px 14px; margin-bottom:14px;">
+      <p style="font-size:12.5px; font-weight:700; margin-bottom:8px;">أسماء معلمين ما طابقت أي حساب مسجّل (${unmatched.length}) — اربطها بالحساب الصحيح قبل الاعتماد:</p>
+      ${unmatched.map(({ norm, raw }) => `
+        <div class="stl-row">
+          <span class="stl-name">${escHtml(raw)}</span>
+          <select class="stl-select" data-norm="${escHtml(norm)}">
+            <option value="">— استخدام الاسم من الملف كما هو —</option>
+            ${teacherProfiles.map(p => `<option value="${p.id}">${escHtml(p.full_name)}</option>`).join('')}
+          </select>
+        </div>`).join('')}
+    </div>`;
   }
 
   if (classes.length > 0) {
@@ -444,6 +490,14 @@ function renderSummary({ classes, issues, correctedCount }) {
 
   el.innerHTML = html;
 
+  el.querySelectorAll('.stl-select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const norm = sel.dataset.norm;
+      if (sel.value) teacherLinkMap.set(norm, sel.value);
+      else teacherLinkMap.delete(norm);
+    });
+  });
+
   el.querySelectorAll('.sc-preview-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const cls = sorted[parseInt(btn.dataset.idx)];
@@ -462,6 +516,17 @@ async function commitAllParsed() {
   statusEl.textContent = 'جارٍ الاعتماد...';
   statusEl.style.color = 'var(--slate)';
 
+  const profileById = new Map(teacherProfiles.map(p => [p.id, p]));
+  function resolveTeacherName(raw) {
+    if (!raw) return null;
+    const linkedId = teacherLinkMap.get(normalizeArText(raw));
+    if (linkedId) {
+      const p = profileById.get(linkedId);
+      if (p) return p.full_name;
+    }
+    return raw;
+  }
+
   for (const cls of parsedClasses) {
     await sb.from('class_schedules').delete().eq('grade_level', cls.grade).eq('class_section', cls.section);
     const rows = [];
@@ -471,7 +536,7 @@ async function commitAllParsed() {
       rows.push({
         grade_level: cls.grade, class_section: cls.section,
         day_of_week: day, period_number: parseInt(period),
-        subject_name: val.subject, teacher_name: val.teacher || null,
+        subject_name: val.subject, teacher_name: resolveTeacherName(val.teacher),
       });
     });
     for (let i = 0; i < rows.length; i += 200) {
@@ -514,7 +579,7 @@ async function handleParseClick() {
       summaryEl.innerHTML = '';
       return;
     }
-    renderSummary(result);
+    await renderSummary(result);
     if (result.classes.length === 0) {
       errEl.textContent = 'ما قدرت أستخرج أي فصل من الملف — شوف تفاصيل كل صفحة بالأسفل لمعرفة السبب.';
       errEl.style.display = 'block';
