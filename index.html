@@ -439,14 +439,23 @@
           </div>
         </div>
 
-        <div class="week-nav" style="display:flex; align-items:center; gap:10px; margin-bottom:16px;">
-          <button id="opplan-week-prev" style="width:auto; padding:8px 16px;">السابق</button>
-          <span id="opplan-week-label" style="font-weight:700;">الأسبوع 1</span>
-          <button id="opplan-week-next" style="width:auto; padding:8px 16px;">التالي</button>
+        <div class="myop-ring-card">
+          <div class="myop-ring" id="myop-ring">
+            <svg viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="fill" id="myop-ring-fill" cx="32" cy="32" r="27"/></svg>
+            <div class="myop-ring-pct" id="myop-ring-pct">0%</div>
+          </div>
+          <div class="myop-ring-info">
+            <p class="myop-ring-title">إنجازك <span id="myop-ring-week-label">للأسبوع 1</span></p>
+            <p class="myop-ring-sub" id="myop-ring-sub">لا توجد مهام تحتاج إجراء هذا الأسبوع</p>
+          </div>
+        </div>
+
+        <div class="myop-week-strip-wrap">
+          <div class="myop-week-strip" id="opplan-week-strip"></div>
         </div>
 
         <h4 style="margin-bottom:14px;">مهامي بهذا الأسبوع</h4>
-        <div id="opplan-my-tasks"></div>
+        <div class="op-kanban" id="opplan-my-tasks"></div>
       </div>
 
       <div id="opplan-not-member" class="hidden">
