@@ -594,6 +594,42 @@ async function refreshOpPlanApprovals() {
   document.getElementById('opplan-stat-rate').textContent = total ? Math.round((approved/total)*100) + '%' : '-';
 }
 
+/* ---------- منطقة الخطر: إعادة تهيئة الخطة التشغيلية بالكامل (حذف كل المهام المُدخلة) ---------- */
+onEl('opplan-reset-btn', 'click', () => {
+  document.getElementById('opplan-reset-overlay').classList.remove('hidden');
+});
+onEl('opplan-reset-cancel', 'click', () => {
+  document.getElementById('opplan-reset-overlay').classList.add('hidden');
+});
+onEl('opplan-reset-confirm', 'click', async () => {
+  const btn = document.getElementById('opplan-reset-confirm');
+  const errEl = document.getElementById('opplan-reset-error');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  const originalText = btn.textContent;
+  btn.textContent = 'جارٍ الحذف...';
+
+  // نحذف الإنجازات الأسبوعية أولاً (مرتبطة بالمهام)، ثم المهام نفسها، ثم نرجّع كل إسناد
+  // برنامج لحالة "لم يبدأ" بما إن كل مهامه المُدخلة صارت محذوفة
+  const { error: err1 } = await sb.from('op_task_completions').delete().not('id', 'is', null);
+  const { error: err2 } = await sb.from('op_tasks').delete().not('id', 'is', null);
+  const { error: err3 } = await sb.from('program_assignments').update({ tasks_entry_complete: false }).not('id', 'is', null);
+
+  btn.disabled = false;
+  btn.textContent = originalText;
+
+  const firstError = err1 || err2 || err3;
+  if (firstError) {
+    errEl.textContent = 'تعذّرت إعادة التهيئة بالكامل: ' + firstError.message;
+    errEl.style.display = 'block';
+    return;
+  }
+
+  document.getElementById('opplan-reset-overlay').classList.add('hidden');
+  await loadOpPlanAdminData();
+  alert('تمت إعادة تهيئة الخطة التشغيلية بنجاح — كل المهام المُدخلة انحذفت.');
+});
+
 /* ---------- شاشة الموظف المشارك ---------- */
 setupCollapsible('opt-excel-toggle', 'opt-excel-body', 'opt-excel-chevron');
 
