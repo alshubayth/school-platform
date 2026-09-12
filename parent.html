@@ -438,8 +438,9 @@ async function loadPlans() {
   renderWeekTabs();
   const currentWeek = publishedWeeks[currentWeekIndex];
 
-  const { data: noteData } = await sb.from('weekly_admin_notes')
+  const { data: noteData, error: noteError } = await sb.from('weekly_admin_notes')
     .select('note').eq('grade_level', currentGrade).eq('week_number', currentWeek).maybeSingle();
+  if (noteError) console.warn('weekly_admin_notes fetch failed (likely missing RLS public-read policy):', noteError);
 
   const noteContainer = document.getElementById('admin-note-container');
   if (noteData && noteData.note) {
@@ -560,44 +561,80 @@ async function loadPlans() {
 /* ---------- مشاركة/تحميل الخطة الأسبوعية كـ PDF ---------- */
 // نفس أسلوب طباعة الجدول الدراسي بالأسفل (نافذة طباعة حقيقية بدل مكتبة PDF خارجية) - يقدر ولي
 // الأمر يختار "حفظ كـ PDF" من نافذة الطباعة، والملف الناتج يقدر يرسله لمن يبغى بأي وسيلة
+// نفس شكل بطاقات المواد اللي يشوفها ولي الأمر بالشاشة بالضبط (ألوان + أيقونات) - عشان الملف
+// المُصدَّر يحس إنه واجهة لولي الأمر لا تقرير داخلي جاف
 const PLAN_PRINT_STYLES = `
-  @page{ size: A4; margin: 14mm; }
+  @page{ size: A4; margin: 12mm; }
   *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  body{ font-family:'IBM Plex Sans Arabic', Arial, sans-serif; margin:0; padding:0; color:#152238; }
-  .print-header{ display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #0F2447; padding-bottom:10px; margin-bottom:14px; }
-  .print-header img{ height:52px; }
-  .print-header .title{ text-align:center; flex:1; }
-  .print-header h1{ font-size:19px; margin:0 0 4px; color:#0F2447; }
-  .print-header p{ font-size:13px; margin:0; color:#6B7684; font-weight:600; }
-  .print-header .date{ font-size:11px; color:#6B7684; text-align:left; white-space:nowrap; }
-  .plan-note{ background:#FDEFE3; border:1px solid #E07A34; border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:12px; }
-  table{ width:100%; border-collapse:collapse; }
-  th, td{ border:1px solid #C7CBD8; padding:7px 8px; text-align:right; font-size:11.5px; vertical-align:top; }
-  th{ background:#0F2447 !important; color:#fff !important; font-size:12px; font-weight:700; text-align:center; }
-  td.subj-name{ font-weight:800; white-space:nowrap; }
-  td.test-yes{ color:#C0453D; font-weight:700; }
-  .print-footer{ margin-top:16px; font-size:10.5px; color:#8890A0; text-align:center; }
+  body{ font-family:'IBM Plex Sans Arabic', Arial, sans-serif; margin:0; padding:0; color:#152238; background:#fff; }
+  .print-header{
+    display:flex; align-items:center; gap:14px; background:#fff;
+    border:1px solid #E7E8EC; border-inline-start:4px solid #2455A4;
+    border-radius:14px; padding:12px 18px; margin-bottom:14px;
+  }
+  .print-header img{ height:42px; background:#fff; border-radius:8px; padding:4px 6px; flex-shrink:0; }
+  .print-header .title{ flex:1; }
+  .print-header h1{ font-size:16.5px; margin:0 0 3px; color:#152238; font-weight:800; }
+  .print-header p{ font-size:12px; margin:0; color:#6B7684; font-weight:600; }
+  .print-header .date{ font-size:10.5px; color:#6B7684; text-align:left; white-space:nowrap; }
+
+  .plan-note, .plan-test-summary{
+    display:flex; align-items:flex-start; gap:10px; border-radius:12px; padding:10px 14px; margin-bottom:12px; font-size:12px;
+  }
+  .plan-note{ background:#FDEFE3; border:1px solid #E07A34; }
+  .plan-note b{ color:#8A4A1F; }
+  .plan-test-summary{ background:#FBEAE9; border:1px solid #C0453D; }
+  .plan-test-summary b{ color:#C0453D; }
+  .plan-note .ic-em, .plan-test-summary .ic-em{ font-size:16px; line-height:1; flex-shrink:0; }
+
+  .cards-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .p-card{ background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 2px 6px rgba(16,23,40,0.08); break-inside:avoid; page-break-inside:avoid; }
+  .p-card .p-top{ padding:10px 12px 8px; position:relative; }
+  .p-card .p-icon{ display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:8px; background:#fff; font-size:14px; margin-bottom:4px; box-shadow:0 1px 4px rgba(16,23,40,0.12); }
+  .p-card h3{ font-size:13.5px; font-weight:800; margin:0; }
+  .p-card.has-test .p-top::after{ content:'📝 اختبار'; position:absolute; top:9px; left:10px; background:#C0453D; color:#fff; font-size:9px; font-weight:800; padding:2px 7px; border-radius:20px; }
+  .p-card .p-body{ padding:8px 12px 10px; }
+  .p-row{ display:flex; gap:6px; margin-bottom:5px; font-size:10.5px; line-height:1.5; }
+  .p-row:last-child{ margin-bottom:0; }
+  .p-row .p-ic{ flex-shrink:0; }
+  .p-row b{ color:#152238; font-weight:700; }
+  .p-row span{ color:#6B7684; }
+
+  .print-footer{ margin-top:14px; font-size:10px; color:#8890A0; text-align:center; }
 `;
 function buildWeeklyPlanPrintHtml() {
   const gradeLabel = GRADE_LABELS[currentGrade] || '';
   const weekNum = publishedWeeks[currentWeekIndex];
   const weekLabel = 'الأسبوع ' + (WEEK_NAMES_AR[weekNum - 1] || weekNum);
   const noteEl = document.querySelector('#admin-note-container .admin-note p');
-  const rows = lastPlans.map(p => {
+
+  function testSectionsLabel(sections) {
+    return (sections && sections.length > 0) ? ` (الفصل ${sections.join('، الفصل ')})` : ' (كل الفصول)';
+  }
+  const testSubjects = lastPlans.filter(p => p.has_test).map(p => p.subjects ? p.subjects.name + testSectionsLabel(p.test_sections) : '').filter(Boolean);
+
+  const cardsHtml = lastPlans.map((p, idx) => {
     const subjectName = p.subjects ? p.subjects.name : '-';
+    const iconPath = subjectIcons[subjectName] || defaultIcon;
+    const accent = accentCycle[idx % accentCycle.length];
+    const accentLight = accentLightCycle[idx % accentLightCycle.length];
     const lessons = (p.lessons && p.lessons.length > 0) ? p.lessons.join('، ') : '-';
     const homework = p.no_homework ? 'لا يوجد واجب' : (p.homework || '-');
-    const testNote = p.has_test
-      ? 'نعم' + ((p.test_sections && p.test_sections.length > 0) ? ` (الفصل ${p.test_sections.join('، الفصل ')})` : ' (كل الفصول)')
-      : 'لا';
-    return `<tr>
-      <td class="subj-name">${subjectName}</td>
-      <td>${lessons}</td>
-      <td>${p.performance_tasks || '-'}</td>
-      <td>${homework}</td>
-      <td class="${p.has_test ? 'test-yes' : ''}">${testNote}</td>
-    </tr>`;
+    return `
+      <div class="p-card${p.has_test ? ' has-test' : ''}">
+        <div class="p-top" style="background:${accentLight};">
+          <span class="p-icon" style="color:${accent};"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPath}</svg></span>
+          <h3>${subjectName}</h3>
+        </div>
+        <div class="p-body">
+          <div class="p-row"><span class="p-ic">📖</span><b>الدرس:</b><span>${lessons}</span></div>
+          <div class="p-row"><span class="p-ic">✅</span><b>المهام:</b><span>${p.performance_tasks || '-'}</span></div>
+          <div class="p-row"><span class="p-ic">📝</span><b>الواجب:</b><span>${homework}</span></div>
+          ${p.has_test ? `<div class="p-row"><span class="p-ic">⚠️</span><b>الاختبار:</b><span>${testSectionsLabel(p.test_sections).trim().replace(/^\(|\)$/g, '')}</span></div>` : ''}
+        </div>
+      </div>`;
   }).join('');
+
   const printDate = new Date().toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
   return `
     <div class="print-header">
@@ -608,11 +645,9 @@ function buildWeeklyPlanPrintHtml() {
       </div>
       <div class="date">تاريخ الطباعة<br>${printDate}</div>
     </div>
-    ${noteEl ? `<div class="plan-note"><b>تعليمات الإدارة:</b> ${noteEl.textContent}</div>` : ''}
-    <table>
-      <thead><tr><th>المادة</th><th>الدرس</th><th>المهام الأدائية</th><th>الواجب</th><th>اختبار؟</th></tr></thead>
-      <tbody>${rows}</tbody>
-    </table>
+    ${noteEl ? `<div class="plan-note"><span class="ic-em">🔔</span><div><b>تعليمات الإدارة:</b> ${noteEl.textContent}</div></div>` : ''}
+    ${testSubjects.length > 0 ? `<div class="plan-test-summary"><span class="ic-em">⚠️</span><div><b>تذكير مهم:</b> يوجد اختبار في ${testSubjects.join('، ')}</div></div>` : ''}
+    <div class="cards-grid">${cardsHtml}</div>
     <p class="print-footer">مدرسة المروج — نظام إدارة المدرسة</p>`;
 }
 function shareWeeklyPlanPdf() {
