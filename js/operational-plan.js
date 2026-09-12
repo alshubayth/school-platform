@@ -530,7 +530,6 @@ async function loadOpPlanEmployeeData() {
   document.getElementById('opt-objective').addEventListener('change', refreshProgramsForObjective);
   refreshObjectivesForGoal();
 
-  document.getElementById('opplan-week-label').textContent = 'الأسبوع ' + opPlanWeek;
   await refreshMyTasks();
 }
 
@@ -703,48 +702,110 @@ onEl('opt-excel-upload', 'click', async () => {
   reader.readAsArrayBuffer(file);
 });
 
-onEl('opplan-week-prev', 'click', () => { if (opPlanWeek > 1) { opPlanWeek--; document.getElementById('opplan-week-label').textContent = 'الأسبوع ' + opPlanWeek; refreshMyTasks(); } });
-onEl('opplan-week-next', 'click', () => { if (opPlanWeek < 40) { opPlanWeek++; document.getElementById('opplan-week-label').textContent = 'الأسبوع ' + opPlanWeek; refreshMyTasks(); } });
+// أيقونات صغيرة توضح نوع مدة المهمة بنظرة وحدة (بدل الاكتفاء بنص "طوال العام"/"أسبوع محدد")
+const durationIcons = {
+  single_week: '<path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/><path d="M9 16l2 2 4-4"/>',
+  semester_1: '<path d="M4 4v16l8-4 8 4V4a1 1 0 00-1-1H5a1 1 0 00-1 1z"/>',
+  semester_2: '<path d="M4 4v16l8-4 8 4V4a1 1 0 00-1-1H5a1 1 0 00-1 1z"/>',
+  full_year: '<path d="M17.5 12a5.5 5.5 0 11-5.5-5.5"/><path d="M6.5 12a5.5 5.5 0 105.5-5.5"/><path d="M12 6.5V4M12 20v-2.5"/>',
+};
+
+function renderWeekStrip() {
+  const strip = document.getElementById('opplan-week-strip');
+  if (!strip) return;
+  strip.innerHTML = '';
+  for (let w = 1; w <= 40; w++) {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'myop-week-pill' + (w === opPlanWeek ? ' active' : '');
+    pill.textContent = String(w);
+    pill.title = 'الأسبوع ' + w;
+    pill.addEventListener('click', () => {
+      if (w === opPlanWeek) return;
+      opPlanWeek = w;
+      renderWeekStrip();
+      refreshMyTasks();
+    });
+    strip.appendChild(pill);
+  }
+  const activePill = strip.querySelector('.myop-week-pill.active');
+  if (activePill) activePill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
+
+function setMyOpRing(doneCount, actionableCount) {
+  const fill = document.getElementById('myop-ring-fill');
+  const pctEl = document.getElementById('myop-ring-pct');
+  const subEl = document.getElementById('myop-ring-sub');
+  const weekLabelEl = document.getElementById('myop-ring-week-label');
+  if (weekLabelEl) weekLabelEl.textContent = 'للأسبوع ' + opPlanWeek;
+  if (!fill || !pctEl) return;
+  const circumference = 2 * Math.PI * 27;
+  const pct = actionableCount > 0 ? Math.round((doneCount / actionableCount) * 100) : 0;
+  fill.style.strokeDasharray = `${circumference}`;
+  fill.style.strokeDashoffset = `${circumference - (pct / 100) * circumference}`;
+  fill.style.stroke = pct >= 100 ? 'var(--status-good)' : (pct > 0 ? 'var(--meadow)' : 'var(--sand)');
+  pctEl.textContent = pct + '%';
+  if (subEl) {
+    subEl.textContent = actionableCount === 0
+      ? 'لا توجد مهام تحتاج إجراء هذا الأسبوع'
+      : `أنجزت ${doneCount} من ${actionableCount} مهمة تحتاج تنفيذ`;
+  }
+}
 
 async function refreshMyTasks() {
+  renderWeekStrip();
   const { data: tasks } = await sb.from('op_tasks')
     .select('id, title, description, duration_type, week_number, plan_status, plan_review_note')
     .eq('employee_profile_id', currentUserId)
     .or(`week_number.eq.${opPlanWeek},duration_type.neq.single_week`);
 
-  const list = document.getElementById('opplan-my-tasks');
-  list.innerHTML = '';
+  const kanban = document.getElementById('opplan-my-tasks');
+  kanban.innerHTML = '';
 
   if (!tasks || tasks.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:24px;"><p>لا توجد مهام لهذا الأسبوع</p></div>';
+    kanban.innerHTML = '<div class="placeholder" style="padding:24px; grid-column:1/-1;"><p>لا توجد مهام لهذا الأسبوع</p></div>';
+    setMyOpRing(0, 0);
     return;
   }
 
-  for (const t of tasks) {
+  const withCompletions = await Promise.all(tasks.map(async (t) => {
     let completionForWeek = null;
     if (t.plan_status === 'approved') {
       const { data: comp } = await sb.from('op_task_completions').select('id, status').eq('task_id', t.id).eq('period_label', 'الأسبوع ' + opPlanWeek).maybeSingle();
       completionForWeek = comp;
     }
+    return { t, completionForWeek };
+  }));
 
+  // نبني 3 أعمدة بصرية بدل قائمة نصية طويلة: يحتاج إجراء منك / بانتظار اعتماد المدير / منجزة ومعتمدة
+  const needsAction = [], waitingApproval = [], done = [];
+  withCompletions.forEach(({ t, completionForWeek }) => {
+    if (completionForWeek && completionForWeek.status === 'approved') done.push({ t, completionForWeek });
+    else if (t.plan_status === 'pending' || (completionForWeek && completionForWeek.status === 'pending')) waitingApproval.push({ t, completionForWeek });
+    else needsAction.push({ t, completionForWeek });
+  });
+
+  setMyOpRing(done.length, needsAction.length + waitingApproval.length + done.length);
+
+  function taskCard({ t, completionForWeek }, colKind) {
+    const isOverdue = colKind === 'needs' && t.duration_type === 'single_week' && t.week_number < opPlanWeek;
     const card = document.createElement('div');
-    card.className = 'form-card';
-    let statusBadge = '';
-    if (t.plan_status === 'pending') statusBadge = '<span style="font-size:11.5px; background:#F1EFE8; color:var(--slate); padding:3px 10px; border-radius:20px;">بانتظار اعتماد الإضافة</span>';
-    else if (t.plan_status === 'rejected') statusBadge = `<span style="font-size:11.5px; background:var(--danger-light); color:var(--danger); padding:3px 10px; border-radius:20px;">مرفوضة${t.plan_review_note ? ': ' + t.plan_review_note : ''}</span>`;
-    else if (completionForWeek && completionForWeek.status === 'pending') statusBadge = '<span style="font-size:11.5px; background:#F1EFE8; color:var(--slate); padding:3px 10px; border-radius:20px;">بانتظار اعتماد الإنجاز</span>';
-    else if (completionForWeek && completionForWeek.status === 'approved') statusBadge = '<span style="font-size:11.5px; background:var(--meadow-light); color:var(--meadow); padding:3px 10px; border-radius:20px;">منجزة ومعتمدة</span>';
-    else if (completionForWeek && completionForWeek.status === 'rejected') statusBadge = '<span style="font-size:11.5px; background:var(--danger-light); color:var(--danger); padding:3px 10px; border-radius:20px;">أُرجعت، أعد التنفيذ</span>';
-
+    card.className = 'myop-task-card' + (isOverdue ? ' overdue' : '');
+    const durIcon = durationIcons[t.duration_type] || durationIcons.single_week;
+    let extraBadge = '';
+    if (t.plan_status === 'rejected') extraBadge = `<span class="myop-overdue-chip">مرفوضة${t.plan_review_note ? ': ' + esc(t.plan_review_note) : ''}</span>`;
+    else if (completionForWeek && completionForWeek.status === 'rejected') extraBadge = '<span class="myop-overdue-chip">أُرجعت، أعد التنفيذ</span>';
     card.innerHTML = `
-      <p style="margin:0 0 4px;"><strong>${t.title}</strong></p>
-      <p style="margin:0 0 10px; font-size:13px; color:var(--slate);">${durationLabels[t.duration_type]} — ${t.description || ''}</p>
-      <div style="display:flex; align-items:center; gap:10px;">${statusBadge}</div>`;
-
-    if (t.plan_status === 'approved' && (!completionForWeek || completionForWeek.status === 'rejected')) {
+      <h6>${esc(t.title)}</h6>
+      ${t.description ? `<p class="desc">${esc(t.description)}</p>` : ''}
+      <div class="badge-row">
+        <span class="myop-duration-chip"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${durIcon}</svg>${durationLabels[t.duration_type]}</span>
+        ${isOverdue ? '<span class="myop-overdue-chip">⚠ متأخرة</span>' : ''}
+        ${extraBadge}
+      </div>`;
+    if (colKind === 'needs' && t.plan_status === 'approved') {
       const btn = document.createElement('button');
       btn.className = 'btn-primary';
-      btn.style.cssText = 'width:auto; padding:8px 16px; margin-top:10px;';
       btn.textContent = 'تم التنفيذ';
       btn.addEventListener('click', async () => {
         await sb.from('op_task_completions').insert({ task_id: t.id, period_label: 'الأسبوع ' + opPlanWeek, period_date: null });
@@ -752,6 +813,22 @@ async function refreshMyTasks() {
       });
       card.appendChild(btn);
     }
-    list.appendChild(card);
+    return card;
   }
+
+  function buildColumn(kind, title, items) {
+    const col = document.createElement('div');
+    col.className = 'op-kanban-col ' + kind;
+    col.innerHTML = `<div class="colhead"><span class="dot"></span>${title}<span class="count">${items.length}</span></div>`;
+    if (items.length === 0) {
+      col.innerHTML += '<div class="op-kanban-empty">لا يوجد</div>';
+    } else {
+      items.forEach(item => col.appendChild(taskCard(item, kind)));
+    }
+    kanban.appendChild(col);
+  }
+
+  buildColumn('needs', 'يحتاج إجراء منك', needsAction);
+  buildColumn('waiting', 'بانتظار اعتماد المدير', waitingApproval);
+  buildColumn('done', 'منجزة ومعتمدة', done);
 }
