@@ -379,7 +379,7 @@ export async function openTile(key, title) {
     loadExamTrackingTile();
   } else if (key === 'schedule') {
     document.getElementById('schedule-module').classList.remove('hidden');
-    const [{ loadScheduleModule }] = await Promise.all([import('./schedule.js'), import('./schedule-pdf.js')]);
+    const [{ loadScheduleModule }] = await Promise.all([import('./schedule.js'), import('./schedule-pdf.js'), import('./teacher-schedule-pdf.js')]);
     loadScheduleModule();
   } else if (key === 'followups') {
     document.getElementById('followups-module').classList.remove('hidden');
