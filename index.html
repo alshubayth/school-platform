@@ -801,155 +801,231 @@
     <div id="budget-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-13">→ رجوع للرئيسية</span>
 
-      <!-- إدارة الصلاحيات: يظهر للمدير فقط -->
-      <div class="form-card hidden" id="budget-perms-section">
-        <h4 style="margin-bottom:2px;">صلاحيات القسم</h4>
-        <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">المدير يتحكم بمين يشوف/يضيف بقسم الميزانية</p>
-        <div id="budget-perms-list"></div>
-        <div class="form-row" style="margin-top:14px;">
-          <select id="budget-perm-employee"></select>
-          <select id="budget-perm-level">
-            <option value="full">صلاحية كاملة (إيرادات + مصروفات + اعتماد)</option>
-            <option value="request_only">إضافة طلبات صرف فقط</option>
-          </select>
+      <!-- رأس القسم: عنوان + تنقّل بين تبويبات الميزانية -->
+      <div class="bud-head">
+        <div class="bud-head-title">
+          <div class="bud-head-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2.5"/><path d="M2 10h20"/><path d="M6 15h4"/><circle cx="17" cy="13" r="1.6"/></svg>
+          </div>
+          <div>
+            <h3>الميزانية</h3>
+            <p>إيرادات ومصروفات المدرسة، طلبات الصرف، وإعدادات القسم</p>
+          </div>
         </div>
-        <button class="btn-primary" id="budget-perm-submit" style="width:auto; padding:10px 18px; margin-top:10px;">+ إعطاء صلاحية</button>
-        <div class="error-msg" id="budget-perm-error"></div>
+        <div class="bud-tabs" id="bud-tabs" role="tablist">
+          <button type="button" class="bud-tab active" data-bud-tab="overview" id="bud-tab-overview">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.5"/><rect x="13" y="8" width="3" height="10" rx="0.5"/><rect x="19" y="5" width="0" height="13"/><rect x="18" y="5" width="3" height="13" rx="0.5"/></svg>
+            <span>لوحة عامة</span>
+          </button>
+          <button type="button" class="bud-tab" data-bud-tab="expenses" id="bud-tab-expenses">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v17l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3V2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
+            <span>طلبات الصرف</span>
+          </button>
+          <button type="button" class="bud-tab" data-bud-tab="settings" id="bud-tab-settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 13.5a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V19a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H4a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H10a1.65 1.65 0 001-1.51V4a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V10a1.65 1.65 0 001.51 1H20a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            <span>الإعدادات</span>
+          </button>
+        </div>
       </div>
 
-      <!-- لوحة الميزانية: تظهر للمدير ولصاحب صلاحية "كاملة" -->
-      <div id="budget-dashboard-section" class="hidden">
-        <div class="form-row" style="grid-template-columns:220px 1fr; align-items:center; margin-bottom:12px;">
-          <select id="budget-semester-filter">
-            <option value="">كل السنة (الفصلين)</option>
-            <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
-            <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
-          </select>
-          <span></span>
-        </div>
-        <div class="stat-grid" id="budget-stats" style="grid-template-columns:repeat(4,1fr);"></div>
+      <!-- ===== تبويب: لوحة عامة ===== -->
+      <div class="bud-panel" id="bud-panel-overview">
+        <div id="budget-dashboard-section" class="hidden">
+          <div class="form-row" style="grid-template-columns:220px 1fr; align-items:center; margin-bottom:12px;">
+            <select id="budget-semester-filter">
+              <option value="">كل السنة (الفصلين)</option>
+              <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+              <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
+            </select>
+            <span></span>
+          </div>
+          <div class="stat-grid" id="budget-stats" style="grid-template-columns:repeat(4,1fr);"></div>
 
-        <div class="form-card hidden" id="budget-category-caps" style="margin-top:18px;"></div>
+          <div class="form-card hidden" id="budget-category-caps" style="margin-top:18px;"></div>
 
-        <div class="form-row" style="align-items:stretch; margin-top:18px;">
-          <div class="form-card" style="margin:0;">
-            <h4>الإيرادات والمصروفات الشهرية</h4>
-            <div style="position:relative; height:140px; max-width:280px; margin:0 auto;">
-              <canvas id="budget-bar-chart"></canvas>
+          <div class="form-row" style="align-items:stretch; margin-top:18px;">
+            <div class="form-card" style="margin:0;">
+              <h4>الإيرادات والمصروفات الشهرية</h4>
+              <div style="position:relative; height:140px; max-width:280px; margin:0 auto;">
+                <canvas id="budget-bar-chart"></canvas>
+              </div>
+            </div>
+            <div class="form-card" style="margin:0;">
+              <h4>توزيع المصروفات حسب البند</h4>
+              <div style="position:relative; height:140px; max-width:200px; margin:0 auto;">
+                <canvas id="budget-donut-chart"></canvas>
+              </div>
+              <div id="budget-donut-legend" style="margin-top:10px;"></div>
             </div>
           </div>
-          <div class="form-card" style="margin:0;">
-            <h4>توزيع المصروفات حسب البند</h4>
-            <div style="position:relative; height:140px; max-width:200px; margin:0 auto;">
-              <canvas id="budget-donut-chart"></canvas>
-            </div>
-            <div id="budget-donut-legend" style="margin-top:10px;"></div>
-          </div>
         </div>
+      </div>
 
-        <div class="form-card" style="margin-top:18px; background:var(--sand);">
-          <h4>إضافة إيراد</h4>
+      <!-- ===== تبويب: طلبات الصرف ===== -->
+      <div class="bud-panel hidden" id="bud-panel-expenses">
+        <!-- تقديم طلب صرف (بيان صرف): يظهر لأي صاحب صلاحية (كاملة أو طلبات فقط) -->
+        <div class="form-card hidden bud-section-card" id="budget-expense-form-section">
+          <div class="bud-section-head">
+            <div class="bud-section-icon" style="background:var(--meadow-light); color:var(--meadow);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            </div>
+            <div>
+              <h4>تقديم طلب صرف (بيان صرف)</h4>
+              <p>يمكن إضافة أكثر من فاتورة بنفس طلب الصرف — يُحفظ الطلب بحالة "بانتظار الاعتماد" ولا يُخصم من الميزانية إلا بعد موافقة المدير</p>
+            </div>
+          </div>
+
           <div class="form-row">
-            <input type="text" id="budget-rev-desc" placeholder="وصف الإيراد (مثال: رسوم دراسية - الفصل الثاني)" />
-            <input type="number" id="budget-rev-amount" placeholder="المبلغ (ر.س)" />
+            <select id="budget-exp-category"></select>
+            <select id="budget-exp-beneficiary">
+              <option value="">يُصرف لـ (اختر الموظف)...</option>
+            </select>
           </div>
           <div class="form-row">
-            <input type="date" id="budget-rev-date" />
-            <select id="budget-rev-semester">
+            <select id="budget-exp-source">
+              <option value="">جهة الصرف...</option>
+              <option>المقصف</option>
+              <option>السلفة</option>
+              <option value="أخرى">أخرى</option>
+            </select>
+            <input type="text" id="budget-exp-source-other" placeholder="اكتب جهة الصرف" style="display:none;" />
+          </div>
+          <div class="form-row">
+            <input type="date" id="budget-exp-date" />
+            <select id="budget-exp-semester">
               <option value="">الفصل الدراسي...</option>
               <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
               <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
             </select>
           </div>
-          <div class="form-row">
-            <input type="text" id="budget-rev-notes" placeholder="ملاحظات (اختياري)" style="grid-column:1/-1;" />
-          </div>
-          <button class="btn-primary" id="budget-rev-submit" style="width:auto; padding:10px 18px;">+ إضافة الإيراد</button>
-          <div class="error-msg" id="budget-rev-error"></div>
+
+          <h4 style="margin:18px 0 8px; font-size:13.5px;">الفواتير</h4>
+          <div id="budget-exp-items"></div>
+          <button type="button" class="btn-primary" id="budget-exp-add-item" style="width:auto; padding:8px 14px; background:var(--slate);">+ إضافة فاتورة</button>
+          <div style="text-align:left; margin-top:10px; font-weight:800; font-size:15px;">الإجمالي: <span id="budget-exp-total">0 ر.س</span></div>
+
+          <button class="btn-primary" id="budget-exp-submit" style="width:auto; padding:10px 18px; margin-top:14px;">حفظ وإرسال للاعتماد</button>
+          <div class="error-msg" id="budget-exp-error"></div>
         </div>
 
-        <details class="form-card" style="margin-top:18px; background:var(--sand);">
-          <summary style="cursor:pointer; font-weight:700; font-size:15px;">إدارة بنود المصروفات</summary>
-          <div style="display:flex; gap:8px; align-items:center; margin-top:14px;">
-            <input type="text" id="budget-category-name" placeholder="اسم بند جديد" style="flex:1; margin:0;" />
-            <input type="number" id="budget-category-cap" min="0" max="100" step="0.5" placeholder="سقف % (اختياري)" style="width:130px; margin:0;" />
-            <button class="btn-primary" id="budget-category-submit" style="width:auto; padding:9px 16px;">+ إضافة بند</button>
-          </div>
-          <p style="font-size:11px; color:var(--slate); margin:8px 0 0;">سقف الصرف % هو نسبة من إجمالي الإيراد — يرتفع تلقائيًا كلما زاد الإيراد، ويظهر له مؤشر لوني بلوحة الميزانية (اخضر حتى 50%، أصفر حتى 80%، أحمر بعدها)</p>
-          <div id="budget-categories-list" style="margin-top:10px;"></div>
-        </details>
-
-        <details class="form-card" style="margin-top:18px; background:var(--sand);" id="budget-share-section">
-          <summary style="cursor:pointer; font-weight:700; font-size:15px;">نصيب الإدارة والمدوَّر (تُحسب آخر كل فصل دراسي)</summary>
-
-          <p style="font-size:12px; color:var(--slate); margin:10px 0;">نسبتان % من إجمالي إيراد الفصل، تُحسبان وتُخصمان من الرصيد عند إقفال الفصل — يمكنك تعديلهما وقت ما تبي</p>
-          <div class="form-row">
-            <div>
-              <label style="font-size:12px; color:var(--slate);">نسبة الإدارة %</label>
-              <input type="number" id="budget-share-admin-pct" min="0" max="100" step="0.5" style="margin-top:4px;" />
-            </div>
-            <div>
-              <label style="font-size:12px; color:var(--slate);">نسبة المدوَّر %</label>
-              <input type="number" id="budget-share-carry-pct" min="0" max="100" step="0.5" style="margin-top:4px;" />
-            </div>
-          </div>
-          <button class="btn-primary" id="budget-share-settings-save" style="width:auto; padding:9px 16px; margin-top:8px; background:var(--slate);">حفظ النسب</button>
-
-          <hr style="margin:16px 0; border:none; border-top:1px solid #ECEAE1;" />
-
-          <p style="font-size:13px; font-weight:700; margin:0 0 8px;">إقفال فصل دراسي</p>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <select id="budget-share-close-semester" style="flex:1; margin:0;"></select>
-            <button class="btn-primary" id="budget-share-close-submit" style="width:auto; padding:9px 16px;">تسجيل نصيب الإدارة والمدوَّر</button>
-          </div>
-          <div class="error-msg" id="budget-share-error"></div>
-
-          <div id="budget-share-closures-list" style="margin-top:14px;"></div>
-        </details>
+        <!-- قائمة طلبات/حركات الصرف -->
+        <div style="margin-top:22px;">
+          <h4 id="budget-expenses-title" style="margin-bottom:10px;">طلبات الصرف</h4>
+          <div id="budget-expenses-list"></div>
+        </div>
       </div>
 
-      <!-- تقديم طلب صرف (بيان صرف): يظهر لأي صاحب صلاحية (كاملة أو طلبات فقط) -->
-      <div class="form-card hidden" id="budget-expense-form-section" style="margin-top:18px;">
-        <h4 style="margin-bottom:2px;">تقديم طلب صرف (بيان صرف)</h4>
-        <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">يمكن إضافة أكثر من فاتورة بنفس طلب الصرف — يُحفظ الطلب بحالة "بانتظار الاعتماد" ولا يُخصم من الميزانية إلا بعد موافقة المدير</p>
-
-        <div class="form-row">
-          <select id="budget-exp-category"></select>
-          <select id="budget-exp-beneficiary">
-            <option value="">يُصرف لـ (اختر الموظف)...</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <select id="budget-exp-source">
-            <option value="">جهة الصرف...</option>
-            <option>المقصف</option>
-            <option>السلفة</option>
-            <option value="أخرى">أخرى</option>
-          </select>
-          <input type="text" id="budget-exp-source-other" placeholder="اكتب جهة الصرف" style="display:none;" />
-        </div>
-        <div class="form-row">
-          <input type="date" id="budget-exp-date" />
-          <select id="budget-exp-semester">
-            <option value="">الفصل الدراسي...</option>
-            <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
-            <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
-          </select>
+      <!-- ===== تبويب: الإعدادات ===== -->
+      <div class="bud-panel hidden" id="bud-panel-settings">
+        <!-- إدارة الصلاحيات: يظهر للمدير فقط -->
+        <div class="form-card hidden bud-section-card" id="budget-perms-section">
+          <div class="bud-section-head">
+            <div class="bud-section-icon" style="background:var(--purple-light); color:var(--purple);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z"/></svg>
+            </div>
+            <div>
+              <h4>صلاحيات القسم</h4>
+              <p>المدير يتحكم بمين يشوف/يضيف بقسم الميزانية</p>
+            </div>
+          </div>
+          <div id="budget-perms-list"></div>
+          <div class="form-row" style="margin-top:14px;">
+            <select id="budget-perm-employee"></select>
+            <select id="budget-perm-level">
+              <option value="full">صلاحية كاملة (إيرادات + مصروفات + اعتماد)</option>
+              <option value="request_only">إضافة طلبات صرف فقط</option>
+            </select>
+          </div>
+          <button class="btn-primary" id="budget-perm-submit" style="width:auto; padding:10px 18px; margin-top:10px;">+ إعطاء صلاحية</button>
+          <div class="error-msg" id="budget-perm-error"></div>
         </div>
 
-        <h4 style="margin:18px 0 8px; font-size:13.5px;">الفواتير</h4>
-        <div id="budget-exp-items"></div>
-        <button type="button" class="btn-primary" id="budget-exp-add-item" style="width:auto; padding:8px 14px; background:var(--slate);">+ إضافة فاتورة</button>
-        <div style="text-align:left; margin-top:10px; font-weight:800; font-size:15px;">الإجمالي: <span id="budget-exp-total">0 ر.س</span></div>
+        <!-- إعدادات إضافية: تظهر للمدير ولصاحب صلاحية "كاملة" -->
+        <div id="budget-settings-extra" class="hidden">
+          <div class="form-card bud-section-card" style="background:var(--sand);">
+            <div class="bud-section-head">
+              <div class="bud-section-icon" style="background:var(--green-light); color:var(--green);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+              </div>
+              <div>
+                <h4>إضافة إيراد</h4>
+                <p>سجّل أي مبلغ يدخل لميزانية المدرسة</p>
+              </div>
+            </div>
+            <div class="form-row">
+              <input type="text" id="budget-rev-desc" placeholder="وصف الإيراد (مثال: رسوم دراسية - الفصل الثاني)" />
+              <input type="number" id="budget-rev-amount" placeholder="المبلغ (ر.س)" />
+            </div>
+            <div class="form-row">
+              <input type="date" id="budget-rev-date" />
+              <select id="budget-rev-semester">
+                <option value="">الفصل الدراسي...</option>
+                <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+                <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
+              </select>
+            </div>
+            <div class="form-row">
+              <input type="text" id="budget-rev-notes" placeholder="ملاحظات (اختياري)" style="grid-column:1/-1;" />
+            </div>
+            <button class="btn-primary" id="budget-rev-submit" style="width:auto; padding:10px 18px;">+ إضافة الإيراد</button>
+            <div class="error-msg" id="budget-rev-error"></div>
+          </div>
 
-        <button class="btn-primary" id="budget-exp-submit" style="width:auto; padding:10px 18px; margin-top:14px;">حفظ وإرسال للاعتماد</button>
-        <div class="error-msg" id="budget-exp-error"></div>
-      </div>
+          <details class="form-card bud-section-card" style="margin-top:18px; background:var(--sand);">
+            <summary class="bud-section-head" style="cursor:pointer; margin-bottom:0;">
+              <div class="bud-section-icon" style="background:var(--gold-light); color:var(--gold);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 12.6L12.3 21a2 2 0 01-2.8 0l-7.5-7.5a2 2 0 010-2.8L10.3 2.4A2 2 0 0111.7 2H19a2 2 0 012 2v7.3a2 2 0 01-.4 1.3z"/><circle cx="15" cy="8" r="1.6"/></svg>
+              </div>
+              <div>
+                <h4>إدارة بنود المصروفات</h4>
+                <p>الأسماء والسقوف المئوية لكل بند</p>
+              </div>
+            </summary>
+            <div style="display:flex; gap:8px; align-items:center; margin-top:14px;">
+              <input type="text" id="budget-category-name" placeholder="اسم بند جديد" style="flex:1; margin:0;" />
+              <input type="number" id="budget-category-cap" min="0" max="100" step="0.5" placeholder="سقف % (اختياري)" style="width:130px; margin:0;" />
+              <button class="btn-primary" id="budget-category-submit" style="width:auto; padding:9px 16px;">+ إضافة بند</button>
+            </div>
+            <p style="font-size:11px; color:var(--slate); margin:8px 0 0;">سقف الصرف % هو نسبة من إجمالي الإيراد — يرتفع تلقائيًا كلما زاد الإيراد، ويظهر له مؤشر لوني بلوحة الميزانية (اخضر حتى 50%، أصفر حتى 80%، أحمر بعدها)</p>
+            <div id="budget-categories-list" style="margin-top:10px;"></div>
+          </details>
 
-      <!-- قائمة طلبات/حركات الصرف -->
-      <div style="margin-top:22px;">
-        <h4 id="budget-expenses-title" style="margin-bottom:10px;">طلبات الصرف</h4>
-        <div id="budget-expenses-list"></div>
+          <details class="form-card bud-section-card" style="margin-top:18px; background:var(--sand);" id="budget-share-section">
+            <summary class="bud-section-head" style="cursor:pointer; margin-bottom:0;">
+              <div class="bud-section-icon" style="background:var(--teal-light); color:var(--teal);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5L5 19M7.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM16.5 20a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/></svg>
+              </div>
+              <div>
+                <h4>نصيب الإدارة والمدوَّر</h4>
+                <p>تُحسب آخر كل فصل دراسي</p>
+              </div>
+            </summary>
+
+            <p style="font-size:12px; color:var(--slate); margin:10px 0;">نسبتان % من إجمالي إيراد الفصل، تُحسبان وتُخصمان من الرصيد عند إقفال الفصل — يمكنك تعديلهما وقت ما تبي</p>
+            <div class="form-row">
+              <div>
+                <label style="font-size:12px; color:var(--slate);">نسبة الإدارة %</label>
+                <input type="number" id="budget-share-admin-pct" min="0" max="100" step="0.5" style="margin-top:4px;" />
+              </div>
+              <div>
+                <label style="font-size:12px; color:var(--slate);">نسبة المدوَّر %</label>
+                <input type="number" id="budget-share-carry-pct" min="0" max="100" step="0.5" style="margin-top:4px;" />
+              </div>
+            </div>
+            <button class="btn-primary" id="budget-share-settings-save" style="width:auto; padding:9px 16px; margin-top:8px; background:var(--slate);">حفظ النسب</button>
+
+            <hr style="margin:16px 0; border:none; border-top:1px solid #ECEAE1;" />
+
+            <p style="font-size:13px; font-weight:700; margin:0 0 8px;">إقفال فصل دراسي</p>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <select id="budget-share-close-semester" style="flex:1; margin:0;"></select>
+              <button class="btn-primary" id="budget-share-close-submit" style="width:auto; padding:9px 16px;">تسجيل نصيب الإدارة والمدوَّر</button>
+            </div>
+            <div class="error-msg" id="budget-share-error"></div>
+
+            <div id="budget-share-closures-list" style="margin-top:14px;"></div>
+          </details>
+        </div>
       </div>
     </div>
 
