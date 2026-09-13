@@ -616,3 +616,42 @@
   .file-perm-row .fp-name{ flex:1; min-width:0; }
   .file-perm-row .fp-toggles{ display:flex; gap:12px; flex-shrink:0; font-size:11.5px; color:var(--slate); }
   .file-perm-row label{ display:flex; align-items:center; gap:4px; cursor:pointer; }
+
+  /* ---------- متابعة أداء الموظفين: سجل الملاحظات + إدارة المؤشرات ---------- */
+  .eval-note-row{
+    display:flex; align-items:flex-start; gap:12px; padding:12px 4px; border-bottom:1px solid var(--border);
+  }
+  .eval-note-row:last-child{ border-bottom:none; }
+  .eval-note-badge{
+    flex-shrink:0; font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; white-space:nowrap; margin-top:1px;
+  }
+  .eval-note-body{ flex:1; min-width:160px; }
+  .eval-note-content{ font-size:13px; line-height:1.6; word-break:break-word; }
+  .eval-note-meta{ font-size:11.5px; color:var(--slate); margin-top:4px; }
+  .eval-note-score{ font-family:'Tajawal'; font-weight:700; font-size:14px; flex-shrink:0; margin-top:1px; }
+  .eval-note-delete{
+    flex-shrink:0; background:none; border:none; color:var(--slate); cursor:pointer; font-size:17px;
+    line-height:1; padding:2px 4px; border-radius:6px;
+  }
+  .eval-note-delete:hover{ color:var(--danger); background:var(--danger-light); }
+
+  .eval-indicator-row{
+    display:flex; align-items:center; gap:12px; padding:10px 4px; border-bottom:1px solid var(--border); flex-wrap:wrap;
+  }
+  .eval-indicator-row:last-child{ border-bottom:none; }
+  .eval-indicator-row.inactive{ opacity:.5; }
+  .eval-indicator-row .ei-name{ flex:1; min-width:120px; font-weight:700; font-size:13.5px; }
+  .eval-indicator-row .ei-weight{ font-size:12px; color:var(--slate); }
+  .eval-indicator-row .ei-actions{ display:flex; gap:6px; flex-shrink:0; }
+  .eval-indicator-row .ei-actions button{
+    border:none; border-radius:8px; padding:6px 11px; font-size:11.5px; font-weight:700; cursor:pointer; font-family:inherit;
+  }
+  .ei-toggle-btn{ background:var(--sand); color:var(--ink); }
+  .ei-delete-btn{ background:var(--danger-light); color:var(--danger); }
+
+  .eval-breakdown-row{ display:flex; align-items:center; gap:10px; padding:8px 4px; border-bottom:1px solid var(--border); }
+  .eval-breakdown-row:last-child{ border-bottom:none; }
+  .eval-breakdown-row .eb-name{ flex:1; font-size:13px; font-weight:600; min-width:100px; }
+  .eval-breakdown-row .eb-bar-wrap{ flex:2; max-width:160px; height:6px; background:var(--sand); border-radius:4px; overflow:hidden; }
+  .eval-breakdown-row .eb-bar{ height:100%; border-radius:4px; }
+  .eval-breakdown-row .eb-score{ font-family:'Tajawal'; font-weight:700; font-size:12.5px; width:32px; text-align:left; flex-shrink:0; }
