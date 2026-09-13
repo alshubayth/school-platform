@@ -41,8 +41,14 @@ export async function loadBudgetModule() {
 
   document.getElementById('budget-perms-section').classList.toggle('hidden', !isAdmin);
   document.getElementById('budget-dashboard-section').classList.toggle('hidden', !hasFull);
+  document.getElementById('budget-settings-extra').classList.toggle('hidden', !hasFull);
   document.getElementById('budget-expense-form-section').classList.remove('hidden');
   document.getElementById('budget-expenses-title').textContent = hasFull ? 'طلبات وحركات الصرف' : 'طلباتي';
+
+  // من عنده صلاحية كاملة يشوف كل التبويبات؛ غيره (طلبات فقط أو بدون صلاحية) يشوف "طلبات الصرف" بس
+  document.getElementById('bud-tab-overview').classList.toggle('hidden', !hasFull);
+  document.getElementById('bud-tab-settings').classList.toggle('hidden', !hasFull);
+  showBudTab(hasFull ? 'overview' : 'expenses');
 
   document.getElementById('budget-exp-date').value = todayIso();
   document.getElementById('budget-rev-date') && (document.getElementById('budget-rev-date').value = todayIso());
@@ -60,6 +66,19 @@ export async function loadBudgetModule() {
 
 document.getElementById('budget-semester-filter').addEventListener('change', () => {
   if (accessLevel() === 'full') loadDashboard();
+});
+
+/* ---------- تبويبات القسم: لوحة عامة / طلبات الصرف / الإعدادات ---------- */
+const BUD_TABS = ['overview', 'expenses', 'settings'];
+function showBudTab(tab) {
+  if (!BUD_TABS.includes(tab)) tab = 'overview';
+  BUD_TABS.forEach(t => {
+    document.getElementById(`bud-tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`bud-panel-${t}`).classList.toggle('hidden', t !== tab);
+  });
+}
+BUD_TABS.forEach(t => {
+  document.getElementById(`bud-tab-${t}`).addEventListener('click', () => showBudTab(t));
 });
 
 /* ---------- قائمة الموظفين لحقل "يُصرف لـ" ---------- */
@@ -568,11 +587,28 @@ function printVoucher(r, items, total) {
 }
 
 /* ---------- لوحة الإحصائيات والرسوم البيانية ---------- */
-function statCard(label, value, color, sub) {
-  return `<div class="stat-card">
-    <div class="label">${label}</div>
-    <div class="value" style="color:${color || 'var(--ink)'};">${value}</div>
-    ${sub ? `<div style="font-size:11px; color:${color || 'var(--slate)'}; margin-top:4px; font-weight:600;">${sub}</div>` : ''}
+const STAT_ICON_STYLE = {
+  revenue: { bg: 'var(--green-light)', fg: 'var(--green)', path: '<path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>' },
+  expense: { bg: 'var(--danger-light)', fg: 'var(--danger)', path: '<path d="M6 2h9l3 3v17l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3V2z"/><path d="M9 8h6M9 12h6M9 16h3"/>' },
+  balance: { bg: 'var(--meadow-light)', fg: 'var(--meadow)', path: '<rect x="2" y="6" width="20" height="13" rx="2.5"/><path d="M2 10h20"/><circle cx="17" cy="13" r="1.6"/>' },
+  category: { bg: 'var(--gold-light)', fg: 'var(--gold)', path: '<path d="M20.6 12.6L12.3 21a2 2 0 01-2.8 0l-7.5-7.5a2 2 0 010-2.8L10.3 2.4A2 2 0 0111.7 2H19a2 2 0 012 2v7.3a2 2 0 01-.4 1.3z"/><circle cx="15" cy="8" r="1.6"/>' },
+  admin: { bg: 'var(--purple-light)', fg: 'var(--purple)', path: '<path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z"/>' },
+  carry: { bg: 'var(--teal-light)', fg: 'var(--teal)', path: '<path d="M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8M21 3v5h-5M21 12a9 9 0 01-9 9 9 9 0 01-6.36-2.64L3 16m0 5v-5h5"/>' },
+};
+function statCard(label, value, color, sub, icon) {
+  const style = icon && STAT_ICON_STYLE[icon];
+  const iconSvg = style
+    ? `<div class="icon-chip" style="background:${style.bg}; color:${style.fg};">
+         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${style.path}</svg>
+       </div>`
+    : '';
+  return `<div class="stat-card${style ? ' bud-stat' : ''}">
+    ${iconSvg}
+    <div class="body">
+      <div class="label">${label}</div>
+      <div class="value" style="color:${color || 'var(--ink)'};">${value}</div>
+      ${sub ? `<div style="font-size:11px; color:${color || 'var(--slate)'}; margin-top:4px; font-weight:600;">${sub}</div>` : ''}
+    </div>
   </div>`;
 }
 
@@ -623,12 +659,12 @@ async function loadDashboard() {
   const topPct = totalExpense ? Math.round(topAmount / totalExpense * 100) : 0;
 
   statsEl.innerHTML =
-    statCard('إجمالي الإيرادات', fmtAmount(totalRevenue), 'var(--green)') +
-    statCard('إجمالي المصروفات (المعتمدة)', fmtAmount(totalExpense), 'var(--danger)') +
-    statCard('الرصيد الحالي', fmtAmount(balance), 'var(--meadow)') +
-    statCard('أكبر بند صرف', topCategory, 'var(--ink)', topAmount ? `${fmtAmount(topAmount)} (${topPct}%)` : null) +
-    statCard('نصيب الإدارة (مخصوم)', fmtAmount(totalAdminShare), 'var(--purple)') +
-    statCard('المدوَّر (محتجز)', fmtAmount(totalCarryover), 'var(--teal)');
+    statCard('إجمالي الإيرادات', fmtAmount(totalRevenue), 'var(--green)', null, 'revenue') +
+    statCard('إجمالي المصروفات (المعتمدة)', fmtAmount(totalExpense), 'var(--danger)', null, 'expense') +
+    statCard('الرصيد الحالي', fmtAmount(balance), 'var(--meadow)', null, 'balance') +
+    statCard('أكبر بند صرف', topCategory, 'var(--ink)', topAmount ? `${fmtAmount(topAmount)} (${topPct}%)` : null, 'category') +
+    statCard('نصيب الإدارة (مخصوم)', fmtAmount(totalAdminShare), 'var(--purple)', null, 'admin') +
+    statCard('المدوَّر (محتجز)', fmtAmount(totalCarryover), 'var(--teal)', null, 'carry');
 
   renderCategoryCaps(totalRevenue, expList);
 
