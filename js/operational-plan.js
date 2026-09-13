@@ -1,4 +1,4 @@
-import { sb, currentUserId, isAdminOrDeputy, gradeLabels,
+import { sb, currentUserId, currentProfile, gradeLabels,
          isOpPlanMember, setOpPlanMember, setupCollapsible } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
@@ -64,7 +64,9 @@ export async function loadOpPlanModule() {
   document.getElementById('opplan-employee-view').classList.add('hidden');
   document.getElementById('opplan-not-member').classList.add('hidden');
 
-  if (isAdminOrDeputy()) {
+  // لوحة الإدارة (الأهداف/البرامج/الاعتمادات) للمدير فقط - الوكيل، مثل المعلم تمامًا، يدخل
+  // بصفحته الشخصية كموظف مشارك لو انسندت له برامج بالخطة (وإلا يشوف رسالة "مو مشارك")
+  if (currentProfile.role === 'admin') {
     document.getElementById('opplan-subtitle').textContent = 'إدارة الأهداف والبرامج ومراجعة الاعتمادات';
     document.getElementById('opplan-admin-view').classList.remove('hidden');
     await loadOpPlanAdminData();
