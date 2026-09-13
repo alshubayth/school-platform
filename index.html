@@ -122,15 +122,15 @@
           </div>
           <div>
             <h3>متابعة أداء الموظفين</h3>
-            <p>ملاحظات ومؤشرات وتقييم نهائي لكل معلم</p>
+            <p>معايير تقييم الأداء الوظيفي الرسمية، رصد المخالفات، وبطاقة أداء قابلة للطباعة</p>
           </div>
         </div>
         <div class="bud-tabs" id="eval-tabs" role="tablist">
-          <button class="bud-tab active" id="eval-tab-overview" type="button">
+          <button class="bud-tab hidden" id="eval-tab-overview" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
             نظرة عامة
           </button>
-          <button class="bud-tab" id="eval-tab-record" type="button">
+          <button class="bud-tab active" id="eval-tab-record" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
             تسجيل ملاحظة
           </button>
@@ -141,14 +141,14 @@
         </div>
       </div>
 
-      <!-- ===== لوحة: نظرة عامة ===== -->
-      <div class="bud-panel" id="eval-panel-overview">
+      <!-- ===== لوحة: نظرة عامة (المدير فقط) ===== -->
+      <div class="bud-panel hidden" id="eval-panel-overview">
         <div id="eval-overview-list-view">
           <div class="stat-grid" id="eval-stats"></div>
           <div class="bud-section-card" style="margin-top:18px;">
             <div class="bud-section-head">
               <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
-              <div><h4>تقييم المعلمين</h4><p>اضغط على أي معلم لعرض تقريره الكامل</p></div>
+              <div><h4>تقييم المعلمين</h4><p>اضغط على أي معلم لعرض تقريره الكامل حسب معايير التقييم الرسمية</p></div>
             </div>
             <div id="eval-employee-list"></div>
           </div>
@@ -165,63 +165,71 @@
               </div>
               <div class="ring-wrap" style="margin-inline-start:auto;" id="eval-detail-ring"></div>
             </div>
+            <div id="eval-detail-band" style="margin:2px 0 14px;"></div>
             <div id="eval-detail-breakdown"></div>
+            <button class="text-action-btn" id="eval-print-card-btn" style="margin-top:14px;">🖨 طباعة بطاقة الأداء (PDF)</button>
           </div>
           <div class="bud-section-card" style="margin-top:14px;">
             <div class="bud-section-head">
               <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg></div>
-              <div><h4>سجل الملاحظات</h4><p>كل الملاحظات المسجلة على هذا المعلم</p></div>
+              <div><h4>سجل المخالفات</h4><p>كل المخالفات المسجَّلة على هذا المعلم للسنة الدراسية الحالية</p></div>
             </div>
             <div id="eval-detail-notes"></div>
           </div>
         </div>
       </div>
 
-      <!-- ===== لوحة: تسجيل ملاحظة ===== -->
-      <div class="bud-panel hidden" id="eval-panel-record">
+      <!-- ===== لوحة: تسجيل ملاحظة (مدير + وكيل) ===== -->
+      <div class="bud-panel" id="eval-panel-record">
         <div class="bud-section-card">
           <div class="bud-section-head">
             <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div>
-            <div><h4>تسجيل ملاحظة جديدة</h4><p>الملاحظة الإيجابية/السلبية تُحتسب ضمن التقييم النهائي، والمحايدة للتوثيق فقط بدون درجة</p></div>
+            <div><h4>تسجيل مخالفة جديدة</h4><p>اختر المعيار ثم البند المحدد - الخصم يُحسب تلقائيًا ويظهر لك قبل الحفظ</p></div>
           </div>
           <div class="form-row">
             <select id="note-employee"></select>
-            <select id="note-type">
-              <option value="positive">ملاحظة إيجابية</option>
-              <option value="negative">ملاحظة سلبية</option>
-              <option value="neutral">ملاحظة محايدة (بدون درجة)</option>
-            </select>
+            <select id="note-criterion"></select>
           </div>
-          <div class="form-row" id="note-scored-row">
-            <select id="note-indicator"></select>
-            <select id="note-score">
-              <option value="5">5 - ممتاز</option>
-              <option value="4">4 - جيد جدًا</option>
-              <option value="3">3 - جيد</option>
-              <option value="2">2 - مقبول</option>
-              <option value="1">1 - ضعيف</option>
-            </select>
+          <div class="form-row">
+            <select id="note-detail"></select>
+            <input type="date" id="note-date" />
           </div>
-          <textarea id="note-text" placeholder="اكتب نص الملاحظة" rows="3"></textarea>
+          <textarea id="note-text" placeholder="تفاصيل المخالفة (اختياري)" rows="3"></textarea>
+          <div id="note-deduction-preview" style="font-size:12.5px; color:var(--slate); margin:2px 0 10px;"></div>
           <div class="error-msg" id="note-error"></div>
-          <button class="btn-primary" id="note-submit">إضافة الملاحظة</button>
+          <button class="btn-primary" id="note-submit">تسجيل المخالفة</button>
+          <span id="note-success-msg" style="font-size:12.5px; color:var(--meadow); display:none; margin-inline-start:10px;">تم التسجيل ✓</span>
         </div>
       </div>
 
-      <!-- ===== لوحة: الإعدادات (المؤشرات) ===== -->
+      <!-- ===== لوحة: الإعدادات (المدير فقط) ===== -->
       <div class="bud-panel hidden" id="eval-panel-settings">
         <div class="bud-section-card">
           <div class="bud-section-head">
+            <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
+            <div><h4>السنة الدراسية الحالية</h4><p>تغييرها يبدأ رصيد كل المعايير من جديد (٥ لكل معيار) لكل الموظفين، بدون حذف سجل المخالفات القديم</p></div>
+          </div>
+          <div class="form-row">
+            <input type="text" id="perf-year-input" placeholder="مثال: 1447/1448" />
+            <button class="btn-primary" id="perf-year-save" style="white-space:nowrap;">حفظ السنة الحالية</button>
+          </div>
+          <div class="error-msg" id="perf-year-error"></div>
+        </div>
+
+        <div class="bud-section-card" style="margin-top:14px;">
+          <div class="bud-section-head">
+            <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
+            <div><h4>تحقق من تطابق أسماء المعلمين بالجدول الدراسي</h4><p>عدد الحصص يُحسب من مطابقة الاسم بالضبط مع جدول الحصص - أي معلم بصفر يحتاج تصحيح الاسم بأحد الجدولين</p></div>
+          </div>
+          <div id="perf-name-check-list"></div>
+        </div>
+
+        <div class="bud-section-card" style="margin-top:14px;">
+          <div class="bud-section-head">
             <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83"/></svg></div>
-            <div><h4>مؤشرات التقييم</h4><p>كل مؤشر له وزن نسبي يدخل في حساب الدرجة النهائية، والتعطيل أسلم من الحذف للمؤشرات التي عليها ملاحظات سابقة</p></div>
+            <div><h4>معايير التقييم وبنودها</h4><p>لكل معيار وزن بالدرجة النهائية (متساوٍ افتراضيًا)، ولكل بند نوع خصم: ثابت، أو نسبي لعدد الحصص/المناوبات</p></div>
           </div>
-          <div id="eval-indicators-list"></div>
-          <div class="form-row" style="margin-top:14px;">
-            <input type="text" id="eval-new-indicator-name" placeholder="اسم المؤشر (مثال: الانضباط)" />
-            <input type="number" id="eval-new-indicator-weight" placeholder="الوزن" min="0.1" step="0.1" value="1" style="max-width:140px;" />
-            <button class="btn-primary" id="eval-add-indicator-btn" style="white-space:nowrap;">+ إضافة مؤشر</button>
-          </div>
-          <div class="error-msg" id="eval-indicator-error"></div>
+          <div id="perf-criteria-list"></div>
         </div>
       </div>
     </div>
