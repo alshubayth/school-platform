@@ -392,9 +392,32 @@
 
       <!-- ===== شاشة المدير ===== -->
       <div id="opplan-admin-view" class="hidden">
+        <div class="bud-head">
+          <div class="bud-head-title">
+            <div class="bud-head-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            </div>
+            <div>
+              <h3>الخطة التشغيلية الرسمية 1448هـ</h3>
+              <p>إدارة الأهداف والبرامج، إسناد المهام للمشاركين، ومراجعة الاعتمادات</p>
+            </div>
+          </div>
+          <div class="bud-tabs" id="opplan-tabs" role="tablist">
+            <button class="bud-tab active" id="opplan-tab-dashboard" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-8"/></svg>
+              لوحة المتابعة
+            </button>
+            <button class="bud-tab" id="opplan-tab-settings" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              الإعدادات
+            </button>
+          </div>
+        </div>
+
+        <!-- ===== لوحة: المتابعة (الداشبورد التفاعلي) ===== -->
+        <div class="bud-panel" id="opplan-panel-dashboard">
         <div class="op-dashboard">
           <div class="op-page-head">
-            <h2>الخطة التشغيلية الرسمية 1448هـ</h2>
             <p>متابعة تنفيذ مدرستنا للبرامج الرسمية المعتمدة من إدارة التعليم — النسبة تُحسب تلقائيًا من المهام الأسبوعية المعتمدة والمنجزة تحت كل برنامج، بدون تسجيل يدوي</p>
             <span class="op-scope-note hidden" id="opplan-scope-note"></span>
             <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
@@ -438,8 +461,9 @@
           <div id="opplan-guide-legend" class="op-legend"></div>
           <div id="opplan-guide-list" class="op-program-grid"></div>
         </div>
+        </div>
 
-        <!-- عرض مهام برنامج (قراءة فقط) -->
+        <!-- عرض مهام برنامج (قراءة فقط) - خارج التبويبات عشان يشتغل دايمًا بغض النظر عن التبويب المفعّل -->
         <div id="opplan-program-overlay" class="hidden" style="position:fixed; inset:0; background:rgba(21,34,56,0.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;">
           <div style="background:#fff; border-radius:16px; padding:22px; max-width:560px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-md);">
             <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
@@ -453,6 +477,8 @@
           </div>
         </div>
 
+        <!-- ===== لوحة: الإعدادات (إسناد + هيكل الأهداف + اعتمادات) ===== -->
+        <div class="bud-panel hidden" id="opplan-panel-settings">
         <div class="form-card">
           <h4>المشاركون بالخطة</h4>
           <div class="form-row">
@@ -511,6 +537,7 @@
         <div id="opplan-pending-completion-list"></div>
 
         <button class="btn-primary" id="opplan-reset-btn" style="width:auto; padding:10px 20px; background:var(--danger); margin-top:26px;">إعادة تهيئة الخطة (حذف كل المهام)</button>
+        </div>
       </div>
 
       <div id="opplan-reset-overlay" class="hidden" style="position:fixed; inset:0; background:rgba(21,34,56,0.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;">
