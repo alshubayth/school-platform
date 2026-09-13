@@ -151,6 +151,11 @@ onEl('opplan-semester-select', 'change', async (e) => {
 let opaMembersCache = [];
 let opaCurrentAssignments = new Set();
 
+// فلتر داشبورد المدير: هدف استراتيجي/تشغيلي مختار حاليًا (null = بدون فلتر) - يُطبّق على شبكة
+// البرامج بالأسفل فقط (الإحصائيات والرسومين وبطاقات الأهداف نفسها تبقى تعرض الصورة الكاملة)
+let opGuideFilterGoalId = null;
+let opGuideFilterObjId = null;
+
 async function loadProgramAssignAdmin() {
   const sel = document.getElementById('opa-employee');
   if (!sel) return;
@@ -376,8 +381,9 @@ async function renderOpPlanGuide() {
     goalsEl.innerHTML = goalCards.map(g => {
       const st = statusInfo(g.startedCount, g.pct);
       const color = goalColorVar(g.goal.title);
+      const isActive = opGuideFilterGoalId === g.goal.id;
       return `
-        <div class="op-goal-card" style="--goal-color:${color};">
+        <div class="op-goal-card ${isActive ? 'active' : ''}" style="--goal-color:${color};" data-goal-id="${g.goal.id}">
           <div class="gtitle"><span class="goal-dot"></span><h5>${esc(g.goal.title)}</h5></div>
           <div class="gmeta">${g.objIds.size} ${g.objIds.size === 1 ? 'هدف تشغيلي' : 'أهداف تشغيلية'} · ${g.programs.length} ${g.programs.length === 1 ? 'برنامج متابَع' : 'برامج متابَعة'}</div>
           <div class="gring">
@@ -387,6 +393,15 @@ async function renderOpPlanGuide() {
         </div>`;
     }).join('');
 
+    goalsEl.querySelectorAll('.op-goal-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const id = card.dataset.goalId;
+        opGuideFilterGoalId = (opGuideFilterGoalId === id) ? null : id;
+        opGuideFilterObjId = null;
+        renderOpPlanGuide();
+      });
+    });
+
     if (legendEl) {
       legendEl.innerHTML = goalCards.map(g => `
         <div class="op-legend-item"><span class="op-legend-dot" style="background:${goalColorVar(g.goal.title)};"></span>${esc(g.goal.title)}</div>
@@ -394,17 +409,76 @@ async function renderOpPlanGuide() {
     }
   }
 
+  /* ---- 2ب) شرائح فلترة الأهداف التشغيلية (تظهر بعد اختيار هدف استراتيجي) ---- */
+  const objectivesEl = document.getElementById('opplan-guide-objectives');
+  if (objectivesEl) {
+    if (opGuideFilterGoalId) {
+      const objMap = new Map();
+      programStats.forEach(s => {
+        if (!s.goal || s.goal.id !== opGuideFilterGoalId || !s.obj) return;
+        if (!objMap.has(s.obj.id)) objMap.set(s.obj.id, { obj: s.obj, count: 0 });
+        objMap.get(s.obj.id).count++;
+      });
+      const chips = Array.from(objMap.values()).sort((a, b) => a.obj.title.localeCompare(b.obj.title, 'ar'));
+      const goalColor = goalColorVar((goalById.get(opGuideFilterGoalId) || {}).title);
+      if (chips.length > 0) {
+        objectivesEl.innerHTML = chips.map(c => `
+          <span class="op-filter-chip ${opGuideFilterObjId === c.obj.id ? 'active' : ''}" data-obj-id="${c.obj.id}" style="--goal-color:${goalColor};">${esc(c.obj.title)} (${c.count})</span>
+        `).join('');
+        objectivesEl.classList.remove('hidden');
+        objectivesEl.querySelectorAll('.op-filter-chip').forEach(chip => {
+          chip.addEventListener('click', () => {
+            const id = chip.dataset.objId;
+            opGuideFilterObjId = (opGuideFilterObjId === id) ? null : id;
+            renderOpPlanGuide();
+          });
+        });
+      } else {
+        objectivesEl.innerHTML = '';
+        objectivesEl.classList.add('hidden');
+      }
+    } else {
+      objectivesEl.innerHTML = '';
+      objectivesEl.classList.add('hidden');
+    }
+  }
+
+  /* ---- شارة الفلتر النشط فوق شبكة البرامج ---- */
+  const filterBadgeEl = document.getElementById('opplan-filter-badge');
+  if (filterBadgeEl) {
+    if (opGuideFilterGoalId) {
+      const goalTitle = (goalById.get(opGuideFilterGoalId) || {}).title || '';
+      const objTitle = opGuideFilterObjId ? (objById.get(opGuideFilterObjId) || {}).title : null;
+      filterBadgeEl.textContent = `مفلترة: ${goalTitle}${objTitle ? ' ← ' + objTitle : ''}  ✕`;
+      filterBadgeEl.classList.remove('hidden');
+      filterBadgeEl.onclick = () => { opGuideFilterGoalId = null; opGuideFilterObjId = null; renderOpPlanGuide(); };
+    } else {
+      filterBadgeEl.classList.add('hidden');
+      filterBadgeEl.onclick = null;
+    }
+  }
+
   renderOpPlanCharts(goalCards, programStats);
 
-  /* ---- 3) شبكة البرامج ---- */
-  const sorted = programStats.slice().sort((a, b) => (a.program.plan_code || '').localeCompare(b.program.plan_code || '', 'en', { numeric: true }));
+  /* ---- 3) شبكة البرامج (مفلترة حسب الهدف الاستراتيجي/التشغيلي المختار، إن وُجد) ---- */
+  const filteredStats = programStats.filter(s => {
+    if (opGuideFilterGoalId && (!s.goal || s.goal.id !== opGuideFilterGoalId)) return false;
+    if (opGuideFilterObjId && (!s.obj || s.obj.id !== opGuideFilterObjId)) return false;
+    return true;
+  });
+  const sorted = filteredStats.slice().sort((a, b) => (a.program.plan_code || '').localeCompare(b.program.plan_code || '', 'en', { numeric: true }));
+
+  if (sorted.length === 0) {
+    container.innerHTML = '<div class="placeholder" style="padding:20px; grid-column:1/-1;"><p>لا توجد برامج ضمن هذا الفلتر</p></div>';
+    return;
+  }
 
   container.innerHTML = sorted.map(s => {
     const { program: p, obj, goal, myTasksCount, pct } = s;
     const st = statusInfo(myTasksCount, pct);
     const color = goal ? goalColorVar(goal.title) : 'var(--meadow)';
     return `
-      <div class="op-program-card" style="--goal-color:${color};" title="${esc(goal ? goal.title : '')}${obj ? ' ← ' + esc(obj.title) : ''}">
+      <div class="op-program-card" style="--goal-color:${color};" data-program-id="${p.id}" title="${esc(goal ? goal.title : '')}${obj ? ' ← ' + esc(obj.title) : ''}">
         <div class="phead">
           ${p.plan_code ? `<span class="op-plan-code">${esc(p.plan_code)}</span>` : '<span></span>'}
           <span class="op-status-chip ${st.cls}">${st.icon} ${st.label}</span>
@@ -418,7 +492,85 @@ async function renderOpPlanGuide() {
         ${p.school_indicator ? `<p style="margin:8px 0 0; font-size:11px; color:#444; white-space:pre-line;">${esc(p.school_indicator)}</p>` : ''}
       </div>`;
   }).join('');
+
+  container.querySelectorAll('.op-program-card').forEach(card => {
+    card.addEventListener('click', () => openProgramTasksView(card.dataset.programId));
+  });
 }
+
+/* ---------- عرض مهام برنامج (قراءة فقط) - يفتح لما تضغط على بطاقة برنامج بالداشبورد ---------- */
+async function openProgramTasksView(programId) {
+  const overlay = document.getElementById('opplan-program-overlay');
+  const titleEl = document.getElementById('opplan-program-overlay-title');
+  const subEl = document.getElementById('opplan-program-overlay-sub');
+  const bodyEl = document.getElementById('opplan-program-overlay-body');
+  if (!overlay) return;
+
+  const program = programsCache.find(p => p.id === programId);
+  if (!program) return;
+  const obj = objectivesCache.find(o => o.id === program.operational_objective_id);
+  const goal = obj ? goalsCache.find(g => g.id === obj.strategic_goal_id) : null;
+
+  titleEl.textContent = program.title;
+  subEl.textContent = [goal ? goal.title : null, obj ? obj.title : null].filter(Boolean).join(' ← ') || '';
+  bodyEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
+  overlay.classList.remove('hidden');
+
+  const { data: tasks } = await sb.from('op_tasks')
+    .select('id, title, duration_type, week_number, semester, plan_status, employee_profile_id, profiles!op_tasks_employee_profile_id_fkey(full_name)')
+    .eq('program_id', programId)
+    .order('week_number', { ascending: true });
+
+  if (!tasks || tasks.length === 0) {
+    bodyEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">ما فيه مهام مدخلة لهذا البرنامج بعد.</p>';
+    return;
+  }
+
+  const { data: completions } = await sb.from('op_task_completions')
+    .select('task_id, status, period_label')
+    .in('task_id', tasks.map(t => t.id));
+  const completionsByTask = new Map();
+  (completions || []).forEach(c => {
+    if (!completionsByTask.has(c.task_id)) completionsByTask.set(c.task_id, []);
+    completionsByTask.get(c.task_id).push(c);
+  });
+
+  const statusLabel = { approved: 'معتمدة', rejected: 'مرفوضة', pending: 'بانتظار الاعتماد' };
+  const statusColor = { approved: 'var(--status-good)', rejected: 'var(--status-bad)', pending: 'var(--status-idle)' };
+
+  bodyEl.innerHTML = `
+    ${program.department || program.school_indicator ? `
+      <div style="background:var(--sand); border-radius:8px; padding:9px 12px; margin-bottom:12px; font-size:12px; color:#444; line-height:1.6;">
+        ${program.department ? `<strong>القسم المسؤول:</strong> ${esc(program.department)}<br>` : ''}
+        ${program.school_indicator ? `<span style="white-space:pre-line;">${esc(program.school_indicator)}</span>` : ''}
+      </div>` : ''}
+    <div class="myprog-existing">
+      ${tasks.map(t => {
+        const label = t.duration_type === 'single_week' ? 'أسبوع ' + t.week_number : (durationLabels[t.duration_type] || t.duration_type);
+        const empName = t.profiles ? t.profiles.full_name : '-';
+        const comps = completionsByTask.get(t.id) || [];
+        const compSummary = t.duration_type === 'single_week'
+          ? (comps.length > 0
+              ? `<span style="font-size:10.5px; color:${statusColor[comps[0].status] || 'var(--status-idle)'};">${statusLabel[comps[0].status] || comps[0].status}</span>`
+              : '<span style="font-size:10.5px; color:var(--status-idle);">لم يُنجز بعد</span>')
+          : (comps.length > 0
+              ? `<span style="font-size:10.5px; color:var(--slate);">${comps.filter(c => c.status === 'approved').length} من ${comps.length} إنجاز معتمد</span>`
+              : '<span style="font-size:10.5px; color:var(--status-idle);">لا إنجاز مسجل بعد</span>');
+        return `
+        <div class="row" style="flex-wrap:wrap;">
+          <span style="flex-shrink:0; font-weight:700; color:var(--slate); width:74px;">${esc(label)}</span>
+          <span style="flex:1; min-width:140px;">${esc(t.title)}</span>
+          <span style="flex-shrink:0; font-size:10.5px; color:${statusColor[t.plan_status] || 'var(--status-idle)'};">${statusLabel[t.plan_status] || t.plan_status}</span>
+          ${compSummary}
+          <span style="flex-basis:100%; font-size:10.5px; color:var(--slate);">بواسطة ${esc(empName)}</span>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+onEl('opplan-program-overlay-close', 'click', () => {
+  document.getElementById('opplan-program-overlay').classList.add('hidden');
+});
 
 /* ---- 4) رسمين تفاعليين (Chart.js): إنجاز كل هدف، وتوزيع حالة البرامج ---- */
 async function renderOpPlanCharts(goalCards, programStats) {
