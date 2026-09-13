@@ -59,6 +59,19 @@ function goalColorVar(goalTitle) {
   return `var(--goal-${slot})`;
 }
 
+/* ---------- تبويبات لوحة المدير: المتابعة / الإعدادات ---------- */
+const OPPLAN_TABS = ['dashboard', 'settings'];
+function showOpPlanTab(tab) {
+  if (!OPPLAN_TABS.includes(tab)) tab = 'dashboard';
+  OPPLAN_TABS.forEach(t => {
+    const tabBtn = document.getElementById(`opplan-tab-${t}`);
+    const panel = document.getElementById(`opplan-panel-${t}`);
+    if (tabBtn) tabBtn.classList.toggle('active', t === tab);
+    if (panel) panel.classList.toggle('hidden', t !== tab);
+  });
+}
+OPPLAN_TABS.forEach(t => onEl(`opplan-tab-${t}`, 'click', () => showOpPlanTab(t)));
+
 export async function loadOpPlanModule() {
   document.getElementById('opplan-admin-view').classList.add('hidden');
   document.getElementById('opplan-employee-view').classList.add('hidden');
@@ -69,6 +82,7 @@ export async function loadOpPlanModule() {
   if (currentProfile.role === 'admin') {
     document.getElementById('opplan-subtitle').textContent = 'إدارة الأهداف والبرامج ومراجعة الاعتمادات';
     document.getElementById('opplan-admin-view').classList.remove('hidden');
+    showOpPlanTab('dashboard');
     await loadOpPlanAdminData();
   } else {
     const { data: membership } = await sb.from('operational_plan_members').select('id').eq('profile_id', currentUserId).maybeSingle();
