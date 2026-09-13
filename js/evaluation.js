@@ -320,7 +320,7 @@ function printPerformanceCard(employeeId) {
 <meta charset="UTF-8" />
 <title>بطاقة أداء - ${esc(emp.full_name)}</title>
 <style>
-  body { font-family: 'Tajawal', Arial, sans-serif; padding: 30px; color:#152238; }
+  body { font-family: 'Tajawal', Arial, sans-serif; padding: 30px; color:#152238; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
   .doc { max-width: 900px; margin: 0 auto; }
   .header { display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #152238; padding-bottom:14px; margin-bottom:20px; }
   .header h1 { margin:0; font-size:20px; }
