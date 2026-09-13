@@ -59,8 +59,8 @@ function goalColorVar(goalTitle) {
   return `var(--goal-${slot})`;
 }
 
-/* ---------- تبويبات لوحة المدير: المتابعة / الإعدادات ---------- */
-const OPPLAN_TABS = ['dashboard', 'settings'];
+/* ---------- تبويبات لوحة المدير: المتابعة / الإعدادات / اعتماد المهام ---------- */
+const OPPLAN_TABS = ['dashboard', 'settings', 'approvals'];
 function showOpPlanTab(tab) {
   if (!OPPLAN_TABS.includes(tab)) tab = 'dashboard';
   OPPLAN_TABS.forEach(t => {
