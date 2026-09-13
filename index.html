@@ -114,38 +114,116 @@
     <div id="notes-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles">→ رجوع للرئيسية</span>
 
-      <div class="stat-grid">
-        <div class="stat-card"><div class="label">عدد الموظفين</div><div class="value" id="stat-emp-count">-</div></div>
-        <div class="stat-card"><div class="label">إجمالي الملاحظات</div><div class="value" id="stat-notes-count">-</div></div>
-        <div class="stat-card"><div class="label">أعلى تقييم</div><div class="value" id="stat-top">-</div></div>
+      <!-- رأس القسم: عنوان + تنقّل بين تبويبات متابعة الأداء -->
+      <div class="bud-head">
+        <div class="bud-head-title">
+          <div class="bud-head-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg>
+          </div>
+          <div>
+            <h3>متابعة أداء الموظفين</h3>
+            <p>ملاحظات ومؤشرات وتقييم نهائي لكل معلم</p>
+          </div>
+        </div>
+        <div class="bud-tabs" id="eval-tabs" role="tablist">
+          <button class="bud-tab active" id="eval-tab-overview" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            نظرة عامة
+          </button>
+          <button class="bud-tab" id="eval-tab-record" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            تسجيل ملاحظة
+          </button>
+          <button class="bud-tab hidden" id="eval-tab-settings" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+            الإعدادات
+          </button>
+        </div>
       </div>
 
-      <div class="form-card" id="add-note-form">
-        <h4>تسجيل ملاحظة جديدة</h4>
-        <div class="form-row">
-          <select id="note-employee"></select>
-          <select id="note-indicator"></select>
+      <!-- ===== لوحة: نظرة عامة ===== -->
+      <div class="bud-panel" id="eval-panel-overview">
+        <div id="eval-overview-list-view">
+          <div class="stat-grid" id="eval-stats"></div>
+          <div class="bud-section-card" style="margin-top:18px;">
+            <div class="bud-section-head">
+              <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+              <div><h4>تقييم المعلمين</h4><p>اضغط على أي معلم لعرض تقريره الكامل</p></div>
+            </div>
+            <div id="eval-employee-list"></div>
+          </div>
         </div>
-        <div class="form-row">
-          <select id="note-type">
-            <option value="positive">ملاحظة إيجابية</option>
-            <option value="negative">ملاحظة سلبية</option>
-          </select>
-          <select id="note-score">
-            <option value="5">5 - ممتاز</option>
-            <option value="4">4 - جيد جدًا</option>
-            <option value="3">3 - جيد</option>
-            <option value="2">2 - مقبول</option>
-            <option value="1">1 - ضعيف</option>
-          </select>
+
+        <div id="eval-detail-view" class="hidden">
+          <span class="back-link" id="eval-detail-back">→ رجوع للقائمة</span>
+          <div class="bud-section-card">
+            <div class="bud-section-head">
+              <div class="bud-section-icon" id="eval-detail-avatar"></div>
+              <div>
+                <h4 id="eval-detail-name">-</h4>
+                <p id="eval-detail-title">-</p>
+              </div>
+              <div class="ring-wrap" style="margin-inline-start:auto;" id="eval-detail-ring"></div>
+            </div>
+            <div id="eval-detail-breakdown"></div>
+          </div>
+          <div class="bud-section-card" style="margin-top:14px;">
+            <div class="bud-section-head">
+              <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg></div>
+              <div><h4>سجل الملاحظات</h4><p>كل الملاحظات المسجلة على هذا المعلم</p></div>
+            </div>
+            <div id="eval-detail-notes"></div>
+          </div>
         </div>
-        <textarea id="note-text" placeholder="اكتب نص الملاحظة" rows="3"></textarea>
-        <div class="error-msg" id="note-error"></div>
-        <button class="btn-primary" id="note-submit">إضافة الملاحظة</button>
       </div>
 
-      <h4 style="margin-bottom:14px;">تقييم المعلمين</h4>
-      <div id="employee-list"></div>
+      <!-- ===== لوحة: تسجيل ملاحظة ===== -->
+      <div class="bud-panel hidden" id="eval-panel-record">
+        <div class="bud-section-card">
+          <div class="bud-section-head">
+            <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div>
+            <div><h4>تسجيل ملاحظة جديدة</h4><p>الملاحظة الإيجابية/السلبية تُحتسب ضمن التقييم النهائي، والمحايدة للتوثيق فقط بدون درجة</p></div>
+          </div>
+          <div class="form-row">
+            <select id="note-employee"></select>
+            <select id="note-type">
+              <option value="positive">ملاحظة إيجابية</option>
+              <option value="negative">ملاحظة سلبية</option>
+              <option value="neutral">ملاحظة محايدة (بدون درجة)</option>
+            </select>
+          </div>
+          <div class="form-row" id="note-scored-row">
+            <select id="note-indicator"></select>
+            <select id="note-score">
+              <option value="5">5 - ممتاز</option>
+              <option value="4">4 - جيد جدًا</option>
+              <option value="3">3 - جيد</option>
+              <option value="2">2 - مقبول</option>
+              <option value="1">1 - ضعيف</option>
+            </select>
+          </div>
+          <textarea id="note-text" placeholder="اكتب نص الملاحظة" rows="3"></textarea>
+          <div class="error-msg" id="note-error"></div>
+          <button class="btn-primary" id="note-submit">إضافة الملاحظة</button>
+        </div>
+      </div>
+
+      <!-- ===== لوحة: الإعدادات (المؤشرات) ===== -->
+      <div class="bud-panel hidden" id="eval-panel-settings">
+        <div class="bud-section-card">
+          <div class="bud-section-head">
+            <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83"/></svg></div>
+            <div><h4>مؤشرات التقييم</h4><p>كل مؤشر له وزن نسبي يدخل في حساب الدرجة النهائية، والتعطيل أسلم من الحذف للمؤشرات التي عليها ملاحظات سابقة</p></div>
+          </div>
+          <div id="eval-indicators-list"></div>
+          <div class="form-row" style="margin-top:14px;">
+            <input type="text" id="eval-new-indicator-name" placeholder="اسم المؤشر (مثال: الانضباط)" />
+            <input type="number" id="eval-new-indicator-weight" placeholder="الوزن" min="0.1" step="0.1" value="1" style="max-width:140px;" />
+            <button class="btn-primary" id="eval-add-indicator-btn" style="white-space:nowrap;">+ إضافة مؤشر</button>
+          </div>
+          <div class="error-msg" id="eval-indicator-error"></div>
+        </div>
+      </div>
     </div>
 
     <div id="weekly-module" class="panel hidden">
@@ -1133,6 +1211,93 @@
           <button type="button" id="lab-print-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:8px; padding:6px 14px; font-size:12.5px; cursor:pointer;">🖨 طباعة أوراق اللصق</button>
         </div>
         <div id="lab-seating-area"></div>
+      </div>
+    </div>
+
+    <div id="files-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-17">→ رجوع للرئيسية</span>
+
+      <div class="bud-head">
+        <div class="bud-head-title">
+          <div class="bud-head-icon" style="background:var(--meadow-light); color:var(--meadow-dark);">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
+          </div>
+          <div>
+            <h3>الملفات</h3>
+            <p>ارفع ملفاتك وشاركها حسب صلاحية كل مجلد</p>
+          </div>
+        </div>
+        <button type="button" class="btn-primary hidden" id="files-new-folder-btn" style="width:auto; padding:9px 16px;">+ مجلد جديد</button>
+      </div>
+
+      <!-- إنشاء مجلد جديد (مدير فقط) -->
+      <div class="form-card hidden bud-section-card" id="files-new-folder-form" style="margin-bottom:18px;">
+        <div class="bud-section-head">
+          <div class="bud-section-icon" style="background:var(--meadow-light); color:var(--meadow);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </div>
+          <div>
+            <h4>مجلد جديد</h4>
+            <p>سمّه بشكل واضح - بعدها حدد مين يشوفه ويرفع فيه</p>
+          </div>
+        </div>
+        <div class="form-row">
+          <input type="text" id="files-folder-name" placeholder="اسم المجلد" />
+          <input type="text" id="files-folder-desc" placeholder="وصف مختصر (اختياري)" />
+        </div>
+        <button class="btn-primary" id="files-folder-create-btn" style="width:auto; padding:9px 18px;">إنشاء المجلد</button>
+        <div class="error-msg" id="files-folder-error"></div>
+      </div>
+
+      <!-- شبكة المجلدات -->
+      <div id="files-folder-grid" class="file-folder-grid"></div>
+
+      <!-- تفاصيل مجلد -->
+      <div id="files-folder-detail" class="hidden">
+        <div class="file-detail-head">
+          <button type="button" id="files-back-to-grid" class="file-back-btn">→ كل المجلدات</button>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+            <div>
+              <h3 id="files-detail-name" style="margin:0;"></h3>
+              <p id="files-detail-desc" style="margin:2px 0 0; font-size:12.5px; color:var(--slate);"></p>
+            </div>
+            <div style="display:flex; gap:8px; flex-shrink:0;">
+              <button type="button" class="btn-primary hidden" id="files-detail-perms-btn" style="width:auto; padding:8px 14px; background:var(--purple);">⚙ الصلاحيات</button>
+              <button type="button" class="btn-primary hidden" id="files-detail-delete-btn" style="width:auto; padding:8px 14px; background:var(--danger);">حذف المجلد</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-card hidden bud-section-card" id="files-upload-card" style="margin-top:16px;">
+          <div class="bud-section-head">
+            <div class="bud-section-icon" style="background:var(--teal-light); color:var(--teal);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
+            </div>
+            <div>
+              <h4>رفع ملف</h4>
+              <p>الحد الأقصى 20 ميجابايت لكل ملف</p>
+            </div>
+          </div>
+          <input type="file" id="files-upload-input" style="margin-bottom:10px;" />
+          <button class="btn-primary" id="files-upload-btn" style="width:auto; padding:9px 18px;">رفع الملف</button>
+          <div id="files-upload-progress" style="font-size:12px; color:var(--slate); margin-top:8px;"></div>
+          <div class="error-msg" id="files-upload-error"></div>
+        </div>
+
+        <div style="margin-top:18px;">
+          <div id="files-file-list"></div>
+        </div>
+      </div>
+
+      <!-- إدارة صلاحيات مجلد (مدير فقط) -->
+      <div id="files-perm-overlay" class="hidden" style="position:fixed; inset:0; background:rgba(21,34,56,0.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:#fff; border-radius:16px; padding:22px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-md);">
+          <h3 style="margin:0 0 4px;" id="files-perm-title">صلاحيات المجلد</h3>
+          <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">حدد مين يقدر يشوف و/أو يرفع بهذا المجلد - المدير عنده صلاحية كاملة دايمًا بدون حاجة للإضافة</p>
+          <input type="text" id="files-perm-search" placeholder="بحث بالاسم..." style="margin-bottom:10px;" />
+          <div id="files-perm-list"></div>
+          <button type="button" id="files-perm-close-btn" style="width:100%; margin-top:16px; background:var(--sand); color:var(--ink); border-radius:10px; padding:10px; border:none; font-weight:700; cursor:pointer; font-size:14px;">تم</button>
+        </div>
       </div>
     </div>
 
