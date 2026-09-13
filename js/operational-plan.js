@@ -158,6 +158,8 @@ async function loadProgramAssignAdmin() {
     .select('profile_id, profiles!operational_plan_members_profile_id_fkey(id, full_name)');
   opaMembersCache = (members || []).map(m => ({ id: m.profile_id, full_name: m.profiles ? m.profiles.full_name : '-' }));
 
+  await refreshOpaAssignedNames();
+
   const prevVal = sel.value;
   sel.innerHTML = '';
   if (opaMembersCache.length === 0) {
@@ -168,6 +170,22 @@ async function loadProgramAssignAdmin() {
   opaMembersCache.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.full_name; sel.appendChild(o); });
   if (prevVal && opaMembersCache.some(m => m.id === prevVal)) sel.value = prevVal;
   await renderOpaChecklist();
+}
+
+// خريطة "أي البرامج مسندة لمين" (كل البرامج، كل الموظفين) - تُعرض بخط صغير جنب كل برنامج
+// بالقائمة عشان المدير يعرف بنظرة وحدة وش مسند ولمين، بغض النظر عن الموظف المختار حاليًا بالقائمة
+let opaAssignedNamesByProgram = new Map();
+async function refreshOpaAssignedNames() {
+  const { data } = await sb.from('program_assignments')
+    .select('program_id, profiles!program_assignments_profile_id_fkey(full_name)');
+  const map = new Map();
+  (data || []).forEach(a => {
+    const name = a.profiles ? a.profiles.full_name : null;
+    if (!name) return;
+    if (!map.has(a.program_id)) map.set(a.program_id, []);
+    map.get(a.program_id).push(name);
+  });
+  opaAssignedNamesByProgram = map;
 }
 
 async function renderOpaChecklist() {
@@ -199,12 +217,16 @@ function buildOpaChecklistDom() {
   if (byGoal.size === 0) { list.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px;">لا نتائج</p>'; return; }
   list.innerHTML = Array.from(byGoal.entries()).map(([goalTitle, progs]) => `
     <div class="opa-goal-heading">${esc(goalTitle)}</div>
-    ${progs.map(p => `
+    ${progs.map(p => {
+      const names = opaAssignedNamesByProgram.get(p.id) || [];
+      return `
       <label class="opa-item">
         <input type="checkbox" data-program-id="${p.id}" ${opaCurrentAssignments.has(p.id) ? 'checked' : ''} />
         ${p.plan_code ? `<span class="code">${esc(p.plan_code)}</span>` : ''}
         <span>${esc(p.title)}</span>
-      </label>`).join('')}
+        ${names.length ? `<span class="opa-assigned-to">مسند لـ: ${esc(names.join('، '))}</span>` : ''}
+      </label>`;
+    }).join('')}
   `).join('');
 }
 
@@ -227,6 +249,8 @@ onEl('opa-save', 'click', async () => {
     await sb.from('program_assignments').delete().eq('program_id', programId).eq('profile_id', profileId);
   }
   opaCurrentAssignments = checked;
+  await refreshOpaAssignedNames();
+  buildOpaChecklistDom();
   if (msgEl) { msgEl.style.display = 'inline'; setTimeout(() => { msgEl.style.display = 'none'; }, 2000); }
 });
 
