@@ -241,9 +241,9 @@
   .emp-row .info{ flex:1; min-width:0; }
   .emp-row .name{ font-weight:700; font-size:14px; }
   .emp-row .title{ font-size:12px; color:var(--slate); margin-top:2px; }
-  .emp-row .text-action-btn{
-    width:auto !important; background:transparent !important; color:var(--teal) !important;
-    padding:6px 4px !important; font-size:13px; font-weight:600; flex-shrink:0;
+  .text-action-btn{
+    width:auto; background:transparent; color:var(--teal); border:none; cursor:pointer;
+    padding:6px 4px; font-size:13px; font-weight:600; flex-shrink:0; font-family:inherit;
   }
   .badge{ font-size:10.5px; padding:3px 10px; border-radius:20px; flex-shrink:0; white-space:nowrap; font-weight:600; }
   .badge-meadow{ background:var(--meadow-light); color:var(--meadow); }
