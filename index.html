@@ -427,12 +427,30 @@
             </div>
           </div>
 
-          <h3 class="op-section-title">التقدم حسب الهدف الاستراتيجي</h3>
+          <h3 class="op-section-title">التقدم حسب الهدف الاستراتيجي <span style="font-size:11.5px; color:var(--slate); font-weight:400;">(اضغط على هدف لفلترة البرامج به)</span></h3>
           <div id="opplan-guide-goals" class="op-goal-grid"></div>
+          <div id="opplan-guide-objectives" class="op-filter-chips hidden"></div>
 
-          <h3 class="op-section-title">البرامج (متابعة تنفيذ مدرستنا)</h3>
+          <h3 class="op-section-title" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+            <span>البرامج (متابعة تنفيذ مدرستنا)</span>
+            <span id="opplan-filter-badge" class="hidden"></span>
+          </h3>
           <div id="opplan-guide-legend" class="op-legend"></div>
           <div id="opplan-guide-list" class="op-program-grid"></div>
+        </div>
+
+        <!-- عرض مهام برنامج (قراءة فقط) -->
+        <div id="opplan-program-overlay" class="hidden" style="position:fixed; inset:0; background:rgba(21,34,56,0.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;">
+          <div style="background:#fff; border-radius:16px; padding:22px; max-width:560px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-md);">
+            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
+              <div>
+                <h3 style="margin:0 0 4px;" id="opplan-program-overlay-title">-</h3>
+                <p style="font-size:12px; color:var(--slate); margin:0;" id="opplan-program-overlay-sub">-</p>
+              </div>
+              <button type="button" id="opplan-program-overlay-close" style="background:none; border:none; font-size:20px; color:var(--slate); cursor:pointer; line-height:1; flex-shrink:0;">×</button>
+            </div>
+            <div id="opplan-program-overlay-body" style="margin-top:16px;"></div>
+          </div>
         </div>
 
         <div class="form-card">
