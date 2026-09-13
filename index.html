@@ -917,23 +917,94 @@
     <div id="followups-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-12">→ رجوع للرئيسية</span>
 
-      <div class="form-card" style="background:var(--sand);">
-        <h4>اختر الفصل والتاريخ</h4>
-        <div class="tabs" id="sf-grade-tabs"></div>
-        <div class="form-row">
-          <div>
-            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الفصل</label>
-            <select id="sf-section-select"><option value="">اختر الفصل</option></select>
+      <!-- رأس القسم: عنوان + تنقّل بين تبويبات كشوف المتابعة -->
+      <div class="bud-head">
+        <div class="bud-head-title">
+          <div class="bud-head-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg>
           </div>
           <div>
-            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">التاريخ</label>
-            <input type="date" id="sf-date" />
+            <h3>كشوف متابعة الطلاب</h3>
+            <p>ملاحظات، مشاركة، اختبارات وخصومات لكل طالب، مع نظرة عامة على الفصل وتقرير قابل للطباعة لكل طالب</p>
           </div>
         </div>
-        <p style="font-size:12px; color:var(--slate); margin:4px 0 0;">التاريخ ينطبق على أي ملاحظة/درجة تضيفها الآن — غيّره لو تسجل ليوم سابق.</p>
+        <div class="bud-tabs" id="sf-tabs" role="tablist">
+          <button class="bud-tab active" id="sf-tab-overview" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            نظرة عامة
+          </button>
+          <button class="bud-tab" id="sf-tab-record" type="button">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+            تسجيل
+          </button>
+        </div>
       </div>
 
-      <div id="sf-students-list"></div>
+      <!-- ===== لوحة: نظرة عامة ===== -->
+      <div class="bud-panel" id="sf-panel-overview">
+        <div id="sf-overview-list-view">
+          <div class="form-card" style="background:var(--sand);">
+            <h4>اختر الفصل</h4>
+            <div class="tabs" id="sfo-grade-tabs"></div>
+            <select id="sfo-section-select"><option value="">اختر الفصل</option></select>
+          </div>
+
+          <div class="stat-grid" id="sfo-class-stats"></div>
+
+          <div class="bud-section-card" style="margin-top:4px;">
+            <div class="bud-section-head">
+              <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+              <div><h4>طلاب الفصل</h4><p>اضغط على أي طالب لعرض تقريره الكامل</p></div>
+            </div>
+            <input type="text" id="sfo-search" placeholder="بحث باسم الطالب..." style="margin-bottom:10px;" />
+            <div id="sfo-student-list"></div>
+          </div>
+        </div>
+
+        <div id="sf-detail-view" class="hidden">
+          <span class="back-link" id="sf-detail-back">→ رجوع للقائمة</span>
+          <div class="bud-section-card">
+            <div class="bud-section-head">
+              <div class="bud-section-icon" id="sf-detail-avatar"></div>
+              <div>
+                <h4 id="sf-detail-name">-</h4>
+                <p id="sf-detail-sub">-</p>
+              </div>
+            </div>
+            <div class="stat-grid" id="sf-detail-stats" style="margin-top:6px; margin-bottom:0;"></div>
+            <button class="text-action-btn" id="sf-detail-print-btn" style="margin-top:14px;">🖨 طباعة تقرير الطالب</button>
+          </div>
+          <div class="bud-section-card" style="margin-top:14px;">
+            <div class="bud-section-head">
+              <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg></div>
+              <div><h4>السجل الكامل</h4><p>كل الملاحظات والدرجات والخصومات المسجَّلة لهذا الطالب</p></div>
+            </div>
+            <div id="sf-detail-log"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== لوحة: تسجيل ===== -->
+      <div class="bud-panel hidden" id="sf-panel-record">
+        <div class="form-card" style="background:var(--sand);">
+          <h4>اختر الفصل والتاريخ</h4>
+          <div class="tabs" id="sf-grade-tabs"></div>
+          <div class="form-row">
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الفصل</label>
+              <select id="sf-section-select"><option value="">اختر الفصل</option></select>
+            </div>
+            <div>
+              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">التاريخ</label>
+              <input type="date" id="sf-date" />
+            </div>
+          </div>
+          <p style="font-size:12px; color:var(--slate); margin:4px 0 0;">التاريخ ينطبق على أي ملاحظة/درجة تضيفها الآن — غيّره لو تسجل ليوم سابق.</p>
+        </div>
+
+        <input type="text" id="sf-search" placeholder="بحث باسم الطالب..." style="margin-bottom:10px;" />
+        <div id="sf-students-list"></div>
+      </div>
     </div>
 
     <div id="budget-module" class="panel hidden">
