@@ -13,7 +13,7 @@ function onEl(id, event, handler) {
 }
 
 let opPlanWeek = 1;
-let goalsCache = [], objectivesCache = [], programsCache = [];
+let goalsCache = [], objectivesCache = [], programsCache = [], allProgramsCache = [];
 let totalProgramsCount = 0; // إجمالي البرامج الرسمية بدون فلترة (43) - للمقارنة بالإحصائية فقط
 
 // تحميل مكتبة Chart.js عند الحاجة بس (نفس أسلوب budget.js) - أرسم الرسوم البيانية فقط
@@ -99,6 +99,7 @@ async function refreshStructureCaches() {
   objectivesCache = objectives || [];
   const allPrograms = programs || [];
   totalProgramsCount = allPrograms.length;
+  allProgramsCache = allPrograms; // بدون فلترة المرحلة - تُستخدم بقائمة إدارة/حذف البرامج
   // نعرض وندوّر بس البرامج المتعلقة بمرحلة المتوسط - العمود قد ما يكون موجود لبرامج مضافة يدويًا
   // قبل هذا التحديث (تُعامل null/undefined كـ "تنطبق" افتراضيًا، مو كاستبعاد)
   programsCache = allPrograms.filter(p => p.applies_to_intermediate !== false);
@@ -126,6 +127,8 @@ async function loadOpPlanAdminData() {
   const objSelect = document.getElementById('pr-objective');
   objSelect.innerHTML = '';
   objectivesCache.forEach(o2 => { const o = document.createElement('option'); o.value = o2.id; o.textContent = o2.title; objSelect.appendChild(o); });
+
+  renderProgramManageList();
 
   await refreshMembersList();
   await loadProgramAssignAdmin();
@@ -513,6 +516,63 @@ onEl('pr-add', 'click', async () => {
   document.getElementById('pr-title').value = '';
   await loadOpPlanAdminData();
 });
+
+/* ---------- حذف برنامج (سواء مضاف يدويًا أو من البرامج الرسمية المستوردة) ---------- */
+function renderProgramManageList() {
+  const list = document.getElementById('pr-manage-list');
+  if (!list) return;
+  const q = (document.getElementById('pr-manage-search')?.value || '').trim();
+  const objById = new Map(objectivesCache.map(o => [o.id, o]));
+  const filtered = allProgramsCache.filter(p => !q || p.title.includes(q) || (p.plan_code || '').includes(q));
+  if (filtered.length === 0) {
+    list.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px;">لا نتائج</p>';
+    return;
+  }
+  list.innerHTML = filtered.map(p => {
+    const obj = objById.get(p.operational_objective_id);
+    return `
+      <div class="pr-manage-row" data-program-id="${p.id}">
+        <div style="flex:1; min-width:0;">
+          ${p.plan_code ? `<span class="code">${esc(p.plan_code)}</span> ` : ''}<span>${esc(p.title)}</span>
+          ${obj ? `<div style="font-size:10.5px; color:var(--slate); margin-top:2px;">${esc(obj.title)}</div>` : ''}
+        </div>
+        <button type="button" class="pr-delete-btn" title="حذف البرنامج" data-program-id="${p.id}" data-program-title="${esc(p.title)}">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+        </button>
+      </div>`;
+  }).join('');
+
+  list.querySelectorAll('.pr-delete-btn').forEach(btn => {
+    btn.addEventListener('click', () => deleteProgramFlow(btn.dataset.programId, btn.dataset.programTitle));
+  });
+}
+onEl('pr-manage-search', 'input', renderProgramManageList);
+
+async function deleteProgramFlow(programId, programTitle) {
+  const [{ count: taskCount }, { count: assignCount }] = await Promise.all([
+    sb.from('op_tasks').select('id', { count: 'exact', head: true }).eq('program_id', programId),
+    sb.from('program_assignments').select('id', { count: 'exact', head: true }).eq('program_id', programId),
+  ]);
+
+  let warning = `هل تريد حذف برنامج "${programTitle}"؟`;
+  if ((taskCount || 0) > 0 || (assignCount || 0) > 0) {
+    warning += `\n\nتنبيه: فيه ${taskCount || 0} مهمة مُدخلة و${assignCount || 0} إسناد مرتبط بهذا البرنامج - راح تنحذف كلها معه ولا يمكن التراجع.`;
+  }
+  if (!confirm(warning)) return;
+
+  if ((taskCount || 0) > 0) {
+    await sb.from('op_task_completions').delete().in('task_id',
+      (await sb.from('op_tasks').select('id').eq('program_id', programId)).data?.map(t => t.id) || []);
+    await sb.from('op_tasks').delete().eq('program_id', programId);
+  }
+  if ((assignCount || 0) > 0) {
+    await sb.from('program_assignments').delete().eq('program_id', programId);
+  }
+  const { error } = await sb.from('programs').delete().eq('id', programId);
+  if (error) { alert('تعذّر حذف البرنامج: ' + error.message); return; }
+
+  await loadOpPlanAdminData();
+}
 
 const durationLabels = { single_week: 'أسبوع محدد', semester_1: 'الفصل الأول', semester_2: 'الفصل الثاني', full_year: 'طوال العام' };
 
