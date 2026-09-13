@@ -421,6 +421,12 @@
   .opa-item input[type=checkbox]{ width:16px; height:16px; flex-shrink:0; }
   .opa-item .code{ font-size:10px; color:var(--slate); background:var(--sand); border-radius:6px; padding:1px 6px; flex-shrink:0; }
 
+  .pr-manage-row{ display:flex; align-items:center; gap:8px; padding:8px 6px; border-radius:8px; font-size:12.5px; border-bottom:1px solid var(--border); }
+  .pr-manage-row:last-child{ border-bottom:none; }
+  .pr-manage-row:hover{ background:var(--sand); }
+  .pr-manage-row .code{ font-size:10px; color:var(--slate); background:var(--sand); border-radius:6px; padding:1px 6px; }
+  .pr-delete-btn{ width:30px; height:30px; flex-shrink:0; padding:0; background:var(--danger-light); color:var(--danger); border-radius:8px; display:flex; align-items:center; justify-content:center; }
+
   /* ===== "برامجي المسندة" (شاشة الموظف - إدخال مهام كل برنامج على حدة) ===== */
   .myprog-card{ border:1px solid var(--border); border-radius:12px; padding:12px 14px; margin-bottom:10px; background:#fff; }
   .myprog-card .mphead{ display:flex; align-items:center; gap:10px; cursor:pointer; }
