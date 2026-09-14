@@ -21,6 +21,10 @@ let donutChartInstance = null;
 let fundingBatchesCache = [];
 // نسخة مفصّلة (مع الفواتير المرتبطة بكل دفعة) - للمدير/صاحب الصلاحية الكاملة بس، لعرض/طباعة تقرير الإقفال
 let batchesDetailedCache = [];
+// كل الإيداعات (لقائمة "كل الإيداعات المسجّلة" مع التعديل/الحذف)
+let revenuesListCache = [];
+// معرّف الإيداع الجاري تعديله حاليًا (null = وضع إضافة جديد)
+let editingRevenueId = null;
 
 function todayIso() {
   const d = new Date();
@@ -80,6 +84,7 @@ export async function loadBudgetModule() {
   if (hasFull) await loadShareSection();
   if (hasFull) await loadDashboard();
   if (hasFull) await loadBatchesLists();
+  if (hasFull) await loadRevenuesList();
   await loadExpensesList(hasFull);
 }
 
@@ -240,7 +245,40 @@ document.getElementById('budget-perm-submit').addEventListener('click', async ()
   await loadPermsSection();
 });
 
-/* ---------- إضافة إيراد ---------- */
+/* ---------- إضافة/تعديل إيراد ---------- */
+// عكس FUNDING_TO_REVENUE_TYPE - لو غيّرنا نوع دفعة سلفة/مدور، نحدّث "جهة الصرف" بطلبات الصرف
+// المرتبطة بها عشان تبقى متطابقة مع النوع الجديد
+const REVENUE_TO_FUNDING_SOURCE = { 'سلفة': 'السلفة', 'مدور سابق': 'مدور سابق' };
+
+function resetRevenueForm() {
+  editingRevenueId = null;
+  document.getElementById('budget-rev-desc').value = '';
+  document.getElementById('budget-rev-amount').value = '';
+  document.getElementById('budget-rev-notes').value = '';
+  document.getElementById('budget-rev-type').value = 'مقصف';
+  document.getElementById('budget-rev-date').value = todayIso();
+  document.getElementById('budget-rev-semester').value = '';
+  document.getElementById('budget-rev-submit').textContent = '+ إضافة الإيراد';
+  document.getElementById('budget-rev-cancel-edit').style.display = 'none';
+}
+
+function fillRevenueFormForEdit(r) {
+  editingRevenueId = r.id;
+  document.getElementById('budget-rev-desc').value = r.description || '';
+  document.getElementById('budget-rev-amount').value = r.amount;
+  document.getElementById('budget-rev-type').value = r.revenue_type || 'مقصف';
+  document.getElementById('budget-rev-date').value = r.revenue_date || todayIso();
+  document.getElementById('budget-rev-semester').value = r.semester || '';
+  document.getElementById('budget-rev-notes').value = r.notes || '';
+  document.getElementById('budget-rev-submit').textContent = 'حفظ التعديل';
+  document.getElementById('budget-rev-cancel-edit').style.display = 'inline-block';
+  const errEl = document.getElementById('budget-rev-error');
+  errEl.style.display = 'none';
+  document.getElementById('budget-rev-desc').scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+document.getElementById('budget-rev-cancel-edit').addEventListener('click', resetRevenueForm);
+
 document.getElementById('budget-rev-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('budget-rev-error');
   errEl.style.display = 'none';
@@ -255,22 +293,110 @@ document.getElementById('budget-rev-submit').addEventListener('click', async () 
   if (!amount || amount <= 0) { errEl.textContent = 'أدخل مبلغ صحيح'; errEl.style.display = 'block'; return; }
   if (!semester) { errEl.textContent = 'اختر الفصل الدراسي'; errEl.style.display = 'block'; return; }
 
-  const { error } = await sb.from('budget_revenues').insert({
-    description: desc, amount, revenue_type: type, revenue_date: date, semester, notes: notes || null, created_by: currentUserId,
-  });
+  const isEdit = !!editingRevenueId;
+  let prevType = null;
+  if (isEdit) {
+    const original = revenuesListCache.find(r => r.id === editingRevenueId);
+    prevType = original ? original.revenue_type : null;
+    // لو الدفعة (سلفة/مدور) عليها صرف مرتبط فعلاً - نمنع تحويلها لمقصف، ونتأكد المبلغ الجديد يكفي المصروف
+    const batch = batchesDetailedCache.find(b => b.id === editingRevenueId);
+    const spent = batch ? batch.spent : 0;
+    if (spent > 0.009) {
+      if (type === 'مقصف') {
+        errEl.textContent = `ما تقدر تحوّلها لمقصف - عليها صرف مرتبط بقيمة ${fmtAmount(spent)}. احذف الفواتير المرتبطة بها أولاً لو تبي تغيّر نوعها`;
+        errEl.style.display = 'block';
+        return;
+      }
+      if (amount < spent - 0.009) {
+        errEl.textContent = `المبلغ الجديد (${fmtAmount(amount)}) أقل من المصروف منها فعليًا (${fmtAmount(spent)})`;
+        errEl.style.display = 'block';
+        return;
+      }
+    }
+  }
+
+  const payload = { description: desc, amount, revenue_type: type, revenue_date: date, semester, notes: notes || null };
+  const { error } = isEdit
+    ? await sb.from('budget_revenues').update(payload).eq('id', editingRevenueId)
+    : await sb.from('budget_revenues').insert({ ...payload, created_by: currentUserId });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
-  document.getElementById('budget-rev-desc').value = '';
-  document.getElementById('budget-rev-amount').value = '';
-  document.getElementById('budget-rev-notes').value = '';
-  document.getElementById('budget-rev-type').value = 'مقصف';
-  document.getElementById('budget-rev-date').value = todayIso();
-  document.getElementById('budget-rev-semester').value = '';
+  if (isEdit && prevType !== type && REVENUE_TO_FUNDING_SOURCE[type] && (prevType === 'سلفة' || prevType === 'مدور سابق')) {
+    await sb.from('budget_expense_requests').update({ funding_source: REVENUE_TO_FUNDING_SOURCE[type] }).eq('funding_revenue_id', editingRevenueId);
+  }
+
+  resetRevenueForm();
   await loadFundingBatches();
   await loadBatchesLists();
+  await loadRevenuesList();
   await loadDashboard();
   await loadExpensesList(true);
 });
+
+/* ---------- قائمة كل الإيداعات المسجّلة (تعديل/حذف) ---------- */
+async function loadRevenuesList() {
+  const listEl = document.getElementById('budget-revenues-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
+
+  const { data, error } = await sb.from('budget_revenues')
+    .select('id, description, amount, revenue_date, revenue_type, semester, notes')
+    .order('revenue_date', { ascending: false });
+  if (error) { console.error('budget_revenues fetch error:', error); listEl.innerHTML = '<p style="font-size:12px; color:var(--danger);">تعذر تحميل الإيداعات</p>'; return; }
+  revenuesListCache = data || [];
+
+  if (revenuesListCache.length === 0) {
+    listEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">ما فيه إيداعات مسجّلة بعد</p>';
+    return;
+  }
+
+  listEl.innerHTML = revenuesListCache.map(r => {
+    const typeBadge = r.revenue_type === 'مقصف' ? 'badge-meadow' : (r.revenue_type === 'سلفة' ? 'badge-gold' : 'badge-green');
+    return `<div class="form-card" data-rev-row="${r.id}" style="margin-bottom:6px; padding:10px 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <div>
+        <span class="badge ${typeBadge}">${esc(r.revenue_type)}</span>
+        <strong style="margin-inline-start:6px;">${esc(r.description)}</strong>
+        <div style="font-size:11.5px; color:var(--slate); margin-top:4px;">${fmtDate(r.revenue_date)} — ${esc(r.semester || '-')} — ${fmtAmount(r.amount)}</div>
+      </div>
+      <div style="display:flex; gap:4px;">
+        <button type="button" class="text-action-btn rev-edit-btn" data-id="${r.id}" style="width:auto; padding:5px 10px; font-size:12px;">✏️ تعديل</button>
+        <button type="button" class="rev-delete-btn" data-id="${r.id}" title="حذف" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:14px; padding:2px 8px;">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('.rev-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const r = revenuesListCache.find(x => x.id === btn.dataset.id);
+      if (r) fillRevenueFormForEdit(r);
+    });
+  });
+  listEl.querySelectorAll('.rev-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const r = revenuesListCache.find(x => x.id === btn.dataset.id);
+      if (!r) return;
+      const batch = batchesDetailedCache.find(b => b.id === r.id);
+      if (batch && batch.spent > 0.009) {
+        alert(`ما تقدر تحذف هذا الإيداع - عليه صرف مرتبط بقيمة ${fmtAmount(batch.spent)}. احذف الفواتير المرتبطة به أولاً`);
+        return;
+      }
+      if (!confirm(`متأكد تبي تحذف الإيداع "${r.description}" (${fmtAmount(r.amount)})؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
+      const { error } = await sb.from('budget_revenues').delete().eq('id', r.id);
+      if (error) {
+        alert(error.message.includes('foreign key') || error.message.includes('violates')
+          ? 'ما تقدر تحذف هذا الإيداع - فيه فواتير صرف مرتبطة به'
+          : 'تعذر الحذف: ' + error.message);
+        return;
+      }
+      if (editingRevenueId === r.id) resetRevenueForm();
+      await loadFundingBatches();
+      await loadBatchesLists();
+      await loadRevenuesList();
+      await loadDashboard();
+      await loadExpensesList(true);
+    });
+  });
+}
 
 /* ---------- جهة الصرف: إظهار حقل "أخرى"، أو قائمة الدفعات لو سلفة/مدور سابق ---------- */
 document.getElementById('budget-exp-source').addEventListener('change', (e) => {
