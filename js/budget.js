@@ -797,7 +797,7 @@ const STAT_ICON_STYLE = {
   admin: { bg: 'var(--purple-light)', fg: 'var(--purple)', path: '<path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z"/>' },
   carry: { bg: 'var(--teal-light)', fg: 'var(--teal)', path: '<path d="M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8M21 3v5h-5M21 12a9 9 0 01-9 9 9 9 0 01-6.36-2.64L3 16m0 5v-5h5"/>' },
 };
-function statCard(label, value, color, sub, icon) {
+function statCard(label, value, color, sub, icon, compact) {
   const style = icon && STAT_ICON_STYLE[icon];
   const iconInner = style
     ? (style.riyal
@@ -807,7 +807,7 @@ function statCard(label, value, color, sub, icon) {
   const iconSvg = style
     ? `<div class="icon-chip" style="background:${style.bg}; color:${style.fg};">${iconInner}</div>`
     : '';
-  return `<div class="stat-card${style ? ' bud-stat' : ''}">
+  return `<div class="stat-card${style ? ' bud-stat' : ''}${compact ? ' compact' : ''}">
     ${iconSvg}
     <div class="body">
       <div class="label">${label}</div>
@@ -866,12 +866,12 @@ async function loadDashboard() {
   const topPct = totalExpense ? Math.round(topAmount / totalExpense * 100) : 0;
 
   statsEl.innerHTML =
-    statCard('إجمالي الإيرادات', fmtAmount(totalRevenue), 'var(--green)', null, 'revenue') +
-    statCard('إجمالي المصروفات (المعتمدة)', fmtAmount(totalExpense), 'var(--danger)', null, 'expense') +
-    statCard('الرصيد الحالي', fmtAmount(balance), 'var(--meadow)', null, 'balance') +
-    statCard('أكبر بند صرف', topCategory, 'var(--ink)', topAmount ? `${fmtAmount(topAmount)} (${topPct}%)` : null, 'category') +
-    statCard('نصيب الإدارة (مخصوم)', fmtAmount(totalAdminShare), 'var(--purple)', null, 'admin') +
-    statCard('المدوَّر (محتجز)', fmtAmount(totalCarryover), 'var(--teal)', null, 'carry');
+    statCard('إجمالي الإيرادات', fmtAmount(totalRevenue), 'var(--green)', null, 'revenue', true) +
+    statCard('إجمالي المصروفات (المعتمدة)', fmtAmount(totalExpense), 'var(--danger)', null, 'expense', true) +
+    statCard('الرصيد الحالي', fmtAmount(balance), 'var(--meadow)', null, 'balance', true) +
+    statCard('أكبر بند صرف', topCategory, 'var(--ink)', topAmount ? `${fmtAmount(topAmount)} (${topPct}%)` : null, 'category', true) +
+    statCard('نصيب الإدارة (مخصوم)', fmtAmount(totalAdminShare), 'var(--purple)', null, 'admin', true) +
+    statCard('المدوَّر (محتجز)', fmtAmount(totalCarryover), 'var(--teal)', null, 'carry', true);
 
   renderCategoryCaps(totalRevenue, expList);
   renderSourceStats(totalRevenue);
