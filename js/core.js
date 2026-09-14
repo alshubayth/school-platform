@@ -25,6 +25,9 @@ export let hasExamAssignment = false;
 // صلاحية قسم "ميزانية المدرسة": null (بدون صلاحية) | 'full' | 'request_only' — مستقلة عن دور المستخدم العام
 export let myBudgetAccess = null;
 export function setMyBudgetAccess(v) { myBudgetAccess = v; }
+// هل عند المعلم صلاحية ممنوحة من المدير/الوكيل لرؤية "متابعة الخطة الأسبوعية"؟ (المدير/الوكيل يشوفونه دائمًا بحكم دورهم)
+export let hasWeeklyTrackingAccess = false;
+export function setWeeklyTrackingAccess(v) { hasWeeklyTrackingAccess = v; }
 export const isAdminOrDeputy = () => ['admin','deputy'].includes(currentProfile.role);
 export const isStaff = () => ['admin','deputy','teacher'].includes(currentProfile.role);
 export function setupCollapsible(toggleId, bodyId, chevronId) {
@@ -60,6 +63,7 @@ const icons = {
   visits: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M9 3h6v4H9z"/><path d="m14 9 6-6M17 3h3v3"/><path d="M7 13h6M7 17h4"/></svg>',
   substitutes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h13l-3-3"/><path d="M20 17H7l3 3"/></svg>',
   computerlab: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  files: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>',
 };
 
 // تجميع الأقسام لأربع مجموعات بالهيدر العلوي وبشبكة الرئيسية بدل عرضها كلها بصف واحد طويل
@@ -74,7 +78,7 @@ export const tiles = [
   { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal', group: 'students' },
   { key: 'schedule', icon: icons.schedule, title: 'الجدول الدراسي', desc: 'جدول الحصص لكل فصل',            roles: ['admin','deputy'], color: 'diamond-teal', group: 'admin' },
   { key: 'followups', icon: icons.followups, title: 'كشوف متابعة الطلاب', desc: 'ملاحظات وسلوك ودرجات مشاركة/اختبارات لكل فصل', roles: ['admin','deputy'], color: 'diamond-gold', group: 'students' },
-  { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy'], color: 'diamond-navy', group: 'teachers' },
+  { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
   { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'admin' },
   { key: 'notes',  icon: icons.notes,  title: 'متابعة أداء الموظفين', desc: 'ملاحظات ومؤشرات وتقييم',       roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
   { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
@@ -86,6 +90,7 @@ export const tiles = [
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
   { key: 'substitutes', icon: icons.substitutes, title: 'بدلاء اليوم', desc: 'تعويض غياب المعلمين وتبديل الحصص', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'computerlab', icon: icons.computerlab, title: 'معمل الحاسب الآلي', desc: 'توزيع الطلاب على أجهزة المعمل وطباعة الملصقات', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'extra' },
+  { key: 'files', icon: icons.files, title: 'الملفات',              desc: 'رفع الملفات ومشاركتها حسب المجلد', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'extra' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold', group: 'extra' },
 ];
 
@@ -205,6 +210,9 @@ export async function loadProfileAndShowDashboard(userId) {
       sb.from('exam_period_teams').select('member_id').eq('member_id', userId).limit(1),
     ]);
     hasExamAssignment = !!(subjectAssign && subjectAssign.length) || !!(teamAssign && teamAssign.length);
+
+    const { data: wtPerm } = await sb.from('weekly_tracking_permissions').select('id').eq('profile_id', userId).maybeSingle();
+    hasWeeklyTrackingAccess = !!wtPerm;
   }
 
   if (profile.role !== 'admin' && profile.role !== 'parent') {
@@ -231,6 +239,7 @@ export function isTileAllowed(t) {
   if (!t.roles.includes(currentProfile.role)) return false;
   if (t.key === 'plan' && currentProfile.role === 'teacher' && !isOpPlanMember) return false;
   if (t.key === 'tracking' && currentProfile.role === 'teacher' && !hasExamAssignment) return false;
+  if (t.key === 'weekly-tracking' && currentProfile.role === 'teacher' && !hasWeeklyTrackingAccess) return false;
   return true;
 }
 
@@ -323,6 +332,7 @@ export function hideAllModules() {
   document.getElementById('visits-module').classList.add('hidden');
   document.getElementById('substitutes-module').classList.add('hidden');
   document.getElementById('computerlab-module').classList.add('hidden');
+  document.getElementById('files-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -401,6 +411,10 @@ export async function openTile(key, title) {
     document.getElementById('computerlab-module').classList.remove('hidden');
     const { loadComputerLabModule } = await import('./computer-lab.js');
     loadComputerLabModule();
+  } else if (key === 'files') {
+    document.getElementById('files-module').classList.remove('hidden');
+    const { loadFilesModule } = await import('./files.js');
+    loadFilesModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
