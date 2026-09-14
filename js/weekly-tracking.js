@@ -1,11 +1,78 @@
-import { sb, gradeLabels } from './core.js';
+import { sb, gradeLabels, currentProfile, currentUserId, isAdminOrDeputy } from './core.js';
 
 let wtWeek = 1;
 
 export async function loadWeeklyTrackingModule() {
+  const canManagePerms = isAdminOrDeputy();
+  document.getElementById('wt-perms-section').classList.toggle('hidden', !canManagePerms);
+  if (canManagePerms) await loadPermsSection();
+
   document.getElementById('wt-week-label').textContent = 'الأسبوع ' + wtWeek;
   await refreshWeeklyTracking();
 }
+
+/* ---------- صلاحية عرض القسم لمعلمين محددين (المدير/الوكيل) ---------- */
+async function loadPermsSection() {
+  const [{ data: teachers }, { data: perms, error: permsError }] = await Promise.all([
+    sb.from('profiles').select('id, full_name').eq('role', 'teacher').order('full_name'),
+    sb.from('weekly_tracking_permissions').select('id, profile_id, profiles!weekly_tracking_permissions_profile_id_fkey(full_name)'),
+  ]);
+  if (permsError) console.error('weekly_tracking_permissions fetch error:', permsError);
+
+  const grantedIds = new Set((perms || []).map(p => p.profile_id));
+  const empSelect = document.getElementById('wt-perm-employee');
+  const available = (teachers || []).filter(t => !grantedIds.has(t.id));
+  empSelect.innerHTML = available.length
+    ? available.map(t => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('')
+    : '<option value="">لا يوجد معلمون متاحون</option>';
+
+  const list = document.getElementById('wt-perms-list');
+  list.innerHTML = '';
+  if (!perms || perms.length === 0) {
+    list.innerHTML = '<div class="placeholder" style="padding:16px;"><p>ما فيه معلمين عندهم صلاحية بعد</p></div>';
+    return;
+  }
+  perms.forEach(p => {
+    const row = document.createElement('div');
+    row.className = 'emp-row';
+    const name = p.profiles ? p.profiles.full_name : '-';
+    const initials = (name || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join('');
+    row.innerHTML = `
+      <div class="avatar-circle" style="background:var(--purple-light); color:var(--purple);">${esc(initials)}</div>
+      <div class="info"><div class="name">${esc(name)}</div>
+      <div class="title">يشوف متابعة الخطة الأسبوعية</div></div>
+      <button class="logout-icon" data-id="${p.id}" title="إلغاء الصلاحية" style="color:var(--danger);">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+      </button>`;
+    row.querySelector('button').addEventListener('click', async (e) => {
+      await sb.from('weekly_tracking_permissions').delete().eq('id', e.currentTarget.dataset.id);
+      await loadPermsSection();
+    });
+    list.appendChild(row);
+  });
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
+document.getElementById('wt-perm-submit').addEventListener('click', async () => {
+  const errEl = document.getElementById('wt-perm-error');
+  errEl.style.display = 'none';
+  const profileId = document.getElementById('wt-perm-employee').value;
+  if (!profileId) { errEl.textContent = 'اختر معلم أولاً'; errEl.style.display = 'block'; return; }
+
+  const { error } = await sb.from('weekly_tracking_permissions').insert({ profile_id: profileId, granted_by: currentUserId });
+  if (error) {
+    errEl.textContent = error.message.includes('duplicate') ? 'هذا المعلم عنده الصلاحية بالفعل' : 'حدث خطأ: ' + error.message;
+    errEl.style.display = 'block';
+    await loadPermsSection();
+    return;
+  }
+  await loadPermsSection();
+});
 
 document.getElementById('wt-week-prev').addEventListener('click', () => { if (wtWeek > 1) { wtWeek--; loadWeeklyTrackingModule(); } });
 document.getElementById('wt-week-next').addEventListener('click', () => { if (wtWeek < 40) { wtWeek++; loadWeeklyTrackingModule(); } });
