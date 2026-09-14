@@ -7,10 +7,20 @@ const STATUS_BADGE = { pending: 'badge-gold', confirmed: 'badge-green', rejected
 const DONUT_COLORS = ['#E8763A', '#1D8FA6', '#5B4B9A', '#1D3F73', '#2E8B4F', '#B3413A', '#93866F'];
 const SEMESTERS = ['الفصل الدراسي الأول', 'الفصل الدراسي الثاني'];
 const BENEFICIARY_ROLES = ['admin', 'deputy', 'teacher'];
+// جهة الصرف بنموذج الفاتورة مكتوبة بـ"ال" التعريف ("السلفة")، بينما نوع الإيداع بجدول
+// budget_revenues بدونها ("سلفة") - عشان يطابق شكل باقي الأنواع الرسمية بالتطبيق. هذا الربط.
+const FUNDING_TO_REVENUE_TYPE = { 'السلفة': 'سلفة', 'مدور سابق': 'مدور سابق' };
 
 let categoriesCache = [];
 let barChartInstance = null;
 let donutChartInstance = null;
+
+// دفعات السلفة/المدور المفتوحة (id, revenue_type, description, amount, revenue_date, remaining) -
+// تُجلب عبر دالة budget_open_funding_batches() (SECURITY DEFINER) عشان صاحب صلاحية "طلبات فقط"
+// يقدر يشوف رصيدها ويختار منها بدون ما يحتاج صلاحية قراءة budget_revenues أو budget_expense_requests كاملة
+let fundingBatchesCache = [];
+// نسخة مفصّلة (مع الفواتير المرتبطة بكل دفعة) - للمدير/صاحب الصلاحية الكاملة بس، لعرض/طباعة تقرير الإقفال
+let batchesDetailedCache = [];
 
 function todayIso() {
   const d = new Date();
@@ -64,10 +74,12 @@ export async function loadBudgetModule() {
 
   await loadCategories();
   await loadBeneficiaries(canPickAnyone);
+  await loadFundingBatches(); // أي صاحب صلاحية (كاملة أو طلبات فقط) يحتاجها لاختيار دفعة السلفة/المدور
 
   if (isAdmin) await loadPermsSection();
   if (hasFull) await loadShareSection();
   if (hasFull) await loadDashboard();
+  if (hasFull) await loadBatchesLists();
   await loadExpensesList(hasFull);
 }
 
@@ -234,6 +246,7 @@ document.getElementById('budget-rev-submit').addEventListener('click', async () 
   errEl.style.display = 'none';
   const desc = document.getElementById('budget-rev-desc').value.trim();
   const amount = parseFloat(document.getElementById('budget-rev-amount').value);
+  const type = document.getElementById('budget-rev-type').value || 'مقصف';
   const date = document.getElementById('budget-rev-date').value || todayIso();
   const semester = document.getElementById('budget-rev-semester').value;
   const notes = document.getElementById('budget-rev-notes').value.trim();
@@ -243,23 +256,54 @@ document.getElementById('budget-rev-submit').addEventListener('click', async () 
   if (!semester) { errEl.textContent = 'اختر الفصل الدراسي'; errEl.style.display = 'block'; return; }
 
   const { error } = await sb.from('budget_revenues').insert({
-    description: desc, amount, revenue_date: date, semester, notes: notes || null, created_by: currentUserId,
+    description: desc, amount, revenue_type: type, revenue_date: date, semester, notes: notes || null, created_by: currentUserId,
   });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
   document.getElementById('budget-rev-desc').value = '';
   document.getElementById('budget-rev-amount').value = '';
   document.getElementById('budget-rev-notes').value = '';
+  document.getElementById('budget-rev-type').value = 'مقصف';
   document.getElementById('budget-rev-date').value = todayIso();
   document.getElementById('budget-rev-semester').value = '';
+  await loadFundingBatches();
+  await loadBatchesLists();
   await loadDashboard();
   await loadExpensesList(true);
 });
 
-/* ---------- جهة الصرف: إظهار حقل "أخرى" عند الحاجة ---------- */
+/* ---------- جهة الصرف: إظهار حقل "أخرى"، أو قائمة الدفعات لو سلفة/مدور سابق ---------- */
 document.getElementById('budget-exp-source').addEventListener('change', (e) => {
-  document.getElementById('budget-exp-source-other').style.display = e.target.value === 'أخرى' ? 'block' : 'none';
+  const val = e.target.value;
+  document.getElementById('budget-exp-source-other').style.display = val === 'أخرى' ? 'block' : 'none';
+  const batchRow = document.getElementById('budget-exp-source-batch-row');
+  if (FUNDING_TO_REVENUE_TYPE[val]) {
+    batchRow.style.display = 'grid';
+    populateSourceBatchSelect(FUNDING_TO_REVENUE_TYPE[val]);
+  } else {
+    batchRow.style.display = 'none';
+  }
 });
+
+/* ---------- دفعات السلفة/المدور المفتوحة (لاختيارها عند الصرف) ---------- */
+async function loadFundingBatches() {
+  const { data, error } = await sb.rpc('budget_open_funding_batches');
+  if (error) { console.error('budget_open_funding_batches error:', error); fundingBatchesCache = []; return; }
+  fundingBatchesCache = data || [];
+}
+
+function populateSourceBatchSelect(revenueType) {
+  const sel = document.getElementById('budget-exp-source-batch');
+  const prevVal = sel.value;
+  const open = fundingBatchesCache.filter(b => b.revenue_type === revenueType && Number(b.remaining) > 0.009);
+  if (open.length === 0) {
+    sel.innerHTML = `<option value="">ما فيه دفعات ${esc(revenueType)} مفتوحة حاليًا</option>`;
+    return;
+  }
+  sel.innerHTML = '<option value="">اختر الدفعة...</option>' +
+    open.map(b => `<option value="${b.id}">${esc(b.description)} — متبقي ${fmtAmount(b.remaining)} (${fmtDate(b.revenue_date)})</option>`).join('');
+  if (prevVal && open.some(b => b.id === prevVal)) sel.value = prevVal;
+}
 
 /* ---------- سطور الفواتير (فاتورة أو أكثر لكل طلب صرف) ---------- */
 function addExpenseItemRow() {
@@ -314,6 +358,8 @@ function resetExpenseForm() {
   document.getElementById('budget-exp-source').value = '';
   document.getElementById('budget-exp-source-other').value = '';
   document.getElementById('budget-exp-source-other').style.display = 'none';
+  document.getElementById('budget-exp-source-batch-row').style.display = 'none';
+  document.getElementById('budget-exp-source-batch').innerHTML = '<option value="">اختر الدفعة...</option>';
   document.getElementById('budget-exp-beneficiary').value = '';
   document.getElementById('budget-exp-semester').value = '';
   document.getElementById('budget-exp-date').value = todayIso();
@@ -333,6 +379,7 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
   const beneficiary = document.getElementById('budget-exp-beneficiary').value;
   const source = document.getElementById('budget-exp-source').value;
   const sourceOther = document.getElementById('budget-exp-source-other').value.trim();
+  const sourceBatchId = document.getElementById('budget-exp-source-batch').value || null;
   const semester = document.getElementById('budget-exp-semester').value;
   const date = document.getElementById('budget-exp-date').value || todayIso();
   const items = collectExpenseItems();
@@ -341,6 +388,7 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
   if (!beneficiary) { errEl.textContent = 'اختر الموظف (يُصرف لـ)'; errEl.style.display = 'block'; return; }
   if (!source) { errEl.textContent = 'اختر جهة الصرف'; errEl.style.display = 'block'; return; }
   if (source === 'أخرى' && !sourceOther) { errEl.textContent = 'اكتب جهة الصرف'; errEl.style.display = 'block'; return; }
+  if (FUNDING_TO_REVENUE_TYPE[source] && !sourceBatchId) { errEl.textContent = 'اختر الدفعة اللي تصرف منها'; errEl.style.display = 'block'; return; }
   if (!semester) { errEl.textContent = 'اختر الفصل الدراسي'; errEl.style.display = 'block'; return; }
   if (items.length === 0) { errEl.textContent = 'أضف فاتورة واحدة على الأقل'; errEl.style.display = 'block'; return; }
   for (const it of items) {
@@ -348,11 +396,27 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
     if (!it.amount || it.amount <= 0) { errEl.textContent = 'أدخل مبلغ صحيح لكل فاتورة'; errEl.style.display = 'block'; return; }
   }
 
+  // منع تجاوز المتبقي من دفعة السلفة/المدور - نعيد تحميل الأرصدة عشان نتحقق من أحدث رقم ممكن
+  if (sourceBatchId) {
+    await loadFundingBatches();
+    const batch = fundingBatchesCache.find(b => b.id === sourceBatchId);
+    const total = items.reduce((s, it) => s + it.amount, 0);
+    if (!batch || Number(batch.remaining) < total - 0.009) {
+      errEl.textContent = batch
+        ? `المبلغ الإجمالي (${fmtAmount(total)}) يتجاوز المتبقي من هذه الدفعة (${fmtAmount(batch.remaining)})`
+        : 'تعذر التحقق من رصيد الدفعة - حدّث الصفحة وحاول مرة ثانية';
+      errEl.style.display = 'block';
+      populateSourceBatchSelect(FUNDING_TO_REVENUE_TYPE[source]);
+      return;
+    }
+  }
+
   const { data: inserted, error } = await sb.from('budget_expense_requests').insert({
     category_id: categoryId,
     beneficiary_name: beneficiary,
     funding_source: source,
     funding_source_other: source === 'أخرى' ? sourceOther : null,
+    funding_revenue_id: sourceBatchId,
     semester: semester || null,
     request_date: date,
     requested_by: currentUserId,
@@ -366,6 +430,11 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
     items.map(it => ({ ...it, request_id: requestId }))
   );
   if (itemsError) { errEl.textContent = 'تعذر حفظ الفواتير: ' + itemsError.message; errEl.style.display = 'block'; return; }
+
+  if (sourceBatchId) {
+    await loadFundingBatches();
+    if (accessLevel() === 'full') { await loadBatchesLists(); await loadDashboard(); }
+  }
 
   resetExpenseForm();
   const level = accessLevel();
@@ -629,15 +698,17 @@ async function loadDashboard() {
   const semesterFilter = document.getElementById('budget-semester-filter') ? document.getElementById('budget-semester-filter').value : '';
 
   const [{ data: revenues }, { data: requests }, { data: closures }] = await Promise.all([
-    sb.from('budget_revenues').select('amount, revenue_date, semester'),
+    sb.from('budget_revenues').select('amount, revenue_date, semester, revenue_type'),
     sb.from('budget_expense_requests')
-      .select('request_date, status, semester, category_id, budget_categories(name), budget_expense_items(amount)')
+      .select('request_date, status, semester, category_id, funding_source, budget_categories(name), budget_expense_items(amount)')
       .eq('status', 'confirmed'),
     sb.from('budget_semester_closures').select('semester, admin_share_amount, carryover_amount'),
   ]);
 
-  let revList = revenues || [];
-  let reqList = requests || [];
+  // لوحة العامة وتقسيم النسب تُحسب من دخل "المقصف" بس — السلفة والمدور لهما صناديقهما
+  // المستقلة (أرصدة الجهات تحت)، ما ينخلطان بأرقام الإيراد/الرصيد الرئيسية
+  let revList = (revenues || []).filter(r => (r.revenue_type || 'مقصف') === 'مقصف');
+  let reqList = (requests || []).filter(r => r.funding_source === 'المقصف');
   let closureList = closures || [];
   if (semesterFilter) {
     revList = revList.filter(r => r.semester === semesterFilter);
@@ -677,8 +748,24 @@ async function loadDashboard() {
     statCard('المدوَّر (محتجز)', fmtAmount(totalCarryover), 'var(--teal)', null, 'carry');
 
   renderCategoryCaps(totalRevenue, expList);
+  renderSourceStats(totalRevenue);
 
   await loadCharts(revList, expList, byCategory);
+}
+
+/* ---------- أرصدة الجهات: متبقي السلفة / متبقي المدور / رصيد المقصف ---------- */
+function renderSourceStats(mqasafBalance) {
+  const el = document.getElementById('budget-source-stats');
+  if (!el) return;
+  const remainingBy = (type) => fundingBatchesCache
+    .filter(b => b.revenue_type === type)
+    .reduce((s, b) => s + Math.max(0, Number(b.remaining)), 0);
+  const openCount = (type) => fundingBatchesCache.filter(b => b.revenue_type === type && Number(b.remaining) > 0.009).length;
+
+  el.innerHTML =
+    statCard('متبقي السلفة', fmtAmount(remainingBy('سلفة')), 'var(--gold)', `${openCount('سلفة')} دفعة مفتوحة`, 'admin') +
+    statCard('متبقي المدور', fmtAmount(remainingBy('مدور سابق')), 'var(--teal)', `${openCount('مدور سابق')} دفعة مفتوحة`, 'carry') +
+    statCard('رصيد المقصف', fmtAmount(mqasafBalance), 'var(--green)', 'إجمالي ما دخل منه', 'revenue');
 }
 
 /* ---------- نصيب الإدارة + المدوَّر (تُحسب آخر كل فصل دراسي) ---------- */
@@ -749,7 +836,7 @@ document.getElementById('budget-share-close-submit') && document.getElementById(
 
   const [{ data: settingsRows }, { data: revenues }, { data: existing }] = await Promise.all([
     sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).single(),
-    sb.from('budget_revenues').select('amount, semester').eq('semester', semester),
+    sb.from('budget_revenues').select('amount, semester').eq('semester', semester).eq('revenue_type', 'مقصف'),
     sb.from('budget_semester_closures').select('id').eq('semester', semester).single(),
   ]);
   const settings = settingsRows || { admin_share_percentage: 10, carryover_percentage: 0 };
@@ -786,6 +873,156 @@ document.getElementById('budget-share-close-submit') && document.getElementById(
   await loadShareSection();
   await loadDashboard();
 });
+
+/* ---------- دفعات السلفة والمدور: قائمة مفتوحة/مقفلة + تقرير إقفال قابل للطباعة ---------- */
+// هذا القسم للمدير/صاحب الصلاحية الكاملة بس (نفس نطاق ظهور budget-settings-extra) - يحتاج قراءة
+// كل طلبات الصرف المرتبطة (مو بس طلبات المستخدم نفسه) وهذا متاح فقط لهذا المستوى أصلًا بصلاحيات RLS
+async function loadBatchesLists() {
+  if (accessLevel() !== 'full') return;
+  const openEl = document.getElementById('budget-batches-open-list');
+  const closedEl = document.getElementById('budget-batches-closed-list');
+  if (!openEl) return;
+  openEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
+
+  const [{ data: revs }, { data: reqs }] = await Promise.all([
+    sb.from('budget_revenues').select('id, description, amount, revenue_date, revenue_type')
+      .in('revenue_type', ['سلفة', 'مدور سابق']).order('revenue_date', { ascending: false }),
+    sb.from('budget_expense_requests')
+      .select('id, statement_number, request_date, status, funding_revenue_id, beneficiary_name, budget_expense_items(amount, description)')
+      .not('funding_revenue_id', 'is', null),
+  ]);
+
+  const reqsByBatch = new Map();
+  (reqs || []).filter(r => r.status !== 'rejected').forEach(r => {
+    if (!reqsByBatch.has(r.funding_revenue_id)) reqsByBatch.set(r.funding_revenue_id, []);
+    reqsByBatch.get(r.funding_revenue_id).push(r);
+  });
+
+  batchesDetailedCache = (revs || []).map(b => {
+    const linked = reqsByBatch.get(b.id) || [];
+    const spent = linked.reduce((s, r) => s + (r.budget_expense_items || []).reduce((s2, it) => s2 + Number(it.amount || 0), 0), 0);
+    const remaining = Number(b.amount) - spent;
+    const lastDate = linked.reduce((max, r) => (!max || r.request_date > max ? r.request_date : max), null);
+    return { ...b, spent, remaining, linked, isClosed: remaining <= 0.009, closedDate: remaining <= 0.009 ? lastDate : null };
+  });
+
+  const open = batchesDetailedCache.filter(b => !b.isClosed);
+  const closed = batchesDetailedCache.filter(b => b.isClosed);
+
+  const batchRow = (b) => {
+    const pct = b.amount > 0 ? Math.min(100, Math.round(b.spent / Number(b.amount) * 100)) : 0;
+    return `<div class="form-card" style="margin-bottom:8px; padding:12px 14px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+        <div>
+          <span class="badge ${b.revenue_type === 'سلفة' ? 'badge-gold' : 'badge-meadow'}">${esc(b.revenue_type)}</span>
+          <strong style="margin-inline-start:6px;">${esc(b.description)}</strong>
+        </div>
+        <button class="text-action-btn budget-batch-print" data-id="${b.id}" style="width:auto;">🖨 طباعة التقرير</button>
+      </div>
+      <div style="font-size:12px; color:var(--slate); margin-top:6px;">
+        المبلغ الأصلي: ${fmtAmount(b.amount)} — المصروف: ${fmtAmount(b.spent)} — المتبقي: <strong style="color:${b.isClosed ? 'var(--danger)' : 'var(--meadow)'};">${fmtAmount(b.remaining)}</strong>
+        ${b.isClosed ? ` — <span style="color:var(--danger); font-weight:700;">تم إغلاق ${b.revenue_type === 'سلفة' ? 'السلفة' : 'المدور'}${b.closedDate ? ' بتاريخ ' + fmtDate(b.closedDate) : ''}</span>` : ''}
+      </div>
+      <div style="background:var(--sand); border-radius:6px; height:6px; margin-top:8px; overflow:hidden;">
+        <div style="background:${b.isClosed ? 'var(--danger)' : 'var(--meadow)'}; height:100%; width:${pct}%;"></div>
+      </div>
+    </div>`;
+  };
+
+  openEl.innerHTML = open.length === 0
+    ? '<p style="font-size:12px; color:var(--slate);">ما فيه دفعات سلفة أو مدور مفتوحة حاليًا</p>'
+    : open.map(batchRow).join('');
+  if (closedEl) {
+    closedEl.innerHTML = closed.length === 0
+      ? '<p style="font-size:12px; color:var(--slate);">ما فيه دفعات مقفلة بعد</p>'
+      : closed.map(batchRow).join('');
+  }
+
+  document.querySelectorAll('.budget-batch-print').forEach(btn => {
+    btn.addEventListener('click', () => printBatchReport(btn.dataset.id));
+  });
+}
+
+function printBatchReport(batchId) {
+  const b = batchesDetailedCache.find(x => x.id === batchId);
+  if (!b) return;
+
+  const rowsHtml = b.linked.length === 0
+    ? '<tr><td colspan="5" style="color:#999;">لا توجد فواتير مرتبطة بهذه الدفعة</td></tr>'
+    : b.linked.flatMap(r => (r.budget_expense_items || []).map(it => `
+      <tr>
+        <td>${r.statement_number}</td>
+        <td>${fmtDate(r.request_date)}</td>
+        <td style="text-align:right;">${esc(r.beneficiary_name)}</td>
+        <td style="text-align:right;">${esc(it.description)}</td>
+        <td>${fmtAmount(it.amount)}</td>
+      </tr>`)).join('');
+
+  const logoHtml = VOUCHER_LOGO_DATA_URI ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="شعار" style="height:54px;" />` : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>تقرير ${b.isClosed ? 'إقفال' : ''} ${esc(b.revenue_type)} - ${esc(b.description)}</title>
+<style>
+  body { font-family: 'Tajawal', 'Tahoma', Arial, sans-serif; padding: 30px; color:#152238; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+  .doc { max-width: 900px; margin: 0 auto; }
+  .header { display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #152238; padding-bottom:14px; margin-bottom:20px; }
+  .header h1 { margin:0; font-size:20px; }
+  .header p { margin:2px 0 0; font-size:12.5px; color:#6B7684; }
+  table.meta { width:100%; border-collapse:collapse; margin-bottom:18px; }
+  table.meta td { border:1px solid #ccc; padding:8px 10px; font-size:13px; }
+  table.meta td.label { background:#f3f3f0; font-weight:bold; width:150px; }
+  table.grid { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  table.grid th, table.grid td { border:1px solid #999; padding:6px 8px; font-size:12px; text-align:center; }
+  table.grid th { background:#16233A; color:#fff; font-weight:600; }
+  table.grid tbody tr:nth-child(even) { background:#f7f7f2; }
+  table.grid tfoot td { font-weight:800; background:#eef1f6; }
+  .status-badge { display:inline-block; padding:4px 14px; border-radius:20px; font-weight:700; font-size:13px; }
+  h3 { font-size:14px; margin:18px 0 8px; }
+  .footer-note { margin-top:24px; font-size:10.5px; color:#999; text-align:center; }
+  @media print { body { padding:0; } }
+</style>
+</head>
+<body>
+  <div class="doc">
+    <div class="header">
+      ${logoHtml}
+      <div style="text-align:center; flex:1;">
+        <h1>تقرير ${b.revenue_type}</h1>
+        <p>${esc(VOUCHER_ORG_NAME)}</p>
+      </div>
+      <div style="width:54px;"></div>
+    </div>
+
+    <table class="meta">
+      <tr><td class="label">الوصف</td><td>${esc(b.description)}</td><td class="label">النوع</td><td>${esc(b.revenue_type)}</td></tr>
+      <tr><td class="label">تاريخ الإيداع</td><td>${fmtDate(b.revenue_date)}</td><td class="label">المبلغ الأصلي</td><td>${fmtAmount(b.amount)}</td></tr>
+      <tr><td class="label">إجمالي المصروف</td><td>${fmtAmount(b.spent)}</td><td class="label">المتبقي</td><td>${fmtAmount(b.remaining)}</td></tr>
+      <tr><td class="label">الحالة</td><td colspan="3"><span class="status-badge" style="background:${b.isClosed ? '#FBEAE9' : '#E7F5EC'}; color:${b.isClosed ? '#C0453D' : '#2E9155'};">${b.isClosed ? 'مقفلة' + (b.closedDate ? ' بتاريخ ' + fmtDate(b.closedDate) : '') : 'مفتوحة'}</span></td></tr>
+    </table>
+
+    <h3>الفواتير المصروفة من هذه الدفعة</h3>
+    <table class="grid">
+      <thead><tr><th style="width:70px;">رقم البيان</th><th style="width:90px;">التاريخ</th><th>يُصرف لـ</th><th>البيان</th><th style="width:80px;">المبلغ</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+      <tfoot><tr><td colspan="4">الإجمالي</td><td>${fmtAmount(b.spent)}</td></tr></tfoot>
+    </table>
+
+    <div class="footer-note">تمت الطباعة من نظام إدارة المدرسة — ${fmtDate(todayIso())}</div>
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('يرجى السماح بفتح نافذة منبثقة للطباعة'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
 
 /* ---------- مؤشرات سقف الصرف لكل بند (% من إجمالي الإيراد) ---------- */
 function renderCategoryCaps(totalRevenue, expList) {
