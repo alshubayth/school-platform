@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, myBudgetAccess, backToTiles } from './core.js';
+import { sb, currentUserId, currentProfile, myBudgetAccess, setMyBudgetAccess, backToTiles } from './core.js';
 
 document.getElementById('back-to-tiles-13').addEventListener('click', backToTiles);
 
@@ -34,6 +34,13 @@ function esc(s) {
 
 export async function loadBudgetModule() {
   const isAdmin = currentProfile.role === 'admin';
+  // نحدّث صلاحية الميزانية من قاعدة البيانات كل ما يفتح القسم - لو المدير منح الصلاحية بعد ما
+  // الموظف سجّل دخوله بنفس الجلسة (myBudgetAccess تُقرأ مرة وحدة عند تسجيل الدخول بملف core.js)
+  // كانت تفضل قديمة لحد ما يسجّل خروج ودخول من جديد، فيبقى الحقل يتثبّت على اسمه فقط بالخطأ
+  if (!isAdmin) {
+    const { data: budgetPerm } = await sb.from('budget_permissions').select('level').eq('profile_id', currentUserId).maybeSingle();
+    setMyBudgetAccess(budgetPerm ? budgetPerm.level : null);
+  }
   const level = accessLevel();
   const hasFull = level === 'full';
   // أي موظف (مدير/وكيل/معلم) يقدر يقدّم طلب صرف - باسمه هو فقط ما لم يكن عنده صلاحية فعلية من المدير
