@@ -27,3 +27,8 @@ export function loadPdfJs() {
   if (window.pdfjsLib) return Promise.resolve();
   return loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js');
 }
+
+export function loadJSZip() {
+  if (window.JSZip) return Promise.resolve();
+  return loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+}
