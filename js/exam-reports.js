@@ -1,5 +1,5 @@
 import { sb, currentUserId, backToTiles } from './core.js';
-import { loadXLSX } from './lib-loader.js';
+import { loadXLSX, loadJSZip } from './lib-loader.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
 
@@ -825,18 +825,22 @@ function renderAnalysis(s) {
       ${isLegacyReport ? '' : `<div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button type="button" class="text-action-btn" id="er-print-topbottom" style="width:auto; padding:8px 14px;">🖨 طباعة</button>
         <button type="button" class="text-action-btn" id="er-export-topbottom" style="width:auto; padding:8px 14px;">⬇ تصدير إكسل</button>
+        <button type="button" class="text-action-btn" id="er-export-remedial" style="width:auto; padding:8px 14px;" title="ملف وورد منفصل لكل فصل فيه طلاب ضعاف - جاهز للتعبئة اليدوية">📄 خطط علاجية جماعية (وورد)</button>
       </div>`}
     </div>
     ${isLegacyReport ? `<p style="font-size:12px; color:var(--danger); margin:8px 0 0;">هذا التقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات الترتيب - ارفع نفس ملف الإكسل وأعد حفظ التقرير لعرض هذه القائمة.</p>` : `
     <div class="form-row" style="align-items:stretch; margin-top:10px;">
       ${studentRankTable(topStudents, 'أعلى ١٥ درجة', 'badge-meadow')}
       ${studentRankTable(weakStudents, 'الطلاب الضعاف (أقل من ٥٠٪)', 'badge-danger')}
-    </div>`}`;
+    </div>`}
+    <div class="error-msg" id="er-remedial-error" style="margin-top:8px;"></div>`;
 
   const printBtn = document.getElementById('er-print-topbottom');
   const exportBtn = document.getElementById('er-export-topbottom');
+  const remedialBtn = document.getElementById('er-export-remedial');
   if (printBtn) printBtn.addEventListener('click', () => printTopBottomReport({ ...s, topStudents, weakStudents }));
   if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel({ ...s, topStudents, weakStudents }));
+  if (remedialBtn) remedialBtn.addEventListener('click', () => exportRemedialPlans(weakStudents));
 }
 
 function studentRankTable(list, title, badgeClass) {
@@ -952,6 +956,108 @@ async function exportTopBottomExcel(s) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'أعلى الدرجات والضعاف');
   XLSX.writeFile(wb, `${title}_أعلى_الدرجات_والضعاف.xlsx`);
+}
+
+/* ---------- تصدير "الخطة العلاجية (الجماعية)" - ملف وورد منفصل لكل فصل فيه طلاب ضعاف ----------
+ * نفس نموذج "دعم التحصيل الدراسي" الرسمي: معلومات المدرسة/المادة/الصف/الشعبة، وجدول
+ * بأسماء الطلاب الضعاف بذلك الفصل مع خانات (شواهد التشخيص/المهارات/الأساليب/الشواهد/المؤشر)
+ * فاضية للمعلم يعبّيها يدويًا. نصدّر ملف .doc واحد لكل فصل (يفتح بوورد مباشرة) مضغوطين بملف zip واحد. */
+const SCHOOL_NAME = 'مدرسة المروج المتوسطة';
+const REMEDIAL_CHECKBOX_OPTIONS = {
+  strategies: ['التعلم المباشر الجمعي', 'التعلم الذاتي المفرد', 'التعلم التعاوني', 'النشاط واللعب', 'أخرى:'],
+  evidence: ['أوراق العمل', 'المهام الأدائية', 'تكليفات منزلية', 'أنشطة صفية', 'الاختبارات', 'أعمال الطالب', 'أخرى:'],
+  progress: ['تقويم مستمر', 'الملاحظة المباشرة', 'نتائج الفترات', 'أداة قياس ( اختبار الفترة )', 'أخرى:_________.'],
+};
+
+function remedialChecklistHtml(options) {
+  return options.map(o => `☐ ${esc(o)}`).join('<br/>');
+}
+
+function buildRemedialPlanDocHtml({ subject, grade, section, dateStr, names }) {
+  const namesHtml = names.length
+    ? names.map((n, i) => `${i + 1}. ${esc(n)}`).join('<br/>')
+    : '-';
+  return `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset="utf-8" />
+<style>
+  body { font-family: 'Arial', 'Tahoma', sans-serif; direction: rtl; font-size: 13px; color:#16233A; }
+  h2, h3 { text-align:center; margin:4px 0; }
+  table { border-collapse: collapse; width:100%; margin-top:14px; }
+  th, td { border: 1px solid #000; padding: 8px; text-align: center; vertical-align: top; font-size: 12.5px; }
+  th { background:#EFEEE6; font-weight:700; }
+  .info-table td:first-child { font-weight:700; background:#F7F7F2; width:110px; }
+  .opinion { margin-top:16px; font-size:12.5px; line-height:1.7; }
+</style></head>
+<body dir="rtl">
+  <h3>دعم التحصيل الدراسي</h3>
+  <h3>نموذج الخطة العلاجية ( الجماعية )</h3>
+  <table class="info-table">
+    <tr><td>المدرسة:</td><td>${esc(SCHOOL_NAME)}</td><td>المادة:</td><td>${esc(subject || '-')}</td></tr>
+    <tr><td>الصف:</td><td>${esc(grade || '-')}</td><td>الشعبة:</td><td>${esc(section)}</td></tr>
+    <tr><td>التاريخ:</td><td colspan="3">${esc(dateStr)}</td></tr>
+  </table>
+  <table>
+    <tr>
+      <th>أسماء الطلاب</th><th>شواهد التشخيص</th><th>المهارات المستهدفة</th>
+      <th>الأساليب/ الإستراتيجيات المطبقة</th><th>الشواهد التعليمية المقترحة</th><th>مؤشر التقدم</th>
+    </tr>
+    <tr>
+      <td style="text-align:right;">${namesHtml}</td>
+      <td>&nbsp;</td>
+      <td>&nbsp;</td>
+      <td>${remedialChecklistHtml(REMEDIAL_CHECKBOX_OPTIONS.strategies)}</td>
+      <td>${remedialChecklistHtml(REMEDIAL_CHECKBOX_OPTIONS.evidence)}</td>
+      <td>${remedialChecklistHtml(REMEDIAL_CHECKBOX_OPTIONS.progress)}</td>
+    </tr>
+  </table>
+  <p class="opinion">رأي المعلم في فاعلية الخطة العلاجية:<br/>
+  مثال: بناء على نتائج نهاية الفصل الدراسي السابق تم تحديد الطلاب الموضحة أسماؤهم بالأعلى ضمن فئة الدعم حيث أنهم لم يحققوا نسبة 50% من الاختبار النهائي، وبعد دخولهم في الخطة العلاجية الجماعية وتنفيذ الأساليب المقترحة الموضحة، ومن خلال تطبيق الشواهد المشار إليها. وبعد تطبيق أدوات القياس المحددة تبين الآتي:<br/>
+  انتقال الطلاب التالية أسماؤهم ( ...... ) إلى خطة العلاج الفردية.</p>
+  <p style="font-size:11px; color:#6B7684; margin-top:18px;">عند انتقال الطالب إلى الخطة الفردية يجب تفعيل نموذج اتفاقية الخطة العلاجية الفردية مع ولي أمر الطالب رقم (3)</p>
+</body></html>`;
+}
+
+async function exportRemedialPlans(weakStudents) {
+  const errEl = document.getElementById('er-remedial-error');
+  if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
+  if (!weakStudents.length) {
+    if (errEl) { errEl.textContent = 'ما فيه طلاب ضعاف (أقل من ٥٠٪) بهذا التقرير حاليًا.'; errEl.style.display = 'block'; }
+    return;
+  }
+  try {
+    await loadJSZip();
+    const subject = currentReport ? currentReport.subject_name : '';
+    const grade = currentReport ? currentReport.grade_level : '';
+    const title = currentReport ? currentReport.title : 'تقرير';
+    const dateStr = new Date().toLocaleDateString('ar-SA-u-nu-latn');
+
+    // تجميع الطلاب الضعاف حسب الفصل (الشعبة) - ترتيب طبيعي (١، ٢، ٣... حتى لو نصوص)
+    const groups = new Map();
+    weakStudents.forEach(st => {
+      const key = (st.section || '').trim() || 'بدون فصل محدد';
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(st.name || st.id || '-');
+    });
+    const sortedSections = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b, 'ar', { numeric: true }));
+
+    const zip = new JSZip();
+    sortedSections.forEach(section => {
+      const sectionLabel = section === 'بدون فصل محدد' ? section : ('الفصل ' + section);
+      const html = buildRemedialPlanDocHtml({ subject, grade, section: sectionLabel, dateStr, names: groups.get(section) });
+      zip.file(`الخطة_العلاجية_الجماعية_${sectionLabel}.doc`, html);
+    });
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `الخطط_العلاجية_${title}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    if (errEl) { errEl.textContent = e.message || 'تعذر إنشاء ملفات الخطط العلاجية'; errEl.style.display = 'block'; }
+  }
 }
 
 /* ---------- رسم بياني بسيط (أعمدة) بستخدام Chart.js - يُحمَّل عند الحاجة فقط ---------- */
