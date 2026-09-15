@@ -964,7 +964,7 @@ async function exportTopBottomExcel(s) {
  * التنسيقات (الخطوط، الحدود، خانات الاختيار، نص رأي المعلم...) مطابقة تمامًا للملف الأصلي بدون أي تغيير -
  * فقط الحقول الخمسة هذي تُملأ. نصدّر ملف .docx حقيقي واحد لكل فصل، مضغوطين بملف zip واحد. */
 const SCHOOL_NAME = 'مدرسة المروج المتوسطة';
-const REMEDIAL_TEMPLATE_URL = new URL('templates/remedial-plan-template.docx', window.location.href).href;
+const REMEDIAL_TEMPLATE_URL = new URL('js/templates/remedial-plan-template.docx', window.location.href).href;
 
 async function exportRemedialPlans(weakStudents) {
   const errEl = document.getElementById('er-remedial-error');
