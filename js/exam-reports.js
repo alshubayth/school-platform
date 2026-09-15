@@ -263,9 +263,21 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students }) 
   const lowestStudents = students.filter((s, idx) => totals[idx] === low).map(s => ({ id: s.id, name: s.name }));
   const highestStudents = students.filter((s, idx) => totals[idx] === high).map(s => ({ id: s.id, name: s.name }));
 
+  // ---- أعلى ١٥ وأدنى ١٥ درجة (بالاسم والفصل) ----
+  const ranked = students.map((s, idx) => ({
+    id: s.id,
+    name: s.name,
+    section: s.section,
+    total: totals[idx],
+    pct: itemCount ? (totals[idx] / itemCount) * 100 : 0,
+  })).sort((a, b) => b.total - a.total);
+  const topStudents = ranked.slice(0, 15);
+  const bottomStudents = ranked.slice(-15).slice().sort((a, b) => a.total - b.total);
+
   return {
     n, itemCount, mean, median, high, low, range: high - low, sd, meanPct, kr20, reliabilityBand,
     gradeDistribution, scoreHistogram, itemStats, hardest, easiest, toReview, lowestStudents, highestStudents,
+    topStudents, bottomStudents,
   };
 }
 
@@ -469,48 +481,81 @@ function renderAllReports(s) {
   renderAnalysis(s);
 }
 
+const GRADE_COLORS = { A: '#2E9155', B: '#2455A4', C: '#0E93A8', D: '#E07A34', F: '#C0453D' };
+
 function renderDist(s) {
   const el = document.getElementById('er-panel-dist');
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">تقرير التوزيع التكراري للصف <span style="font-size:12.5px; color:var(--slate); font-weight:400;">متوسط الدرجة% ${pct(s.meanPct)}</span></h4>
-    <div style="overflow-x:auto;"><table class="er-table"><thead><tr>
-      <th>التقدير</th><th>الدرجة المئوية</th><th>الدرجة الخام</th><th>التكرار</th><th>النسبة المئوية</th>
-    </tr></thead><tbody>
-      ${s.gradeDistribution.map(g => `<tr>
-        <td><span class="badge badge-gray">${g.grade}</span></td>
-        <td>${fmt1(g.pctMin)} - ${fmt2(g.pctMax)}</td>
-        <td>${fmt2(g.rawMin)} - ${fmt2(g.rawMax)}</td>
-        <td>${g.freq}</td>
-        <td>${pct(g.freqPct)}</td>
-      </tr>`).join('')}
-    </tbody></table></div>
-    <canvas id="er-dist-chart" height="90" style="margin-top:18px;"></canvas>`;
-  drawBarChart('er-dist-chart', s.gradeDistribution.map(g => g.grade), s.gradeDistribution.map(g => g.freq), 'التكرار');
+    <div class="er-dist-layout">
+      <div style="overflow-x:auto;"><table class="er-table"><thead><tr>
+        <th>التقدير</th><th>الدرجة المئوية</th><th>الدرجة الخام</th><th>التكرار</th><th>النسبة المئوية</th>
+      </tr></thead><tbody>
+        ${s.gradeDistribution.map(g => `<tr>
+          <td><span class="badge" style="background:${GRADE_COLORS[g.grade]}1a; color:${GRADE_COLORS[g.grade]};">${g.grade}</span></td>
+          <td>${fmt1(g.pctMin)} - ${fmt2(g.pctMax)}</td>
+          <td>${fmt2(g.rawMin)} - ${fmt2(g.rawMax)}</td>
+          <td>${g.freq}</td>
+          <td>${pct(g.freqPct)}</td>
+        </tr>`).join('')}
+      </tbody></table></div>
+      <div class="form-card er-chart-card">
+        <h5 style="margin:0 0 10px; font-size:13px;">عدد الطلاب حسب التقدير</h5>
+        <div class="er-chart-wrap"><canvas id="er-dist-chart"></canvas></div>
+      </div>
+    </div>`;
+  drawBarChart('er-dist-chart', s.gradeDistribution.map(g => g.grade), s.gradeDistribution.map(g => g.freq), 'التكرار', {
+    colors: s.gradeDistribution.map(g => GRADE_COLORS[g.grade]),
+  });
 }
 
 function renderHist(s) {
   const el = document.getElementById('er-panel-hist');
+  const histColors = s.scoreHistogram.map((b, i) => (i >= 7 ? '#2E9155' : i >= 5 ? '#2455A4' : i >= 3 ? '#0E93A8' : i >= 1 ? '#E07A34' : '#C0453D'));
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">الرسم البياني لتقدير الطالب</h4>
     ${summaryStatsGrid(s)}
-    <canvas id="er-hist-chart" height="90" style="margin-top:18px;"></canvas>`;
-  drawBarChart('er-hist-chart', s.scoreHistogram.map(b => b.label), s.scoreHistogram.map(b => b.count), 'عدد الطلاب');
+    <div class="form-card er-chart-card" style="margin-top:18px;">
+      <h5 style="margin:0 0 10px; font-size:13px;">توزيع الطلاب حسب الدرجة المئوية (فئات ١٠٪)</h5>
+      <div class="er-chart-wrap"><canvas id="er-hist-chart"></canvas></div>
+    </div>`;
+  drawBarChart('er-hist-chart', s.scoreHistogram.map(b => b.label + '٪'), s.scoreHistogram.map(b => b.count), 'عدد الطلاب', {
+    colors: histColors,
+  });
+}
+
+// لون شريط النسبة لكل بديل: أخضر للإجابة الصحيحة، رمادي لعدم الاستجابة/متعدد، برتقالي لبقية الاختيارات
+function choiceBarColor(c) {
+  if (c.isCorrect) return '#2E9155';
+  if (c.label === 'لا توجد استجابة' || c.label === 'متعدد') return '#C7C2B4';
+  return '#E07A34';
 }
 
 function renderItems(s) {
   const el = document.getElementById('er-panel-items');
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">التحليل المجمع لبنود الاختبار</h4>
-    <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">الإجابة الصحيحة معلّمة بـ * — المفتاح: صواب ✓ / خطأ ✕</p>
-    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:14px;">
+    <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">
+      الإجابة الصحيحة معلّمة بـ * ولون <span style="color:#2E9155; font-weight:700;">أخضر</span> — بقية الاختيارات
+      <span style="color:#E07A34; font-weight:700;">برتقالي</span> — عدم الاستجابة/متعدد <span style="color:#8F8A7A; font-weight:700;">رمادي</span>
+    </p>
+    <div class="er-items-grid">
       ${s.itemStats.map(it => `
         <div class="form-card" style="margin:0;">
-          <h5 style="margin:0 0 8px; font-size:13px;">${esc(it.label)} ${it.flagged ? '<span class="badge badge-danger" title="مشتت أُختير أكثر من الإجابة الصحيحة">⚠</span>' : ''}</h5>
-          <table class="er-table small"><thead><tr><th>الاستجابة</th><th>التكرار</th><th>النسبة</th></tr></thead><tbody>
-            ${it.choices.map(c => `<tr${c.isCorrect ? ' style="font-weight:700; color:var(--meadow);"' : ''}>
-              <td>${esc(c.label)}${c.isCorrect ? '*' : ''}</td><td>${c.count}</td><td>${pct(c.pct)}</td>
-            </tr>`).join('')}
-          </tbody></table>
+          <h5 style="margin:0 0 10px; font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:6px;">
+            <span>${esc(it.label)}</span>
+            ${it.flagged ? '<span class="badge badge-danger" title="مشتت أُختير أكثر من الإجابة الصحيحة">⚠ مراجعة</span>' : ''}
+          </h5>
+          <div class="er-choice-list">
+            ${it.choices.map(c => `
+              <div class="er-choice-row">
+                <div class="er-choice-label">
+                  <span>${esc(c.label)}${c.isCorrect ? ' *' : ''}</span>
+                  <span>${c.count} — ${pct(c.pct)}</span>
+                </div>
+                <div class="er-choice-bar"><div class="er-choice-bar-fill" style="background:${choiceBarColor(c)}; width:${c.pct > 0 ? Math.max(c.pct, 2) : 0}%;"></div></div>
+              </div>`).join('')}
+          </div>
         </div>`).join('')}
     </div>`;
 }
@@ -568,16 +613,140 @@ function renderAnalysis(s) {
       <h5 style="margin:0 0 8px; font-size:13px;">أسئلة للمراجعة</h5>
       <p style="font-size:12.5px; margin:0;">${s.toReview.length ? s.toReview.map(it => esc(it.label) + (it.topWrong ? ` (اختار كثيرون "${esc(it.topWrong)}" بدل الإجابة الصحيحة)` : '')).join('، ') : 'ما فيه أسئلة مشتتاتها أكثر اختيارًا من الإجابة الصحيحة'}</p>
     </div>
-    <div class="form-row" style="margin-top:18px;">
-      <div class="form-card" style="margin:0;">
-        <h5 style="margin:0 0 8px; font-size:13px;">أقل درجة (${fmt1(s.low)})</h5>
-        <p style="font-size:12px; color:var(--slate); margin:0;">${s.lowestStudents.map(st => esc(st.name || st.id)).join('، ') || '-'}</p>
+    <div style="margin-top:22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div>
+        <h5 style="margin:0 0 4px; font-size:14px;">أعلى ١٥ وأدنى ١٥ درجة</h5>
+        <p style="font-size:11.5px; color:var(--slate); margin:0;">بأسماء الطلاب وفصولهم</p>
       </div>
-      <div class="form-card" style="margin:0;">
-        <h5 style="margin:0 0 8px; font-size:13px;">أعلى درجة (${fmt1(s.high)})</h5>
-        <p style="font-size:12px; color:var(--slate); margin:0;">${s.highestStudents.map(st => esc(st.name || st.id)).join('، ') || '-'}</p>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="text-action-btn" id="er-print-topbottom" style="width:auto; padding:8px 14px;">🖨 طباعة</button>
+        <button type="button" class="text-action-btn" id="er-export-topbottom" style="width:auto; padding:8px 14px;">⬇ تصدير إكسل</button>
       </div>
+    </div>
+    <div class="form-row" style="align-items:stretch; margin-top:10px;">
+      ${studentRankTable(s.topStudents, 'أعلى ١٥ درجة', 'badge-meadow')}
+      ${studentRankTable(s.bottomStudents, 'أدنى ١٥ درجة', 'badge-danger')}
     </div>`;
+
+  const printBtn = document.getElementById('er-print-topbottom');
+  const exportBtn = document.getElementById('er-export-topbottom');
+  if (printBtn) printBtn.addEventListener('click', () => printTopBottomReport(s));
+  if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel(s));
+}
+
+function studentRankTable(list, title, badgeClass) {
+  return `<div class="form-card" style="margin:0;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <h5 style="margin:0; font-size:13px;">${esc(title)}</h5>
+      <span class="badge ${badgeClass}">${list.length} طالب</span>
+    </div>
+    <div style="overflow-x:auto;"><table class="er-table small"><thead><tr>
+      <th>#</th><th style="text-align:right;">الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th>
+    </tr></thead><tbody>
+      ${list.length ? list.map((st, i) => `<tr>
+        <td>${i + 1}</td>
+        <td style="text-align:right;">${esc(st.name || st.id || '-')}</td>
+        <td>${esc(st.section || '-')}</td>
+        <td>${fmt1(st.total)}</td>
+        <td>${pct(st.pct)}</td>
+      </tr>`).join('') : '<tr><td colspan="5" style="color:var(--slate);">لا يوجد</td></tr>'}
+    </tbody></table></div>
+  </div>`;
+}
+
+/* ---------- طباعة تقرير أعلى/أدنى ١٥ درجة ---------- */
+const ER_LOGO_DATA_URI = new URL('logo.png', window.location.href).href;
+function printTopBottomReport(s) {
+  const title = currentReport ? currentReport.title : 'تقرير أعلى وأدنى الدرجات';
+  const sub = currentReport ? `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'}` : '';
+
+  const rowsHtml = (list) => list.length
+    ? list.map((st, i) => `<tr>
+        <td>${i + 1}</td>
+        <td style="text-align:right;">${esc(st.name || st.id || '-')}</td>
+        <td>${esc(st.section || '-')}</td>
+        <td>${fmt1(st.total)}</td>
+        <td>${pct(st.pct)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5">لا يوجد</td></tr>';
+
+  const logoHtml = ER_LOGO_DATA_URI ? `<img src="${ER_LOGO_DATA_URI}" alt="شعار" style="height:50px;" />` : '';
+
+  const html = `<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<title>أعلى وأدنى ١٥ درجة - ${esc(title)}</title>
+<style>
+  body { font-family: 'Tajawal', 'Tahoma', Arial, sans-serif; padding: 24px; color:#16233A; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+  .doc { max-width: 960px; margin: 0 auto; }
+  .header { display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #16233A; padding-bottom:14px; margin-bottom:20px; }
+  .header h1 { margin:0; font-size:19px; }
+  .header p { margin:2px 0 0; font-size:12px; color:#6B7684; }
+  .cols { display:flex; gap:18px; }
+  .cols > div { flex:1; }
+  h3 { font-size:13.5px; margin:0 0 8px; }
+  table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  th, td { border:1px solid #999; padding:6px 8px; font-size:11.5px; text-align:center; }
+  th { background:#16233A; color:#fff; font-weight:600; }
+  tbody tr:nth-child(even) { background:#f7f7f2; }
+  .footer-note { margin-top:20px; font-size:10px; color:#999; text-align:center; }
+  @media print { body { padding:0; } .cols { display:block; } }
+</style>
+</head>
+<body>
+  <div class="doc">
+    <div class="header">
+      ${logoHtml}
+      <div style="text-align:center; flex:1;">
+        <h1>تقرير أعلى وأدنى ١٥ درجة</h1>
+        <p>${esc(title)}${sub ? ' — ' + esc(sub) : ''}</p>
+      </div>
+      <div style="width:50px;"></div>
+    </div>
+    <div class="cols">
+      <div>
+        <h3>أعلى ١٥ درجة</h3>
+        <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
+        <tbody>${rowsHtml(s.topStudents)}</tbody></table>
+      </div>
+      <div>
+        <h3>أدنى ١٥ درجة</h3>
+        <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
+        <tbody>${rowsHtml(s.bottomStudents)}</tbody></table>
+      </div>
+    </div>
+    <div class="footer-note">تمت الطباعة من نظام إدارة المدرسة</div>
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('يرجى السماح بفتح نافذة منبثقة للطباعة'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
+/* ---------- تصدير تقرير أعلى/أدنى ١٥ درجة لملف إكسل ---------- */
+async function exportTopBottomExcel(s) {
+  await loadXLSX();
+  const title = currentReport ? currentReport.title : 'تقرير';
+  const header = ['#', 'الاسم', 'الفصل', 'الدرجة', 'النسبة%'];
+  const toRows = (list) => list.map((st, i) => [i + 1, st.name || st.id || '-', st.section || '-', Math.round(st.total * 10) / 10, Math.round(st.pct * 100) / 100]);
+
+  const aoa = [
+    ['أعلى ١٥ درجة'], header, ...toRows(s.topStudents),
+    [],
+    ['أدنى ١٥ درجة'], header, ...toRows(s.bottomStudents),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 12 }, { wch: 10 }, { wch: 10 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'أعلى وأدنى الدرجات');
+  XLSX.writeFile(wb, `${title}_أعلى_وأدنى_الدرجات.xlsx`);
 }
 
 /* ---------- رسم بياني بسيط (أعمدة) بستخدام Chart.js - يُحمَّل عند الحاجة فقط ---------- */
@@ -595,16 +764,46 @@ function loadChartLib() {
   return chartLibPromise;
 }
 const chartInstances = {};
-async function drawBarChart(canvasId, labels, data, label) {
+async function drawBarChart(canvasId, labels, data, label, opts = {}) {
   try {
     await loadChartLib();
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     if (chartInstances[canvasId]) { chartInstances[canvasId].destroy(); delete chartInstances[canvasId]; }
+
+    // يرسم عدد الطلاب فوق كل عمود مباشرة - بدون الحاجة لمكتبة إضافية
+    const dataLabelsPlugin = {
+      id: 'erDataLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.font = '700 11px Tahoma, Arial, sans-serif';
+        ctx.fillStyle = '#3A4351';
+        ctx.textAlign = 'center';
+        chart.data.datasets[0].data.forEach((v, i) => {
+          const bar = meta.data[i];
+          if (!bar || !v) return;
+          ctx.fillText(String(v), bar.x, bar.y - 6);
+        });
+        ctx.restore();
+      },
+    };
+
     chartInstances[canvasId] = new Chart(canvas, {
       type: 'bar',
-      data: { labels, datasets: [{ label, data, backgroundColor: '#1D8FA6', borderRadius: 4 }] },
-      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      data: { labels, datasets: [{ label, data, backgroundColor: opts.colors || '#2455A4', borderRadius: 6, maxBarThickness: 52 }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 18 } },
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#ECEAE1' } },
+          x: { grid: { display: false } },
+        },
+      },
+      plugins: [dataLabelsPlugin],
     });
   } catch (e) {
     console.error('chart error:', e);
