@@ -1,5 +1,5 @@
 import { sb, currentUserId, backToTiles } from './core.js';
-import { loadXLSX, loadJSZip } from './lib-loader.js';
+import { loadXLSX, loadJSZip, loadDocxTemplater } from './lib-loader.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
 
@@ -959,63 +959,12 @@ async function exportTopBottomExcel(s) {
 }
 
 /* ---------- تصدير "الخطة العلاجية (الجماعية)" - ملف وورد منفصل لكل فصل فيه طلاب ضعاف ----------
- * نفس نموذج "دعم التحصيل الدراسي" الرسمي: معلومات المدرسة/المادة/الصف/الشعبة، وجدول
- * بأسماء الطلاب الضعاف بذلك الفصل مع خانات (شواهد التشخيص/المهارات/الأساليب/الشواهد/المؤشر)
- * فاضية للمعلم يعبّيها يدويًا. نصدّر ملف .doc واحد لكل فصل (يفتح بوورد مباشرة) مضغوطين بملف zip واحد. */
+ * نستخدم نفس ملف النموذج الرسمي الأصلي (.docx) بالضبط كقالب - محفوظ بمسار templates/remedial-plan-template.docx
+ * ومزروع فيه حقول {SCHOOL} {SUBJECT} {GRADE} {SECTION} {DATE} {NAMES} بمكانها الصحيح بالجدول، فتبقى كل
+ * التنسيقات (الخطوط، الحدود، خانات الاختيار، نص رأي المعلم...) مطابقة تمامًا للملف الأصلي بدون أي تغيير -
+ * فقط الحقول الخمسة هذي تُملأ. نصدّر ملف .docx حقيقي واحد لكل فصل، مضغوطين بملف zip واحد. */
 const SCHOOL_NAME = 'مدرسة المروج المتوسطة';
-const REMEDIAL_CHECKBOX_OPTIONS = {
-  strategies: ['التعلم المباشر الجمعي', 'التعلم الذاتي المفرد', 'التعلم التعاوني', 'النشاط واللعب', 'أخرى:'],
-  evidence: ['أوراق العمل', 'المهام الأدائية', 'تكليفات منزلية', 'أنشطة صفية', 'الاختبارات', 'أعمال الطالب', 'أخرى:'],
-  progress: ['تقويم مستمر', 'الملاحظة المباشرة', 'نتائج الفترات', 'أداة قياس ( اختبار الفترة )', 'أخرى:_________.'],
-};
-
-function remedialChecklistHtml(options) {
-  return options.map(o => `☐ ${esc(o)}`).join('<br/>');
-}
-
-function buildRemedialPlanDocHtml({ subject, grade, section, dateStr, names }) {
-  const namesHtml = names.length
-    ? names.map((n, i) => `${i + 1}. ${esc(n)}`).join('<br/>')
-    : '-';
-  return `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-<head><meta charset="utf-8" />
-<style>
-  body { font-family: 'Arial', 'Tahoma', sans-serif; direction: rtl; font-size: 13px; color:#16233A; }
-  h2, h3 { text-align:center; margin:4px 0; }
-  table { border-collapse: collapse; width:100%; margin-top:14px; }
-  th, td { border: 1px solid #000; padding: 8px; text-align: center; vertical-align: top; font-size: 12.5px; }
-  th { background:#EFEEE6; font-weight:700; }
-  .info-table td:first-child { font-weight:700; background:#F7F7F2; width:110px; }
-  .opinion { margin-top:16px; font-size:12.5px; line-height:1.7; }
-</style></head>
-<body dir="rtl">
-  <h3>دعم التحصيل الدراسي</h3>
-  <h3>نموذج الخطة العلاجية ( الجماعية )</h3>
-  <table class="info-table">
-    <tr><td>المدرسة:</td><td>${esc(SCHOOL_NAME)}</td><td>المادة:</td><td>${esc(subject || '-')}</td></tr>
-    <tr><td>الصف:</td><td>${esc(grade || '-')}</td><td>الشعبة:</td><td>${esc(section)}</td></tr>
-    <tr><td>التاريخ:</td><td colspan="3">${esc(dateStr)}</td></tr>
-  </table>
-  <table>
-    <tr>
-      <th>أسماء الطلاب</th><th>شواهد التشخيص</th><th>المهارات المستهدفة</th>
-      <th>الأساليب/ الإستراتيجيات المطبقة</th><th>الشواهد التعليمية المقترحة</th><th>مؤشر التقدم</th>
-    </tr>
-    <tr>
-      <td style="text-align:right;">${namesHtml}</td>
-      <td>&nbsp;</td>
-      <td>&nbsp;</td>
-      <td>${remedialChecklistHtml(REMEDIAL_CHECKBOX_OPTIONS.strategies)}</td>
-      <td>${remedialChecklistHtml(REMEDIAL_CHECKBOX_OPTIONS.evidence)}</td>
-      <td>${remedialChecklistHtml(REMEDIAL_CHECKBOX_OPTIONS.progress)}</td>
-    </tr>
-  </table>
-  <p class="opinion">رأي المعلم في فاعلية الخطة العلاجية:<br/>
-  مثال: بناء على نتائج نهاية الفصل الدراسي السابق تم تحديد الطلاب الموضحة أسماؤهم بالأعلى ضمن فئة الدعم حيث أنهم لم يحققوا نسبة 50% من الاختبار النهائي، وبعد دخولهم في الخطة العلاجية الجماعية وتنفيذ الأساليب المقترحة الموضحة، ومن خلال تطبيق الشواهد المشار إليها. وبعد تطبيق أدوات القياس المحددة تبين الآتي:<br/>
-  انتقال الطلاب التالية أسماؤهم ( ...... ) إلى خطة العلاج الفردية.</p>
-  <p style="font-size:11px; color:#6B7684; margin-top:18px;">عند انتقال الطالب إلى الخطة الفردية يجب تفعيل نموذج اتفاقية الخطة العلاجية الفردية مع ولي أمر الطالب رقم (3)</p>
-</body></html>`;
-}
+const REMEDIAL_TEMPLATE_URL = new URL('templates/remedial-plan-template.docx', window.location.href).href;
 
 async function exportRemedialPlans(weakStudents) {
   const errEl = document.getElementById('er-remedial-error');
@@ -1025,7 +974,11 @@ async function exportRemedialPlans(weakStudents) {
     return;
   }
   try {
-    await loadJSZip();
+    await Promise.all([loadJSZip(), loadDocxTemplater()]);
+    const templateResp = await fetch(REMEDIAL_TEMPLATE_URL);
+    if (!templateResp.ok) throw new Error('تعذر تحميل نموذج الخطة العلاجية (templates/remedial-plan-template.docx) - تأكد إنه مرفوع على الموقع.');
+    const templateBuf = await templateResp.arrayBuffer();
+
     const subject = currentReport ? currentReport.subject_name : '';
     const grade = currentReport ? currentReport.grade_level : '';
     const title = currentReport ? currentReport.title : 'تقرير';
@@ -1043,8 +996,21 @@ async function exportRemedialPlans(weakStudents) {
     const zip = new JSZip();
     sortedSections.forEach(section => {
       const sectionLabel = section === 'بدون فصل محدد' ? section : ('الفصل ' + section);
-      const html = buildRemedialPlanDocHtml({ subject, grade, section: sectionLabel, dateStr, names: groups.get(section) });
-      zip.file(`الخطة_العلاجية_الجماعية_${sectionLabel}.doc`, html);
+      const names = groups.get(section);
+      const namesText = names.map((n, i) => `${i + 1}. ${n}`).join('، ');
+
+      const pzip = new window.PizZip(templateBuf);
+      const doc = new window.docxtemplater(pzip, { paragraphLoop: true, linebreaks: true });
+      doc.render({
+        SCHOOL: SCHOOL_NAME,
+        SUBJECT: subject || '-',
+        GRADE: grade || '-',
+        SECTION: sectionLabel,
+        DATE: dateStr,
+        NAMES: namesText,
+      });
+      const out = doc.getZip().generate({ type: 'arraybuffer' });
+      zip.file(`الخطة_العلاجية_الجماعية_${sectionLabel}.docx`, out);
     });
     const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
@@ -1056,7 +1022,7 @@ async function exportRemedialPlans(weakStudents) {
     a.remove();
     URL.revokeObjectURL(url);
   } catch (e) {
-    if (errEl) { errEl.textContent = e.message || 'تعذر إنشاء ملفات الخطط العلاجية'; errEl.style.display = 'block'; }
+    if (errEl) { errEl.textContent = (e && e.message) || 'تعذر إنشاء ملفات الخطط العلاجية'; errEl.style.display = 'block'; }
   }
 }
 
