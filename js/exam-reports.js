@@ -380,6 +380,9 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     students_count: parsedData.students.length,
     key_raw: keyRaw,
     stats,
+    // نحفظ إجابات الطلاب الخام كمان (مو بس النتيجة المحسوبة) عشان لو المدير احتاج يعدّل
+    // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية
+    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts },
     created_by: currentUserId,
   });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
@@ -447,7 +450,65 @@ async function openReport(id) {
   document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`;
   showErTab('dist');
   renderAllReports(data.stats);
+  document.getElementById('er-editkey-card').classList.add('hidden');
 }
+
+/* ---------- تعديل مفتاح الإجابة لتقرير محفوظ وإعادة حساب التقارير الستة ---------- */
+document.getElementById('er-edit-key-btn').addEventListener('click', () => {
+  if (!currentReport) return;
+  const errEl = document.getElementById('er-editkey-error');
+  errEl.style.display = 'none';
+  if (!currentReport.raw_data || !Array.isArray(currentReport.raw_data.choiceCounts)) {
+    errEl.textContent = 'هذا تقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات الطلاب الخام - لازم ترفع نفس ملف الإكسل وتحفظ التقرير من جديد عشان تقدر تعدّل مفتاحه لاحقًا.';
+    errEl.style.display = 'block';
+    document.getElementById('er-editkey-card').classList.remove('hidden');
+    document.getElementById('er-editkey-form').innerHTML = '';
+    return;
+  }
+  const { choiceCounts } = currentReport.raw_data;
+  const el = document.getElementById('er-editkey-form');
+  el.innerHTML = `<div class="er-key-grid">${choiceCounts.map((numChoices, i) => {
+    const options = ARABIC_LETTERS.slice(0, numChoices);
+    const current = letterFor(currentReport.key_raw[i], numChoices);
+    return `<div class="er-key-item">
+      <label>سؤال ${i + 1}</label>
+      <select class="er-editkey-select" data-item="${i}">
+        ${options.map(o => `<option value="${o}"${o === current ? ' selected' : ''}>${o}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('')}</div>`;
+  document.getElementById('er-editkey-card').classList.remove('hidden');
+  document.getElementById('er-editkey-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+document.getElementById('er-editkey-cancel').addEventListener('click', () => {
+  document.getElementById('er-editkey-card').classList.add('hidden');
+});
+
+document.getElementById('er-editkey-save').addEventListener('click', async () => {
+  const errEl = document.getElementById('er-editkey-error');
+  errEl.style.display = 'none';
+  if (!currentReport || !currentReport.raw_data) return;
+  const { students, choiceCounts } = currentReport.raw_data;
+
+  const selects = Array.from(document.querySelectorAll('.er-editkey-select'));
+  const letterSelections = selects.map(s => s.value);
+  if (letterSelections.some(v => !v)) {
+    errEl.textContent = 'اختر الإجابة الصحيحة لكل سؤال';
+    errEl.style.display = 'block';
+    return;
+  }
+  const keyRaw = buildManualKey(letterSelections, choiceCounts);
+  const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students });
+
+  const { error } = await sb.from('exam_reports').update({ key_raw: keyRaw, stats }).eq('id', currentReport.id);
+  if (error) { errEl.textContent = 'تعذر حفظ المفتاح الجديد: ' + error.message; errEl.style.display = 'block'; return; }
+
+  currentReport = { ...currentReport, key_raw: keyRaw, stats };
+  document.getElementById('er-editkey-card').classList.add('hidden');
+  showErTab('dist');
+  renderAllReports(stats);
+});
 
 document.getElementById('er-back-to-list').addEventListener('click', () => {
   document.getElementById('er-detail-view').classList.add('hidden');
