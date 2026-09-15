@@ -75,16 +75,25 @@ function computeChoiceCounts(itemCols, dataRows) {
   });
 }
 
-function letterFor(value, numChoices) {
+// بعض الملفات ترمّز أول اختيار بأعلى رقم (معكوس - الغالب بالمواد العربية)، وبعضها ترمّزه
+// بالرقم ١ عاديًا (المواد الإنجليزية غالبًا) - الاتجاه يُحدَّد بخيار "ترتيب الاختيارات"
+// بشاشة الرفع (افتراضيًا يُخمَّن من اسم المادة)، ونفس القيمة تُحفظ مع التقرير عشان تعديل
+// المفتاح لاحقًا يستخدم نفس الاتجاه.
+function letterFor(value, numChoices, reversed = true) {
   if (typeof value !== 'number' || value <= 0) return null;
-  const idx = numChoices - value;
+  const idx = reversed ? numChoices - value : value - 1;
   return ARABIC_LETTERS[idx] || ('اختيار ' + value);
 }
 // عكس letterFor: يحوّل الحرف المختار يدويًا (أ/ب/ج...) للقيمة الرقمية الخام المطابقة لترميز الملف
-function valueForLetter(letter, numChoices) {
+function valueForLetter(letter, numChoices, reversed = true) {
   const idx = ARABIC_LETTERS.indexOf(letter);
   if (idx === -1) return null;
-  return numChoices - idx;
+  return reversed ? numChoices - idx : idx + 1;
+}
+// تخمين مبدئي لاتجاه الترميز من اسم المادة - المواد اللي اسمها بحروف لاتينية (إنجليزي
+// غالبًا) الأرجح ترميزها عادي (غير معكوس)؛ غير كذا نفترض معكوس (المواد العربية)
+function guessReversedOrder(subjectName) {
+  return !/[A-Za-z]/.test(String(subjectName || ''));
 }
 
 /* يحوّل صفوف الشيت الخام (array of arrays، أول صف عناوين) لقائمة طلاب. الملفات عادة ما
@@ -137,8 +146,8 @@ export function parseSheetRows(rows) {
 }
 
 // يبني مصفوفة المفتاح الرقمية الخام من اختيارات الحروف اللي دخّلها المدير يدويًا لكل سؤال
-export function buildManualKey(letterSelections, choiceCounts) {
-  return letterSelections.map((letter, i) => valueForLetter(letter, choiceCounts[i]));
+export function buildManualKey(letterSelections, choiceCounts, reversed = true) {
+  return letterSelections.map((letter, i) => valueForLetter(letter, choiceCounts[i], reversed));
 }
 
 function mostCommon(arr) {
@@ -322,7 +331,8 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     document.getElementById('er-subject').value = parsedData.detected.subject || '';
     document.getElementById('er-grade').value = parsedData.detected.grade || '';
     document.getElementById('er-semester').value = '';
-    renderKeyForm(parsedData);
+    document.getElementById('er-reversed-order').checked = guessReversedOrder(parsedData.detected.subject);
+    renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
     document.getElementById('er-preview-card').classList.remove('hidden');
     document.getElementById('er-preview-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (e) {
@@ -332,12 +342,13 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
 });
 
 // يبني نموذج اختيار الإجابة الصحيحة لكل سؤال - قائمة منسدلة بعدد اختيارات ذلك السؤال بالضبط،
-// معبّاة مبدئيًا من صف النموذج لو انلقى بالملف
-function renderKeyForm(parsed) {
+// معبّاة مبدئيًا من صف النموذج لو انلقى بالملف. تُعاد كل مرة يتغيّر فيها خيار "ترتيب الاختيارات"
+// عشان الحروف المعروضة/المعبّأة تطابق الاتجاه المختار
+function renderKeyForm(parsed, reversed = true) {
   const el = document.getElementById('er-key-form');
   el.innerHTML = `<div class="er-key-grid">${parsed.choiceCounts.map((numChoices, i) => {
     const options = ARABIC_LETTERS.slice(0, numChoices);
-    const preselect = parsed.detectedKeyRaw ? letterFor(parsed.detectedKeyRaw[i], numChoices) : null;
+    const preselect = parsed.detectedKeyRaw ? letterFor(parsed.detectedKeyRaw[i], numChoices, reversed) : null;
     return `<div class="er-key-item">
       <label>سؤال ${i + 1}</label>
       <select class="er-key-select" data-item="${i}">
@@ -347,6 +358,11 @@ function renderKeyForm(parsed) {
     </div>`;
   }).join('')}</div>`;
 }
+
+document.getElementById('er-reversed-order').addEventListener('change', (e) => {
+  if (!parsedData) return;
+  renderKeyForm(parsedData, e.target.checked);
+});
 
 document.getElementById('er-cancel-btn').addEventListener('click', () => {
   parsedData = null;
@@ -368,7 +384,8 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     errEl.style.display = 'block';
     return;
   }
-  const keyRaw = buildManualKey(letterSelections, parsedData.choiceCounts);
+  const reversedOrder = document.getElementById('er-reversed-order').checked;
+  const keyRaw = buildManualKey(letterSelections, parsedData.choiceCounts, reversedOrder);
 
   const stats = computeExamStats({ ...parsedData, keyRaw });
   const { error } = await sb.from('exam_reports').insert({
@@ -381,8 +398,9 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     key_raw: keyRaw,
     stats,
     // نحفظ إجابات الطلاب الخام كمان (مو بس النتيجة المحسوبة) عشان لو المدير احتاج يعدّل
-    // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية
-    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts },
+    // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية - وكذلك اتجاه
+    // ترميز الاختيارات المستخدم عشان تعديل المفتاح لاحقًا يفهم نفس الحروف صح
+    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, reversedOrder },
     created_by: currentUserId,
   });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
@@ -465,11 +483,15 @@ document.getElementById('er-edit-key-btn').addEventListener('click', () => {
     document.getElementById('er-editkey-form').innerHTML = '';
     return;
   }
-  const { choiceCounts } = currentReport.raw_data;
+  const { choiceCounts, reversedOrder = true } = currentReport.raw_data;
   const el = document.getElementById('er-editkey-form');
-  el.innerHTML = `<div class="er-key-grid">${choiceCounts.map((numChoices, i) => {
+  el.innerHTML = `<label style="display:flex; align-items:center; gap:8px; font-size:12px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:9px 12px; margin-bottom:12px;">
+    <input type="checkbox" id="er-editkey-reversed" style="width:auto; margin:0;"${reversedOrder ? ' checked' : ''} />
+    <span>ترتيب رموز الاختيارات بالملف معكوس (بطّله إذا المادة إنجليزية أو النتائج غريبة)</span>
+  </label>
+  <div class="er-key-grid">${choiceCounts.map((numChoices, i) => {
     const options = ARABIC_LETTERS.slice(0, numChoices);
-    const current = letterFor(currentReport.key_raw[i], numChoices);
+    const current = letterFor(currentReport.key_raw[i], numChoices, reversedOrder);
     return `<div class="er-key-item">
       <label>سؤال ${i + 1}</label>
       <select class="er-editkey-select" data-item="${i}">
@@ -477,6 +499,14 @@ document.getElementById('er-edit-key-btn').addEventListener('click', () => {
       </select>
     </div>`;
   }).join('')}</div>`;
+  document.getElementById('er-editkey-reversed').addEventListener('change', (e) => {
+    const opts = ARABIC_LETTERS;
+    document.querySelectorAll('.er-editkey-select').forEach((sel, i) => {
+      const numChoices = choiceCounts[i];
+      const letter = letterFor(currentReport.key_raw[i], numChoices, e.target.checked);
+      sel.value = letter || opts[0];
+    });
+  });
   document.getElementById('er-editkey-card').classList.remove('hidden');
   document.getElementById('er-editkey-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
 });
@@ -498,13 +528,15 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
     errEl.style.display = 'block';
     return;
   }
-  const keyRaw = buildManualKey(letterSelections, choiceCounts);
+  const reversedOrder = document.getElementById('er-editkey-reversed').checked;
+  const keyRaw = buildManualKey(letterSelections, choiceCounts, reversedOrder);
   const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students });
+  const newRawData = { ...currentReport.raw_data, reversedOrder };
 
-  const { error } = await sb.from('exam_reports').update({ key_raw: keyRaw, stats }).eq('id', currentReport.id);
+  const { error } = await sb.from('exam_reports').update({ key_raw: keyRaw, stats, raw_data: newRawData }).eq('id', currentReport.id);
   if (error) { errEl.textContent = 'تعذر حفظ المفتاح الجديد: ' + error.message; errEl.style.display = 'block'; return; }
 
-  currentReport = { ...currentReport, key_raw: keyRaw, stats };
+  currentReport = { ...currentReport, key_raw: keyRaw, stats, raw_data: newRawData };
   document.getElementById('er-editkey-card').classList.add('hidden');
   showErTab('dist');
   renderAllReports(stats);
