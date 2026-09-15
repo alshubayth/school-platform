@@ -906,6 +906,81 @@
       </div>
     </div>
 
+    <div id="exam-reports-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-18">→ رجوع للرئيسية</span>
+
+      <!-- ===== قائمة التقارير المحفوظة + رفع تقرير جديد ===== -->
+      <div id="er-list-view">
+        <div class="form-card bud-section-card" style="background:var(--sand);">
+          <div class="bud-section-head">
+            <div class="bud-section-icon" style="background:var(--purple-light); color:var(--purple);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/></svg>
+            </div>
+            <div>
+              <h4>رفع نتائج اختبار جديد</h4>
+              <p>ملف إكسل فيه إجابات الطلاب (رقم الهوية، الاسم، الصف، الفصل، المادة، ثم عمود لكل سؤال) - ولازم يحتوي صف "النموذج" (الإجابة الصحيحة) برقم هوية كله أصفار</p>
+            </div>
+          </div>
+          <input type="file" id="er-file" accept=".xlsx,.xls" style="margin-bottom:12px;" />
+          <button class="btn-primary" id="er-analyze-btn" style="width:auto; padding:10px 18px;">تحليل الملف</button>
+          <div class="error-msg" id="er-analyze-error"></div>
+
+          <div id="er-preview-card" class="hidden" style="margin-top:18px; padding-top:16px; border-top:1px dashed var(--border);">
+            <div id="er-preview-summary" style="font-size:13px; margin-bottom:12px;"></div>
+            <div class="form-row">
+              <input type="text" id="er-title" placeholder="عنوان التقرير (مثال: رياضيات - ثاني متوسط - الفترة الأولى)" />
+              <input type="text" id="er-subject" placeholder="المادة" />
+            </div>
+            <div class="form-row">
+              <input type="text" id="er-grade" placeholder="الصف" />
+              <select id="er-semester">
+                <option value="">الفصل الدراسي...</option>
+                <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
+                <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
+              </select>
+            </div>
+            <button class="btn-primary" id="er-save-btn" style="width:auto; padding:10px 18px;">حفظ التقرير</button>
+            <button class="text-action-btn" id="er-cancel-btn" style="width:auto; padding:10px 14px;">إلغاء</button>
+            <div class="error-msg" id="er-save-error"></div>
+          </div>
+        </div>
+
+        <h4 style="margin:22px 0 12px; font-size:14px;">التقارير المحفوظة</h4>
+        <div id="er-saved-list"><div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div></div>
+      </div>
+
+      <!-- ===== تفاصيل تقرير محدد (٦ تقارير بتبويبات) ===== -->
+      <div id="er-detail-view" class="hidden">
+        <span class="back-link" id="er-back-to-list">→ رجوع لقائمة التقارير</span>
+        <div class="bud-head" style="margin-top:10px;">
+          <div class="bud-head-title">
+            <div class="bud-head-icon">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/></svg>
+            </div>
+            <div>
+              <h3 id="er-detail-title">-</h3>
+              <p id="er-detail-sub">-</p>
+            </div>
+          </div>
+          <div class="bud-tabs" id="er-tabs" role="tablist">
+            <button class="bud-tab active" id="er-tab-dist" type="button">التوزيع التكرارى</button>
+            <button class="bud-tab" id="er-tab-hist" type="button">تقدير الطالب</button>
+            <button class="bud-tab" id="er-tab-items" type="button">تحليل البنود</button>
+            <button class="bud-tab" id="er-tab-summary" type="button">تقرير موجز</button>
+            <button class="bud-tab" id="er-tab-itemstats" type="button">إحصاءات البنود</button>
+            <button class="bud-tab" id="er-tab-analysis" type="button">تحليل شامل</button>
+          </div>
+        </div>
+
+        <div class="bud-panel" id="er-panel-dist"></div>
+        <div class="bud-panel hidden" id="er-panel-hist"></div>
+        <div class="bud-panel hidden" id="er-panel-items"></div>
+        <div class="bud-panel hidden" id="er-panel-summary"></div>
+        <div class="bud-panel hidden" id="er-panel-itemstats"></div>
+        <div class="bud-panel hidden" id="er-panel-analysis"></div>
+      </div>
+    </div>
+
     <div id="schedule-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-11">→ رجوع للرئيسية</span>
 
