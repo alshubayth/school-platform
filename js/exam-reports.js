@@ -161,7 +161,7 @@ function mostCommon(arr) {
 /* =========================================================================
  * حساب كل الإحصاءات المطلوبة للتقارير الستة، من بيانات مُحلَّلة (parseSheetRows)
  * ========================================================================= */
-export function computeExamStats({ itemCount, keyRaw, choiceCounts, students }) {
+export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, reversedOrder = true }) {
   const n = students.length;
 
   const isCorrect = (ans, i) => ans[i] != null && ans[i] === keyRaw[i];
@@ -208,7 +208,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students }) 
   const itemStats = [];
   for (let i = 0; i < itemCount; i++) {
     const numChoices = choiceCounts[i];
-    const correctLetter = letterFor(keyRaw[i], numChoices);
+    const correctLetter = letterFor(keyRaw[i], numChoices, reversedOrder);
     const freqMap = new Map(); // key: label -> {count, isCorrect, sortVal}
     let correctCount = 0, notPresent = 0, multi = 0;
     students.forEach(s => {
@@ -216,7 +216,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students }) 
       let label, sortVal;
       if (v == null || v === -2) { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
       else if (v === -3) { label = 'متعدد'; sortVal = 999; multi++; }
-      else if (typeof v === 'number' && v > 0) { label = letterFor(v, numChoices); sortVal = v; }
+      else if (typeof v === 'number' && v > 0) { label = letterFor(v, numChoices, reversedOrder); sortVal = v; }
       else { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
       if (!freqMap.has(label)) freqMap.set(label, { label, count: 0, isCorrect: label === correctLetter, sortVal });
       freqMap.get(label).count++;
@@ -387,7 +387,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   const reversedOrder = document.getElementById('er-reversed-order').checked;
   const keyRaw = buildManualKey(letterSelections, parsedData.choiceCounts, reversedOrder);
 
-  const stats = computeExamStats({ ...parsedData, keyRaw });
+  const stats = computeExamStats({ ...parsedData, keyRaw, reversedOrder });
   const { error } = await sb.from('exam_reports').insert({
     title,
     subject_name: document.getElementById('er-subject').value.trim() || null,
@@ -530,7 +530,7 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
   }
   const reversedOrder = document.getElementById('er-editkey-reversed').checked;
   const keyRaw = buildManualKey(letterSelections, choiceCounts, reversedOrder);
-  const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students });
+  const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students, reversedOrder });
   const newRawData = { ...currentReport.raw_data, reversedOrder };
 
   const { error } = await sb.from('exam_reports').update({ key_raw: keyRaw, stats, raw_data: newRawData }).eq('id', currentReport.id);
