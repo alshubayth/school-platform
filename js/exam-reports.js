@@ -39,6 +39,7 @@ function pct(n) { return fmt2(n) + '٪'; }
 export function detectColumns(headerRow) {
   const col = {};
   const items = [];
+  const itemTypes = []; // 'tf' (صح وخطأ - اختيارين بس) أو 'mcq' (اختيار متعدد عادي) - بالتوازي مع items
   (headerRow || []).forEach((cell, idx) => {
     const c = String(cell == null ? '' : cell).trim();
     if (!c) return;
@@ -47,9 +48,10 @@ export function detectColumns(headerRow) {
     else if (col.grade == null && c.includes('صف')) col.grade = idx;
     else if (col.section == null && c === 'الفصل') col.section = idx;
     else if (col.subject == null && c.includes('اسم') && c.includes('ماد')) col.subject = idx;
-    else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال') || /متعدد\s*\d+$/.test(c)) items.push(idx);
+    else if (c.includes('صح') && c.includes('خطأ')) { items.push(idx); itemTypes.push('tf'); }
+    else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال') || /متعدد\s*\d+$/.test(c)) { items.push(idx); itemTypes.push('mcq'); }
   });
-  return { col, items };
+  return { col, items, itemTypes };
 }
 
 // بعض الملفات (نادرًا) يجي فيها صف "نموذج" جاهز برقم هوية أو اسم كله أصفار - لو انلقى
@@ -63,10 +65,11 @@ function isKeyRow(row) {
   return isAllZeros(row.id) || isAllZeros(row.name);
 }
 
-// يحسب عدد الاختيارات الفعلي لكل بند (أكبر قيمة موجبة ظهرت فيه، بحد أدنى ٣)
-function computeChoiceCounts(itemCols, dataRows) {
+// يحسب عدد الاختيارات الفعلي لكل بند (أكبر قيمة موجبة ظهرت فيه) - بحد أدنى ٢ لأسئلة
+// "صح وخطأ" (اختيارين بس) وبحد أدنى ٣ لأسئلة الاختيار المتعدد العادية
+function computeChoiceCounts(itemCols, dataRows, itemTypes = []) {
   return itemCols.map((_, i) => {
-    let max = 3;
+    let max = itemTypes[i] === 'tf' ? 2 : 3;
     dataRows.forEach(r => {
       const v = r.answers[i];
       if (typeof v === 'number' && v > 0 && v > max) max = v;
@@ -103,7 +106,7 @@ function guessReversedOrder(subjectName) {
 export function parseSheetRows(rows) {
   if (!rows || rows.length < 2) throw new Error('الملف فاضي أو ما فيه بيانات كافية');
   const header = rows[0];
-  const { col, items } = detectColumns(header);
+  const { col, items, itemTypes } = detectColumns(header);
   if (col.id == null && col.name == null) throw new Error('ما لقيت عمود "StudentID" (رقم الهوية) ولا عمود اسم الطالب بالملف');
   if (items.length === 0) throw new Error('ما لقيت أعمدة الأسئلة (اختيار متعدد) بالملف');
 
@@ -131,11 +134,12 @@ export function parseSheetRows(rows) {
   const students = allRows.filter(r => !isKeyRow(r));
   if (students.length === 0) throw new Error('ما فيه طلاب بالملف');
 
-  const choiceCounts = computeChoiceCounts(items, students.concat(detectedKeyRow ? [detectedKeyRow] : []));
+  const choiceCounts = computeChoiceCounts(items, students.concat(detectedKeyRow ? [detectedKeyRow] : []), itemTypes);
 
   return {
     itemCount: items.length,
     choiceCounts,
+    itemTypes,
     students,
     detectedKeyRaw: detectedKeyRow ? detectedKeyRow.answers : null,
     detected: {
@@ -161,7 +165,7 @@ function mostCommon(arr) {
 /* =========================================================================
  * حساب كل الإحصاءات المطلوبة للتقارير الستة، من بيانات مُحلَّلة (parseSheetRows)
  * ========================================================================= */
-export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, reversedOrder = true }) {
+export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, reversedOrder = true, itemTypes = [] }) {
   const n = students.length;
 
   const isCorrect = (ans, i) => ans[i] != null && ans[i] === keyRaw[i];
@@ -206,6 +210,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
   const lowerSet = new Set(sortedByTotalDesc.slice(-k27).map(x => x.idx));
 
   const itemStats = [];
+  let mcqSeq = 0, tfSeq = 0;
   for (let i = 0; i < itemCount; i++) {
     const numChoices = choiceCounts[i];
     const correctLetter = letterFor(keyRaw[i], numChoices, reversedOrder);
@@ -249,7 +254,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
 
     itemStats.push({
       num: i + 1,
-      label: 'اختيار متعدد' + (i + 1),
+      label: itemTypes[i] === 'tf' ? 'صح وخطأ' + (++tfSeq) : 'اختيار متعدد' + (++mcqSeq),
       correctLetter,
       correctCount, notPresent, multi,
       wrongCount: n - correctCount - notPresent - multi,
@@ -401,7 +406,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     // نحفظ إجابات الطلاب الخام كمان (مو بس النتيجة المحسوبة) عشان لو المدير احتاج يعدّل
     // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية - وكذلك اتجاه
     // ترميز الاختيارات المستخدم عشان تعديل المفتاح لاحقًا يفهم نفس الحروف صح
-    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, reversedOrder },
+    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder },
     created_by: currentUserId,
   });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
@@ -520,7 +525,7 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
   const errEl = document.getElementById('er-editkey-error');
   errEl.style.display = 'none';
   if (!currentReport || !currentReport.raw_data) return;
-  const { students, choiceCounts } = currentReport.raw_data;
+  const { students, choiceCounts, itemTypes = [] } = currentReport.raw_data;
 
   const selects = Array.from(document.querySelectorAll('.er-editkey-select'));
   const letterSelections = selects.map(s => s.value);
@@ -531,7 +536,7 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
   }
   const reversedOrder = document.getElementById('er-editkey-reversed').checked;
   const keyRaw = buildManualKey(letterSelections, choiceCounts, reversedOrder);
-  const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students, reversedOrder });
+  const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students, reversedOrder, itemTypes });
   const newRawData = { ...currentReport.raw_data, reversedOrder };
 
   const { error } = await sb.from('exam_reports').update({ key_raw: keyRaw, stats, raw_data: newRawData }).eq('id', currentReport.id);
