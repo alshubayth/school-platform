@@ -64,6 +64,7 @@ const icons = {
   substitutes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h13l-3-3"/><path d="M20 17H7l3 3"/></svg>',
   computerlab: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
   files: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>',
+  examreports: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/><path d="M8 16.5h3l1.2 2.4 1.3-4.8 1 2.4h2"/></svg>',
 };
 
 // تجميع الأقسام لأربع مجموعات بالهيدر العلوي وبشبكة الرئيسية بدل عرضها كلها بصف واحد طويل
@@ -86,6 +87,7 @@ export const tiles = [
   { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
   { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students' },
+  { key: 'exam-reports', icon: icons.examreports, title: 'تقارير الاختبارات', desc: 'تحليل نتائج الاختبارات وبنودها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green', group: 'admin' },
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
   { key: 'substitutes', icon: icons.substitutes, title: 'بدلاء اليوم', desc: 'تعويض غياب المعلمين وتبديل الحصص', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
@@ -326,6 +328,7 @@ export function hideAllModules() {
   document.getElementById('duty-module').classList.add('hidden');
   document.getElementById('exams-module').classList.add('hidden');
   document.getElementById('exam-tracking-module').classList.add('hidden');
+  document.getElementById('exam-reports-module').classList.add('hidden');
   document.getElementById('schedule-module').classList.add('hidden');
   document.getElementById('followups-module').classList.add('hidden');
   document.getElementById('budget-module').classList.add('hidden');
@@ -387,6 +390,10 @@ export async function openTile(key, title) {
     document.getElementById('exam-tracking-module').classList.remove('hidden');
     const { loadExamTrackingTile } = await import('./exam-tracking.js');
     loadExamTrackingTile();
+  } else if (key === 'exam-reports') {
+    document.getElementById('exam-reports-module').classList.remove('hidden');
+    const { loadExamReportsModule } = await import('./exam-reports.js');
+    loadExamReportsModule();
   } else if (key === 'schedule') {
     document.getElementById('schedule-module').classList.remove('hidden');
     const [{ loadScheduleModule }] = await Promise.all([import('./schedule.js'), import('./schedule-pdf.js')]);
