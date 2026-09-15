@@ -1,5 +1,5 @@
 import { sb, currentUserId, backToTiles } from './core.js';
-import { loadXLSX, loadJSZip, loadDocxTemplater } from './lib-loader.js';
+import { loadXLSX, loadJSZip } from './lib-loader.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
 
@@ -959,12 +959,20 @@ async function exportTopBottomExcel(s) {
 }
 
 /* ---------- تصدير "الخطة العلاجية (الجماعية)" - ملف وورد منفصل لكل فصل فيه طلاب ضعاف ----------
- * نستخدم نفس ملف النموذج الرسمي الأصلي (.docx) بالضبط كقالب - محفوظ بمسار templates/remedial-plan-template.docx
- * ومزروع فيه حقول {SCHOOL} {SUBJECT} {GRADE} {SECTION} {DATE} {NAMES} بمكانها الصحيح بالجدول، فتبقى كل
- * التنسيقات (الخطوط، الحدود، خانات الاختيار، نص رأي المعلم...) مطابقة تمامًا للملف الأصلي بدون أي تغيير -
- * فقط الحقول الخمسة هذي تُملأ. نصدّر ملف .docx حقيقي واحد لكل فصل، مضغوطين بملف zip واحد. */
+ * نستخدم نفس ملف النموذج الرسمي الأصلي (.docx) بالضبط كقالب - محفوظ بمسار js/templates/remedial-plan-template.docx
+ * ومزروع فيه حقول {SCHOOL} {SUBJECT} {GRADE} {SECTION} {DATE} {NAMES} بمكانها الصحيح بالجدول (كل حقل نص واحد
+ * متواصل بعنصر <w:t> واحد، تأكدنا من كذا وقت بناء القالب). نعبّيهم باستبدال نص مباشر داخل word/document.xml
+ * (بمكتبة JSZip بس، بدون أي مكتبة خارجية زيادة) فتبقى كل التنسيقات (الخطوط، الحدود، خانات الاختيار، نص
+ * رأي المعلم...) مطابقة تمامًا للملف الأصلي بدون أي تغيير. نصدّر ملف .docx حقيقي واحد لكل فصل، مضغوطين
+ * بملف zip واحد. */
 const SCHOOL_NAME = 'مدرسة المروج المتوسطة';
 const REMEDIAL_TEMPLATE_URL = new URL('js/templates/remedial-plan-template.docx', window.location.href).href;
+
+function escXml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
 
 async function exportRemedialPlans(weakStudents) {
   const errEl = document.getElementById('er-remedial-error');
@@ -974,9 +982,9 @@ async function exportRemedialPlans(weakStudents) {
     return;
   }
   try {
-    await Promise.all([loadJSZip(), loadDocxTemplater()]);
+    await loadJSZip();
     const templateResp = await fetch(REMEDIAL_TEMPLATE_URL);
-    if (!templateResp.ok) throw new Error('تعذر تحميل نموذج الخطة العلاجية (templates/remedial-plan-template.docx) - تأكد إنه مرفوع على الموقع.');
+    if (!templateResp.ok) throw new Error('تعذر تحميل نموذج الخطة العلاجية (js/templates/remedial-plan-template.docx) - تأكد إنه مرفوع على الموقع بنفس المسار.');
     const templateBuf = await templateResp.arrayBuffer();
 
     const subject = currentReport ? currentReport.subject_name : '';
@@ -994,24 +1002,24 @@ async function exportRemedialPlans(weakStudents) {
     const sortedSections = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b, 'ar', { numeric: true }));
 
     const zip = new JSZip();
-    sortedSections.forEach(section => {
+    for (const section of sortedSections) {
       const sectionLabel = section === 'بدون فصل محدد' ? section : ('الفصل ' + section);
       const names = groups.get(section);
       const namesText = names.map((n, i) => `${i + 1}. ${n}`).join('، ');
 
-      const pzip = new window.PizZip(templateBuf);
-      const doc = new window.docxtemplater(pzip, { paragraphLoop: true, linebreaks: true });
-      doc.render({
-        SCHOOL: SCHOOL_NAME,
-        SUBJECT: subject || '-',
-        GRADE: grade || '-',
-        SECTION: sectionLabel,
-        DATE: dateStr,
-        NAMES: namesText,
-      });
-      const out = doc.getZip().generate({ type: 'arraybuffer' });
+      const docZip = await JSZip.loadAsync(templateBuf);
+      let xml = await docZip.file('word/document.xml').async('string');
+      xml = xml
+        .replace(/\{SCHOOL\}/g, escXml(SCHOOL_NAME))
+        .replace(/\{SUBJECT\}/g, escXml(subject || '-'))
+        .replace(/\{GRADE\}/g, escXml(grade || '-'))
+        .replace(/\{SECTION\}/g, escXml(sectionLabel))
+        .replace(/\{DATE\}/g, escXml(dateStr))
+        .replace(/\{NAMES\}/g, escXml(namesText));
+      docZip.file('word/document.xml', xml);
+      const out = await docZip.generateAsync({ type: 'arraybuffer' });
       zip.file(`الخطة_العلاجية_الجماعية_${sectionLabel}.docx`, out);
-    });
+    }
     const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
