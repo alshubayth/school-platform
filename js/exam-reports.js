@@ -1,0 +1,563 @@
+import { sb, currentUserId, backToTiles } from './core.js';
+import { loadXLSX } from './lib-loader.js';
+
+document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
+
+const ARABIC_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز'];
+const GRADE_BANDS = [
+  { grade: 'A', min: 90, max: 100 },
+  { grade: 'B', min: 80, max: 89.99 },
+  { grade: 'C', min: 70, max: 79.99 },
+  { grade: 'D', min: 60, max: 69.99 },
+  { grade: 'F', min: 0, max: 59.99 },
+];
+const RELIABILITY_BANDS = [
+  { label: 'ضعيف', min: -Infinity, max: 0.699999 },
+  { label: 'متوسط', min: 0.70, max: 0.799999 },
+  { label: 'جيد', min: 0.80, max: 0.899999 },
+  { label: 'ممتاز', min: 0.90, max: Infinity },
+];
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+function fmt1(n) { return (Math.round((n || 0) * 10) / 10).toLocaleString('ar-SA'); }
+function fmt2(n) { return (Math.round((n || 0) * 100) / 100).toLocaleString('ar-SA'); }
+function pct(n) { return fmt2(n) + '٪'; }
+
+/* =========================================================================
+ * تحليل ملف الإكسل: كشف الأعمدة، فصل صف "النموذج" (الإجابة الصحيحة)، وتحويل
+ * كل الرموز الرقمية الخام لكل بند (سؤال) إلى حروف عربية للعرض.
+ *
+ * ملاحظة مهمة عن ترميز الاختيارات: القيم الرقمية بملف الإكسل معكوسة عن ترتيب
+ * الحروف - أعلى رقم = "أ" (أول اختيار) وأقل رقم = آخر حرف مستخدم. مثلاً لسؤال
+ * بثلاث اختيارات: ١="ج"، ٢="ب"، ٣="أ". كذلك: -2 تعني "لا توجد استجابة"،
+ * -3 تعني "متعدد" (اختار أكثر من إجابة). هذا مؤكد من مطابقة نتائج حقيقية.
+ * ========================================================================= */
+export function detectColumns(headerRow) {
+  const col = {};
+  const items = [];
+  (headerRow || []).forEach((cell, idx) => {
+    const c = String(cell == null ? '' : cell).trim();
+    if (!c) return;
+    if (col.id == null && (c === 'StudentID' || c.toLowerCase() === 'studentid' || (c.includes('رقم') && c.includes('هوي')))) col.id = idx;
+    else if (col.name == null && c.includes('اسم') && c.includes('طالب')) col.name = idx;
+    else if (col.grade == null && c.includes('صف')) col.grade = idx;
+    else if (col.section == null && c === 'الفصل') col.section = idx;
+    else if (col.subject == null && c.includes('اسم') && c.includes('ماد')) col.subject = idx;
+    else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال')) items.push(idx);
+  });
+  return { col, items };
+}
+
+function isKeyRowId(idVal) {
+  const s = String(idVal == null ? '' : idVal).trim();
+  return s.length > 0 && /^0+$/.test(s);
+}
+
+// يحسب عدد الاختيارات الفعلي لكل بند (أكبر قيمة موجبة ظهرت فيه، بحد أدنى ٣)
+function computeChoiceCounts(itemCols, dataRows) {
+  return itemCols.map((_, i) => {
+    let max = 3;
+    dataRows.forEach(r => {
+      const v = r.answers[i];
+      if (typeof v === 'number' && v > 0 && v > max) max = v;
+    });
+    return max;
+  });
+}
+
+function letterFor(value, numChoices) {
+  if (typeof value !== 'number' || value <= 0) return null;
+  const idx = numChoices - value;
+  return ARABIC_LETTERS[idx] || ('اختيار ' + value);
+}
+
+/* يحوّل صفوف الشيت الخام (array of arrays، أول صف عناوين) إلى: صف "النموذج" (المفتاح)،
+ * وقائمة الطلاب، مع رفض واضح لو ما لقينا صف المفتاح أو كان الملف فاضي. */
+export function parseSheetRows(rows) {
+  if (!rows || rows.length < 2) throw new Error('الملف فاضي أو ما فيه بيانات كافية');
+  const header = rows[0];
+  const { col, items } = detectColumns(header);
+  if (col.id == null) throw new Error('ما لقيت عمود "StudentID" (رقم الهوية) بالملف');
+  if (items.length === 0) throw new Error('ما لقيت أعمدة الأسئلة (اختيار متعدد) بالملف');
+
+  const allRows = rows.slice(1)
+    .filter(r => r && r[col.id] != null && String(r[col.id]).trim() !== '')
+    .map(r => ({
+      id: String(r[col.id]).trim(),
+      name: col.name != null ? String(r[col.name] == null ? '' : r[col.name]).trim() : '',
+      grade: col.grade != null ? String(r[col.grade] == null ? '' : r[col.grade]).trim() : '',
+      section: col.section != null ? String(r[col.section] == null ? '' : r[col.section]).trim() : '',
+      subject: col.subject != null ? String(r[col.subject] == null ? '' : r[col.subject]).trim() : '',
+      answers: items.map(ci => {
+        const v = r[ci];
+        if (v === '' || v == null) return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+    }));
+
+  const keyRows = allRows.filter(r => isKeyRowId(r.id));
+  if (keyRows.length === 0) {
+    throw new Error('ما لقيت صف "النموذج" (الإجابة الصحيحة) - لازم يكون رقم الهوية له كله أصفار (مثال: 0000000000)');
+  }
+  const keyRow = keyRows[0];
+  const students = allRows.filter(r => !isKeyRowId(r.id));
+  if (students.length === 0) throw new Error('ما فيه طلاب بالملف غير صف النموذج');
+
+  const choiceCounts = computeChoiceCounts(items, students.concat([keyRow]));
+
+  return {
+    itemCount: items.length,
+    keyRaw: keyRow.answers,
+    choiceCounts,
+    students,
+    detected: {
+      subject: students.find(s => s.subject)?.subject || '',
+      grade: mostCommon(students.map(s => s.grade).filter(Boolean)) || '',
+    },
+  };
+}
+
+function mostCommon(arr) {
+  const counts = new Map();
+  arr.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
+  let best = null, bestN = 0;
+  counts.forEach((n, v) => { if (n > bestN) { best = v; bestN = n; } });
+  return best;
+}
+
+/* =========================================================================
+ * حساب كل الإحصاءات المطلوبة للتقارير الستة، من بيانات مُحلَّلة (parseSheetRows)
+ * ========================================================================= */
+export function computeExamStats({ itemCount, keyRaw, choiceCounts, students }) {
+  const n = students.length;
+
+  const isCorrect = (ans, i) => ans[i] != null && ans[i] === keyRaw[i];
+  const totals = students.map(s => {
+    let t = 0;
+    for (let i = 0; i < itemCount; i++) if (isCorrect(s.answers, i)) t++;
+    return t;
+  });
+
+  const mean = totals.reduce((a, b) => a + b, 0) / n;
+  const sorted = totals.slice().sort((a, b) => a - b);
+  const median = n % 2 === 1 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  const high = Math.max(...totals);
+  const low = Math.min(...totals);
+  const variance = totals.reduce((s, t) => s + (t - mean) * (t - mean), 0) / n;
+  const sd = Math.sqrt(variance);
+  const meanPct = itemCount ? (mean / itemCount) * 100 : 0;
+
+  // ---- تقرير ١: التوزيع التكراري للصف (A-F) ----
+  const gradeDistribution = GRADE_BANDS.map(b => {
+    const rawMin = (b.min / 100) * itemCount;
+    const rawMax = (b.max / 100) * itemCount;
+    const freq = totals.filter(t => {
+      const p = itemCount ? (t / itemCount) * 100 : 0;
+      return p >= b.min && p <= b.max;
+    }).length;
+    return { grade: b.grade, pctMin: b.min, pctMax: b.max, rawMin, rawMax, freq, freqPct: n ? (freq / n) * 100 : 0 };
+  });
+
+  // ---- تقرير ٢: الرسم البياني لتقدير الطالب (10 فئات بالدرجة المئوية) ----
+  const scoreHistogram = Array.from({ length: 10 }, (_, i) => ({ label: String((i + 1) * 10), count: 0 }));
+  totals.forEach(t => {
+    const p = itemCount ? (t / itemCount) * 100 : 0;
+    const idx = Math.min(9, Math.floor(p / 10));
+    scoreHistogram[idx].count++;
+  });
+
+  // ---- إحصاءات كل بند: نسبة الصواب، تكرارات كل اختيار، ثنائي التسلسل النقطي، أعلى/أدنى ٢٧٪ ----
+  const k27 = Math.max(1, Math.round(n * 0.27));
+  const sortedByTotalDesc = students.map((s, idx) => ({ idx, total: totals[idx] })).sort((a, b) => b.total - a.total);
+  const upperSet = new Set(sortedByTotalDesc.slice(0, k27).map(x => x.idx));
+  const lowerSet = new Set(sortedByTotalDesc.slice(-k27).map(x => x.idx));
+
+  const itemStats = [];
+  for (let i = 0; i < itemCount; i++) {
+    const numChoices = choiceCounts[i];
+    const correctLetter = letterFor(keyRaw[i], numChoices);
+    const freqMap = new Map(); // key: label -> {count, isCorrect, sortVal}
+    let correctCount = 0, notPresent = 0, multi = 0;
+    students.forEach(s => {
+      const v = s.answers[i];
+      let label, sortVal;
+      if (v == null || v === -2) { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
+      else if (v === -3) { label = 'متعدد'; sortVal = 999; multi++; }
+      else if (typeof v === 'number' && v > 0) { label = letterFor(v, numChoices); sortVal = v; }
+      else { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
+      if (!freqMap.has(label)) freqMap.set(label, { label, count: 0, isCorrect: label === correctLetter, sortVal });
+      freqMap.get(label).count++;
+      if (v === keyRaw[i]) correctCount++;
+    });
+    const choices = Array.from(freqMap.values())
+      .sort((a, b) => a.sortVal - b.sortVal)
+      .map(c => ({ ...c, pct: n ? (c.count / n) * 100 : 0 }));
+
+    const correctPct = n ? (correctCount / n) * 100 : 0;
+    const mask = students.map(s => (isCorrect(s.answers, i) ? 1 : 0));
+    const p = correctCount / n, q = 1 - p;
+    const m1vals = [], m0vals = [];
+    mask.forEach((m, si) => (m ? m1vals : m0vals).push(totals[si]));
+    const avg = arr => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+    const m1 = avg(m1vals), m0 = avg(m0vals);
+    const pointBiserial = sd > 0 ? ((m1 - m0) / sd) * Math.sqrt(p * q) : 0;
+
+    let upperCorrect = 0, lowerCorrect = 0;
+    students.forEach((s, si) => {
+      if (upperSet.has(si) && isCorrect(s.answers, i)) upperCorrect++;
+      if (lowerSet.has(si) && isCorrect(s.answers, i)) lowerCorrect++;
+    });
+    const upper27 = (upperCorrect / k27) * 100;
+    const lower27 = (lowerCorrect / k27) * 100;
+
+    const wrongChoices = choices.filter(c => !c.isCorrect && c.label !== 'لا توجد استجابة' && c.label !== 'متعدد');
+    const topWrong = wrongChoices.reduce((best, c) => (!best || c.count > best.count ? c : best), null);
+    const flagged = !!(topWrong && topWrong.count > correctCount);
+
+    itemStats.push({
+      num: i + 1,
+      label: 'اختيار متعدد' + (i + 1),
+      correctLetter,
+      correctCount, notPresent, multi,
+      wrongCount: n - correctCount - notPresent - multi,
+      correctPct, choices,
+      pointBiserial, upper27, lower27, flagged, topWrong: topWrong ? topWrong.label : null,
+    });
+  }
+
+  const sumPQ = itemStats.reduce((s, it) => {
+    const p = it.correctCount / n;
+    return s + p * (1 - p);
+  }, 0);
+  const kr20 = itemCount > 1 && variance > 0 ? (itemCount / (itemCount - 1)) * (1 - sumPQ / variance) : 0;
+  const reliabilityBand = (RELIABILITY_BANDS.find(b => kr20 >= b.min && kr20 <= b.max) || RELIABILITY_BANDS[0]).label;
+
+  const hardest = itemStats.slice().sort((a, b) => a.correctPct - b.correctPct).slice(0, Math.min(10, itemCount));
+  const easiest = itemStats.slice().sort((a, b) => b.correctPct - a.correctPct).slice(0, Math.min(10, itemCount));
+  const toReview = itemStats.filter(it => it.flagged);
+
+  const lowestStudents = students.filter((s, idx) => totals[idx] === low).map(s => ({ id: s.id, name: s.name }));
+  const highestStudents = students.filter((s, idx) => totals[idx] === high).map(s => ({ id: s.id, name: s.name }));
+
+  return {
+    n, itemCount, mean, median, high, low, range: high - low, sd, meanPct, kr20, reliabilityBand,
+    gradeDistribution, scoreHistogram, itemStats, hardest, easiest, toReview, lowestStudents, highestStudents,
+  };
+}
+
+/* =========================================================================
+ * واجهة الرفع والتحليل
+ * ========================================================================= */
+let parsedData = null; // { itemCount, keyRaw, choiceCounts, students, detected }
+let currentReport = null; // آخر تقرير محفوظ تم فتحه بشاشة التفاصيل
+
+export async function loadExamReportsModule() {
+  document.getElementById('er-detail-view').classList.add('hidden');
+  document.getElementById('er-list-view').classList.remove('hidden');
+  document.getElementById('er-preview-card').classList.add('hidden');
+  document.getElementById('er-file').value = '';
+  parsedData = null;
+  await loadSavedList();
+}
+
+document.getElementById('er-analyze-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('er-analyze-error');
+  errEl.style.display = 'none';
+  const file = document.getElementById('er-file').files[0];
+  if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
+
+  try {
+    await loadXLSX();
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    let rows = [];
+    wb.SheetNames.forEach(name => {
+      const sheet = wb.Sheets[name];
+      rows = rows.concat(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
+    });
+    parsedData = parseSheetRows(rows);
+
+    document.getElementById('er-preview-summary').innerHTML =
+      `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال، وتم اكتشاف صف "النموذج" (الإجابة الصحيحة) بنجاح ✓`;
+    document.getElementById('er-title').value = '';
+    document.getElementById('er-subject').value = parsedData.detected.subject || '';
+    document.getElementById('er-grade').value = parsedData.detected.grade || '';
+    document.getElementById('er-semester').value = '';
+    document.getElementById('er-preview-card').classList.remove('hidden');
+    document.getElementById('er-preview-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    errEl.textContent = e.message || 'تعذر تحليل الملف';
+    errEl.style.display = 'block';
+  }
+});
+
+document.getElementById('er-cancel-btn').addEventListener('click', () => {
+  parsedData = null;
+  document.getElementById('er-preview-card').classList.add('hidden');
+  document.getElementById('er-file').value = '';
+});
+
+document.getElementById('er-save-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('er-save-error');
+  errEl.style.display = 'none';
+  if (!parsedData) { errEl.textContent = 'حلّل الملف أولاً'; errEl.style.display = 'block'; return; }
+  const title = document.getElementById('er-title').value.trim();
+  if (!title) { errEl.textContent = 'اكتب عنوان للتقرير'; errEl.style.display = 'block'; return; }
+
+  const stats = computeExamStats(parsedData);
+  const { error } = await sb.from('exam_reports').insert({
+    title,
+    subject_name: document.getElementById('er-subject').value.trim() || null,
+    grade_level: document.getElementById('er-grade').value.trim() || null,
+    semester: document.getElementById('er-semester').value || null,
+    item_count: parsedData.itemCount,
+    students_count: parsedData.students.length,
+    key_raw: parsedData.keyRaw,
+    stats,
+    created_by: currentUserId,
+  });
+  if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
+
+  parsedData = null;
+  document.getElementById('er-preview-card').classList.add('hidden');
+  document.getElementById('er-file').value = '';
+  await loadSavedList();
+});
+
+async function loadSavedList() {
+  const listEl = document.getElementById('er-saved-list');
+  const { data, error } = await sb.from('exam_reports')
+    .select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at')
+    .order('created_at', { ascending: false });
+  if (error) { listEl.innerHTML = '<p style="color:var(--danger); font-size:12.5px;">تعذر تحميل التقارير</p>'; return; }
+  if (!data || data.length === 0) {
+    listEl.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه تقارير محفوظة بعد</p></div>';
+    return;
+  }
+  listEl.innerHTML = data.map(r => `
+    <div class="form-card" data-id="${r.id}" style="margin-bottom:8px; padding:12px 14px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+      <div>
+        <strong>${esc(r.title)}</strong>
+        <div style="font-size:11.5px; color:var(--slate); margin-top:4px;">${esc(r.subject_name || '-')} — ${esc(r.grade_level || '-')} — ${esc(r.semester || '-')} — ${r.students_count} طالب — ${r.item_count} سؤال</div>
+      </div>
+      <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:14px; padding:2px 8px;">✕</button>
+    </div>`).join('');
+
+  listEl.querySelectorAll('[data-id]').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.er-delete-btn')) return;
+      openReport(card.dataset.id);
+    });
+  });
+  listEl.querySelectorAll('.er-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('متأكد تبي تحذف هذا التقرير؟')) return;
+      await sb.from('exam_reports').delete().eq('id', btn.dataset.id);
+      await loadSavedList();
+    });
+  });
+}
+
+async function openReport(id) {
+  const { data, error } = await sb.from('exam_reports').select('*').eq('id', id).single();
+  if (error || !data) { alert('تعذر فتح التقرير'); return; }
+  currentReport = data;
+  document.getElementById('er-list-view').classList.add('hidden');
+  document.getElementById('er-detail-view').classList.remove('hidden');
+  document.getElementById('er-detail-title').textContent = data.title;
+  document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`;
+  showErTab('dist');
+  renderAllReports(data.stats);
+}
+
+document.getElementById('er-back-to-list').addEventListener('click', () => {
+  document.getElementById('er-detail-view').classList.add('hidden');
+  document.getElementById('er-list-view').classList.remove('hidden');
+});
+
+const ER_TABS = ['dist', 'hist', 'items', 'summary', 'itemstats', 'analysis'];
+function showErTab(tab) {
+  ER_TABS.forEach(t => {
+    document.getElementById(`er-tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`er-panel-${t}`).classList.toggle('hidden', t !== tab);
+  });
+}
+ER_TABS.forEach(t => document.getElementById(`er-tab-${t}`).addEventListener('click', () => showErTab(t)));
+
+/* =========================================================================
+ * عرض التقارير الستة
+ * ========================================================================= */
+function statBox(label, value) {
+  return `<div class="stat-card compact"><div class="body"><div class="label">${esc(label)}</div><div class="value" style="font-size:16px;">${value}</div></div></div>`;
+}
+
+function summaryStatsGrid(s) {
+  return `<div class="stat-grid compact-grid" style="grid-template-columns:repeat(3,1fr);">
+    ${statBox('عدد الطلاب', s.n)}
+    ${statBox('أعلى درجة', fmt1(s.high))}
+    ${statBox('أقل درجة', fmt1(s.low))}
+    ${statBox('متوسط الدرجة', fmt2(s.mean))}
+    ${statBox('الدرجة الوسيطة', fmt1(s.median))}
+    ${statBox('نطاق الدرجات', fmt1(s.range))}
+    ${statBox('الانحراف المعياري', fmt2(s.sd))}
+    ${statBox('معامل الثبات (KR20)', fmt2(s.kr20))}
+    ${statBox('متوسط الدرجة %', pct(s.meanPct))}
+  </div>`;
+}
+
+function renderAllReports(s) {
+  renderDist(s);
+  renderHist(s);
+  renderItems(s);
+  renderSummary(s);
+  renderItemStats(s);
+  renderAnalysis(s);
+}
+
+function renderDist(s) {
+  const el = document.getElementById('er-panel-dist');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">تقرير التوزيع التكراري للصف <span style="font-size:12.5px; color:var(--slate); font-weight:400;">متوسط الدرجة% ${pct(s.meanPct)}</span></h4>
+    <div style="overflow-x:auto;"><table class="er-table"><thead><tr>
+      <th>التقدير</th><th>الدرجة المئوية</th><th>الدرجة الخام</th><th>التكرار</th><th>النسبة المئوية</th>
+    </tr></thead><tbody>
+      ${s.gradeDistribution.map(g => `<tr>
+        <td><span class="badge badge-gray">${g.grade}</span></td>
+        <td>${fmt1(g.pctMin)} - ${fmt2(g.pctMax)}</td>
+        <td>${fmt2(g.rawMin)} - ${fmt2(g.rawMax)}</td>
+        <td>${g.freq}</td>
+        <td>${pct(g.freqPct)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>
+    <canvas id="er-dist-chart" height="90" style="margin-top:18px;"></canvas>`;
+  drawBarChart('er-dist-chart', s.gradeDistribution.map(g => g.grade), s.gradeDistribution.map(g => g.freq), 'التكرار');
+}
+
+function renderHist(s) {
+  const el = document.getElementById('er-panel-hist');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">الرسم البياني لتقدير الطالب</h4>
+    ${summaryStatsGrid(s)}
+    <canvas id="er-hist-chart" height="90" style="margin-top:18px;"></canvas>`;
+  drawBarChart('er-hist-chart', s.scoreHistogram.map(b => b.label), s.scoreHistogram.map(b => b.count), 'عدد الطلاب');
+}
+
+function renderItems(s) {
+  const el = document.getElementById('er-panel-items');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">التحليل المجمع لبنود الاختبار</h4>
+    <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">الإجابة الصحيحة معلّمة بـ * — المفتاح: صواب ✓ / خطأ ✕</p>
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(230px,1fr)); gap:14px;">
+      ${s.itemStats.map(it => `
+        <div class="form-card" style="margin:0;">
+          <h5 style="margin:0 0 8px; font-size:13px;">${esc(it.label)} ${it.flagged ? '<span class="badge badge-danger" title="مشتت أُختير أكثر من الإجابة الصحيحة">⚠</span>' : ''}</h5>
+          <table class="er-table small"><thead><tr><th>الاستجابة</th><th>التكرار</th><th>النسبة</th></tr></thead><tbody>
+            ${it.choices.map(c => `<tr${c.isCorrect ? ' style="font-weight:700; color:var(--meadow);"' : ''}>
+              <td>${esc(c.label)}${c.isCorrect ? '*' : ''}</td><td>${c.count}</td><td>${pct(c.pct)}</td>
+            </tr>`).join('')}
+          </tbody></table>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderSummary(s) {
+  const el = document.getElementById('er-panel-summary');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">تقرير موجز للاختبار</h4>
+    ${summaryStatsGrid(s)}
+    <div style="overflow-x:auto; margin-top:18px;"><table class="er-table"><thead><tr>
+      <th>رقم</th><th>سؤال</th><th>الإجابة الصحيحة</th><th>الإجمالي: الصواب%</th><th>أعلى ٢٧٪</th><th>أدنى ٢٧٪</th><th>نقطي ثنائي التسلسل</th>
+    </tr></thead><tbody>
+      ${s.itemStats.map(it => `<tr>
+        <td>${it.num}</td><td>${esc(it.label)}</td><td>${esc(it.correctLetter || '-')}</td>
+        <td>${pct(it.correctPct)}</td><td>${pct(it.upper27)}</td><td>${pct(it.lower27)}</td><td>${fmt2(it.pointBiserial)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function renderItemStats(s) {
+  const el = document.getElementById('er-panel-itemstats');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">تقرير إحصاءات بنود الاختبار</h4>
+    <div style="overflow-x:auto;"><table class="er-table"><thead><tr>
+      <th>سؤال</th><th>نقاط</th><th>مصحح</th><th>الصواب</th><th>الخطأ</th><th>غير موجود</th><th>نقطي ثنائي التسلسل</th><th>النسبة% الصواب</th>
+    </tr></thead><tbody>
+      ${s.itemStats.map(it => `<tr>
+        <td>${esc(it.label)}</td><td>1</td><td>${s.n}</td><td>${it.correctCount}</td><td>${it.wrongCount}</td><td>${it.notPresent}</td>
+        <td>${fmt2(it.pointBiserial)}</td><td>${pct(it.correctPct)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function renderAnalysis(s) {
+  const el = document.getElementById('er-panel-analysis');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">تقرير تحليل الاختبار</h4>
+    ${summaryStatsGrid(s)}
+    <div class="form-row" style="align-items:stretch; margin-top:18px;">
+      <div class="form-card" style="margin:0;">
+        <h5 style="margin:0 0 10px; font-size:13px;">أصعب الأسئلة</h5>
+        ${s.hardest.map(it => `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0; border-bottom:1px solid #ECEAE1;"><span>${esc(it.label)}</span><span style="font-weight:700; color:var(--danger);">${pct(it.correctPct)}</span></div>`).join('')}
+      </div>
+      <div class="form-card" style="margin:0;">
+        <h5 style="margin:0 0 10px; font-size:13px;">أسهل الأسئلة</h5>
+        ${s.easiest.map(it => `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0; border-bottom:1px solid #ECEAE1;"><span>${esc(it.label)}</span><span style="font-weight:700; color:var(--meadow);">${pct(it.correctPct)}</span></div>`).join('')}
+      </div>
+    </div>
+    <div class="form-card" style="margin-top:18px;">
+      <h5 style="margin:0 0 8px; font-size:13px;">الموثوقية (كرونباخ ألفا)</h5>
+      <p style="font-size:13px; margin:0;">${fmt2(s.kr20)} — <span class="badge badge-gray">${esc(s.reliabilityBand)}</span></p>
+      <p style="font-size:11.5px; color:var(--slate); margin-top:8px;">تُستخدم لقياس الاتساق الداخلي (الموثوقية) للاختبار: ضعيف &lt;٠٫٧٠ / متوسط ٠٫٧٠-٠٫٧٩ / جيد ٠٫٨٠-٠٫٨٩ / ممتاز ٠٫٩٠+</p>
+    </div>
+    <div class="form-card" style="margin-top:18px;">
+      <h5 style="margin:0 0 8px; font-size:13px;">أسئلة للمراجعة</h5>
+      <p style="font-size:12.5px; margin:0;">${s.toReview.length ? s.toReview.map(it => esc(it.label) + (it.topWrong ? ` (اختار كثيرون "${esc(it.topWrong)}" بدل الإجابة الصحيحة)` : '')).join('، ') : 'ما فيه أسئلة مشتتاتها أكثر اختيارًا من الإجابة الصحيحة'}</p>
+    </div>
+    <div class="form-row" style="margin-top:18px;">
+      <div class="form-card" style="margin:0;">
+        <h5 style="margin:0 0 8px; font-size:13px;">أقل درجة (${fmt1(s.low)})</h5>
+        <p style="font-size:12px; color:var(--slate); margin:0;">${s.lowestStudents.map(st => esc(st.name || st.id)).join('، ') || '-'}</p>
+      </div>
+      <div class="form-card" style="margin:0;">
+        <h5 style="margin:0 0 8px; font-size:13px;">أعلى درجة (${fmt1(s.high)})</h5>
+        <p style="font-size:12px; color:var(--slate); margin:0;">${s.highestStudents.map(st => esc(st.name || st.id)).join('، ') || '-'}</p>
+      </div>
+    </div>`;
+}
+
+/* ---------- رسم بياني بسيط (أعمدة) بستخدام Chart.js - يُحمَّل عند الحاجة فقط ---------- */
+let chartLibPromise = null;
+function loadChartLib() {
+  if (window.Chart) return Promise.resolve();
+  if (chartLibPromise) return chartLibPromise;
+  chartLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
+    s.onload = resolve;
+    s.onerror = () => { chartLibPromise = null; reject(new Error('تعذر تحميل مكتبة الرسوم البيانية')); };
+    document.head.appendChild(s);
+  });
+  return chartLibPromise;
+}
+const chartInstances = {};
+async function drawBarChart(canvasId, labels, data, label) {
+  try {
+    await loadChartLib();
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (chartInstances[canvasId]) { chartInstances[canvasId].destroy(); delete chartInstances[canvasId]; }
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: { labels, datasets: [{ label, data, backgroundColor: '#1D8FA6', borderRadius: 4 }] },
+      options: { responsive: true, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+    });
+  } catch (e) {
+    console.error('chart error:', e);
+  }
+}
