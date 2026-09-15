@@ -52,9 +52,15 @@ export function detectColumns(headerRow) {
   return { col, items };
 }
 
-function isKeyRowId(idVal) {
-  const s = String(idVal == null ? '' : idVal).trim();
+// بعض الملفات (نادرًا) يجي فيها صف "نموذج" جاهز برقم هوية أو اسم كله أصفار - لو انلقى
+// نستخدمه كتعبئة مبدئية لنموذج إدخال الإجابة الصحيحة اليدوي بس (وليس شرطًا لتحليل الملف،
+// لأن الغالب أن الملف ما يحتوي مفتاح إجابة أصلًا والمدير يدخلها يدويًا بعد الرفع).
+function isAllZeros(val) {
+  const s = String(val == null ? '' : val).trim();
   return s.length > 0 && /^0+$/.test(s);
+}
+function isKeyRow(row) {
+  return isAllZeros(row.id) || isAllZeros(row.name);
 }
 
 // يحسب عدد الاختيارات الفعلي لكل بند (أكبر قيمة موجبة ظهرت فيه، بحد أدنى ٣)
@@ -74,20 +80,31 @@ function letterFor(value, numChoices) {
   const idx = numChoices - value;
   return ARABIC_LETTERS[idx] || ('اختيار ' + value);
 }
+// عكس letterFor: يحوّل الحرف المختار يدويًا (أ/ب/ج...) للقيمة الرقمية الخام المطابقة لترميز الملف
+function valueForLetter(letter, numChoices) {
+  const idx = ARABIC_LETTERS.indexOf(letter);
+  if (idx === -1) return null;
+  return numChoices - idx;
+}
 
-/* يحوّل صفوف الشيت الخام (array of arrays، أول صف عناوين) إلى: صف "النموذج" (المفتاح)،
- * وقائمة الطلاب، مع رفض واضح لو ما لقينا صف المفتاح أو كان الملف فاضي. */
+/* يحوّل صفوف الشيت الخام (array of arrays، أول صف عناوين) لقائمة طلاب. الملفات عادة ما
+ * تحتوي صف "نموذج" (مفتاح إجابة) - الإجابة الصحيحة تُدخل يدويًا بعد الرفع (انظر
+ * buildManualKey) - لكن لو انلقى صف مفتاح جاهز (رقم هوية/اسم كله أصفار) نستخدمه كتعبئة
+ * مبدئية بس، ونستبعده من قائمة الطلاب. */
 export function parseSheetRows(rows) {
   if (!rows || rows.length < 2) throw new Error('الملف فاضي أو ما فيه بيانات كافية');
   const header = rows[0];
   const { col, items } = detectColumns(header);
-  if (col.id == null) throw new Error('ما لقيت عمود "StudentID" (رقم الهوية) بالملف');
+  if (col.id == null && col.name == null) throw new Error('ما لقيت عمود "StudentID" (رقم الهوية) ولا عمود اسم الطالب بالملف');
   if (items.length === 0) throw new Error('ما لقيت أعمدة الأسئلة (اختيار متعدد) بالملف');
 
   const allRows = rows.slice(1)
-    .filter(r => r && r[col.id] != null && String(r[col.id]).trim() !== '')
+    .filter(r => r && (
+      (col.id != null && r[col.id] != null && String(r[col.id]).trim() !== '') ||
+      (col.name != null && r[col.name] != null && String(r[col.name]).trim() !== '')
+    ))
     .map(r => ({
-      id: String(r[col.id]).trim(),
+      id: col.id != null ? String(r[col.id] == null ? '' : r[col.id]).trim() : '',
       name: col.name != null ? String(r[col.name] == null ? '' : r[col.name]).trim() : '',
       grade: col.grade != null ? String(r[col.grade] == null ? '' : r[col.grade]).trim() : '',
       section: col.section != null ? String(r[col.section] == null ? '' : r[col.section]).trim() : '',
@@ -100,26 +117,28 @@ export function parseSheetRows(rows) {
       }),
     }));
 
-  const keyRows = allRows.filter(r => isKeyRowId(r.id));
-  if (keyRows.length === 0) {
-    throw new Error('ما لقيت صف "النموذج" (الإجابة الصحيحة) - لازم يكون رقم الهوية له كله أصفار (مثال: 0000000000)');
-  }
-  const keyRow = keyRows[0];
-  const students = allRows.filter(r => !isKeyRowId(r.id));
-  if (students.length === 0) throw new Error('ما فيه طلاب بالملف غير صف النموذج');
+  const keyRows = allRows.filter(isKeyRow);
+  const detectedKeyRow = keyRows[0] || null;
+  const students = allRows.filter(r => !isKeyRow(r));
+  if (students.length === 0) throw new Error('ما فيه طلاب بالملف');
 
-  const choiceCounts = computeChoiceCounts(items, students.concat([keyRow]));
+  const choiceCounts = computeChoiceCounts(items, students.concat(detectedKeyRow ? [detectedKeyRow] : []));
 
   return {
     itemCount: items.length,
-    keyRaw: keyRow.answers,
     choiceCounts,
     students,
+    detectedKeyRaw: detectedKeyRow ? detectedKeyRow.answers : null,
     detected: {
       subject: students.find(s => s.subject)?.subject || '',
       grade: mostCommon(students.map(s => s.grade).filter(Boolean)) || '',
     },
   };
+}
+
+// يبني مصفوفة المفتاح الرقمية الخام من اختيارات الحروف اللي دخّلها المدير يدويًا لكل سؤال
+export function buildManualKey(letterSelections, choiceCounts) {
+  return letterSelections.map((letter, i) => valueForLetter(letter, choiceCounts[i]));
 }
 
 function mostCommon(arr) {
@@ -253,7 +272,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students }) 
 /* =========================================================================
  * واجهة الرفع والتحليل
  * ========================================================================= */
-let parsedData = null; // { itemCount, keyRaw, choiceCounts, students, detected }
+let parsedData = null; // { itemCount, choiceCounts, students, detectedKeyRaw, detected }
 let currentReport = null; // آخر تقرير محفوظ تم فتحه بشاشة التفاصيل
 
 export async function loadExamReportsModule() {
@@ -282,12 +301,16 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     });
     parsedData = parseSheetRows(rows);
 
+    const keyNote = parsedData.detectedKeyRaw
+      ? ' — لقيت صف نموذج جاهز بالملف وعبّيت الإجابات منه، راجعها/عدّلها بالأسفل'
+      : ' — عبّي الإجابة الصحيحة لكل سؤال بالأسفل';
     document.getElementById('er-preview-summary').innerHTML =
-      `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال، وتم اكتشاف صف "النموذج" (الإجابة الصحيحة) بنجاح ✓`;
+      `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`;
     document.getElementById('er-title').value = '';
     document.getElementById('er-subject').value = parsedData.detected.subject || '';
     document.getElementById('er-grade').value = parsedData.detected.grade || '';
     document.getElementById('er-semester').value = '';
+    renderKeyForm(parsedData);
     document.getElementById('er-preview-card').classList.remove('hidden');
     document.getElementById('er-preview-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (e) {
@@ -295,6 +318,23 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     errEl.style.display = 'block';
   }
 });
+
+// يبني نموذج اختيار الإجابة الصحيحة لكل سؤال - قائمة منسدلة بعدد اختيارات ذلك السؤال بالضبط،
+// معبّاة مبدئيًا من صف النموذج لو انلقى بالملف
+function renderKeyForm(parsed) {
+  const el = document.getElementById('er-key-form');
+  el.innerHTML = `<div class="er-key-grid">${parsed.choiceCounts.map((numChoices, i) => {
+    const options = ARABIC_LETTERS.slice(0, numChoices);
+    const preselect = parsed.detectedKeyRaw ? letterFor(parsed.detectedKeyRaw[i], numChoices) : null;
+    return `<div class="er-key-item">
+      <label>سؤال ${i + 1}</label>
+      <select class="er-key-select" data-item="${i}">
+        <option value="">اختر...</option>
+        ${options.map(o => `<option value="${o}"${o === preselect ? ' selected' : ''}>${o}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('')}</div>`;
+}
 
 document.getElementById('er-cancel-btn').addEventListener('click', () => {
   parsedData = null;
@@ -309,7 +349,16 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   const title = document.getElementById('er-title').value.trim();
   if (!title) { errEl.textContent = 'اكتب عنوان للتقرير'; errEl.style.display = 'block'; return; }
 
-  const stats = computeExamStats(parsedData);
+  const selects = Array.from(document.querySelectorAll('.er-key-select'));
+  const letterSelections = selects.map(s => s.value);
+  if (letterSelections.some(v => !v)) {
+    errEl.textContent = 'اختر الإجابة الصحيحة لكل سؤال قبل الحفظ';
+    errEl.style.display = 'block';
+    return;
+  }
+  const keyRaw = buildManualKey(letterSelections, parsedData.choiceCounts);
+
+  const stats = computeExamStats({ ...parsedData, keyRaw });
   const { error } = await sb.from('exam_reports').insert({
     title,
     subject_name: document.getElementById('er-subject').value.trim() || null,
@@ -317,7 +366,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     semester: document.getElementById('er-semester').value || null,
     item_count: parsedData.itemCount,
     students_count: parsedData.students.length,
-    key_raw: parsedData.keyRaw,
+    key_raw: keyRaw,
     stats,
     created_by: currentUserId,
   });
