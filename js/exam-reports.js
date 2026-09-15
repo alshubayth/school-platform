@@ -537,11 +537,11 @@ function renderHist(s) {
   });
 }
 
-// لون شريط النسبة لكل بديل: أخضر للإجابة الصحيحة، أصفر للإجابة المشتتة (الأكثر اختيارًا
-// من بين الإجابات الخاطئة - تحتاج مراجعة)، أحمر لبقية الاختيارات وعدم الاستجابة/متعدد
+// لون شريط النسبة لكل بديل: أخضر للإجابة الصحيحة، أصفر للمشتت الأكثر اختيارًا لو تجاوز
+// عدد من اختاره عدد من اختار الإجابة الصحيحة (مشكلة فعلية تحتاج مراجعة)، وإلا أحمر
 function choiceBarColor(c, it) {
   if (c.isCorrect) return '#2E9155';
-  if (it.topWrong && c.label === it.topWrong && c.count > 0) return '#C9962B';
+  if (it.flagged && it.topWrong && c.label === it.topWrong) return '#FACC15';
   return '#C0453D';
 }
 
@@ -550,9 +550,10 @@ function renderItems(s) {
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">التحليل المجمع لبنود الاختبار</h4>
     <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">
-      الإجابة الصحيحة معلّمة بـ * ولون <span style="color:#2E9155; font-weight:700;">أخضر</span> — الإجابة المشتتة
-      (الأكثر اختيارًا خطأ وتحتاج مراجعة) <span style="color:#C9962B; font-weight:700;">أصفر</span> — بقية
-      الاختيارات وعدم الاستجابة/متعدد <span style="color:#C0453D; font-weight:700;">أحمر</span>
+      الإجابة الصحيحة معلّمة بـ * ولون <span style="color:#2E9155; font-weight:700;">أخضر</span> — المشتت الأكثر
+      اختيارًا يصير <span style="color:#D4B106; font-weight:700;">أصفر</span> فقط لو تجاوز عدد من اختاره عدد من
+      اختار الإجابة الصحيحة (تحتاج مراجعة) — وإلا يبقى <span style="color:#C0453D; font-weight:700;">أحمر</span>
+      مثل بقية الاختيارات وعدم الاستجابة/متعدد
     </p>
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:14px; direction:rtl;">
       ${s.itemStats.map(it => `
