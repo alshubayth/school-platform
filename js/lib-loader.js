@@ -32,3 +32,10 @@ export function loadJSZip() {
   if (window.JSZip) return Promise.resolve();
   return loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
 }
+
+// PizZip + docxtemplater: لتعبئة قوالب Word (.docx) حقيقية بالحفاظ التام على تنسيقها
+// الأصلي (خطوط، حدود، تباعد...) - نستخدمهم لتعبئة نموذج "الخطة العلاجية الجماعية"
+export async function loadDocxTemplater() {
+  if (!window.PizZip) await loadScript('https://cdn.jsdelivr.net/npm/pizzip@3.1.6/dist/pizzip.min.js');
+  if (!window.docxtemplater) await loadScript('https://cdn.jsdelivr.net/npm/docxtemplater@3.44.3/build/docxtemplater.js');
+}
