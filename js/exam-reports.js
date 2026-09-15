@@ -487,7 +487,7 @@ function renderDist(s) {
   const el = document.getElementById('er-panel-dist');
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">تقرير التوزيع التكراري للصف <span style="font-size:12.5px; color:var(--slate); font-weight:400;">متوسط الدرجة% ${pct(s.meanPct)}</span></h4>
-    <div class="er-dist-layout">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:18px; align-items:start;">
       <div style="overflow-x:auto;"><table class="er-table"><thead><tr>
         <th>التقدير</th><th>الدرجة المئوية</th><th>الدرجة الخام</th><th>التكرار</th><th>النسبة المئوية</th>
       </tr></thead><tbody>
@@ -499,9 +499,9 @@ function renderDist(s) {
           <td>${pct(g.freqPct)}</td>
         </tr>`).join('')}
       </tbody></table></div>
-      <div class="form-card er-chart-card">
+      <div class="form-card" style="margin:0;">
         <h5 style="margin:0 0 10px; font-size:13px;">عدد الطلاب حسب التقدير</h5>
-        <div class="er-chart-wrap"><canvas id="er-dist-chart"></canvas></div>
+        <div style="position:relative; height:270px;"><canvas id="er-dist-chart" style="width:100% !important; height:100% !important;"></canvas></div>
       </div>
     </div>`;
   drawBarChart('er-dist-chart', s.gradeDistribution.map(g => g.grade), s.gradeDistribution.map(g => g.freq), 'التكرار', {
@@ -515,9 +515,9 @@ function renderHist(s) {
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">الرسم البياني لتقدير الطالب</h4>
     ${summaryStatsGrid(s)}
-    <div class="form-card er-chart-card" style="margin-top:18px;">
+    <div class="form-card" style="margin-top:18px;">
       <h5 style="margin:0 0 10px; font-size:13px;">توزيع الطلاب حسب الدرجة المئوية (فئات ١٠٪)</h5>
-      <div class="er-chart-wrap"><canvas id="er-hist-chart"></canvas></div>
+      <div style="position:relative; height:270px;"><canvas id="er-hist-chart" style="width:100% !important; height:100% !important;"></canvas></div>
     </div>`;
   drawBarChart('er-hist-chart', s.scoreHistogram.map(b => b.label + '٪'), s.scoreHistogram.map(b => b.count), 'عدد الطلاب', {
     colors: histColors,
@@ -539,21 +539,23 @@ function renderItems(s) {
       الإجابة الصحيحة معلّمة بـ * ولون <span style="color:#2E9155; font-weight:700;">أخضر</span> — بقية الاختيارات
       <span style="color:#E07A34; font-weight:700;">برتقالي</span> — عدم الاستجابة/متعدد <span style="color:#8F8A7A; font-weight:700;">رمادي</span>
     </p>
-    <div class="er-items-grid">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:14px; direction:rtl;">
       ${s.itemStats.map(it => `
         <div class="form-card" style="margin:0;">
           <h5 style="margin:0 0 10px; font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:6px;">
             <span>${esc(it.label)}</span>
             ${it.flagged ? '<span class="badge badge-danger" title="مشتت أُختير أكثر من الإجابة الصحيحة">⚠ مراجعة</span>' : ''}
           </h5>
-          <div class="er-choice-list">
+          <div style="display:flex; flex-direction:column; gap:9px;">
             ${it.choices.map(c => `
-              <div class="er-choice-row">
-                <div class="er-choice-label">
+              <div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; font-size:12px; gap:6px;">
                   <span>${esc(c.label)}${c.isCorrect ? ' *' : ''}</span>
                   <span>${c.count} — ${pct(c.pct)}</span>
                 </div>
-                <div class="er-choice-bar"><div class="er-choice-bar-fill" style="background:${choiceBarColor(c)}; width:${c.pct > 0 ? Math.max(c.pct, 2) : 0}%;"></div></div>
+                <div style="background:var(--sand); border-radius:5px; height:8px; overflow:hidden;">
+                  <div style="background:${choiceBarColor(c)}; height:100%; border-radius:5px; width:${c.pct > 0 ? Math.max(c.pct, 2) : 0}%;"></div>
+                </div>
               </div>`).join('')}
           </div>
         </div>`).join('')}
@@ -591,6 +593,10 @@ function renderItemStats(s) {
 
 function renderAnalysis(s) {
   const el = document.getElementById('er-panel-analysis');
+  // تقارير محفوظة بنسخة سابقة من النظام ما تحتوي هذه القوائم بعد - نتفادى انهيار الصفحة
+  const topStudents = Array.isArray(s.topStudents) ? s.topStudents : [];
+  const bottomStudents = Array.isArray(s.bottomStudents) ? s.bottomStudents : [];
+  const isLegacyReport = !Array.isArray(s.topStudents) && !Array.isArray(s.bottomStudents);
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">تقرير تحليل الاختبار</h4>
     ${summaryStatsGrid(s)}
@@ -618,20 +624,21 @@ function renderAnalysis(s) {
         <h5 style="margin:0 0 4px; font-size:14px;">أعلى ١٥ وأدنى ١٥ درجة</h5>
         <p style="font-size:11.5px; color:var(--slate); margin:0;">بأسماء الطلاب وفصولهم</p>
       </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      ${isLegacyReport ? '' : `<div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button type="button" class="text-action-btn" id="er-print-topbottom" style="width:auto; padding:8px 14px;">🖨 طباعة</button>
         <button type="button" class="text-action-btn" id="er-export-topbottom" style="width:auto; padding:8px 14px;">⬇ تصدير إكسل</button>
-      </div>
+      </div>`}
     </div>
+    ${isLegacyReport ? `<p style="font-size:12px; color:var(--danger); margin:8px 0 0;">هذا التقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات الترتيب - ارفع نفس ملف الإكسل وأعد حفظ التقرير لعرض هذه القائمة.</p>` : `
     <div class="form-row" style="align-items:stretch; margin-top:10px;">
-      ${studentRankTable(s.topStudents, 'أعلى ١٥ درجة', 'badge-meadow')}
-      ${studentRankTable(s.bottomStudents, 'أدنى ١٥ درجة', 'badge-danger')}
-    </div>`;
+      ${studentRankTable(topStudents, 'أعلى ١٥ درجة', 'badge-meadow')}
+      ${studentRankTable(bottomStudents, 'أدنى ١٥ درجة', 'badge-danger')}
+    </div>`}`;
 
   const printBtn = document.getElementById('er-print-topbottom');
   const exportBtn = document.getElementById('er-export-topbottom');
-  if (printBtn) printBtn.addEventListener('click', () => printTopBottomReport(s));
-  if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel(s));
+  if (printBtn) printBtn.addEventListener('click', () => printTopBottomReport({ ...s, topStudents, bottomStudents }));
+  if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel({ ...s, topStudents, bottomStudents }));
 }
 
 function studentRankTable(list, title, badgeClass) {
