@@ -494,6 +494,7 @@ function renderAllReports(s) {
 }
 
 const GRADE_COLORS = { A: '#2E9155', B: '#2455A4', C: '#0E93A8', D: '#E07A34', F: '#C0453D' };
+const GRADE_LABELS = { A: 'ممتاز', B: 'جيد جدًا', C: 'جيد', D: 'مقبول', F: 'ضعيف' };
 
 function renderDist(s) {
   const el = document.getElementById('er-panel-dist');
@@ -504,7 +505,7 @@ function renderDist(s) {
         <th>التقدير</th><th>الدرجة المئوية</th><th>الدرجة الخام</th><th>التكرار</th><th>النسبة المئوية</th>
       </tr></thead><tbody>
         ${s.gradeDistribution.map(g => `<tr>
-          <td><span class="badge" style="background:${GRADE_COLORS[g.grade]}1a; color:${GRADE_COLORS[g.grade]};">${g.grade}</span></td>
+          <td><span class="badge" style="background:${GRADE_COLORS[g.grade]}1a; color:${GRADE_COLORS[g.grade]};">${GRADE_LABELS[g.grade] || g.grade}</span></td>
           <td>${fmt1(g.pctMin)} - ${fmt2(g.pctMax)}</td>
           <td>${fmt2(g.rawMin)} - ${fmt2(g.rawMax)}</td>
           <td>${g.freq}</td>
@@ -516,7 +517,7 @@ function renderDist(s) {
         <div style="position:relative; height:270px;"><canvas id="er-dist-chart" style="width:100% !important; height:100% !important;"></canvas></div>
       </div>
     </div>`;
-  drawBarChart('er-dist-chart', s.gradeDistribution.map(g => g.grade), s.gradeDistribution.map(g => g.freq), 'التكرار', {
+  drawBarChart('er-dist-chart', s.gradeDistribution.map(g => GRADE_LABELS[g.grade] || g.grade), s.gradeDistribution.map(g => g.freq), 'التكرار', {
     colors: s.gradeDistribution.map(g => GRADE_COLORS[g.grade]),
   });
 }
@@ -536,11 +537,12 @@ function renderHist(s) {
   });
 }
 
-// لون شريط النسبة لكل بديل: أخضر للإجابة الصحيحة، رمادي لعدم الاستجابة/متعدد، برتقالي لبقية الاختيارات
-function choiceBarColor(c) {
+// لون شريط النسبة لكل بديل: أخضر للإجابة الصحيحة، أصفر للإجابة المشتتة (الأكثر اختيارًا
+// من بين الإجابات الخاطئة - تحتاج مراجعة)، أحمر لبقية الاختيارات وعدم الاستجابة/متعدد
+function choiceBarColor(c, it) {
   if (c.isCorrect) return '#2E9155';
-  if (c.label === 'لا توجد استجابة' || c.label === 'متعدد') return '#C7C2B4';
-  return '#E07A34';
+  if (it.topWrong && c.label === it.topWrong && c.count > 0) return '#C9962B';
+  return '#C0453D';
 }
 
 function renderItems(s) {
@@ -548,8 +550,9 @@ function renderItems(s) {
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">التحليل المجمع لبنود الاختبار</h4>
     <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">
-      الإجابة الصحيحة معلّمة بـ * ولون <span style="color:#2E9155; font-weight:700;">أخضر</span> — بقية الاختيارات
-      <span style="color:#E07A34; font-weight:700;">برتقالي</span> — عدم الاستجابة/متعدد <span style="color:#8F8A7A; font-weight:700;">رمادي</span>
+      الإجابة الصحيحة معلّمة بـ * ولون <span style="color:#2E9155; font-weight:700;">أخضر</span> — الإجابة المشتتة
+      (الأكثر اختيارًا خطأ وتحتاج مراجعة) <span style="color:#C9962B; font-weight:700;">أصفر</span> — بقية
+      الاختيارات وعدم الاستجابة/متعدد <span style="color:#C0453D; font-weight:700;">أحمر</span>
     </p>
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:14px; direction:rtl;">
       ${s.itemStats.map(it => `
@@ -566,7 +569,7 @@ function renderItems(s) {
                   <span>${c.count} — ${pct(c.pct)}</span>
                 </div>
                 <div style="background:var(--sand); border-radius:5px; height:8px; overflow:hidden;">
-                  <div style="background:${choiceBarColor(c)}; height:100%; border-radius:5px; width:${c.pct > 0 ? Math.max(c.pct, 2) : 0}%;"></div>
+                  <div style="background:${choiceBarColor(c, it)}; height:100%; border-radius:5px; width:${c.pct > 0 ? Math.max(c.pct, 2) : 0}%;"></div>
                 </div>
               </div>`).join('')}
           </div>
