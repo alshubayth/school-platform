@@ -964,14 +964,28 @@
       <div id="er-detail-view" class="hidden">
         <span class="back-link" id="er-back-to-list">→ رجوع لقائمة التقارير</span>
         <div class="bud-head" style="margin-top:10px;">
-          <div class="bud-head-title">
-            <div class="bud-head-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/></svg>
+          <div class="bud-head-title" style="justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <div class="bud-head-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/></svg>
+              </div>
+              <div>
+                <h3 id="er-detail-title">-</h3>
+                <p id="er-detail-sub">-</p>
+              </div>
             </div>
-            <div>
-              <h3 id="er-detail-title">-</h3>
-              <p id="er-detail-sub">-</p>
+            <button type="button" class="text-action-btn" id="er-edit-key-btn" style="width:auto; padding:8px 14px; flex-shrink:0;" title="تعديل الإجابة الصحيحة لكل سؤال وإعادة حساب التقارير">✎ تعديل مفتاح الإجابة</button>
+          </div>
+
+          <div id="er-editkey-card" class="hidden" style="background:var(--sand); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:18px;">
+            <h5 style="margin:0 0 4px; font-size:13.5px;">تعديل مفتاح الإجابة</h5>
+            <p style="font-size:11.5px; color:var(--slate); margin:0 0 12px;">غيّر الإجابة الصحيحة لأي سؤال وبعدين احفظ - كل التقارير الستة بتُعاد حسابها تلقائيًا بالمفتاح الجديد.</p>
+            <div id="er-editkey-form"></div>
+            <div style="display:flex; gap:8px; margin-top:14px;">
+              <button type="button" class="btn-primary" id="er-editkey-save" style="width:auto; padding:9px 18px;">حفظ المفتاح الجديد</button>
+              <button type="button" class="text-action-btn" id="er-editkey-cancel" style="width:auto; padding:9px 14px;">إلغاء</button>
             </div>
+            <div class="error-msg" id="er-editkey-error"></div>
           </div>
           <div class="bud-tabs" id="er-tabs" role="tablist">
             <button class="bud-tab active" id="er-tab-dist" type="button">التوزيع التكرارى</button>
