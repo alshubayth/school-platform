@@ -1,1621 +1,927 @@
-<!DOCTYPE html>
+import { sb, currentUserId, backToTiles } from './core.js';
+import { loadXLSX } from './lib-loader.js';
+
+document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
+
+const ARABIC_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و', 'ز'];
+const GRADE_BANDS = [
+  { grade: 'A', min: 90, max: 100 },
+  { grade: 'B', min: 80, max: 89.99 },
+  { grade: 'C', min: 70, max: 79.99 },
+  { grade: 'D', min: 60, max: 69.99 },
+  { grade: 'F', min: 0, max: 59.99 },
+];
+const RELIABILITY_BANDS = [
+  { label: 'ضعيف', min: -Infinity, max: 0.699999 },
+  { label: 'متوسط', min: 0.70, max: 0.799999 },
+  { label: 'جيد', min: 0.80, max: 0.899999 },
+  { label: 'ممتاز', min: 0.90, max: Infinity },
+];
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+function fmt1(n) { return (Math.round((n || 0) * 10) / 10).toLocaleString('ar-SA'); }
+function fmt2(n) { return (Math.round((n || 0) * 100) / 100).toLocaleString('ar-SA'); }
+function pct(n) { return fmt2(n) + '٪'; }
+
+/* =========================================================================
+ * تحليل ملف الإكسل: كشف الأعمدة، فصل صف "النموذج" (الإجابة الصحيحة)، وتحويل
+ * كل الرموز الرقمية الخام لكل بند (سؤال) إلى حروف عربية للعرض.
+ *
+ * ملاحظة مهمة عن ترميز الاختيارات: القيم الرقمية بملف الإكسل معكوسة عن ترتيب
+ * الحروف - أعلى رقم = "أ" (أول اختيار) وأقل رقم = آخر حرف مستخدم. مثلاً لسؤال
+ * بثلاث اختيارات: ١="ج"، ٢="ب"، ٣="أ". كذلك: -2 تعني "لا توجد استجابة"،
+ * -3 تعني "متعدد" (اختار أكثر من إجابة). هذا مؤكد من مطابقة نتائج حقيقية.
+ * ========================================================================= */
+export function detectColumns(headerRow) {
+  const col = {};
+  const items = [];
+  (headerRow || []).forEach((cell, idx) => {
+    const c = String(cell == null ? '' : cell).trim();
+    if (!c) return;
+    if (col.id == null && (c === 'StudentID' || c.toLowerCase() === 'studentid' || (c.includes('رقم') && c.includes('هوي')))) col.id = idx;
+    else if (col.name == null && c.includes('اسم') && c.includes('طالب')) col.name = idx;
+    else if (col.grade == null && c.includes('صف')) col.grade = idx;
+    else if (col.section == null && c === 'الفصل') col.section = idx;
+    else if (col.subject == null && c.includes('اسم') && c.includes('ماد')) col.subject = idx;
+    else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال') || /متعدد\s*\d+$/.test(c)) items.push(idx);
+  });
+  return { col, items };
+}
+
+// بعض الملفات (نادرًا) يجي فيها صف "نموذج" جاهز برقم هوية أو اسم كله أصفار - لو انلقى
+// نستخدمه كتعبئة مبدئية لنموذج إدخال الإجابة الصحيحة اليدوي بس (وليس شرطًا لتحليل الملف،
+// لأن الغالب أن الملف ما يحتوي مفتاح إجابة أصلًا والمدير يدخلها يدويًا بعد الرفع).
+function isAllZeros(val) {
+  const s = String(val == null ? '' : val).trim();
+  return s.length > 0 && /^0+$/.test(s);
+}
+function isKeyRow(row) {
+  return isAllZeros(row.id) || isAllZeros(row.name);
+}
+
+// يحسب عدد الاختيارات الفعلي لكل بند (أكبر قيمة موجبة ظهرت فيه، بحد أدنى ٣)
+function computeChoiceCounts(itemCols, dataRows) {
+  return itemCols.map((_, i) => {
+    let max = 3;
+    dataRows.forEach(r => {
+      const v = r.answers[i];
+      if (typeof v === 'number' && v > 0 && v > max) max = v;
+    });
+    return max;
+  });
+}
+
+// بعض الملفات ترمّز أول اختيار بأعلى رقم (معكوس - الغالب بالمواد العربية)، وبعضها ترمّزه
+// بالرقم ١ عاديًا (المواد الإنجليزية غالبًا) - الاتجاه يُحدَّد بخيار "ترتيب الاختيارات"
+// بشاشة الرفع (افتراضيًا يُخمَّن من اسم المادة)، ونفس القيمة تُحفظ مع التقرير عشان تعديل
+// المفتاح لاحقًا يستخدم نفس الاتجاه.
+function letterFor(value, numChoices, reversed = true) {
+  if (typeof value !== 'number' || value <= 0) return null;
+  const idx = reversed ? numChoices - value : value - 1;
+  return ARABIC_LETTERS[idx] || ('اختيار ' + value);
+}
+// عكس letterFor: يحوّل الحرف المختار يدويًا (أ/ب/ج...) للقيمة الرقمية الخام المطابقة لترميز الملف
+function valueForLetter(letter, numChoices, reversed = true) {
+  const idx = ARABIC_LETTERS.indexOf(letter);
+  if (idx === -1) return null;
+  return reversed ? numChoices - idx : idx + 1;
+}
+// تخمين مبدئي لاتجاه الترميز من اسم المادة - المواد اللي اسمها بحروف لاتينية (إنجليزي
+// غالبًا) الأرجح ترميزها عادي (غير معكوس)؛ غير كذا نفترض معكوس (المواد العربية)
+function guessReversedOrder(subjectName) {
+  return !/[A-Za-z]/.test(String(subjectName || ''));
+}
+
+/* يحوّل صفوف الشيت الخام (array of arrays، أول صف عناوين) لقائمة طلاب. الملفات عادة ما
+ * تحتوي صف "نموذج" (مفتاح إجابة) - الإجابة الصحيحة تُدخل يدويًا بعد الرفع (انظر
+ * buildManualKey) - لكن لو انلقى صف مفتاح جاهز (رقم هوية/اسم كله أصفار) نستخدمه كتعبئة
+ * مبدئية بس، ونستبعده من قائمة الطلاب. */
+export function parseSheetRows(rows) {
+  if (!rows || rows.length < 2) throw new Error('الملف فاضي أو ما فيه بيانات كافية');
+  const header = rows[0];
+  const { col, items } = detectColumns(header);
+  if (col.id == null && col.name == null) throw new Error('ما لقيت عمود "StudentID" (رقم الهوية) ولا عمود اسم الطالب بالملف');
+  if (items.length === 0) throw new Error('ما لقيت أعمدة الأسئلة (اختيار متعدد) بالملف');
+
+  const allRows = rows.slice(1)
+    .filter(r => r && (
+      (col.id != null && r[col.id] != null && String(r[col.id]).trim() !== '') ||
+      (col.name != null && r[col.name] != null && String(r[col.name]).trim() !== '')
+    ))
+    .map(r => ({
+      id: col.id != null ? String(r[col.id] == null ? '' : r[col.id]).trim() : '',
+      name: col.name != null ? String(r[col.name] == null ? '' : r[col.name]).trim() : '',
+      grade: col.grade != null ? String(r[col.grade] == null ? '' : r[col.grade]).trim() : '',
+      section: col.section != null ? String(r[col.section] == null ? '' : r[col.section]).trim() : '',
+      subject: col.subject != null ? String(r[col.subject] == null ? '' : r[col.subject]).trim() : '',
+      answers: items.map(ci => {
+        const v = r[ci];
+        if (v === '' || v == null) return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? n : null;
+      }),
+    }));
+
+  const keyRows = allRows.filter(isKeyRow);
+  const detectedKeyRow = keyRows[0] || null;
+  const students = allRows.filter(r => !isKeyRow(r));
+  if (students.length === 0) throw new Error('ما فيه طلاب بالملف');
+
+  const choiceCounts = computeChoiceCounts(items, students.concat(detectedKeyRow ? [detectedKeyRow] : []));
+
+  return {
+    itemCount: items.length,
+    choiceCounts,
+    students,
+    detectedKeyRaw: detectedKeyRow ? detectedKeyRow.answers : null,
+    detected: {
+      subject: students.find(s => s.subject)?.subject || '',
+      grade: mostCommon(students.map(s => s.grade).filter(Boolean)) || '',
+    },
+  };
+}
+
+// يبني مصفوفة المفتاح الرقمية الخام من اختيارات الحروف اللي دخّلها المدير يدويًا لكل سؤال
+export function buildManualKey(letterSelections, choiceCounts, reversed = true) {
+  return letterSelections.map((letter, i) => valueForLetter(letter, choiceCounts[i], reversed));
+}
+
+function mostCommon(arr) {
+  const counts = new Map();
+  arr.forEach(v => counts.set(v, (counts.get(v) || 0) + 1));
+  let best = null, bestN = 0;
+  counts.forEach((n, v) => { if (n > bestN) { best = v; bestN = n; } });
+  return best;
+}
+
+/* =========================================================================
+ * حساب كل الإحصاءات المطلوبة للتقارير الستة، من بيانات مُحلَّلة (parseSheetRows)
+ * ========================================================================= */
+export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, reversedOrder = true }) {
+  const n = students.length;
+
+  const isCorrect = (ans, i) => ans[i] != null && ans[i] === keyRaw[i];
+  const totals = students.map(s => {
+    let t = 0;
+    for (let i = 0; i < itemCount; i++) if (isCorrect(s.answers, i)) t++;
+    return t;
+  });
+
+  const mean = totals.reduce((a, b) => a + b, 0) / n;
+  const sorted = totals.slice().sort((a, b) => a - b);
+  const median = n % 2 === 1 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  const high = Math.max(...totals);
+  const low = Math.min(...totals);
+  const variance = totals.reduce((s, t) => s + (t - mean) * (t - mean), 0) / n;
+  const sd = Math.sqrt(variance);
+  const meanPct = itemCount ? (mean / itemCount) * 100 : 0;
+
+  // ---- تقرير ١: التوزيع التكراري للصف (A-F) ----
+  const gradeDistribution = GRADE_BANDS.map(b => {
+    const rawMin = (b.min / 100) * itemCount;
+    const rawMax = (b.max / 100) * itemCount;
+    const freq = totals.filter(t => {
+      const p = itemCount ? (t / itemCount) * 100 : 0;
+      return p >= b.min && p <= b.max;
+    }).length;
+    return { grade: b.grade, pctMin: b.min, pctMax: b.max, rawMin, rawMax, freq, freqPct: n ? (freq / n) * 100 : 0 };
+  });
+
+  // ---- تقرير ٢: الرسم البياني لتقدير الطالب (10 فئات بالدرجة المئوية) ----
+  const scoreHistogram = Array.from({ length: 10 }, (_, i) => ({ label: String((i + 1) * 10), count: 0 }));
+  totals.forEach(t => {
+    const p = itemCount ? (t / itemCount) * 100 : 0;
+    const idx = Math.min(9, Math.floor(p / 10));
+    scoreHistogram[idx].count++;
+  });
+
+  // ---- إحصاءات كل بند: نسبة الصواب، تكرارات كل اختيار، ثنائي التسلسل النقطي، أعلى/أدنى ٢٧٪ ----
+  const k27 = Math.max(1, Math.round(n * 0.27));
+  const sortedByTotalDesc = students.map((s, idx) => ({ idx, total: totals[idx] })).sort((a, b) => b.total - a.total);
+  const upperSet = new Set(sortedByTotalDesc.slice(0, k27).map(x => x.idx));
+  const lowerSet = new Set(sortedByTotalDesc.slice(-k27).map(x => x.idx));
+
+  const itemStats = [];
+  for (let i = 0; i < itemCount; i++) {
+    const numChoices = choiceCounts[i];
+    const correctLetter = letterFor(keyRaw[i], numChoices, reversedOrder);
+    const freqMap = new Map(); // key: label -> {count, isCorrect, sortVal}
+    let correctCount = 0, notPresent = 0, multi = 0;
+    students.forEach(s => {
+      const v = s.answers[i];
+      let label, sortVal;
+      if (v == null || v === -2) { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
+      else if (v === -3) { label = 'متعدد'; sortVal = 999; multi++; }
+      else if (typeof v === 'number' && v > 0) { label = letterFor(v, numChoices, reversedOrder); sortVal = v; }
+      else { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
+      if (!freqMap.has(label)) freqMap.set(label, { label, count: 0, isCorrect: label === correctLetter, sortVal });
+      freqMap.get(label).count++;
+      if (v === keyRaw[i]) correctCount++;
+    });
+    const choices = Array.from(freqMap.values())
+      .sort((a, b) => a.sortVal - b.sortVal)
+      .map(c => ({ ...c, pct: n ? (c.count / n) * 100 : 0 }));
+
+    const correctPct = n ? (correctCount / n) * 100 : 0;
+    const mask = students.map(s => (isCorrect(s.answers, i) ? 1 : 0));
+    const p = correctCount / n, q = 1 - p;
+    const m1vals = [], m0vals = [];
+    mask.forEach((m, si) => (m ? m1vals : m0vals).push(totals[si]));
+    const avg = arr => (arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : 0);
+    const m1 = avg(m1vals), m0 = avg(m0vals);
+    const pointBiserial = sd > 0 ? ((m1 - m0) / sd) * Math.sqrt(p * q) : 0;
+
+    let upperCorrect = 0, lowerCorrect = 0;
+    students.forEach((s, si) => {
+      if (upperSet.has(si) && isCorrect(s.answers, i)) upperCorrect++;
+      if (lowerSet.has(si) && isCorrect(s.answers, i)) lowerCorrect++;
+    });
+    const upper27 = (upperCorrect / k27) * 100;
+    const lower27 = (lowerCorrect / k27) * 100;
+
+    const wrongChoices = choices.filter(c => !c.isCorrect && c.label !== 'لا توجد استجابة' && c.label !== 'متعدد');
+    const topWrong = wrongChoices.reduce((best, c) => (!best || c.count > best.count ? c : best), null);
+    const flagged = !!(topWrong && topWrong.count > correctCount);
+
+    itemStats.push({
+      num: i + 1,
+      label: 'اختيار متعدد' + (i + 1),
+      correctLetter,
+      correctCount, notPresent, multi,
+      wrongCount: n - correctCount - notPresent - multi,
+      correctPct, choices,
+      pointBiserial, upper27, lower27, flagged, topWrong: topWrong ? topWrong.label : null,
+    });
+  }
+
+  const sumPQ = itemStats.reduce((s, it) => {
+    const p = it.correctCount / n;
+    return s + p * (1 - p);
+  }, 0);
+  const kr20 = itemCount > 1 && variance > 0 ? (itemCount / (itemCount - 1)) * (1 - sumPQ / variance) : 0;
+  const reliabilityBand = (RELIABILITY_BANDS.find(b => kr20 >= b.min && kr20 <= b.max) || RELIABILITY_BANDS[0]).label;
+
+  const hardest = itemStats.slice().sort((a, b) => a.correctPct - b.correctPct).slice(0, Math.min(10, itemCount));
+  const easiest = itemStats.slice().sort((a, b) => b.correctPct - a.correctPct).slice(0, Math.min(10, itemCount));
+  const toReview = itemStats.filter(it => it.flagged);
+
+  const lowestStudents = students.filter((s, idx) => totals[idx] === low).map(s => ({ id: s.id, name: s.name }));
+  const highestStudents = students.filter((s, idx) => totals[idx] === high).map(s => ({ id: s.id, name: s.name }));
+
+  // ---- أعلى ١٥ وأدنى ١٥ درجة (بالاسم والفصل) ----
+  const ranked = students.map((s, idx) => ({
+    id: s.id,
+    name: s.name,
+    section: s.section,
+    total: totals[idx],
+    pct: itemCount ? (totals[idx] / itemCount) * 100 : 0,
+  })).sort((a, b) => b.total - a.total);
+  const topStudents = ranked.slice(0, 15);
+  const bottomStudents = ranked.slice(-15).slice().sort((a, b) => a.total - b.total);
+
+  return {
+    n, itemCount, mean, median, high, low, range: high - low, sd, meanPct, kr20, reliabilityBand,
+    gradeDistribution, scoreHistogram, itemStats, hardest, easiest, toReview, lowestStudents, highestStudents,
+    topStudents, bottomStudents,
+  };
+}
+
+/* =========================================================================
+ * واجهة الرفع والتحليل
+ * ========================================================================= */
+let parsedData = null; // { itemCount, choiceCounts, students, detectedKeyRaw, detected }
+let currentReport = null; // آخر تقرير محفوظ تم فتحه بشاشة التفاصيل
+
+export async function loadExamReportsModule() {
+  document.getElementById('er-detail-view').classList.add('hidden');
+  document.getElementById('er-list-view').classList.remove('hidden');
+  document.getElementById('er-preview-card').classList.add('hidden');
+  document.getElementById('er-file').value = '';
+  parsedData = null;
+  await loadSavedList();
+}
+
+document.getElementById('er-analyze-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('er-analyze-error');
+  errEl.style.display = 'none';
+  const file = document.getElementById('er-file').files[0];
+  if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
+
+  try {
+    await loadXLSX();
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    let rows = [];
+    wb.SheetNames.forEach(name => {
+      const sheet = wb.Sheets[name];
+      rows = rows.concat(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
+    });
+    parsedData = parseSheetRows(rows);
+
+    const keyNote = parsedData.detectedKeyRaw
+      ? ' — لقيت صف نموذج جاهز بالملف وعبّيت الإجابات منه، راجعها/عدّلها بالأسفل'
+      : ' — عبّي الإجابة الصحيحة لكل سؤال بالأسفل';
+    document.getElementById('er-preview-summary').innerHTML =
+      `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`;
+    document.getElementById('er-title').value = '';
+    document.getElementById('er-subject').value = parsedData.detected.subject || '';
+    document.getElementById('er-grade').value = parsedData.detected.grade || '';
+    document.getElementById('er-semester').value = '';
+    document.getElementById('er-reversed-order').checked = guessReversedOrder(parsedData.detected.subject);
+    renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
+    document.getElementById('er-preview-card').classList.remove('hidden');
+    document.getElementById('er-preview-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (e) {
+    errEl.textContent = e.message || 'تعذر تحليل الملف';
+    errEl.style.display = 'block';
+  }
+});
+
+// يبني نموذج اختيار الإجابة الصحيحة لكل سؤال - قائمة منسدلة بعدد اختيارات ذلك السؤال بالضبط،
+// معبّاة مبدئيًا من صف النموذج لو انلقى بالملف. تُعاد كل مرة يتغيّر فيها خيار "ترتيب الاختيارات"
+// عشان الحروف المعروضة/المعبّأة تطابق الاتجاه المختار
+function renderKeyForm(parsed, reversed = true) {
+  const el = document.getElementById('er-key-form');
+  el.innerHTML = `<div class="er-key-grid">${parsed.choiceCounts.map((numChoices, i) => {
+    const options = ARABIC_LETTERS.slice(0, numChoices);
+    const preselect = parsed.detectedKeyRaw ? letterFor(parsed.detectedKeyRaw[i], numChoices, reversed) : null;
+    return `<div class="er-key-item">
+      <label>سؤال ${i + 1}</label>
+      <select class="er-key-select" data-item="${i}">
+        <option value="">اختر...</option>
+        ${options.map(o => `<option value="${o}"${o === preselect ? ' selected' : ''}>${o}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+document.getElementById('er-reversed-order').addEventListener('change', (e) => {
+  if (!parsedData) return;
+  renderKeyForm(parsedData, e.target.checked);
+});
+
+document.getElementById('er-cancel-btn').addEventListener('click', () => {
+  parsedData = null;
+  document.getElementById('er-preview-card').classList.add('hidden');
+  document.getElementById('er-file').value = '';
+});
+
+document.getElementById('er-save-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('er-save-error');
+  errEl.style.display = 'none';
+  if (!parsedData) { errEl.textContent = 'حلّل الملف أولاً'; errEl.style.display = 'block'; return; }
+  const title = document.getElementById('er-title').value.trim();
+  if (!title) { errEl.textContent = 'اكتب عنوان للتقرير'; errEl.style.display = 'block'; return; }
+
+  const selects = Array.from(document.querySelectorAll('.er-key-select'));
+  const letterSelections = selects.map(s => s.value);
+  if (letterSelections.some(v => !v)) {
+    errEl.textContent = 'اختر الإجابة الصحيحة لكل سؤال قبل الحفظ';
+    errEl.style.display = 'block';
+    return;
+  }
+  const reversedOrder = document.getElementById('er-reversed-order').checked;
+  const keyRaw = buildManualKey(letterSelections, parsedData.choiceCounts, reversedOrder);
+
+  const stats = computeExamStats({ ...parsedData, keyRaw, reversedOrder });
+  const { error } = await sb.from('exam_reports').insert({
+    title,
+    subject_name: document.getElementById('er-subject').value.trim() || null,
+    grade_level: document.getElementById('er-grade').value.trim() || null,
+    semester: document.getElementById('er-semester').value || null,
+    item_count: parsedData.itemCount,
+    students_count: parsedData.students.length,
+    key_raw: keyRaw,
+    stats,
+    // نحفظ إجابات الطلاب الخام كمان (مو بس النتيجة المحسوبة) عشان لو المدير احتاج يعدّل
+    // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية - وكذلك اتجاه
+    // ترميز الاختيارات المستخدم عشان تعديل المفتاح لاحقًا يفهم نفس الحروف صح
+    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, reversedOrder },
+    created_by: currentUserId,
+  });
+  if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
+
+  parsedData = null;
+  document.getElementById('er-preview-card').classList.add('hidden');
+  document.getElementById('er-file').value = '';
+  await loadSavedList();
+});
+
+async function loadSavedList() {
+  const listEl = document.getElementById('er-saved-list');
+  const { data, error } = await sb.from('exam_reports')
+    .select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at')
+    .order('created_at', { ascending: false });
+  if (error) { listEl.innerHTML = '<p style="color:var(--danger); font-size:12.5px;">تعذر تحميل التقارير</p>'; return; }
+  if (!data || data.length === 0) {
+    listEl.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه تقارير محفوظة بعد</p></div>';
+    return;
+  }
+  const colors = [
+    { bg: 'var(--teal-light)', fg: 'var(--teal)' },
+    { bg: 'var(--gold-light)', fg: 'var(--gold)' },
+    { bg: 'var(--purple-light)', fg: 'var(--purple)' },
+    { bg: 'var(--meadow-light)', fg: 'var(--meadow-dark)' },
+  ];
+  const examIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:26px; height:26px;"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`;
+
+  listEl.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:14px;">
+    ${data.map((r, i) => {
+      const c = colors[i % colors.length];
+      return `
+      <div data-id="${r.id}" title="${esc(r.title)}" style="position:relative; background:#fff; border:1px solid var(--border); border-radius:14px; padding:20px 12px 14px; text-align:center; cursor:pointer; transition:0.15s; box-shadow:var(--shadow-sm);" onmouseover="this.style.boxShadow='var(--shadow-md)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.boxShadow='var(--shadow-sm)'; this.style.transform='none';">
+        <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف" style="position:absolute; top:6px; left:6px; border:none; background:none; color:var(--danger); cursor:pointer; font-size:13px; padding:3px 6px; line-height:1; border-radius:6px;">✕</button>
+        <div style="width:50px; height:50px; border-radius:13px; background:${c.bg}; color:${c.fg}; display:flex; align-items:center; justify-content:center; margin:0 auto 10px;">${examIconSvg}</div>
+        <div style="font-size:12.5px; font-weight:700; color:var(--ink); overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.4; min-height:34px;">${esc(r.title)}</div>
+        <div style="font-size:10.5px; color:var(--slate); margin-top:6px;">${esc(r.grade_level || '-')} — ${r.students_count} طالب</div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  listEl.querySelectorAll('[data-id]').forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.er-delete-btn')) return;
+      openReport(card.dataset.id);
+    });
+  });
+  listEl.querySelectorAll('.er-delete-btn').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (!confirm('متأكد تبي تحذف هذا التقرير؟')) return;
+      await sb.from('exam_reports').delete().eq('id', btn.dataset.id);
+      await loadSavedList();
+    });
+  });
+}
+
+async function openReport(id) {
+  const { data, error } = await sb.from('exam_reports').select('*').eq('id', id).single();
+  if (error || !data) { alert('تعذر فتح التقرير'); return; }
+  currentReport = data;
+  document.getElementById('er-list-view').classList.add('hidden');
+  document.getElementById('er-detail-view').classList.remove('hidden');
+  document.getElementById('er-detail-title').textContent = data.title;
+  document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`;
+  showErTab('dist');
+  renderAllReports(data.stats);
+  document.getElementById('er-editkey-card').classList.add('hidden');
+}
+
+/* ---------- تعديل مفتاح الإجابة لتقرير محفوظ وإعادة حساب التقارير الستة ---------- */
+document.getElementById('er-edit-key-btn').addEventListener('click', () => {
+  if (!currentReport) return;
+  const errEl = document.getElementById('er-editkey-error');
+  errEl.style.display = 'none';
+  if (!currentReport.raw_data || !Array.isArray(currentReport.raw_data.choiceCounts)) {
+    errEl.textContent = 'هذا تقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات الطلاب الخام - لازم ترفع نفس ملف الإكسل وتحفظ التقرير من جديد عشان تقدر تعدّل مفتاحه لاحقًا.';
+    errEl.style.display = 'block';
+    document.getElementById('er-editkey-card').classList.remove('hidden');
+    document.getElementById('er-editkey-form').innerHTML = '';
+    return;
+  }
+  const { choiceCounts, reversedOrder = true } = currentReport.raw_data;
+  const el = document.getElementById('er-editkey-form');
+  el.innerHTML = `<label style="display:flex; align-items:center; gap:8px; font-size:12px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:9px 12px; margin-bottom:12px;">
+    <input type="checkbox" id="er-editkey-reversed" style="width:auto; margin:0;"${reversedOrder ? ' checked' : ''} />
+    <span>ترتيب رموز الاختيارات بالملف معكوس (بطّله إذا المادة إنجليزية أو النتائج غريبة)</span>
+  </label>
+  <div class="er-key-grid">${choiceCounts.map((numChoices, i) => {
+    const options = ARABIC_LETTERS.slice(0, numChoices);
+    const current = letterFor(currentReport.key_raw[i], numChoices, reversedOrder);
+    return `<div class="er-key-item">
+      <label>سؤال ${i + 1}</label>
+      <select class="er-editkey-select" data-item="${i}">
+        ${options.map(o => `<option value="${o}"${o === current ? ' selected' : ''}>${o}</option>`).join('')}
+      </select>
+    </div>`;
+  }).join('')}</div>`;
+  document.getElementById('er-editkey-reversed').addEventListener('change', (e) => {
+    const opts = ARABIC_LETTERS;
+    document.querySelectorAll('.er-editkey-select').forEach((sel, i) => {
+      const numChoices = choiceCounts[i];
+      const letter = letterFor(currentReport.key_raw[i], numChoices, e.target.checked);
+      sel.value = letter || opts[0];
+    });
+  });
+  document.getElementById('er-editkey-card').classList.remove('hidden');
+  document.getElementById('er-editkey-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+document.getElementById('er-editkey-cancel').addEventListener('click', () => {
+  document.getElementById('er-editkey-card').classList.add('hidden');
+});
+
+document.getElementById('er-editkey-save').addEventListener('click', async () => {
+  const errEl = document.getElementById('er-editkey-error');
+  errEl.style.display = 'none';
+  if (!currentReport || !currentReport.raw_data) return;
+  const { students, choiceCounts } = currentReport.raw_data;
+
+  const selects = Array.from(document.querySelectorAll('.er-editkey-select'));
+  const letterSelections = selects.map(s => s.value);
+  if (letterSelections.some(v => !v)) {
+    errEl.textContent = 'اختر الإجابة الصحيحة لكل سؤال';
+    errEl.style.display = 'block';
+    return;
+  }
+  const reversedOrder = document.getElementById('er-editkey-reversed').checked;
+  const keyRaw = buildManualKey(letterSelections, choiceCounts, reversedOrder);
+  const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students, reversedOrder });
+  const newRawData = { ...currentReport.raw_data, reversedOrder };
+
+  const { error } = await sb.from('exam_reports').update({ key_raw: keyRaw, stats, raw_data: newRawData }).eq('id', currentReport.id);
+  if (error) { errEl.textContent = 'تعذر حفظ المفتاح الجديد: ' + error.message; errEl.style.display = 'block'; return; }
+
+  currentReport = { ...currentReport, key_raw: keyRaw, stats, raw_data: newRawData };
+  document.getElementById('er-editkey-card').classList.add('hidden');
+  showErTab('dist');
+  renderAllReports(stats);
+});
+
+document.getElementById('er-back-to-list').addEventListener('click', () => {
+  document.getElementById('er-detail-view').classList.add('hidden');
+  document.getElementById('er-list-view').classList.remove('hidden');
+});
+
+const ER_TABS = ['dist', 'hist', 'items', 'summary', 'itemstats', 'analysis'];
+function showErTab(tab) {
+  ER_TABS.forEach(t => {
+    document.getElementById(`er-tab-${t}`).classList.toggle('active', t === tab);
+    document.getElementById(`er-panel-${t}`).classList.toggle('hidden', t !== tab);
+  });
+}
+ER_TABS.forEach(t => document.getElementById(`er-tab-${t}`).addEventListener('click', () => showErTab(t)));
+
+/* =========================================================================
+ * عرض التقارير الستة
+ * ========================================================================= */
+function statBox(label, value) {
+  return `<div class="stat-card compact"><div class="body"><div class="label">${esc(label)}</div><div class="value" style="font-size:16px;">${value}</div></div></div>`;
+}
+
+function summaryStatsGrid(s) {
+  return `<div class="stat-grid compact-grid" style="grid-template-columns:repeat(3,1fr);">
+    ${statBox('عدد الطلاب', s.n)}
+    ${statBox('أعلى درجة', fmt1(s.high))}
+    ${statBox('أقل درجة', fmt1(s.low))}
+    ${statBox('متوسط الدرجة', fmt2(s.mean))}
+    ${statBox('الدرجة الوسيطة', fmt1(s.median))}
+    ${statBox('نطاق الدرجات', fmt1(s.range))}
+    ${statBox('الانحراف المعياري', fmt2(s.sd))}
+    ${statBox('معامل الثبات (KR20)', fmt2(s.kr20))}
+    ${statBox('متوسط الدرجة %', pct(s.meanPct))}
+  </div>`;
+}
+
+function renderAllReports(s) {
+  renderDist(s);
+  renderHist(s);
+  renderItems(s);
+  renderSummary(s);
+  renderItemStats(s);
+  renderAnalysis(s);
+}
+
+const GRADE_COLORS = { A: '#2E9155', B: '#2455A4', C: '#0E93A8', D: '#E07A34', F: '#C0453D' };
+const GRADE_LABELS = { A: 'ممتاز', B: 'جيد جدًا', C: 'جيد', D: 'مقبول', F: 'ضعيف' };
+
+function renderDist(s) {
+  const el = document.getElementById('er-panel-dist');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">تقرير التوزيع التكراري للصف <span style="font-size:12.5px; color:var(--slate); font-weight:400;">متوسط الدرجة% ${pct(s.meanPct)}</span></h4>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px,1fr)); gap:18px; align-items:start;">
+      <div style="overflow-x:auto;"><table class="er-table"><thead><tr>
+        <th>التقدير</th><th>الدرجة المئوية</th><th>الدرجة الخام</th><th>التكرار</th><th>النسبة المئوية</th>
+      </tr></thead><tbody>
+        ${s.gradeDistribution.map(g => `<tr>
+          <td><span class="badge" style="background:${GRADE_COLORS[g.grade]}1a; color:${GRADE_COLORS[g.grade]};">${GRADE_LABELS[g.grade] || g.grade}</span></td>
+          <td>${fmt1(g.pctMin)} - ${fmt2(g.pctMax)}</td>
+          <td>${fmt2(g.rawMin)} - ${fmt2(g.rawMax)}</td>
+          <td>${g.freq}</td>
+          <td>${pct(g.freqPct)}</td>
+        </tr>`).join('')}
+      </tbody></table></div>
+      <div class="form-card" style="margin:0;">
+        <h5 style="margin:0 0 10px; font-size:13px;">عدد الطلاب حسب التقدير</h5>
+        <div style="position:relative; height:270px;"><canvas id="er-dist-chart" style="width:100% !important; height:100% !important;"></canvas></div>
+      </div>
+    </div>`;
+  drawBarChart('er-dist-chart', s.gradeDistribution.map(g => GRADE_LABELS[g.grade] || g.grade), s.gradeDistribution.map(g => g.freq), 'التكرار', {
+    colors: s.gradeDistribution.map(g => GRADE_COLORS[g.grade]),
+  });
+}
+
+function renderHist(s) {
+  const el = document.getElementById('er-panel-hist');
+  const histColors = s.scoreHistogram.map((b, i) => (i >= 7 ? '#2E9155' : i >= 5 ? '#2455A4' : i >= 3 ? '#0E93A8' : i >= 1 ? '#E07A34' : '#C0453D'));
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">الرسم البياني لتقدير الطالب</h4>
+    ${summaryStatsGrid(s)}
+    <div class="form-card" style="margin-top:18px;">
+      <h5 style="margin:0 0 10px; font-size:13px;">توزيع الطلاب حسب الدرجة المئوية (فئات ١٠٪)</h5>
+      <div style="position:relative; height:270px;"><canvas id="er-hist-chart" style="width:100% !important; height:100% !important;"></canvas></div>
+    </div>`;
+  drawBarChart('er-hist-chart', s.scoreHistogram.map(b => b.label + '٪'), s.scoreHistogram.map(b => b.count), 'عدد الطلاب', {
+    colors: histColors,
+  });
+}
+
+// لون شريط النسبة لكل بديل: أخضر للإجابة الصحيحة، أصفر للمشتت الأكثر اختيارًا لو تجاوز
+// عدد من اختاره عدد من اختار الإجابة الصحيحة (مشكلة فعلية تحتاج مراجعة)، وإلا أحمر
+function choiceBarColor(c, it) {
+  if (c.isCorrect) return '#2E9155';
+  if (it.flagged && it.topWrong && c.label === it.topWrong) return '#FACC15';
+  return '#C0453D';
+}
+
+function renderItems(s) {
+  const el = document.getElementById('er-panel-items');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">التحليل المجمع لبنود الاختبار</h4>
+    <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">
+      الإجابة الصحيحة معلّمة بـ * ولون <span style="color:#2E9155; font-weight:700;">أخضر</span> — المشتت الأكثر
+      اختيارًا يصير <span style="color:#D4B106; font-weight:700;">أصفر</span> فقط لو تجاوز عدد من اختاره عدد من
+      اختار الإجابة الصحيحة (تحتاج مراجعة) — وإلا يبقى <span style="color:#C0453D; font-weight:700;">أحمر</span>
+      مثل بقية الاختيارات وعدم الاستجابة/متعدد
+    </p>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:14px; direction:rtl;">
+      ${s.itemStats.map(it => `
+        <div class="form-card" style="margin:0;">
+          <h5 style="margin:0 0 10px; font-size:13px; display:flex; align-items:center; justify-content:space-between; gap:6px;">
+            <span>${esc(it.label)}</span>
+            ${it.flagged ? '<span class="badge badge-danger" title="مشتت أُختير أكثر من الإجابة الصحيحة">⚠ مراجعة</span>' : ''}
+          </h5>
+          <div style="display:flex; flex-direction:column; gap:9px;">
+            ${it.choices.map(c => `
+              <div>
+                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px; font-size:12px; gap:6px;">
+                  <span>${esc(c.label)}${c.isCorrect ? ' *' : ''}</span>
+                  <span>${c.count} — ${pct(c.pct)}</span>
+                </div>
+                <div style="background:var(--sand); border-radius:5px; height:8px; overflow:hidden;">
+                  <div style="background:${choiceBarColor(c, it)}; height:100%; border-radius:5px; width:${c.pct > 0 ? Math.max(c.pct, 2) : 0}%;"></div>
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>`).join('')}
+    </div>`;
+}
+
+function renderSummary(s) {
+  const el = document.getElementById('er-panel-summary');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">تقرير موجز للاختبار</h4>
+    ${summaryStatsGrid(s)}
+    <div style="overflow-x:auto; margin-top:18px;"><table class="er-table"><thead><tr>
+      <th>رقم</th><th>سؤال</th><th>الإجابة الصحيحة</th><th>الإجمالي: الصواب%</th><th>أعلى ٢٧٪</th><th>أدنى ٢٧٪</th><th>نقطي ثنائي التسلسل</th>
+    </tr></thead><tbody>
+      ${s.itemStats.map(it => `<tr>
+        <td>${it.num}</td><td>${esc(it.label)}</td><td>${esc(it.correctLetter || '-')}</td>
+        <td>${pct(it.correctPct)}</td><td>${pct(it.upper27)}</td><td>${pct(it.lower27)}</td><td>${fmt2(it.pointBiserial)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function renderItemStats(s) {
+  const el = document.getElementById('er-panel-itemstats');
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">تقرير إحصاءات بنود الاختبار</h4>
+    <div style="overflow-x:auto;"><table class="er-table"><thead><tr>
+      <th>سؤال</th><th>نقاط</th><th>مصحح</th><th>الصواب</th><th>الخطأ</th><th>غير موجود</th><th>نقطي ثنائي التسلسل</th><th>النسبة% الصواب</th>
+    </tr></thead><tbody>
+      ${s.itemStats.map(it => `<tr>
+        <td>${esc(it.label)}</td><td>1</td><td>${s.n}</td><td>${it.correctCount}</td><td>${it.wrongCount}</td><td>${it.notPresent}</td>
+        <td>${fmt2(it.pointBiserial)}</td><td>${pct(it.correctPct)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>`;
+}
+
+function renderAnalysis(s) {
+  const el = document.getElementById('er-panel-analysis');
+  // تقارير محفوظة بنسخة سابقة من النظام ما تحتوي هذه القوائم بعد - نتفادى انهيار الصفحة
+  const topStudents = Array.isArray(s.topStudents) ? s.topStudents : [];
+  const bottomStudents = Array.isArray(s.bottomStudents) ? s.bottomStudents : [];
+  const isLegacyReport = !Array.isArray(s.topStudents) && !Array.isArray(s.bottomStudents);
+  el.innerHTML = `
+    <h4 style="margin-bottom:14px;">تقرير تحليل الاختبار</h4>
+    ${summaryStatsGrid(s)}
+    <div class="form-row" style="align-items:stretch; margin-top:18px;">
+      <div class="form-card" style="margin:0;">
+        <h5 style="margin:0 0 10px; font-size:13px;">أصعب الأسئلة</h5>
+        ${s.hardest.map(it => `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0; border-bottom:1px solid #ECEAE1;"><span>${esc(it.label)}</span><span style="font-weight:700; color:var(--danger);">${pct(it.correctPct)}</span></div>`).join('')}
+      </div>
+      <div class="form-card" style="margin:0;">
+        <h5 style="margin:0 0 10px; font-size:13px;">أسهل الأسئلة</h5>
+        ${s.easiest.map(it => `<div style="display:flex; justify-content:space-between; font-size:12.5px; padding:4px 0; border-bottom:1px solid #ECEAE1;"><span>${esc(it.label)}</span><span style="font-weight:700; color:var(--meadow);">${pct(it.correctPct)}</span></div>`).join('')}
+      </div>
+    </div>
+    <div class="form-card" style="margin-top:18px;">
+      <h5 style="margin:0 0 8px; font-size:13px;">الموثوقية (كرونباخ ألفا)</h5>
+      <p style="font-size:13px; margin:0;">${fmt2(s.kr20)} — <span class="badge badge-gray">${esc(s.reliabilityBand)}</span></p>
+      <p style="font-size:11.5px; color:var(--slate); margin-top:8px;">تُستخدم لقياس الاتساق الداخلي (الموثوقية) للاختبار: ضعيف &lt;٠٫٧٠ / متوسط ٠٫٧٠-٠٫٧٩ / جيد ٠٫٨٠-٠٫٨٩ / ممتاز ٠٫٩٠+</p>
+    </div>
+    <div class="form-card" style="margin-top:18px;">
+      <h5 style="margin:0 0 8px; font-size:13px;">أسئلة للمراجعة</h5>
+      <p style="font-size:12.5px; margin:0;">${s.toReview.length ? s.toReview.map(it => esc(it.label) + (it.topWrong ? ` (اختار كثيرون "${esc(it.topWrong)}" بدل الإجابة الصحيحة)` : '')).join('، ') : 'ما فيه أسئلة مشتتاتها أكثر اختيارًا من الإجابة الصحيحة'}</p>
+    </div>
+    <div style="margin-top:22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+      <div>
+        <h5 style="margin:0 0 4px; font-size:14px;">أعلى ١٥ وأدنى ١٥ درجة</h5>
+        <p style="font-size:11.5px; color:var(--slate); margin:0;">بأسماء الطلاب وفصولهم</p>
+      </div>
+      ${isLegacyReport ? '' : `<div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button type="button" class="text-action-btn" id="er-print-topbottom" style="width:auto; padding:8px 14px;">🖨 طباعة</button>
+        <button type="button" class="text-action-btn" id="er-export-topbottom" style="width:auto; padding:8px 14px;">⬇ تصدير إكسل</button>
+      </div>`}
+    </div>
+    ${isLegacyReport ? `<p style="font-size:12px; color:var(--danger); margin:8px 0 0;">هذا التقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات الترتيب - ارفع نفس ملف الإكسل وأعد حفظ التقرير لعرض هذه القائمة.</p>` : `
+    <div class="form-row" style="align-items:stretch; margin-top:10px;">
+      ${studentRankTable(topStudents, 'أعلى ١٥ درجة', 'badge-meadow')}
+      ${studentRankTable(bottomStudents, 'أدنى ١٥ درجة', 'badge-danger')}
+    </div>`}`;
+
+  const printBtn = document.getElementById('er-print-topbottom');
+  const exportBtn = document.getElementById('er-export-topbottom');
+  if (printBtn) printBtn.addEventListener('click', () => printTopBottomReport({ ...s, topStudents, bottomStudents }));
+  if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel({ ...s, topStudents, bottomStudents }));
+}
+
+function studentRankTable(list, title, badgeClass) {
+  return `<div class="form-card" style="margin:0;">
+    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
+      <h5 style="margin:0; font-size:13px;">${esc(title)}</h5>
+      <span class="badge ${badgeClass}">${list.length} طالب</span>
+    </div>
+    <div style="overflow-x:auto;"><table class="er-table small"><thead><tr>
+      <th>#</th><th style="text-align:right;">الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th>
+    </tr></thead><tbody>
+      ${list.length ? list.map((st, i) => `<tr>
+        <td>${i + 1}</td>
+        <td style="text-align:right;">${esc(st.name || st.id || '-')}</td>
+        <td>${esc(st.section || '-')}</td>
+        <td>${fmt1(st.total)}</td>
+        <td>${pct(st.pct)}</td>
+      </tr>`).join('') : '<tr><td colspan="5" style="color:var(--slate);">لا يوجد</td></tr>'}
+    </tbody></table></div>
+  </div>`;
+}
+
+/* ---------- طباعة تقرير أعلى/أدنى ١٥ درجة ---------- */
+const ER_LOGO_DATA_URI = new URL('logo.png', window.location.href).href;
+function printTopBottomReport(s) {
+  const title = currentReport ? currentReport.title : 'تقرير أعلى وأدنى الدرجات';
+  const sub = currentReport ? `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'}` : '';
+
+  const rowsHtml = (list) => list.length
+    ? list.map((st, i) => `<tr>
+        <td>${i + 1}</td>
+        <td style="text-align:right;">${esc(st.name || st.id || '-')}</td>
+        <td>${esc(st.section || '-')}</td>
+        <td>${fmt1(st.total)}</td>
+        <td>${pct(st.pct)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="5">لا يوجد</td></tr>';
+
+  const logoHtml = ER_LOGO_DATA_URI ? `<img src="${ER_LOGO_DATA_URI}" alt="شعار" style="height:50px;" />` : '';
+
+  const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>لوحة تحكم مدرسة المروج</title>
-<link rel="manifest" href="manifest-staff.json">
-<meta name="theme-color" content="#0F2447">
-<link rel="apple-touch-icon" href="icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-<link rel="stylesheet" href="styles.css">
+<title>أعلى وأدنى ١٥ درجة - ${esc(title)}</title>
+<style>
+  body { font-family: 'Tajawal', 'Tahoma', Arial, sans-serif; padding: 24px; color:#16233A; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+  .doc { max-width: 960px; margin: 0 auto; }
+  .header { display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #16233A; padding-bottom:14px; margin-bottom:20px; }
+  .header h1 { margin:0; font-size:19px; }
+  .header p { margin:2px 0 0; font-size:12px; color:#6B7684; }
+  .cols { display:flex; gap:18px; }
+  .cols > div { flex:1; }
+  h3 { font-size:13.5px; margin:0 0 8px; }
+  table { width:100%; border-collapse:collapse; margin-bottom:20px; }
+  th, td { border:1px solid #999; padding:6px 8px; font-size:11.5px; text-align:center; }
+  th { background:#16233A; color:#fff; font-weight:600; }
+  tbody tr:nth-child(even) { background:#f7f7f2; }
+  .footer-note { margin-top:20px; font-size:10px; color:#999; text-align:center; }
+  @media print { body { padding:0; } .cols { display:block; } }
+</style>
 </head>
 <body>
-
-<!-- ===== شاشة تسجيل الدخول ===== -->
-<div id="login-screen">
-  <div class="brand-panel">
-    <svg class="hills" viewBox="0 0 500 200" preserveAspectRatio="none">
-      <path d="M0,140 Q125,90 250,130 T500,110 V200 H0 Z" fill="rgba(255,255,255,0.08)"/>
-      <path d="M0,170 Q150,120 300,160 T500,150 V200 H0 Z" fill="rgba(255,255,255,0.12)"/>
-    </svg>
-    <img src="logo.png" alt="شعار مدرسة المروج المتوسطة" style="width:280px; max-width:70%; height:auto; background:#fff; padding:16px 20px; border-radius:14px; margin-bottom:28px; position:relative; z-index:1;" />
-    <h1>لوحة تحكم<br>مدرسة المروج</h1>
-    <p>منصة إدارة متكاملة لكل خدمات المدرسة — من متابعة الأداء إلى الخطة التشغيلية، في مكان واحد.</p>
+  <div class="doc">
+    <div class="header">
+      ${logoHtml}
+      <div style="text-align:center; flex:1;">
+        <h1>تقرير أعلى وأدنى ١٥ درجة</h1>
+        <p>${esc(title)}${sub ? ' — ' + esc(sub) : ''}</p>
+      </div>
+      <div style="width:50px;"></div>
+    </div>
+    <div class="cols">
+      <div>
+        <h3>أعلى ١٥ درجة</h3>
+        <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
+        <tbody>${rowsHtml(s.topStudents)}</tbody></table>
+      </div>
+      <div>
+        <h3>أدنى ١٥ درجة</h3>
+        <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
+        <tbody>${rowsHtml(s.bottomStudents)}</tbody></table>
+      </div>
+    </div>
+    <div class="footer-note">تمت الطباعة من نظام إدارة المدرسة</div>
   </div>
-  <div class="login-panel">
-    <div class="login-card" id="login-card">
-      <h2>تسجيل الدخول</h2>
-      <p class="sub">أدخل بياناتك للمتابعة إلى لوحتك</p>
-      <div class="error-msg" id="login-error"></div>
-      <div class="field">
-        <label>البريد الإلكتروني أو الرقم الوظيفي</label>
-        <input type="text" id="login-email" placeholder="name@example.com أو 12345" />
-      </div>
-      <div class="field">
-        <label>كلمة المرور</label>
-        <input type="password" id="login-password" placeholder="••••••••" />
-      </div>
-      <button class="btn-primary" id="login-btn">دخول</button>
-      <p style="text-align:center; margin-top:14px;">
-        <span class="text-action-btn" id="show-reset-link">تغيير كلمة المرور</span>
-      </p>
-    </div>
-    <div class="login-card hidden" id="reset-password-card">
-      <h2>تغيير كلمة المرور</h2>
-      <p class="sub">أدخل بريدك/رقمك الوظيفي وكلمة المرور الحالية، ثم كلمة المرور الجديدة</p>
-      <div class="error-msg" id="reset-error"></div>
-      <div class="success-msg" id="reset-success" style="display:none; background:var(--meadow-light); color:var(--meadow); padding:10px 14px; border-radius:10px; font-size:13.5px; margin-bottom:14px;"></div>
-      <div class="field">
-        <label>البريد الإلكتروني أو الرقم الوظيفي</label>
-        <input type="text" id="reset-email" placeholder="name@example.com أو 12345" />
-      </div>
-      <div class="field">
-        <label>كلمة المرور الحالية</label>
-        <input type="password" id="reset-old-password" placeholder="••••••••" />
-      </div>
-      <div class="field">
-        <label>كلمة المرور الجديدة</label>
-        <input type="password" id="reset-new-password" placeholder="••••••••" />
-      </div>
-      <div class="field">
-        <label>تأكيد كلمة المرور الجديدة</label>
-        <input type="password" id="reset-new-password-confirm" placeholder="••••••••" />
-      </div>
-      <button class="btn-primary" id="reset-submit-btn">تغيير كلمة المرور</button>
-      <p style="text-align:center; margin-top:14px;">
-        <span class="text-action-btn" id="hide-reset-link">رجوع لتسجيل الدخول</span>
-      </p>
-    </div>
-  </div>
-</div>
-
-<!-- ===== لوحة التحكم ===== -->
-<div id="dashboard-screen" class="hidden">
-  <header class="topbar">
-    <div class="brand">
-      <img src="logo.png" alt="شعار مدرسة المروج المتوسطة" />
-      <span>مدرسة المروج</span>
-    </div>
-    <div id="nav-list"></div>
-    <div class="sidebar-footer">
-      <div class="avatar" id="user-avatar"></div>
-      <div class="user-meta">
-        <div class="name" id="user-name"></div>
-        <div class="role" id="user-role-badge"></div>
-      </div>
-      <button class="logout-icon" id="logout-btn" title="تسجيل خروج">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
-      </button>
-    </div>
-  </header>
-
-  <main class="main">
-    <div id="tiles-view">
-      <div class="main-header">
-        <h2>الرئيسية</h2>
-        <p>مرحبًا بك في لوحة تحكم مدرسة المروج</p>
-      </div>
-      <div id="my-duty-banner"></div>
-
-      <div id="dash-weekly-schedule" style="margin-bottom:22px;"></div>
-
-      <p style="font-family:'Tajawal'; font-weight:700; font-size:14px; margin:0 0 12px;">الأقسام</p>
-      <div class="tiles-groups" id="dash-sections-grid"></div>
-
-      <div id="dashboard-content" style="margin-top:28px;"></div>
-    </div>
-
-    <div id="module-header" class="page-header hidden"></div>
-
-    <div id="notes-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles">→ رجوع للرئيسية</span>
-
-      <!-- رأس القسم: عنوان + تنقّل بين تبويبات متابعة الأداء -->
-      <div class="bud-head">
-        <div class="bud-head-title">
-          <div class="bud-head-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg>
-          </div>
-          <div>
-            <h3>متابعة أداء الموظفين</h3>
-            <p>معايير تقييم الأداء الوظيفي الرسمية، رصد المخالفات، وبطاقة أداء قابلة للطباعة</p>
-          </div>
-        </div>
-        <div class="bud-tabs" id="eval-tabs" role="tablist">
-          <button class="bud-tab hidden" id="eval-tab-overview" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-            نظرة عامة
-          </button>
-          <button class="bud-tab active" id="eval-tab-record" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            تسجيل ملاحظة
-          </button>
-          <button class="bud-tab hidden" id="eval-tab-settings" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            الإعدادات
-          </button>
-        </div>
-      </div>
-
-      <!-- ===== لوحة: نظرة عامة (المدير فقط) ===== -->
-      <div class="bud-panel hidden" id="eval-panel-overview">
-        <div id="eval-overview-list-view">
-          <div class="stat-grid" id="eval-stats"></div>
-          <div class="bud-section-card" style="margin-top:18px;">
-            <div class="bud-section-head">
-              <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
-              <div><h4>تقييم المعلمين</h4><p>اضغط على أي معلم لعرض تقريره الكامل حسب معايير التقييم الرسمية</p></div>
-            </div>
-            <div id="eval-employee-list"></div>
-          </div>
-        </div>
-
-        <div id="eval-detail-view" class="hidden">
-          <span class="back-link" id="eval-detail-back">→ رجوع للقائمة</span>
-          <div class="bud-section-card">
-            <div class="bud-section-head">
-              <div class="bud-section-icon" id="eval-detail-avatar"></div>
-              <div>
-                <h4 id="eval-detail-name">-</h4>
-                <p id="eval-detail-title">-</p>
-              </div>
-              <div class="ring-wrap" style="margin-inline-start:auto;" id="eval-detail-ring"></div>
-            </div>
-            <div id="eval-detail-band" style="margin:2px 0 14px;"></div>
-            <div id="eval-detail-breakdown"></div>
-            <button class="text-action-btn" id="eval-print-card-btn" style="margin-top:14px;">🖨 طباعة بطاقة الأداء (PDF)</button>
-          </div>
-          <div class="bud-section-card" style="margin-top:14px;">
-            <div class="bud-section-head">
-              <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg></div>
-              <div><h4>سجل المخالفات</h4><p>كل المخالفات المسجَّلة على هذا المعلم للسنة الدراسية الحالية</p></div>
-            </div>
-            <div id="eval-detail-notes"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== لوحة: تسجيل ملاحظة (مدير + وكيل) ===== -->
-      <div class="bud-panel" id="eval-panel-record">
-        <div class="bud-section-card">
-          <div class="bud-section-head">
-            <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg></div>
-            <div><h4>تسجيل مخالفة جديدة</h4><p>اختر المعيار ثم البند المحدد - الخصم يُحسب تلقائيًا ويظهر لك قبل الحفظ</p></div>
-          </div>
-          <div class="form-row">
-            <select id="note-employee"></select>
-            <select id="note-criterion"></select>
-          </div>
-          <div class="form-row">
-            <select id="note-detail"></select>
-            <input type="date" id="note-date" />
-          </div>
-          <textarea id="note-text" placeholder="تفاصيل المخالفة (اختياري)" rows="3"></textarea>
-          <div id="note-deduction-preview" style="font-size:12.5px; color:var(--slate); margin:2px 0 10px;"></div>
-          <div class="error-msg" id="note-error"></div>
-          <button class="btn-primary" id="note-submit">تسجيل المخالفة</button>
-          <span id="note-success-msg" style="font-size:12.5px; color:var(--meadow); display:none; margin-inline-start:10px;">تم التسجيل ✓</span>
-        </div>
-      </div>
-
-      <!-- ===== لوحة: الإعدادات (المدير فقط) ===== -->
-      <div class="bud-panel hidden" id="eval-panel-settings">
-        <div class="bud-section-card">
-          <div class="bud-section-head">
-            <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></div>
-            <div><h4>السنة الدراسية الحالية</h4><p>تغييرها يبدأ رصيد كل المعايير من جديد (٥ لكل معيار) لكل الموظفين، بدون حذف سجل المخالفات القديم</p></div>
-          </div>
-          <div class="form-row">
-            <input type="text" id="perf-year-input" placeholder="مثال: 1447/1448" />
-            <button class="btn-primary" id="perf-year-save" style="white-space:nowrap;">حفظ السنة الحالية</button>
-          </div>
-          <div class="error-msg" id="perf-year-error"></div>
-        </div>
-
-        <div class="bud-section-card" style="margin-top:14px;">
-          <div class="bud-section-head">
-            <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
-            <div><h4>تحقق من تطابق أسماء المعلمين بالجدول الدراسي</h4><p>عدد الحصص يُحسب من مطابقة الاسم بالضبط مع جدول الحصص - أي معلم بصفر يحتاج تصحيح الاسم بأحد الجدولين</p></div>
-          </div>
-          <div id="perf-name-check-list"></div>
-        </div>
-
-        <div class="bud-section-card" style="margin-top:14px;">
-          <div class="bud-section-head">
-            <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83"/></svg></div>
-            <div><h4>معايير التقييم وبنودها</h4><p>لكل معيار وزن بالدرجة النهائية (متساوٍ افتراضيًا)، ولكل بند نوع خصم: ثابت، أو نسبي لعدد الحصص/المناوبات</p></div>
-          </div>
-          <div id="perf-criteria-list"></div>
-        </div>
-      </div>
-    </div>
-
-    <div id="weekly-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-3">→ رجوع للرئيسية</span>
-
-
-      <div class="wp-header">
-        <div class="wp-header-top">
-          <div>
-            <h3>الخطة الأسبوعية</h3>
-            <p>الدروس والمهام والواجبات لكل مرحلة</p>
-          </div>
-          <select id="weekly-grade" class="wp-grade-select">
-            <option value="first_intermediate">أول متوسط</option>
-            <option value="second_intermediate">ثاني متوسط</option>
-            <option value="third_intermediate">ثالث متوسط</option>
-          </select>
-        </div>
-        <div class="wp-week-pill">
-          <button id="week-prev" type="button">‹ السابق</button>
-          <span id="week-label">الأسبوع 1</span>
-          <button id="week-next" type="button">التالي ›</button>
-        </div>
-      </div>
-
-      <div id="weekly-admin-note-card" class="form-card hidden">
-        <h4>ملاحظة الإدارة لهذا الأسبوع</h4>
-        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">تظهر لولي الأمر فوق قائمة المواد مباشرة</p>
-        <textarea id="weekly-admin-note-text" placeholder="مثال: يوم الخميس القادم إجازة رسمية، أو تذكير باجتماع أولياء الأمور" rows="2"></textarea>
-        <div id="weekly-admin-note-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-bottom:10px;"></div>
-        <button id="weekly-admin-note-save" style="width:auto;">حفظ الملاحظة</button>
-      </div>
-
-      <div id="weekly-publish-card" class="form-card hidden" style="background:var(--sand);">
-        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:4px;">
-          <input type="checkbox" id="weekly-publish-toggle" style="width:auto; margin:0;" />
-          <span style="font-weight:700;">نشر هذا الأسبوع لأولياء الأمور</span>
-        </label>
-        <p style="font-size:12.5px; color:var(--slate); margin:0;">لما تفعّله، يقدر ولي الأمر يشوف خطة هذا الأسبوع بصفحته. المعلمون يقدرون يدخلون خططهم لأي أسبوع بشكل طبيعي بغض النظر عن هذا الخيار.</p>
-      </div>
-
-      <div id="weekly-form-card" class="form-card hidden">
-        <h4 id="weekly-form-title">إضافة / تحديث خطة المادة لهذا الأسبوع</h4>
-        <select id="weekly-subject"></select>
-        <div id="weekly-lessons-container"></div>
-        <span class="text-action-btn" id="weekly-add-lesson-btn" style="display:inline-block; margin-bottom:14px;">+ إضافة درس</span>
-        <textarea id="weekly-tasks" placeholder="المهام الأدائية" rows="2"></textarea>
-        <textarea id="weekly-homework" placeholder="الواجبات المطلوبة" rows="2"></textarea>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:14px; cursor:pointer;">
-          <input type="checkbox" id="weekly-no-homework" style="width:auto; margin:0;" />
-          لا يوجد واجب هذا الأسبوع لهذه المادة
-        </label>
-        <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:10px; cursor:pointer;">
-          <input type="checkbox" id="weekly-has-test" style="width:auto; margin:0;" />
-          يوجد اختبار هذا الأسبوع لهذه المادة
-        </label>
-        <div id="weekly-test-sections-wrap" class="hidden" style="background:#fff; border:1px solid #ECEAE1; border-radius:10px; padding:10px 12px; margin-bottom:14px;">
-          <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول اللي عليها الاختبار (لو المادة تُدرّس بأكثر من فصل بمعلمين مختلفين). اتركها كلها فاضية = الاختبار على كل الفصول.</p>
-          <div id="weekly-test-sections-list" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
-        </div>
-        <div class="error-msg" id="weekly-error"></div>
-        <button class="btn-primary" id="weekly-submit">حفظ خطة المادة</button>
-        <div id="weekly-submit-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13.5px; font-weight:600; margin-top:10px;"></div>
-      </div>
-
-      <h4 style="margin-bottom:14px;">خطة هذا الأسبوع</h4>
-      <div id="weekly-list"></div>
-    </div>
-
-    <div id="perms-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-4">→ رجوع للرئيسية</span>
-
-
-      <div class="form-card">
-        <h4>إنشاء حساب دخول جديد</h4>
-        <div class="form-row">
-          <input type="text" id="newuser-name" placeholder="الاسم الكامل" style="margin-bottom:10px;" />
-          <select id="newuser-role">
-            <option value="teacher">معلم</option>
-            <option value="deputy">وكيل</option>
-            <option value="admin">مدير</option>
-            <option value="parent">ولي أمر</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <input type="text" id="newuser-email" placeholder="البريد الإلكتروني أو الرقم الوظيفي" style="margin-bottom:10px;" />
-          <input type="text" id="newuser-password" placeholder="كلمة مرور مبدئية" style="margin-bottom:10px;" />
-        </div>
-        <div class="error-msg" id="newuser-error"></div>
-        <div id="newuser-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px;"></div>
-        <button class="btn-primary" id="newuser-submit">إنشاء الحساب</button>
-      </div>
-
-      <div class="form-card">
-        <h4>إضافة تخصيص جديد</h4>
-        <div class="form-row">
-          <select id="perm-teacher"></select>
-          <select id="perm-subject"></select>
-        </div>
-        <select id="perm-grade">
-          <option value="first_intermediate">أول متوسط</option>
-          <option value="second_intermediate">ثاني متوسط</option>
-          <option value="third_intermediate">ثالث متوسط</option>
-        </select>
-        <div class="error-msg" id="perm-error"></div>
-        <button class="btn-primary" id="perm-submit">إضافة التخصيص</button>
-      </div>
-
-      <h4 style="margin-bottom:14px;">التخصيصات الحالية</h4>
-      <div id="perms-list"></div>
-    </div>
-
-    <div id="portal-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-5">→ رجوع للرئيسية</span>
-
-
-      <div class="form-card" id="portal-add-form">
-        <h4>إضافة موظف جديد</h4>
-        <div class="form-row">
-          <input type="text" id="portal-name" placeholder="اسم الموظف" style="margin-bottom:10px;" />
-          <input type="text" id="portal-title" placeholder="المسمى الوظيفي" style="margin-bottom:10px;" />
-        </div>
-        <div class="error-msg" id="portal-error"></div>
-        <button class="btn-primary" id="portal-submit">إضافة الموظف</button>
-      </div>
-
-      <div class="form-card" id="portal-bulk-form">
-        <h4 id="portal-bulk-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ إنشاء حسابات دخول متعددة من ملف إكسل</span>
-          <svg id="portal-bulk-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <div id="portal-bulk-body" class="hidden" style="margin-top:14px;">
-          <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج، عبّه ببيانات الموظفين (اسم، إيميل، كلمة مرور، دور)، وارفعه — يتم إنشاء كل حساب وربطه بجدول الموظفين تلقائيًا.</p>
-          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-            <button id="portal-download-template" style="width:auto; background:var(--sand); color:var(--ink); border:1px solid #E4E2D9;">تنزيل نموذج فارغ</button>
-          </div>
-          <input type="file" id="portal-excel-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
-          <div class="error-msg" id="portal-excel-error"></div>
-          <div id="portal-excel-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:10px;"></div>
-          <button id="portal-excel-upload" style="width:auto;">رفع الملف وإنشاء الحسابات</button>
-        </div>
-      </div>
-
-      <h4 style="margin-bottom:14px;">كل الموظفين</h4>
-      <div id="portal-list"></div>
-    </div>
-
-    <div id="weekly-tracking-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-7">→ رجوع للرئيسية</span>
-
-      <div class="form-card hidden bud-section-card" id="wt-perms-section">
-        <div class="bud-section-head">
-          <div class="bud-section-icon" style="background:var(--purple-light); color:var(--purple);">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z"/></svg>
-          </div>
-          <div>
-            <h4>صلاحية عرض القسم</h4>
-            <p>امنح معلمين محددين إمكانية رؤية متابعة الخطة الأسبوعية</p>
-          </div>
-        </div>
-        <div id="wt-perms-list"></div>
-        <div class="form-row" style="margin-top:14px;">
-          <select id="wt-perm-employee"></select>
-          <span></span>
-        </div>
-        <button class="btn-primary" id="wt-perm-submit" style="width:auto; padding:10px 18px; margin-top:10px;">+ إعطاء الصلاحية</button>
-        <div class="error-msg" id="wt-perm-error"></div>
-      </div>
-
-      <div class="week-nav" style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
-        <button id="wt-week-prev" style="width:auto; padding:8px 16px;">السابق</button>
-        <span id="wt-week-label" style="font-weight:700;">الأسبوع 1</span>
-        <button id="wt-week-next" style="width:auto; padding:8px 16px;">التالي</button>
-      </div>
-
-      <div id="wt-grades-container"></div>
-    </div>
-
-    <div id="opplan-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-6">→ رجوع للرئيسية</span>
-      <p id="opplan-subtitle" style="color:var(--slate); font-size:12.5px; margin:-10px 0 20px;"></p>
-
-      <!-- ===== شاشة المدير ===== -->
-      <div id="opplan-admin-view" class="hidden">
-        <div class="bud-head">
-          <div class="bud-head-title">
-            <div class="bud-head-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-            </div>
-            <div>
-              <h3>الخطة التشغيلية الرسمية 1448هـ</h3>
-              <p>إدارة الأهداف والبرامج، إسناد المهام للمشاركين، ومراجعة الاعتمادات</p>
-            </div>
-          </div>
-          <div class="bud-tabs" id="opplan-tabs" role="tablist">
-            <button class="bud-tab active" id="opplan-tab-dashboard" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-8"/></svg>
-              لوحة المتابعة
-            </button>
-            <button class="bud-tab" id="opplan-tab-settings" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-              الإعدادات
-            </button>
-            <button class="bud-tab" id="opplan-tab-approvals" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-              اعتماد المهام
-            </button>
-          </div>
-        </div>
-
-        <!-- ===== لوحة: المتابعة (الداشبورد التفاعلي) ===== -->
-        <div class="bud-panel" id="opplan-panel-dashboard">
-        <div class="op-dashboard">
-          <div class="op-page-head">
-            <p>متابعة تنفيذ مدرستنا للبرامج الرسمية المعتمدة من إدارة التعليم — النسبة تُحسب تلقائيًا من المهام الأسبوعية المعتمدة والمنجزة تحت كل برنامج، بدون تسجيل يدوي</p>
-            <span class="op-scope-note hidden" id="opplan-scope-note"></span>
-            <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
-              <label style="font-size:12.5px; color:var(--slate); font-weight:700;">الفصل الدراسي الحالي:</label>
-              <select id="opplan-semester-select" style="width:auto;">
-                <option value="semester_1">الفصل الأول</option>
-                <option value="semester_2">الفصل الثاني</option>
-              </select>
-            </div>
-          </div>
-
-          <div id="opplan-guide-stats" class="op-stat-row"></div>
-
-          <div class="op-chart-row">
-            <div class="op-chart-card">
-              <h3>نسبة الإنجاز حسب الهدف الاستراتيجي</h3>
-              <p class="op-chart-sub">متوسط إنجاز برامج كل هدف، محسوب تلقائيًا من المهام الأسبوعية المعتمدة</p>
-              <div class="op-chart-box"><canvas id="opplan-goals-bar-chart"></canvas></div>
-            </div>
-            <div class="op-chart-card">
-              <h3>حالة البرامج</h3>
-              <p class="op-chart-sub">توزيع البرامج المتابَعة حسب حالة التنفيذ</p>
-              <div class="op-donut-wrap">
-                <div class="op-donut-box">
-                  <canvas id="opplan-status-donut-chart"></canvas>
-                  <div class="op-donut-center"><div class="big" id="opplan-donut-total">0</div><div class="small">برنامج</div></div>
-                </div>
-                <div class="op-donut-legend" id="opplan-donut-legend"></div>
-              </div>
-            </div>
-          </div>
-
-          <h3 class="op-section-title">التقدم حسب الهدف الاستراتيجي <span style="font-size:11.5px; color:var(--slate); font-weight:400;">(اضغط على هدف لفلترة البرامج به)</span></h3>
-          <div id="opplan-guide-goals" class="op-goal-grid"></div>
-          <div id="opplan-guide-objectives" class="op-filter-chips hidden"></div>
-
-          <h3 class="op-section-title" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-            <span>البرامج (متابعة تنفيذ مدرستنا)</span>
-            <span id="opplan-filter-badge" class="hidden"></span>
-          </h3>
-          <div id="opplan-guide-legend" class="op-legend"></div>
-          <div id="opplan-guide-list" class="op-program-grid"></div>
-        </div>
-        </div>
-
-        <!-- عرض مهام برنامج (قراءة فقط) - خارج التبويبات عشان يشتغل دايمًا بغض النظر عن التبويب المفعّل -->
-        <div id="opplan-program-overlay" class="hidden" style="position:fixed; inset:0; background:rgba(21,34,56,0.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;">
-          <div style="background:#fff; border-radius:16px; padding:22px; max-width:560px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-md);">
-            <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px;">
-              <div>
-                <h3 style="margin:0 0 4px;" id="opplan-program-overlay-title">-</h3>
-                <p style="font-size:12px; color:var(--slate); margin:0;" id="opplan-program-overlay-sub">-</p>
-              </div>
-              <button type="button" id="opplan-program-overlay-close" style="background:none; border:none; font-size:20px; color:var(--slate); cursor:pointer; line-height:1; flex-shrink:0;">×</button>
-            </div>
-            <div id="opplan-program-overlay-body" style="margin-top:16px;"></div>
-          </div>
-        </div>
-
-        <!-- ===== لوحة: الإعدادات (إسناد + هيكل الأهداف + اعتمادات) ===== -->
-        <div class="bud-panel hidden" id="opplan-panel-settings">
-        <div class="form-card">
-          <h4>المشاركون بالخطة</h4>
-          <div class="form-row">
-            <select id="opm-employee"></select>
-            <button class="btn-primary" id="opm-add-member" style="width:auto; padding:11px 20px;">إضافة للخطة</button>
-          </div>
-          <div id="opm-members-list" style="margin-top:10px;"></div>
-        </div>
-
-        <div class="form-card">
-          <h4>إسناد البرامج للمشاركين</h4>
-          <p style="font-size:12.5px; color:var(--slate); margin:0 0 12px;">اختر مشاركًا وحدد البرامج المسندة له — يشوفها بصفحته ويدخل مهامها الأسبوعية برنامجًا برنامج</p>
-          <div class="form-row">
-            <select id="opa-employee"></select>
-          </div>
-          <input type="text" id="opa-search" placeholder="بحث باسم البرنامج أو رمزه..." style="margin:10px 0;" />
-          <div id="opa-checklist" class="opa-checklist"></div>
-          <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
-            <button class="btn-primary" id="opa-save" style="width:auto; padding:10px 20px;">حفظ الإسناد</button>
-            <span id="opa-save-msg" style="font-size:12.5px; color:var(--meadow); display:none;">تم الحفظ ✓</span>
-          </div>
-        </div>
-
-        <div class="form-card">
-          <h4>الهيكل: أهداف عامة ← تشغيلية ← برامج</h4>
-          <div class="form-row">
-            <input type="text" id="og-title" placeholder="اسم هدف عام جديد" />
-            <button class="btn-primary" id="og-add" style="width:auto; padding:11px 20px;">إضافة</button>
-          </div>
-          <div class="form-row" style="margin-top:10px;">
-            <select id="oo-goal"></select>
-            <input type="text" id="oo-title" placeholder="اسم هدف تشغيلي جديد" />
-          </div>
-          <button class="btn-primary" id="oo-add" style="width:auto; padding:11px 20px; margin-bottom:14px;">إضافة هدف تشغيلي</button>
-          <div class="form-row">
-            <select id="pr-objective"></select>
-            <input type="text" id="pr-title" placeholder="اسم برنامج جديد" />
-          </div>
-          <button class="btn-primary" id="pr-add" style="width:auto; padding:11px 20px;">إضافة برنامج</button>
-
-          <h5 style="margin:22px 0 8px; font-size:12.5px; font-weight:800; color:var(--slate);">كل البرامج (للحذف)</h5>
-          <input type="text" id="pr-manage-search" placeholder="بحث باسم البرنامج أو رمزه..." style="margin-bottom:8px;" />
-          <div id="pr-manage-list" class="opa-checklist"></div>
-        </div>
-
-        <button class="btn-primary" id="opplan-reset-btn" style="width:auto; padding:10px 20px; background:var(--danger); margin-top:10px;">إعادة تهيئة الخطة (حذف كل المهام)</button>
-        </div>
-
-        <!-- ===== لوحة: اعتماد المهام ===== -->
-        <div class="bud-panel hidden" id="opplan-panel-approvals">
-        <div class="op-stat-row" style="margin-bottom:26px;">
-          <div class="op-stat-tile" style="--op-accent:var(--gold);"><div class="lbl">مهام بانتظار اعتماد الإضافة</div><div class="val" id="opplan-stat-pending-plan">-</div></div>
-          <div class="op-stat-tile" style="--op-accent:var(--purple);"><div class="lbl">إنجازات بانتظار الاعتماد</div><div class="val" id="opplan-stat-pending-completion">-</div></div>
-          <div class="op-stat-tile" style="--op-accent:var(--status-good);"><div class="lbl">نسبة الإنجاز المعتمد</div><div class="val" id="opplan-stat-rate">-</div></div>
-        </div>
-
-        <h4 style="margin-bottom:14px;">بانتظار اعتماد إضافة المهمة</h4>
-        <div id="opplan-pending-plan-list"></div>
-
-        <h4 style="margin:20px 0 14px;">بانتظار اعتماد الإنجاز</h4>
-        <div id="opplan-pending-completion-list"></div>
-        </div>
-      </div>
-
-      <div id="opplan-reset-overlay" class="hidden" style="position:fixed; inset:0; background:rgba(21,34,56,0.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;">
-        <div style="background:#fff; border-radius:16px; padding:26px 22px; max-width:420px; width:100%; box-shadow:var(--shadow-md); text-align:center;">
-          <div style="width:52px; height:52px; border-radius:50%; background:var(--danger-light); color:var(--danger); display:flex; align-items:center; justify-content:center; margin:0 auto 14px;">
-            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
-          </div>
-          <h3 style="margin:0 0 8px; font-size:16px;">إعادة تهيئة الخطة التشغيلية؟</h3>
-          <p style="font-size:13px; color:var(--slate); line-height:1.7; margin:0 0 18px;">
-            هذا الإجراء يحذف <strong>كل المهام المُدخلة</strong> من جميع الموظفين المشاركين بالخطة (وأي إنجازات مرتبطة بها)، ولا يمكن التراجع عنه.
-            بالضغط على "أقرّ وأوافق" أنت تُقرّ بأن إعادة التهيئة تتم على مسؤوليتك.
-          </p>
-          <div class="error-msg" id="opplan-reset-error" style="text-align:right;"></div>
-          <div style="display:flex; gap:10px;">
-            <button id="opplan-reset-cancel" style="flex:1; background:var(--sand); color:var(--ink);">إلغاء</button>
-            <button id="opplan-reset-confirm" style="flex:1; background:var(--danger); color:#fff;">أقرّ وأوافق، احذف الكل</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== شاشة الموظف المشارك ===== -->
-      <div id="opplan-employee-view" class="hidden">
-        <div class="form-card" id="myprog-wrap">
-          <h4 style="margin-bottom:4px;">برامجي المسندة</h4>
-          <p style="font-size:12.5px; color:var(--slate); margin:0 0 14px;">افتح كل برنامج وحدد مهامه على مدار أسابيع السنة، ثم أنهِ البرنامج للانتقال تلقائيًا للي بعده</p>
-          <div id="myprog-list"></div>
-        </div>
-
-        <div class="form-card">
-          <h4 id="opt-excel-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-            <span>+ رفع مهام دفعة وحدة من ملف إكسل</span>
-            <svg id="opt-excel-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
-          </h4>
-          <div id="opt-excel-body" class="hidden" style="margin-top:14px;">
-            <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج الفارغ، عبّه بمهامك، وارفعه. كل مهمة تنضاف لك بحالة "بانتظار اعتماد الإضافة" تلقائيًا.</p>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
-              <button id="opt-download-template" style="width:auto; background:var(--sand); color:var(--ink); border:1px solid #E4E2D9;">تنزيل نموذج فارغ</button>
-            </div>
-            <input type="file" id="opt-excel-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
-            <div class="error-msg" id="opt-excel-error"></div>
-            <div id="opt-excel-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:10px;"></div>
-            <button id="opt-excel-upload" style="width:auto;">رفع الملف وإضافة المهام</button>
-          </div>
-        </div>
-
-        <div class="myop-ring-card">
-          <div class="myop-ring" id="myop-ring">
-            <svg viewBox="0 0 64 64"><circle class="track" cx="32" cy="32" r="27"/><circle class="fill" id="myop-ring-fill" cx="32" cy="32" r="27"/></svg>
-            <div class="myop-ring-pct" id="myop-ring-pct">0%</div>
-          </div>
-          <div class="myop-ring-info">
-            <p class="myop-ring-title">إنجازك <span id="myop-ring-week-label">للأسبوع 1</span></p>
-            <p class="myop-ring-sub" id="myop-ring-sub">لا توجد مهام تحتاج إجراء هذا الأسبوع</p>
-          </div>
-        </div>
-
-        <div class="myop-week-strip-wrap">
-          <div class="myop-week-strip" id="opplan-week-strip"></div>
-        </div>
-
-        <h4 style="margin-bottom:14px;">مهامي بهذا الأسبوع</h4>
-        <div class="op-kanban" id="opplan-my-tasks"></div>
-      </div>
-
-      <div id="opplan-not-member" class="hidden">
-        <div class="placeholder"><p>أنت لست مضافًا للخطة التشغيلية حاليًا. راجع المدير لإضافتك.</p></div>
-      </div>
-    </div>
-
-    <div id="duty-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-8">→ رجوع للرئيسية</span>
-
-      <div id="duty-teacher-view" class="hidden">
-        <div style="margin-bottom:28px;">
-          <h4 style="margin-bottom:14px;">مناوباتي الثابتة (تتكرر كل أسبوع)</h4>
-          <div id="my-duty-fixed-list"></div>
-        </div>
-        <div>
-          <h4 style="margin-bottom:14px;">مناوباتي لهذا الأسبوع — يبدأ من: <span id="my-duty-week-label"></span></h4>
-          <div id="my-duty-weekly-list"></div>
-        </div>
-      </div>
-
-      <div id="duty-admin-view">
-      <div class="form-card">
-        <h4 id="dt-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ إضافة نوع مناوبة</span>
-          <svg id="dt-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <div id="dt-body" class="hidden" style="margin-top:14px;">
-          <div class="form-row">
-            <select id="dt-name-select">
-              <option value="">اختر المناوبة الرئيسية</option>
-              <option value="مناوبة الصباح">مناوبة الصباح</option>
-              <option value="مناوبة الفسحة">مناوبة الفسحة</option>
-              <option value="مناوبة المصلى">مناوبة المصلى</option>
-              <option value="مناوبة الحافلات">مناوبة الحافلات</option>
-              <option value="مناوبة الأركان">مناوبة الأركان</option>
-              <option value="__other__">نوع آخر...</option>
-            </select>
-            <input type="text" id="dt-name-other" placeholder="اكتب اسم المناوبة الرئيسية" style="display:none;" />
-          </div>
-          <div class="form-row" style="margin-top:10px;">
-            <input type="text" id="dt-location" placeholder="التفصيل: الموقع أو الحصة (مثال: حافلات / الساحة الداخلية / الممر الأول / نقطة بيع / الحصة الرابعة) — اختياري" />
-            <button class="btn-primary" id="dt-add" style="width:auto; padding:11px 20px;">إضافة نوع</button>
-          </div>
-        </div>
-        <div id="dt-list" style="margin-top:10px;"></div>
-      </div>
-
-      <div class="form-card">
-        <h4 id="duty-import-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ استيراد المناوبات من ملف إكسل</span>
-          <svg id="duty-import-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <div id="duty-import-body" class="hidden" style="margin-top:14px;">
-          <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">حمّل النموذج، عبّي فيه كل مناوبات الموظفين، وارفعه — النظام يضيف أنواع المناوبات الناقصة تلقائيًا ويربط كل صف بحساب الموظف حسب اسمه.</p>
-          <button class="btn-secondary" id="duty-template-btn" style="width:auto; padding:9px 16px; margin-bottom:12px;">تحميل نموذج إكسل</button>
-          <input type="file" id="duty-import-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
-          <button class="btn-primary" id="duty-import-btn" style="width:auto; padding:11px 20px;">استيراد الملف</button>
-          <div class="error-msg" id="duty-import-error"></div>
-          <div id="duty-import-summary" style="margin-top:10px; font-size:13px;"></div>
-        </div>
-      </div>
-
-      <div class="form-card">
-        <h4 id="fixed-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ إضافة مناوب ثابت (تتكرر كل أسبوع تلقائيًا)</span>
-          <svg id="fixed-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <div id="fixed-body" class="hidden" style="margin-top:14px;">
-          <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الموظف</label>
-          <select id="fixed-teacher"></select>
-          <div id="fixed-rows" style="margin-top:12px; display:flex; flex-direction:column; gap:10px;"></div>
-          <button class="btn-secondary" id="fixed-add-row" style="width:auto; padding:9px 16px; margin-top:10px;">+ إضافة مناوبة لهذا الموظف</button>
-          <div class="error-msg" id="fixed-error"></div>
-          <button class="btn-primary" id="fixed-add" style="width:auto; padding:11px 20px; margin-top:12px;">حفظ كل المناوبات</button>
-        </div>
-        <div id="fixed-list" style="margin-top:14px;"></div>
-      </div>
-
-      <div class="form-card">
-        <h4 id="weekly-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ إضافة مناوب متغيّر لهذا الأسبوع</span>
-          <svg id="weekly-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <p style="font-size:12.5px; color:var(--slate); margin:4px 0 10px;">أسبوع يبدأ من: <strong id="week-sunday-label"></strong> (الأحد إلى الخميس)</p>
-        <div id="weekly-body" class="hidden">
-          <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الموظف</label>
-          <select id="weekly-teacher"></select>
-          <div id="weekly-rows" style="margin-top:12px; display:flex; flex-direction:column; gap:10px;"></div>
-          <button class="btn-secondary" id="weekly-add-row" style="width:auto; padding:9px 16px; margin-top:10px;">+ إضافة مناوبة لهذا الموظف</button>
-          <div class="error-msg" id="weekly-error"></div>
-          <button class="btn-primary" id="weekly-add" style="width:auto; padding:11px 20px; margin-top:12px;">حفظ كل المناوبات</button>
-        </div>
-        <div id="weekly-list" style="margin-top:14px;"></div>
-      </div>
-
-      <div class="form-card">
-        <h4>تسجيل الحضور — اليوم: <span id="today-date-label"></span></h4>
-        <div id="today-duty-list"></div>
-      </div>
-      </div>
-    </div>
-
-    <div id="exams-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-9">→ رجوع للرئيسية</span>
-
-      <div class="form-card">
-        <h4 id="exam-import-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ استيراد بيانات الطلاب (ملف إكسل)</span>
-          <svg id="exam-import-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <div id="exam-import-body" class="hidden" style="margin-top:14px;">
-          <input type="file" id="exam-import-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
-          <button class="btn-primary" id="exam-import-btn" style="width:auto; padding:11px 20px;">استيراد الملف</button>
-          <div class="error-msg" id="exam-import-error"></div>
-        </div>
-        <div id="exam-student-stats" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px;"></div>
-      </div>
-
-      <div class="form-card">
-        <h4 id="exam-period-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ إضافة فترة اختبار جديدة</span>
-          <svg id="exam-period-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <div id="exam-period-body" class="hidden" style="margin-top:14px;">
-          <input type="text" id="exam-period-name" placeholder="اسم الفترة (مثال: اختبارات نهاية الفصل الثاني)" />
-          <div class="form-row">
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">العام الهجري</label>
-              <input type="text" id="exam-academic-year" placeholder="1447هـ" />
-            </div>
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">الفصل الدراسي</label>
-              <select id="exam-semester">
-                <option value="الفصل الأول">الفصل الأول</option>
-                <option value="الفصل الثاني">الفصل الثاني</option>
-                <option value="الفصل الثالث">الفصل الثالث</option>
-              </select>
-            </div>
-          </div>
-          <div class="form-row">
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">عدد اللجان</label>
-              <input type="number" id="exam-committee-count" min="1" placeholder="24" />
-            </div>
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">بداية ترقيم اللجنة الخاصة</label>
-              <input type="number" id="exam-special-seat-start" min="1" placeholder="900" />
-            </div>
-          </div>
-          <div class="form-row">
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">بداية ترقيم أول متوسط</label>
-              <input type="number" id="exam-seat-first" min="1" placeholder="1" />
-            </div>
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">بداية ترقيم ثاني متوسط</label>
-              <input type="number" id="exam-seat-second" min="1" placeholder="300" />
-            </div>
-          </div>
-          <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">بداية ترقيم ثالث متوسط</label>
-          <input type="number" id="exam-seat-third" min="1" placeholder="600" />
-          <div class="error-msg" id="exam-period-error"></div>
-          <button class="btn-primary" id="exam-period-add" style="width:auto; padding:11px 20px;">إنشاء الفترة</button>
-        </div>
-      </div>
-
-      <div class="form-card">
-        <h4>فترات الاختبار</h4>
-        <div id="exam-periods-list"></div>
-      </div>
-
-      <div id="exam-period-detail" class="hidden">
-        <div class="form-card">
-          <h4 id="exam-detail-title"></h4>
-          <div class="form-row">
-            <input type="text" id="exam-special-search" placeholder="ابحث بالاسم أو رقم الهوية لإضافته للجنة الخاصة" />
-            <button id="exam-special-search-btn" style="width:auto; padding:11px 20px;">بحث</button>
-          </div>
-          <div id="exam-special-search-results" style="margin-bottom:12px;"></div>
-          <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">طلاب اللجنة الخاصة الحاليين:</p>
-          <div id="exam-special-list"></div>
-          <button class="btn-primary" id="exam-conditions-print-btn" style="width:auto; padding:10px 18px; margin-top:10px; background:#7A4FC7; color:#fff;">طباعة كشف الحالات</button>
-          <button class="btn-primary" id="exam-generate-btn" style="width:auto; padding:11px 20px; margin-top:16px;">توليد التوزيع والترقيم</button>
-          <button class="btn-primary" id="exam-print-all-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#E8763A; color:#fff;">طباعة كشوف المناداة</button>
-          <button class="btn-primary" id="exam-class-sheets-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#1E5B3A; color:#fff;">كشوف الفصول (القاعات)</button>
-          <button class="btn-primary" id="exam-roster-print-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#2C5F8A; color:#fff;">طباعة كشاف اللجان</button>
-          <button class="btn-primary" id="exam-labels-print-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#5A3E9E; color:#fff;">طباعة ملصقات الطلاب</button>
-          <button class="btn-primary" id="exam-labels-print-bygrade-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#8A5FD1; color:#fff;">طباعة الملصقات مفردة (حسب المرحلة)</button>
-          <div class="error-msg" id="exam-generate-error"></div>
-        </div>
-
-        <div class="form-card">
-          <h4 id="exam-locations-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-            <span>+ مقرات اللجان</span>
-            <svg id="exam-locations-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-          </h4>
-          <div id="exam-locations-body" class="hidden" style="margin-top:14px;">
-            <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">حدد الفصل/القاعة لكل لجنة — تُستخدم لاحقًا بالرسائل وبعض الكشوف</p>
-            <div id="exam-locations-list"></div>
-            <button class="btn-primary" id="exam-locations-save" style="width:auto; padding:11px 20px; margin-top:10px;">حفظ المقرات</button>
-            <div class="error-msg" id="exam-locations-error"></div>
-            <div id="exam-locations-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-top:10px;">تم حفظ المقرات بنجاح.</div>
-          </div>
-        </div>
-
-        <div class="form-card">
-          <h4 id="exam-messages-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-            <span>+ إعداد رسائل أولياء الأمور</span>
-            <svg id="exam-messages-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-          </h4>
-          <div id="exam-messages-body" class="hidden" style="margin-top:14px;">
-            <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">اسحب أي متغير للصندوق (أو اضغط عليه) وبينحط بمكان المؤشر، وبيتم استبداله تلقائيًا لكل طالب:</p>
-            <div id="exam-var-chips" style="display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px;">
-              <span class="exam-var-chip" draggable="true" data-var="#الاسم_الاول">#الاسم_الاول</span>
-              <span class="exam-var-chip" draggable="true" data-var="#اللجنة">#اللجنة</span>
-              <span class="exam-var-chip" draggable="true" data-var="#الصف">#الصف</span>
-              <span class="exam-var-chip" draggable="true" data-var="#رقم_الجلوس">#رقم_الجلوس</span>
-              <span class="exam-var-chip" draggable="true" data-var="#المقر">#المقر</span>
-            </div>
-            <textarea id="exam-message-template" rows="5" placeholder="مثال: عزيزي ولي أمر الطالب #الاسم_الاول، لجنة اختبار ابنكم هي #اللجنة بمقر #المقر، رقم الجلوس #رقم_الجلوس، الصف #الصف."></textarea>
-            <button class="btn-primary" id="exam-messages-export-btn" style="width:auto; padding:11px 20px;">تصدير الرسائل (إكسل)</button>
-            <div class="error-msg" id="exam-messages-error"></div>
-          </div>
-        </div>
-        <div id="exam-results"></div>
-      </div>
-    </div>
-
-    <div id="exam-tracking-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-10">→ رجوع للرئيسية</span>
-
-      <div class="form-card">
-        <h4>اختر فترة الاختبار</h4>
-        <select id="tracking-period-select"></select>
-      </div>
-
-      <div id="tracking-content" class="hidden">
-        <div class="form-card" style="background:var(--sand);">
-          <h4>فرق الاختبار (لكل الفترة)</h4>
-          <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">فريق الكنترول وفريق التدقيق يغطيان كل مواد هذه الفترة</p>
-          <div class="form-row">
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">فريق الكنترول</label>
-              <div id="exam-kontrol-list" style="max-height:180px; overflow-y:auto; background:#fff; border-radius:10px; padding:8px;"></div>
-            </div>
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">فريق التدقيق</label>
-              <div id="exam-tadqeeq-list" style="max-height:180px; overflow-y:auto; background:#fff; border-radius:10px; padding:8px;"></div>
-            </div>
-          </div>
-          <button class="btn-primary" id="exam-teams-save" style="width:auto; padding:10px 18px; margin-top:8px;">حفظ الفرق</button>
-          <div id="exam-teams-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-top:10px;">تم حفظ الفرق بنجاح.</div>
-        </div>
-
-        <div class="form-card" style="background:var(--sand);">
-          <h4>إضافة مادة ومسؤول</h4>
-          <div class="form-row">
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">المرحلة</label>
-              <select id="exam-track-grade">
-                <option value="first_intermediate">أول متوسط</option>
-                <option value="second_intermediate">ثاني متوسط</option>
-                <option value="third_intermediate">ثالث متوسط</option>
-              </select>
-            </div>
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">المادة</label>
-              <select id="exam-track-subject"></select>
-            </div>
-          </div>
-          <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:4px;">المعلم المسؤول (يصدّر الأسئلة ويطبعها ويفتح المظاريف ويصحح المقالي)</label>
-          <select id="exam-track-teacher"></select>
-          <div class="error-msg" id="exam-track-add-error"></div>
-          <button class="btn-primary" id="exam-track-add-btn" style="width:auto; padding:10px 18px; margin-top:8px;">إضافة</button>
-        </div>
-
-        <div id="exam-tracking-list"></div>
-      </div>
-    </div>
-
-    <div id="exam-reports-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-18">→ رجوع للرئيسية</span>
-
-      <!-- ===== قائمة التقارير المحفوظة + رفع تقرير جديد ===== -->
-      <div id="er-list-view">
-        <div class="form-card bud-section-card" style="background:var(--sand);">
-          <div class="bud-section-head">
-            <div class="bud-section-icon" style="background:var(--purple-light); color:var(--purple);">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/></svg>
-            </div>
-            <div>
-              <h4>رفع نتائج اختبار جديد</h4>
-              <p>ملف إكسل فيه إجابات الطلاب (رقم الهوية، الاسم، الصف، الفصل، المادة، ثم عمود لكل سؤال) - ولازم يحتوي صف "النموذج" (الإجابة الصحيحة) برقم هوية كله أصفار</p>
-            </div>
-          </div>
-          <input type="file" id="er-file" accept=".xlsx,.xls" style="margin-bottom:12px;" />
-          <button class="btn-primary" id="er-analyze-btn" style="width:auto; padding:10px 18px;">تحليل الملف</button>
-          <div class="error-msg" id="er-analyze-error"></div>
-
-          <div id="er-preview-card" class="hidden" style="margin-top:18px; padding-top:16px; border-top:1px dashed var(--border);">
-            <div id="er-preview-summary" style="font-size:13px; margin-bottom:12px;"></div>
-            <div class="form-row">
-              <input type="text" id="er-title" placeholder="عنوان التقرير (مثال: رياضيات - ثاني متوسط - الفترة الأولى)" />
-              <input type="text" id="er-subject" placeholder="المادة" />
-            </div>
-            <div class="form-row">
-              <input type="text" id="er-grade" placeholder="الصف" />
-              <select id="er-semester">
-                <option value="">الفصل الدراسي...</option>
-                <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
-                <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
-              </select>
-            </div>
-
-            <label style="display:flex; align-items:center; gap:8px; font-size:12.5px; background:var(--sand); border-radius:10px; padding:10px 12px; margin:12px 0;">
-              <input type="checkbox" id="er-reversed-order" style="width:auto; margin:0;" />
-              <span>ترتيب رموز الاختيارات بالملف معكوس (الوضع المعتاد بالمواد العربية) - بطّل هذا الخيار إذا كانت المادة إنجليزية أو لاحظت إن أغلب الطلاب طلعوا ضعاف بشكل غير منطقي بعد الحفظ</span>
-            </label>
-
-            <h5 style="margin:16px 0 8px; font-size:13px;">الإجابة الصحيحة لكل سؤال</h5>
-            <p style="font-size:11.5px; color:var(--slate); margin:0 0 10px;">اختر الإجابة الصحيحة لكل سؤال يدويًا (الملف ما يحتوي نموذج إجابة جاهز)</p>
-            <div id="er-key-form"></div>
-
-            <button class="btn-primary" id="er-save-btn" style="width:auto; padding:10px 18px; margin-top:14px;">حفظ التقرير</button>
-            <button class="text-action-btn" id="er-cancel-btn" style="width:auto; padding:10px 14px;">إلغاء</button>
-            <div class="error-msg" id="er-save-error"></div>
-          </div>
-        </div>
-
-        <h4 style="margin:22px 0 12px; font-size:14px;">التقارير المحفوظة</h4>
-        <div id="er-saved-list"><div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div></div>
-      </div>
-
-      <!-- ===== تفاصيل تقرير محدد (٦ تقارير بتبويبات) ===== -->
-      <div id="er-detail-view" class="hidden">
-        <span class="back-link" id="er-back-to-list">→ رجوع لقائمة التقارير</span>
-        <div class="bud-head" style="margin-top:10px;">
-          <div class="bud-head-title" style="justify-content:space-between;">
-            <div style="display:flex; align-items:center; gap:14px;">
-              <div class="bud-head-icon">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/></svg>
-              </div>
-              <div>
-                <h3 id="er-detail-title">-</h3>
-                <p id="er-detail-sub">-</p>
-              </div>
-            </div>
-            <button type="button" class="text-action-btn" id="er-edit-key-btn" style="width:auto; padding:8px 14px; flex-shrink:0;" title="تعديل الإجابة الصحيحة لكل سؤال وإعادة حساب التقارير">✎ تعديل مفتاح الإجابة</button>
-          </div>
-
-          <div id="er-editkey-card" class="hidden" style="background:var(--sand); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:18px;">
-            <h5 style="margin:0 0 4px; font-size:13.5px;">تعديل مفتاح الإجابة</h5>
-            <p style="font-size:11.5px; color:var(--slate); margin:0 0 12px;">غيّر الإجابة الصحيحة لأي سؤال وبعدين احفظ - كل التقارير الستة بتُعاد حسابها تلقائيًا بالمفتاح الجديد.</p>
-            <div id="er-editkey-form"></div>
-            <div style="display:flex; gap:8px; margin-top:14px;">
-              <button type="button" class="btn-primary" id="er-editkey-save" style="width:auto; padding:9px 18px;">حفظ المفتاح الجديد</button>
-              <button type="button" class="text-action-btn" id="er-editkey-cancel" style="width:auto; padding:9px 14px;">إلغاء</button>
-            </div>
-            <div class="error-msg" id="er-editkey-error"></div>
-          </div>
-          <div class="bud-tabs" id="er-tabs" role="tablist">
-            <button class="bud-tab active" id="er-tab-dist" type="button">التوزيع التكرارى</button>
-            <button class="bud-tab" id="er-tab-hist" type="button">تقدير الطالب</button>
-            <button class="bud-tab" id="er-tab-items" type="button">تحليل البنود</button>
-            <button class="bud-tab" id="er-tab-summary" type="button">تقرير موجز</button>
-            <button class="bud-tab" id="er-tab-itemstats" type="button">إحصاءات البنود</button>
-            <button class="bud-tab" id="er-tab-analysis" type="button">تحليل شامل</button>
-          </div>
-        </div>
-
-        <div class="bud-panel" id="er-panel-dist"></div>
-        <div class="bud-panel hidden" id="er-panel-hist"></div>
-        <div class="bud-panel hidden" id="er-panel-items"></div>
-        <div class="bud-panel hidden" id="er-panel-summary"></div>
-        <div class="bud-panel hidden" id="er-panel-itemstats"></div>
-        <div class="bud-panel hidden" id="er-panel-analysis"></div>
-      </div>
-    </div>
-
-    <div id="schedule-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-11">→ رجوع للرئيسية</span>
-
-
-      <div class="form-card" style="background:var(--sand);">
-        <h4>استيراد جدول من ملف PDF</h4>
-        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">
-          ارفع ملف الجدول الرسمي (نفس شكل الجدول المعتمد من المدرسة) وبنحاول نقرأ كل الفصول منه تلقائيًا.
-          <b>مهم:</b> راجع كل ما يستخرج بعنايه قبل التأكيد — لو أي مادة أو اسم طلع معكوس أو غريب لا تعتمد ولا تحفظ، وخبرنا.
-        </p>
-        <input type="file" id="sc-pdf-file" accept=".pdf" style="margin-bottom:10px;" />
-        <button class="btn-primary" id="sc-pdf-parse-btn" style="width:auto; padding:10px 18px;">معاينة الملف</button>
-        <div class="error-msg" id="sc-pdf-error"></div>
-        <div id="sc-pdf-summary"></div>
-      </div>
-
-      <div class="tabs" id="sc-grade-tabs"></div>
-
-      <div class="form-card">
-        <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الفصل</label>
-        <select id="sc-section-select"><option value="">اختر الفصل</option></select>
-      </div>
-
-      <div id="sc-grid-container"></div>
-    </div>
-
-    <div id="followups-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-12">→ رجوع للرئيسية</span>
-
-      <!-- رأس القسم: عنوان + تنقّل بين تبويبات كشوف المتابعة -->
-      <div class="bud-head">
-        <div class="bud-head-title">
-          <div class="bud-head-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg>
-          </div>
-          <div>
-            <h3>كشوف متابعة الطلاب</h3>
-            <p>ملاحظات، مشاركة، اختبارات وخصومات لكل طالب، مع نظرة عامة على الفصل وتقرير قابل للطباعة لكل طالب</p>
-          </div>
-        </div>
-        <div class="bud-tabs" id="sf-tabs" role="tablist">
-          <button class="bud-tab active" id="sf-tab-overview" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
-            نظرة عامة
-          </button>
-          <button class="bud-tab" id="sf-tab-record" type="button">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            تسجيل
-          </button>
-        </div>
-      </div>
-
-      <!-- ===== لوحة: نظرة عامة ===== -->
-      <div class="bud-panel" id="sf-panel-overview">
-        <div id="sf-overview-list-view">
-          <div class="form-card" style="background:var(--sand);">
-            <h4>اختر الفصل</h4>
-            <div class="tabs" id="sfo-grade-tabs"></div>
-            <select id="sfo-section-select"><option value="">اختر الفصل</option></select>
-          </div>
-
-          <div class="stat-grid" id="sfo-class-stats"></div>
-
-          <div class="bud-section-card" style="margin-top:4px;">
-            <div class="bud-section-head">
-              <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
-              <div><h4>طلاب الفصل</h4><p>اضغط على أي طالب لعرض تقريره الكامل</p></div>
-            </div>
-            <input type="text" id="sfo-search" placeholder="بحث باسم الطالب..." style="margin-bottom:10px;" />
-            <div id="sfo-student-list"></div>
-          </div>
-        </div>
-
-        <div id="sf-detail-view" class="hidden">
-          <span class="back-link" id="sf-detail-back">→ رجوع للقائمة</span>
-          <div class="bud-section-card">
-            <div class="bud-section-head">
-              <div class="bud-section-icon" id="sf-detail-avatar"></div>
-              <div>
-                <h4 id="sf-detail-name">-</h4>
-                <p id="sf-detail-sub">-</p>
-              </div>
-            </div>
-            <div class="stat-grid" id="sf-detail-stats" style="margin-top:6px; margin-bottom:0;"></div>
-            <button class="text-action-btn" id="sf-detail-print-btn" style="margin-top:14px;">🖨 طباعة تقرير الطالب</button>
-          </div>
-          <div class="bud-section-card" style="margin-top:14px;">
-            <div class="bud-section-head">
-              <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg></div>
-              <div><h4>السجل الكامل</h4><p>كل الملاحظات والدرجات والخصومات المسجَّلة لهذا الطالب</p></div>
-            </div>
-            <div id="sf-detail-log"></div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== لوحة: تسجيل ===== -->
-      <div class="bud-panel hidden" id="sf-panel-record">
-        <div class="form-card" style="background:var(--sand);">
-          <h4>اختر الفصل والتاريخ</h4>
-          <div class="tabs" id="sf-grade-tabs"></div>
-          <div class="form-row">
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الفصل</label>
-              <select id="sf-section-select"><option value="">اختر الفصل</option></select>
-            </div>
-            <div>
-              <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">التاريخ</label>
-              <input type="date" id="sf-date" />
-            </div>
-          </div>
-          <p style="font-size:12px; color:var(--slate); margin:4px 0 0;">التاريخ ينطبق على أي ملاحظة/درجة تضيفها الآن — غيّره لو تسجل ليوم سابق.</p>
-        </div>
-
-        <input type="text" id="sf-search" placeholder="بحث باسم الطالب..." style="margin-bottom:10px;" />
-        <div id="sf-students-list"></div>
-      </div>
-    </div>
-
-    <div id="budget-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-13">→ رجوع للرئيسية</span>
-
-      <!-- رأس القسم: عنوان + تنقّل بين تبويبات الميزانية -->
-      <div class="bud-head">
-        <div class="bud-head-title">
-          <div class="bud-head-icon">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2.5"/><path d="M2 10h20"/><path d="M6 15h4"/><circle cx="17" cy="13" r="1.6"/></svg>
-          </div>
-          <div>
-            <h3>الميزانية</h3>
-            <p>إيرادات ومصروفات المدرسة، طلبات الصرف، وإعدادات القسم</p>
-          </div>
-        </div>
-        <div class="bud-tabs" id="bud-tabs" role="tablist">
-          <button type="button" class="bud-tab active" data-bud-tab="overview" id="bud-tab-overview">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><rect x="7" y="12" width="3" height="6" rx="0.5"/><rect x="13" y="8" width="3" height="10" rx="0.5"/><rect x="19" y="5" width="0" height="13"/><rect x="18" y="5" width="3" height="13" rx="0.5"/></svg>
-            <span>لوحة عامة</span>
-          </button>
-          <button type="button" class="bud-tab" data-bud-tab="expenses" id="bud-tab-expenses">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l3 3v17l-2-1.3-2 1.3-2-1.3-2 1.3-2-1.3-2 1.3V2z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>
-            <span>طلبات الصرف</span>
-          </button>
-          <button type="button" class="bud-tab" data-bud-tab="settings" id="bud-tab-settings">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 13.5a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V19a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H4a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H10a1.65 1.65 0 001-1.51V4a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V10a1.65 1.65 0 001.51 1H20a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-            <span>الإعدادات</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- ===== تبويب: لوحة عامة ===== -->
-      <div class="bud-panel" id="bud-panel-overview">
-        <div id="budget-dashboard-section" class="hidden">
-          <div class="form-row" style="grid-template-columns:220px 1fr; align-items:center; margin-bottom:12px;">
-            <select id="budget-semester-filter">
-              <option value="">كل السنة (الفصلين)</option>
-              <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
-              <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
-            </select>
-            <span></span>
-          </div>
-
-          <h4 style="margin:0 0 10px; font-size:13px; color:var(--slate);">أرصدة الجهات</h4>
-          <div class="stat-grid" id="budget-source-stats"></div>
-
-          <h4 style="margin:0 0 10px; font-size:12px; color:var(--slate); font-weight:600;">نظرة عامة على السنة</h4>
-          <div class="stat-grid compact-grid" id="budget-stats"></div>
-
-          <div class="form-card hidden" id="budget-category-caps" style="margin-top:18px;"></div>
-
-          <div class="form-row" style="align-items:stretch; margin-top:18px;">
-            <div class="form-card" style="margin:0;">
-              <h4>الإيرادات والمصروفات الشهرية</h4>
-              <div style="position:relative; height:140px; max-width:280px; margin:0 auto;">
-                <canvas id="budget-bar-chart"></canvas>
-              </div>
-            </div>
-            <div class="form-card" style="margin:0;">
-              <h4>توزيع المصروفات حسب البند</h4>
-              <div style="position:relative; height:140px; max-width:200px; margin:0 auto;">
-                <canvas id="budget-donut-chart"></canvas>
-              </div>
-              <div id="budget-donut-legend" style="margin-top:10px;"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- ===== تبويب: طلبات الصرف ===== -->
-      <div class="bud-panel hidden" id="bud-panel-expenses">
-        <!-- تقديم طلب صرف (بيان صرف): يظهر لأي صاحب صلاحية (كاملة أو طلبات فقط) -->
-        <div class="form-card hidden bud-section-card" id="budget-expense-form-section">
-          <div class="bud-section-head">
-            <div class="bud-section-icon" style="background:var(--meadow-light); color:var(--meadow);">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-            </div>
-            <div>
-              <h4>تقديم طلب صرف (بيان صرف)</h4>
-              <p>يمكن إضافة أكثر من فاتورة بنفس طلب الصرف — يُحفظ الطلب بحالة "بانتظار الاعتماد" ولا يُخصم من الميزانية إلا بعد موافقة المدير</p>
-            </div>
-          </div>
-
-          <div class="form-row">
-            <select id="budget-exp-category"></select>
-            <select id="budget-exp-beneficiary">
-              <option value="">يُصرف لـ (اختر الموظف)...</option>
-            </select>
-          </div>
-          <div class="form-row">
-            <select id="budget-exp-source">
-              <option value="">جهة الصرف...</option>
-              <option>المقصف</option>
-              <option>السلفة</option>
-              <option>مدور سابق</option>
-              <option value="أخرى">أخرى</option>
-            </select>
-            <input type="text" id="budget-exp-source-other" placeholder="اكتب جهة الصرف" style="display:none;" />
-          </div>
-          <div class="form-row" id="budget-exp-source-batch-row" style="display:none;">
-            <select id="budget-exp-source-batch">
-              <option value="">اختر الدفعة...</option>
-            </select>
-            <span></span>
-          </div>
-          <div class="form-row">
-            <input type="date" id="budget-exp-date" />
-            <select id="budget-exp-semester">
-              <option value="">الفصل الدراسي...</option>
-              <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
-              <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
-            </select>
-          </div>
-
-          <h4 style="margin:18px 0 8px; font-size:13.5px;">الفواتير</h4>
-          <div id="budget-exp-items"></div>
-          <button type="button" class="btn-primary" id="budget-exp-add-item" style="width:auto; padding:8px 14px; background:var(--slate);">+ إضافة فاتورة</button>
-          <div style="text-align:left; margin-top:10px; font-weight:800; font-size:15px;">الإجمالي: <span id="budget-exp-total">0 ر.س</span></div>
-
-          <button class="btn-primary" id="budget-exp-submit" style="width:auto; padding:10px 18px; margin-top:14px;">حفظ وإرسال للاعتماد</button>
-          <div class="error-msg" id="budget-exp-error"></div>
-        </div>
-
-        <!-- قائمة طلبات/حركات الصرف -->
-        <div style="margin-top:22px;">
-          <h4 id="budget-expenses-title" style="margin-bottom:10px;">طلبات الصرف</h4>
-          <div id="budget-expenses-list"></div>
-        </div>
-      </div>
-
-      <!-- ===== تبويب: الإعدادات ===== -->
-      <div class="bud-panel hidden" id="bud-panel-settings">
-        <!-- إدارة الصلاحيات: يظهر للمدير فقط -->
-        <div class="form-card hidden bud-section-card" id="budget-perms-section">
-          <div class="bud-section-head">
-            <div class="bud-section-icon" style="background:var(--purple-light); color:var(--purple);">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z"/></svg>
-            </div>
-            <div>
-              <h4>صلاحيات القسم</h4>
-              <p>المدير يتحكم بمين يشوف/يضيف بقسم الميزانية</p>
-            </div>
-          </div>
-          <div id="budget-perms-list"></div>
-          <div class="form-row" style="margin-top:14px;">
-            <select id="budget-perm-employee"></select>
-            <select id="budget-perm-level">
-              <option value="full">صلاحية كاملة (إيرادات + مصروفات + اعتماد)</option>
-              <option value="request_only">إضافة طلبات صرف فقط</option>
-            </select>
-          </div>
-          <button class="btn-primary" id="budget-perm-submit" style="width:auto; padding:10px 18px; margin-top:10px;">+ إعطاء صلاحية</button>
-          <div class="error-msg" id="budget-perm-error"></div>
-        </div>
-
-        <!-- إعدادات إضافية: تظهر للمدير ولصاحب صلاحية "كاملة" -->
-        <div id="budget-settings-extra" class="hidden">
-          <div class="form-card bud-section-card" style="background:var(--sand);">
-            <div class="bud-section-head">
-              <div class="bud-section-icon" style="background:var(--green-light); color:var(--green);">
-                <div class="riyal-icon" style="width:18px; height:18px;"></div>
-              </div>
-              <div>
-                <h4>إضافة إيراد</h4>
-                <p>سجّل أي مبلغ يدخل لميزانية المدرسة</p>
-              </div>
-            </div>
-            <div class="form-row">
-              <input type="text" id="budget-rev-desc" placeholder="وصف الإيراد (مثال: رسوم دراسية - الفصل الثاني)" />
-              <input type="number" id="budget-rev-amount" placeholder="المبلغ (ر.س)" />
-            </div>
-            <div class="form-row">
-              <select id="budget-rev-type">
-                <option value="مقصف">مقصف</option>
-                <option value="سلفة">سلفة</option>
-                <option value="مدور سابق">مدور سابق</option>
-              </select>
-              <input type="date" id="budget-rev-date" />
-            </div>
-            <div class="form-row">
-              <select id="budget-rev-semester">
-                <option value="">الفصل الدراسي...</option>
-                <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
-                <option value="الفصل الدراسي الثاني">الفصل الدراسي الثاني</option>
-              </select>
-              <span></span>
-            </div>
-            <p style="font-size:11px; color:var(--slate); margin:0 0 10px;">إيداع سلفة أو مدور سابق يصير "دفعة" مستقلة برصيدها الخاص، تقدر تصرف منها فواتير لحد ما ينتهي مبلغها فتنقفل تلقائيًا — راجع قسم "دفعات السلفة والمدور" تحت</p>
-            <div class="form-row">
-              <input type="text" id="budget-rev-notes" placeholder="ملاحظات (اختياري)" style="grid-column:1/-1;" />
-            </div>
-            <button class="btn-primary" id="budget-rev-submit" style="width:auto; padding:10px 18px;">+ إضافة الإيراد</button>
-            <button class="text-action-btn" id="budget-rev-cancel-edit" style="width:auto; padding:10px 14px; margin-inline-start:8px; display:none;">إلغاء التعديل</button>
-            <div class="error-msg" id="budget-rev-error"></div>
-
-            <details style="margin-top:16px;" open>
-              <summary style="cursor:pointer; font-size:12.5px; font-weight:700; color:var(--slate);">كل الإيداعات المسجّلة</summary>
-              <div id="budget-revenues-list" style="margin-top:10px;"><p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p></div>
-            </details>
-          </div>
-
-          <div class="form-card bud-section-card" style="margin-top:18px; background:var(--sand);">
-            <div class="bud-section-head">
-              <div class="bud-section-icon" style="background:var(--purple-light); color:var(--purple);">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="13" rx="2.5"/><path d="M2 10h20"/><path d="M6 15h4"/><circle cx="17" cy="13" r="1.6"/></svg>
-              </div>
-              <div>
-                <h4>دفعات السلفة والمدور</h4>
-                <p>كل دفعة سلفة أو مدور برصيدها الخاص — تنقفل تلقائيًا لما ينصرف كامل مبلغها</p>
-              </div>
-            </div>
-            <div id="budget-batches-open-list"><p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p></div>
-
-            <details style="margin-top:14px;">
-              <summary style="cursor:pointer; font-size:12.5px; font-weight:700; color:var(--slate);">الدفعات المقفلة</summary>
-              <div id="budget-batches-closed-list" style="margin-top:10px;"></div>
-            </details>
-          </div>
-
-          <details class="form-card bud-section-card" style="margin-top:18px; background:var(--sand);">
-            <summary class="bud-section-head" style="cursor:pointer; margin-bottom:0;">
-              <div class="bud-section-icon" style="background:var(--gold-light); color:var(--gold);">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 12.6L12.3 21a2 2 0 01-2.8 0l-7.5-7.5a2 2 0 010-2.8L10.3 2.4A2 2 0 0111.7 2H19a2 2 0 012 2v7.3a2 2 0 01-.4 1.3z"/><circle cx="15" cy="8" r="1.6"/></svg>
-              </div>
-              <div>
-                <h4>إدارة بنود المصروفات</h4>
-                <p>الأسماء والسقوف المئوية لكل بند</p>
-              </div>
-            </summary>
-            <div style="display:flex; gap:8px; align-items:center; margin-top:14px;">
-              <input type="text" id="budget-category-name" placeholder="اسم بند جديد" style="flex:1; margin:0;" />
-              <input type="number" id="budget-category-cap" min="0" max="100" step="0.5" placeholder="سقف % (اختياري)" style="width:130px; margin:0;" />
-              <button class="btn-primary" id="budget-category-submit" style="width:auto; padding:9px 16px;">+ إضافة بند</button>
-            </div>
-            <p style="font-size:11px; color:var(--slate); margin:8px 0 0;">سقف الصرف % هو نسبة من إجمالي الإيراد — يرتفع تلقائيًا كلما زاد الإيراد، ويظهر له مؤشر لوني بلوحة الميزانية (اخضر حتى 50%، أصفر حتى 80%، أحمر بعدها)</p>
-            <div id="budget-categories-list" style="margin-top:10px;"></div>
-          </details>
-
-          <details class="form-card bud-section-card" style="margin-top:18px; background:var(--sand);" id="budget-share-section">
-            <summary class="bud-section-head" style="cursor:pointer; margin-bottom:0;">
-              <div class="bud-section-icon" style="background:var(--teal-light); color:var(--teal);">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 5L5 19M7.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM16.5 20a2.5 2.5 0 100-5 2.5 2.5 0 000 5z"/></svg>
-              </div>
-              <div>
-                <h4>نصيب الإدارة والمدوَّر</h4>
-                <p>تُحسب آخر كل فصل دراسي</p>
-              </div>
-            </summary>
-
-            <p style="font-size:12px; color:var(--slate); margin:10px 0;">نسبتان % من إجمالي إيراد الفصل، تُحسبان وتُخصمان من الرصيد عند إقفال الفصل — يمكنك تعديلهما وقت ما تبي</p>
-            <div class="form-row">
-              <div>
-                <label style="font-size:12px; color:var(--slate);">نسبة الإدارة %</label>
-                <input type="number" id="budget-share-admin-pct" min="0" max="100" step="0.5" style="margin-top:4px;" />
-              </div>
-              <div>
-                <label style="font-size:12px; color:var(--slate);">نسبة المدوَّر %</label>
-                <input type="number" id="budget-share-carry-pct" min="0" max="100" step="0.5" style="margin-top:4px;" />
-              </div>
-            </div>
-            <button class="btn-primary" id="budget-share-settings-save" style="width:auto; padding:9px 16px; margin-top:8px; background:var(--slate);">حفظ النسب</button>
-
-            <hr style="margin:16px 0; border:none; border-top:1px solid #ECEAE1;" />
-
-            <p style="font-size:13px; font-weight:700; margin:0 0 8px;">إقفال فصل دراسي</p>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <select id="budget-share-close-semester" style="flex:1; margin:0;"></select>
-              <button class="btn-primary" id="budget-share-close-submit" style="width:auto; padding:9px 16px;">تسجيل نصيب الإدارة والمدوَّر</button>
-            </div>
-            <div class="error-msg" id="budget-share-error"></div>
-
-            <div id="budget-share-closures-list" style="margin-top:14px;"></div>
-          </details>
-        </div>
-      </div>
-    </div>
-
-    <div id="visits-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-14">→ رجوع للرئيسية</span>
-      <div id="cv-container"></div>
-    </div>
-
-    <div id="substitutes-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-15">→ رجوع للرئيسية</span>
-
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:18px;">
-        <label style="font-size:12px; color:var(--slate); margin:0;">التاريخ</label>
-        <input type="date" id="sub-date" style="margin:0; width:auto;" />
-      </div>
-
-      <div id="sub-admin-panel" class="hidden">
-        <div class="form-card">
-          <h4 style="margin-bottom:2px;">غياب اليوم</h4>
-          <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">أضف اسم كل معلم غايب بهذا التاريخ، وراح تطلع لك حصصه تلقائيًا لتعيين بديل لكل واحدة</p>
-          <div class="form-row" style="grid-template-columns:1fr auto;">
-            <select id="sub-absence-teacher-select"></select>
-            <button type="button" class="btn-primary" id="sub-absence-add-btn" style="width:auto; padding:9px 18px;">+ إضافة</button>
-          </div>
-          <div class="error-msg" id="sub-absence-error"></div>
-          <div id="sub-absence-list" style="margin-top:10px; display:flex; flex-wrap:wrap; gap:8px;"></div>
-        </div>
-
-        <div id="sub-coverage-wrap" class="hidden" style="margin-top:16px;">
-          <h4 style="font-size:13.5px; margin:0 0 10px;">تعيين بديل لكل حصة</h4>
-          <div id="sub-coverage-list"></div>
-        </div>
-
-        <div class="form-card" style="margin-top:16px; background:var(--sand);">
-          <h4 style="margin-bottom:2px;">تبديل حصتين لنفس الفصل</h4>
-          <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">يبدّل الحصتين مع بعض (المادة والمعلم) بنفس الفصل واليوم — يفيدك لما تبي تحط حصة البديل بمكان مختلف</p>
-          <div class="form-row">
-            <select id="sub-swap-grade">
-              <option value="first_intermediate">أول متوسط</option>
-              <option value="second_intermediate">ثاني متوسط</option>
-              <option value="third_intermediate">ثالث متوسط</option>
-            </select>
-            <select id="sub-swap-section"></select>
-          </div>
-          <div class="form-row">
-            <select id="sub-swap-period-a">
-              <option value="">الحصة الأولى...</option>
-              <option value="1">الحصة 1</option><option value="2">الحصة 2</option><option value="3">الحصة 3</option>
-              <option value="4">الحصة 4</option><option value="5">الحصة 5</option><option value="6">الحصة 6</option><option value="7">الحصة 7</option>
-            </select>
-            <select id="sub-swap-period-b">
-              <option value="">الحصة الثانية...</option>
-              <option value="1">الحصة 1</option><option value="2">الحصة 2</option><option value="3">الحصة 3</option>
-              <option value="4">الحصة 4</option><option value="5">الحصة 5</option><option value="6">الحصة 6</option><option value="7">الحصة 7</option>
-            </select>
-          </div>
-          <button type="button" class="btn-primary" id="sub-swap-btn" style="width:auto; padding:9px 16px;">تبديل</button>
-          <div class="error-msg" id="sub-swap-error"></div>
-          <div id="sub-swap-success" style="display:none; margin-top:8px; color:var(--teal); font-weight:700; font-size:13px;">تم التبديل بنجاح</div>
-          <div id="sub-swap-resolution"></div>
-        </div>
-      </div>
-
-      <div style="margin-top:22px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-          <h4 style="margin:0;">بدلاء اليوم</h4>
-          <button type="button" id="sub-print-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:8px; padding:6px 14px; font-size:12.5px; cursor:pointer;">🖨 طباعة التقرير</button>
-        </div>
-        <div id="sub-today-list"></div>
-      </div>
-    </div>
-
-    <div id="computerlab-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-16">→ رجوع للرئيسية</span>
-
-      <div class="form-card" style="background:var(--sand);">
-        <h4>عدد أجهزة المعمل</h4>
-        <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">رقم واحد ثابت للمعمل كامل - يُستخدم لتوزيع طلاب كل الفصول اللي تضيفها تحت مع بعض على نفس مجموعة الأجهزة.</p>
-        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-          <input type="number" id="lab-computer-count" min="1" style="width:140px;" placeholder="مثلاً 30" />
-          <button class="btn-primary" id="lab-save-settings-btn" style="width:auto; padding:9px 18px;">حفظ</button>
-        </div>
-        <div class="error-msg" id="lab-settings-error" style="display:none;"></div>
-      </div>
-
-      <div class="form-card" style="margin-top:14px;">
-        <h4>الفصول اللي تدرّسها بالمعمل</h4>
-        <div class="tabs" id="lab-grade-tabs"></div>
-        <div class="form-row">
-          <div>
-            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الفصل</label>
-            <select id="lab-section-select"><option value="">اختر الفصل</option></select>
-          </div>
-          <div style="display:flex; align-items:flex-end;">
-            <button class="btn-primary" id="lab-add-class-btn" style="width:auto; padding:9px 18px;">+ إضافة</button>
-          </div>
-        </div>
-        <div class="error-msg" id="lab-add-error" style="display:none;"></div>
-        <div id="lab-classes-chips"></div>
-      </div>
-
-      <div style="margin-top:18px;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-          <h4 style="margin:0;">توزيع الطلاب على الأجهزة</h4>
-          <button type="button" id="lab-print-btn" style="border:1px solid var(--slate); background:none; color:var(--slate); border-radius:8px; padding:6px 14px; font-size:12.5px; cursor:pointer;">🖨 طباعة أوراق اللصق</button>
-        </div>
-        <div id="lab-seating-area"></div>
-      </div>
-    </div>
-
-    <div id="files-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-17">→ رجوع للرئيسية</span>
-
-      <div class="bud-head">
-        <div class="bud-head-title">
-          <div class="bud-head-icon" style="background:var(--meadow-light); color:var(--meadow-dark);">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>
-          </div>
-          <div>
-            <h3>الملفات</h3>
-            <p>ارفع ملفاتك وشاركها حسب صلاحية كل مجلد</p>
-          </div>
-        </div>
-        <button type="button" class="btn-primary hidden" id="files-new-folder-btn" style="width:auto; padding:9px 16px;">+ مجلد جديد</button>
-      </div>
-
-      <!-- إنشاء مجلد جديد (مدير فقط) -->
-      <div class="form-card hidden bud-section-card" id="files-new-folder-form" style="margin-bottom:18px;">
-        <div class="bud-section-head">
-          <div class="bud-section-icon" style="background:var(--meadow-light); color:var(--meadow);">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-          </div>
-          <div>
-            <h4>مجلد جديد</h4>
-            <p>سمّه بشكل واضح - بعدها حدد مين يشوفه ويرفع فيه</p>
-          </div>
-        </div>
-        <div class="form-row">
-          <input type="text" id="files-folder-name" placeholder="اسم المجلد" />
-          <input type="text" id="files-folder-desc" placeholder="وصف مختصر (اختياري)" />
-        </div>
-        <button class="btn-primary" id="files-folder-create-btn" style="width:auto; padding:9px 18px;">إنشاء المجلد</button>
-        <div class="error-msg" id="files-folder-error"></div>
-      </div>
-
-      <!-- شبكة المجلدات -->
-      <div id="files-folder-grid" class="file-folder-grid"></div>
-
-      <!-- تفاصيل مجلد -->
-      <div id="files-folder-detail" class="hidden">
-        <div class="file-detail-head">
-          <button type="button" id="files-back-to-grid" class="file-back-btn">→ كل المجلدات</button>
-          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-            <div>
-              <h3 id="files-detail-name" style="margin:0;"></h3>
-              <p id="files-detail-desc" style="margin:2px 0 0; font-size:12.5px; color:var(--slate);"></p>
-            </div>
-            <div style="display:flex; gap:8px; flex-shrink:0;">
-              <button type="button" class="btn-primary hidden" id="files-detail-perms-btn" style="width:auto; padding:8px 14px; background:var(--purple);">⚙ الصلاحيات</button>
-              <button type="button" class="btn-primary hidden" id="files-detail-delete-btn" style="width:auto; padding:8px 14px; background:var(--danger);">حذف المجلد</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="form-card hidden bud-section-card" id="files-upload-card" style="margin-top:16px;">
-          <div class="bud-section-head">
-            <div class="bud-section-icon" style="background:var(--teal-light); color:var(--teal);">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/></svg>
-            </div>
-            <div>
-              <h4>رفع ملف</h4>
-              <p>الحد الأقصى 20 ميجابايت لكل ملف</p>
-            </div>
-          </div>
-          <input type="file" id="files-upload-input" style="margin-bottom:10px;" />
-          <button class="btn-primary" id="files-upload-btn" style="width:auto; padding:9px 18px;">رفع الملف</button>
-          <div id="files-upload-progress" style="font-size:12px; color:var(--slate); margin-top:8px;"></div>
-          <div class="error-msg" id="files-upload-error"></div>
-        </div>
-
-        <div style="margin-top:18px;">
-          <div id="files-file-list"></div>
-        </div>
-      </div>
-
-      <!-- إدارة صلاحيات مجلد (مدير فقط) -->
-      <div id="files-perm-overlay" class="hidden" style="position:fixed; inset:0; background:rgba(21,34,56,0.55); z-index:200; display:flex; align-items:center; justify-content:center; padding:20px;">
-        <div style="background:#fff; border-radius:16px; padding:22px; max-width:420px; width:100%; max-height:85vh; overflow-y:auto; box-shadow:var(--shadow-md);">
-          <h3 style="margin:0 0 4px;" id="files-perm-title">صلاحيات المجلد</h3>
-          <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">حدد مين يقدر يشوف و/أو يرفع بهذا المجلد - المدير عنده صلاحية كاملة دايمًا بدون حاجة للإضافة</p>
-          <input type="text" id="files-perm-search" placeholder="بحث بالاسم..." style="margin-bottom:10px;" />
-          <div id="files-perm-list"></div>
-          <button type="button" id="files-perm-close-btn" style="width:100%; margin-top:16px; background:var(--sand); color:var(--ink); border-radius:10px; padding:10px; border:none; font-weight:700; cursor:pointer; font-size:14px;">تم</button>
-        </div>
-      </div>
-    </div>
-
-    <div id="placeholder-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-2">→ رجوع للرئيسية</span>
-      <div class="placeholder">
-        <div class="ic-big"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg></div>
-        <p id="placeholder-text">هذا القسم قيد التطوير حاليًا</p>
-      </div>
-    </div>
-  </main>
-</div>
-
-<script type="module" src="js/core.js"></script>
-
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
-</script>
 </body>
-</html>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) { alert('يرجى السماح بفتح نافذة منبثقة للطباعة'); return; }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 300);
+}
+
+/* ---------- تصدير تقرير أعلى/أدنى ١٥ درجة لملف إكسل ---------- */
+async function exportTopBottomExcel(s) {
+  await loadXLSX();
+  const title = currentReport ? currentReport.title : 'تقرير';
+  const header = ['#', 'الاسم', 'الفصل', 'الدرجة', 'النسبة%'];
+  const toRows = (list) => list.map((st, i) => [i + 1, st.name || st.id || '-', st.section || '-', Math.round(st.total * 10) / 10, Math.round(st.pct * 100) / 100]);
+
+  const aoa = [
+    ['أعلى ١٥ درجة'], header, ...toRows(s.topStudents),
+    [],
+    ['أدنى ١٥ درجة'], header, ...toRows(s.bottomStudents),
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 12 }, { wch: 10 }, { wch: 10 }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'أعلى وأدنى الدرجات');
+  XLSX.writeFile(wb, `${title}_أعلى_وأدنى_الدرجات.xlsx`);
+}
+
+/* ---------- رسم بياني بسيط (أعمدة) بستخدام Chart.js - يُحمَّل عند الحاجة فقط ---------- */
+let chartLibPromise = null;
+function loadChartLib() {
+  if (window.Chart) return Promise.resolve();
+  if (chartLibPromise) return chartLibPromise;
+  chartLibPromise = new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js';
+    s.onload = resolve;
+    s.onerror = () => { chartLibPromise = null; reject(new Error('تعذر تحميل مكتبة الرسوم البيانية')); };
+    document.head.appendChild(s);
+  });
+  return chartLibPromise;
+}
+const chartInstances = {};
+async function drawBarChart(canvasId, labels, data, label, opts = {}) {
+  try {
+    await loadChartLib();
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (chartInstances[canvasId]) { chartInstances[canvasId].destroy(); delete chartInstances[canvasId]; }
+
+    // يرسم عدد الطلاب فوق كل عمود مباشرة - بدون الحاجة لمكتبة إضافية
+    const dataLabelsPlugin = {
+      id: 'erDataLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        const meta = chart.getDatasetMeta(0);
+        ctx.save();
+        ctx.font = '700 11px Tahoma, Arial, sans-serif';
+        ctx.fillStyle = '#3A4351';
+        ctx.textAlign = 'center';
+        chart.data.datasets[0].data.forEach((v, i) => {
+          const bar = meta.data[i];
+          if (!bar || !v) return;
+          ctx.fillText(String(v), bar.x, bar.y - 6);
+        });
+        ctx.restore();
+      },
+    };
+
+    chartInstances[canvasId] = new Chart(canvas, {
+      type: 'bar',
+      data: { labels, datasets: [{ label, data, backgroundColor: opts.colors || '#2455A4', borderRadius: 6, maxBarThickness: 52 }] },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        layout: { padding: { top: 18 } },
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#ECEAE1' } },
+          x: { grid: { display: false } },
+        },
+      },
+      plugins: [dataLabelsPlugin],
+    });
+  } catch (e) {
+    console.error('chart error:', e);
+  }
+}
