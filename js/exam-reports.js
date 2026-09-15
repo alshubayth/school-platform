@@ -400,14 +400,26 @@ async function loadSavedList() {
     listEl.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه تقارير محفوظة بعد</p></div>';
     return;
   }
-  listEl.innerHTML = data.map(r => `
-    <div class="form-card" data-id="${r.id}" style="margin-bottom:8px; padding:12px 14px; cursor:pointer; display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-      <div>
-        <strong>${esc(r.title)}</strong>
-        <div style="font-size:11.5px; color:var(--slate); margin-top:4px;">${esc(r.subject_name || '-')} — ${esc(r.grade_level || '-')} — ${esc(r.semester || '-')} — ${r.students_count} طالب — ${r.item_count} سؤال</div>
-      </div>
-      <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف" style="border:none; background:none; color:var(--danger); cursor:pointer; font-size:14px; padding:2px 8px;">✕</button>
-    </div>`).join('');
+  const colors = [
+    { bg: 'var(--teal-light)', fg: 'var(--teal)' },
+    { bg: 'var(--gold-light)', fg: 'var(--gold)' },
+    { bg: 'var(--purple-light)', fg: 'var(--purple)' },
+    { bg: 'var(--meadow-light)', fg: 'var(--meadow-dark)' },
+  ];
+  const examIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:26px; height:26px;"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`;
+
+  listEl.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:14px;">
+    ${data.map((r, i) => {
+      const c = colors[i % colors.length];
+      return `
+      <div data-id="${r.id}" title="${esc(r.title)}" style="position:relative; background:#fff; border:1px solid var(--border); border-radius:14px; padding:20px 12px 14px; text-align:center; cursor:pointer; transition:0.15s; box-shadow:var(--shadow-sm);" onmouseover="this.style.boxShadow='var(--shadow-md)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.boxShadow='var(--shadow-sm)'; this.style.transform='none';">
+        <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف" style="position:absolute; top:6px; left:6px; border:none; background:none; color:var(--danger); cursor:pointer; font-size:13px; padding:3px 6px; line-height:1; border-radius:6px;">✕</button>
+        <div style="width:50px; height:50px; border-radius:13px; background:${c.bg}; color:${c.fg}; display:flex; align-items:center; justify-content:center; margin:0 auto 10px;">${examIconSvg}</div>
+        <div style="font-size:12.5px; font-weight:700; color:var(--ink); overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.4; min-height:34px;">${esc(r.title)}</div>
+        <div style="font-size:10.5px; color:var(--slate); margin-top:6px;">${esc(r.grade_level || '-')} — ${r.students_count} طالب</div>
+      </div>`;
+    }).join('')}
+  </div>`;
 
   listEl.querySelectorAll('[data-id]').forEach(card => {
     card.addEventListener('click', (e) => {
