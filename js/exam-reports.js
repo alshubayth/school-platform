@@ -281,12 +281,13 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
     pct: itemCount ? (totals[idx] / itemCount) * 100 : 0,
   })).sort((a, b) => b.total - a.total);
   const topStudents = ranked.slice(0, 15);
-  const bottomStudents = ranked.slice(-15).slice().sort((a, b) => a.total - b.total);
+  // الطلاب الضعاف: أي طالب تحقيقه أقل من ٥٠٪ من الدرجة (مو رقم ثابت) - بالاسم، من الأدنى للأعلى
+  const weakStudents = ranked.filter(r => r.pct < 50).slice().sort((a, b) => a.total - b.total);
 
   return {
     n, itemCount, mean, median, high, low, range: high - low, sd, meanPct, kr20, reliabilityBand,
     gradeDistribution, scoreHistogram, itemStats, hardest, easiest, toReview, lowestStudents, highestStudents,
-    topStudents, bottomStudents,
+    topStudents, weakStudents,
   };
 }
 
@@ -704,8 +705,9 @@ function renderAnalysis(s) {
   const el = document.getElementById('er-panel-analysis');
   // تقارير محفوظة بنسخة سابقة من النظام ما تحتوي هذه القوائم بعد - نتفادى انهيار الصفحة
   const topStudents = Array.isArray(s.topStudents) ? s.topStudents : [];
-  const bottomStudents = Array.isArray(s.bottomStudents) ? s.bottomStudents : [];
-  const isLegacyReport = !Array.isArray(s.topStudents) && !Array.isArray(s.bottomStudents);
+  // توافق مع التقارير المحفوظة قبل التحويل من "أدنى ١٥" لـ"الطلاب الضعاف (أقل من ٥٠٪)"
+  const weakStudents = Array.isArray(s.weakStudents) ? s.weakStudents : (Array.isArray(s.bottomStudents) ? s.bottomStudents : []);
+  const isLegacyReport = !Array.isArray(s.topStudents) && !Array.isArray(s.weakStudents) && !Array.isArray(s.bottomStudents);
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">تقرير تحليل الاختبار</h4>
     ${summaryStatsGrid(s)}
@@ -730,8 +732,8 @@ function renderAnalysis(s) {
     </div>
     <div style="margin-top:22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
       <div>
-        <h5 style="margin:0 0 4px; font-size:14px;">أعلى ١٥ وأدنى ١٥ درجة</h5>
-        <p style="font-size:11.5px; color:var(--slate); margin:0;">بأسماء الطلاب وفصولهم</p>
+        <h5 style="margin:0 0 4px; font-size:14px;">أعلى ١٥ درجة والطلاب الضعاف</h5>
+        <p style="font-size:11.5px; color:var(--slate); margin:0;">بأسماء الطلاب وفصولهم - الضعاف: كل طالب تحقيقه أقل من ٥٠٪ من الدرجة (بدون حد أقصى للعدد)</p>
       </div>
       ${isLegacyReport ? '' : `<div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button type="button" class="text-action-btn" id="er-print-topbottom" style="width:auto; padding:8px 14px;">🖨 طباعة</button>
@@ -741,13 +743,13 @@ function renderAnalysis(s) {
     ${isLegacyReport ? `<p style="font-size:12px; color:var(--danger); margin:8px 0 0;">هذا التقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات الترتيب - ارفع نفس ملف الإكسل وأعد حفظ التقرير لعرض هذه القائمة.</p>` : `
     <div class="form-row" style="align-items:stretch; margin-top:10px;">
       ${studentRankTable(topStudents, 'أعلى ١٥ درجة', 'badge-meadow')}
-      ${studentRankTable(bottomStudents, 'أدنى ١٥ درجة', 'badge-danger')}
+      ${studentRankTable(weakStudents, 'الطلاب الضعاف (أقل من ٥٠٪)', 'badge-danger')}
     </div>`}`;
 
   const printBtn = document.getElementById('er-print-topbottom');
   const exportBtn = document.getElementById('er-export-topbottom');
-  if (printBtn) printBtn.addEventListener('click', () => printTopBottomReport({ ...s, topStudents, bottomStudents }));
-  if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel({ ...s, topStudents, bottomStudents }));
+  if (printBtn) printBtn.addEventListener('click', () => printTopBottomReport({ ...s, topStudents, weakStudents }));
+  if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel({ ...s, topStudents, weakStudents }));
 }
 
 function studentRankTable(list, title, badgeClass) {
@@ -792,7 +794,7 @@ function printTopBottomReport(s) {
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8" />
-<title>أعلى وأدنى ١٥ درجة - ${esc(title)}</title>
+<title>أعلى ١٥ درجة والطلاب الضعاف - ${esc(title)}</title>
 <style>
   body { font-family: 'Tajawal', 'Tahoma', Arial, sans-serif; padding: 24px; color:#16233A; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
   .doc { max-width: 960px; margin: 0 auto; }
@@ -815,7 +817,7 @@ function printTopBottomReport(s) {
     <div class="header">
       ${logoHtml}
       <div style="text-align:center; flex:1;">
-        <h1>تقرير أعلى وأدنى ١٥ درجة</h1>
+        <h1>تقرير أعلى ١٥ درجة والطلاب الضعاف</h1>
         <p>${esc(title)}${sub ? ' — ' + esc(sub) : ''}</p>
       </div>
       <div style="width:50px;"></div>
@@ -827,9 +829,9 @@ function printTopBottomReport(s) {
         <tbody>${rowsHtml(s.topStudents)}</tbody></table>
       </div>
       <div>
-        <h3>أدنى ١٥ درجة</h3>
+        <h3>الطلاب الضعاف (أقل من ٥٠٪)</h3>
         <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
-        <tbody>${rowsHtml(s.bottomStudents)}</tbody></table>
+        <tbody>${rowsHtml(s.weakStudents)}</tbody></table>
       </div>
     </div>
     <div class="footer-note">تمت الطباعة من نظام إدارة المدرسة</div>
@@ -856,13 +858,13 @@ async function exportTopBottomExcel(s) {
   const aoa = [
     ['أعلى ١٥ درجة'], header, ...toRows(s.topStudents),
     [],
-    ['أدنى ١٥ درجة'], header, ...toRows(s.bottomStudents),
+    ['الطلاب الضعاف (أقل من ٥٠٪)'], header, ...toRows(s.weakStudents),
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 12 }, { wch: 10 }, { wch: 10 }];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'أعلى وأدنى الدرجات');
-  XLSX.writeFile(wb, `${title}_أعلى_وأدنى_الدرجات.xlsx`);
+  XLSX.utils.book_append_sheet(wb, ws, 'أعلى الدرجات والضعاف');
+  XLSX.writeFile(wb, `${title}_أعلى_الدرجات_والضعاف.xlsx`);
 }
 
 /* ---------- رسم بياني بسيط (أعمدة) بستخدام Chart.js - يُحمَّل عند الحاجة فقط ---------- */
