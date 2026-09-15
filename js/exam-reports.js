@@ -47,7 +47,7 @@ export function detectColumns(headerRow) {
     else if (col.grade == null && c.includes('صف')) col.grade = idx;
     else if (col.section == null && c === 'الفصل') col.section = idx;
     else if (col.subject == null && c.includes('اسم') && c.includes('ماد')) col.subject = idx;
-    else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال')) items.push(idx);
+    else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال') || /متعدد\s*\d+$/.test(c)) items.push(idx);
   });
   return { col, items };
 }
