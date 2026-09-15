@@ -22,7 +22,7 @@
       <path d="M0,140 Q125,90 250,130 T500,110 V200 H0 Z" fill="rgba(255,255,255,0.08)"/>
       <path d="M0,170 Q150,120 300,160 T500,150 V200 H0 Z" fill="rgba(255,255,255,0.12)"/>
     </svg>
-    <img src="logo.png" alt="شعار الهيئة الملكية للجبيل وينبع" style="width:280px; max-width:70%; height:auto; background:#fff; padding:16px 20px; border-radius:14px; margin-bottom:28px; position:relative; z-index:1;" />
+    <img src="logo.png" alt="شعار مدرسة المروج المتوسطة" style="width:280px; max-width:70%; height:auto; background:#fff; padding:16px 20px; border-radius:14px; margin-bottom:28px; position:relative; z-index:1;" />
     <h1>لوحة تحكم<br>مدرسة المروج</h1>
     <p>منصة إدارة متكاملة لكل خدمات المدرسة — من متابعة الأداء إلى الخطة التشغيلية، في مكان واحد.</p>
   </div>
@@ -77,7 +77,7 @@
 <div id="dashboard-screen" class="hidden">
   <header class="topbar">
     <div class="brand">
-      <img src="logo.png" alt="شعار الهيئة الملكية للجبيل وينبع" />
+      <img src="logo.png" alt="شعار مدرسة المروج المتوسطة" />
       <span>مدرسة المروج</span>
     </div>
     <div id="nav-list"></div>
@@ -238,16 +238,22 @@
       <span class="back-link" id="back-to-tiles-3">→ رجوع للرئيسية</span>
 
 
-      <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:20px;">
-        <select id="weekly-grade" style="max-width:220px; margin-bottom:0;">
-          <option value="first_intermediate">أول متوسط</option>
-          <option value="second_intermediate">ثاني متوسط</option>
-          <option value="third_intermediate">ثالث متوسط</option>
-        </select>
-        <div style="display:flex; align-items:center; gap:10px; background:var(--sand); border-radius:10px; padding:6px 10px;">
-          <button id="week-prev" style="background:transparent; padding:6px 10px; color:var(--meadow); font-weight:700;">‹ السابق</button>
-          <span style="font-family:'Tajawal'; font-weight:700; min-width:90px; text-align:center;" id="week-label">الأسبوع 1</span>
-          <button id="week-next" style="background:transparent; padding:6px 10px; color:var(--meadow); font-weight:700;">التالي ›</button>
+      <div class="wp-header">
+        <div class="wp-header-top">
+          <div>
+            <h3>الخطة الأسبوعية</h3>
+            <p>الدروس والمهام والواجبات لكل مرحلة</p>
+          </div>
+          <select id="weekly-grade" class="wp-grade-select">
+            <option value="first_intermediate">أول متوسط</option>
+            <option value="second_intermediate">ثاني متوسط</option>
+            <option value="third_intermediate">ثالث متوسط</option>
+          </select>
+        </div>
+        <div class="wp-week-pill">
+          <button id="week-prev" type="button">‹ السابق</button>
+          <span id="week-label">الأسبوع 1</span>
+          <button id="week-next" type="button">التالي ›</button>
         </div>
       </div>
 
