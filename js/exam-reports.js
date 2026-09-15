@@ -475,11 +475,93 @@ async function openReport(id) {
   showErTab('dist');
   renderAllReports(data.stats);
   document.getElementById('er-editkey-card').classList.add('hidden');
+  document.getElementById('er-updatefile-card').classList.add('hidden');
 }
+
+/* ---------- تحديث ملف الإكسل لتقرير محفوظ - يبقي الإجابة الصحيحة كما هي ---------- */
+document.getElementById('er-update-file-btn').addEventListener('click', () => {
+  if (!currentReport) return;
+  document.getElementById('er-editkey-card').classList.add('hidden');
+  const errEl = document.getElementById('er-updatefile-error');
+  errEl.style.display = 'none';
+  document.getElementById('er-update-file').value = '';
+  if (!currentReport.raw_data || !Array.isArray(currentReport.raw_data.choiceCounts)) {
+    errEl.textContent = 'هذا تقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات كافية لتحديث الملف بدون تعديل يدوي - احذفه وارفعه من جديد.';
+    errEl.style.display = 'block';
+  }
+  document.getElementById('er-updatefile-card').classList.remove('hidden');
+  document.getElementById('er-updatefile-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+});
+
+document.getElementById('er-updatefile-cancel').addEventListener('click', () => {
+  document.getElementById('er-updatefile-card').classList.add('hidden');
+});
+
+document.getElementById('er-updatefile-confirm').addEventListener('click', async () => {
+  const errEl = document.getElementById('er-updatefile-error');
+  errEl.style.display = 'none';
+  if (!currentReport || !currentReport.raw_data || !Array.isArray(currentReport.raw_data.choiceCounts)) {
+    errEl.textContent = 'ما فيه بيانات كافية بالتقرير الحالي لتحديثه بهذي الطريقة.';
+    errEl.style.display = 'block';
+    return;
+  }
+  const file = document.getElementById('er-update-file').files[0];
+  if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
+
+  try {
+    await loadXLSX();
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array' });
+    let rows = [];
+    wb.SheetNames.forEach(name => {
+      const sheet = wb.Sheets[name];
+      rows = rows.concat(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
+    });
+    const newParsed = parseSheetRows(rows);
+
+    const { choiceCounts: oldChoiceCounts, reversedOrder = true } = currentReport.raw_data;
+    if (newParsed.itemCount !== oldChoiceCounts.length) {
+      errEl.textContent = `عدد أسئلة الملف الجديد (${newParsed.itemCount}) ما يطابق عدد أسئلة التقرير الحالي (${oldChoiceCounts.length}) - لازم يكون نفس عدد الأسئلة عشان يبقى نفس مفتاح الإجابة صحيح. لو الاختبار مختلف كليًا، ارفعه كتقرير جديد بدل التحديث.`;
+      errEl.style.display = 'block';
+      return;
+    }
+
+    // نحوّل مفتاح الإجابة الحالي (قيم خام) لحروف باستخدام بيانات الترميز القديمة، وبعدين نبنيه
+    // من جديد بنفس الحروف على قيم الملف الجديد - عشان الإجابة الصحيحة (بالحرف) تبقى كما هي
+    // حتى لو الترميز الخام اختلف شوي بين الملفين
+    const letters = oldChoiceCounts.map((numChoices, i) => letterFor(currentReport.key_raw[i], numChoices, reversedOrder));
+    if (letters.some(l => !l)) {
+      errEl.textContent = 'تعذر قراءة مفتاح الإجابة الحالي لتطبيقه على الملف الجديد - استخدم "تعديل مفتاح الإجابة" بدالًا من ذلك.';
+      errEl.style.display = 'block';
+      return;
+    }
+    const newKeyRaw = buildManualKey(letters, newParsed.choiceCounts, reversedOrder);
+    const stats = computeExamStats({ ...newParsed, keyRaw: newKeyRaw, reversedOrder });
+    const newRawData = { students: newParsed.students, choiceCounts: newParsed.choiceCounts, itemTypes: newParsed.itemTypes, reversedOrder };
+
+    const { error } = await sb.from('exam_reports').update({
+      item_count: newParsed.itemCount,
+      students_count: newParsed.students.length,
+      key_raw: newKeyRaw,
+      stats,
+      raw_data: newRawData,
+    }).eq('id', currentReport.id);
+    if (error) { errEl.textContent = 'تعذر تحديث التقرير: ' + error.message; errEl.style.display = 'block'; return; }
+
+    currentReport = { ...currentReport, item_count: newParsed.itemCount, students_count: newParsed.students.length, key_raw: newKeyRaw, stats, raw_data: newRawData };
+    document.getElementById('er-detail-sub').textContent = `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'} — ${currentReport.students_count} طالب`;
+    renderAllReports(stats);
+    document.getElementById('er-updatefile-card').classList.add('hidden');
+  } catch (e) {
+    errEl.textContent = e.message || 'تعذر قراءة الملف';
+    errEl.style.display = 'block';
+  }
+});
 
 /* ---------- تعديل مفتاح الإجابة لتقرير محفوظ وإعادة حساب التقارير الستة ---------- */
 document.getElementById('er-edit-key-btn').addEventListener('click', () => {
   if (!currentReport) return;
+  document.getElementById('er-updatefile-card').classList.add('hidden');
   const errEl = document.getElementById('er-editkey-error');
   errEl.style.display = 'none';
   if (!currentReport.raw_data || !Array.isArray(currentReport.raw_data.choiceCounts)) {
