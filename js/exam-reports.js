@@ -822,7 +822,12 @@ function renderAnalysis(s) {
         <h5 style="margin:0 0 4px; font-size:14px;">أعلى ١٥ درجة والطلاب الضعاف</h5>
         <p style="font-size:11.5px; color:var(--slate); margin:0;">بأسماء الطلاب وفصولهم - الضعاف: كل طالب تحقيقه أقل من ٥٠٪ من الدرجة (بدون حد أقصى للعدد)</p>
       </div>
-      ${isLegacyReport ? '' : `<div style="display:flex; gap:8px; flex-wrap:wrap;">
+      ${isLegacyReport ? '' : `<div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+        <select id="er-print-scope" style="width:auto; padding:8px 10px; font-size:12px; border:1px solid var(--border); border-radius:8px;">
+          <option value="both">طباعة: كلاهما</option>
+          <option value="weak">طباعة: الضعاف فقط</option>
+          <option value="top">طباعة: أعلى ١٥ فقط</option>
+        </select>
         <button type="button" class="text-action-btn" id="er-print-topbottom" style="width:auto; padding:8px 14px;">🖨 طباعة</button>
         <button type="button" class="text-action-btn" id="er-export-topbottom" style="width:auto; padding:8px 14px;">⬇ تصدير إكسل</button>
         <button type="button" class="text-action-btn" id="er-export-remedial" style="width:auto; padding:8px 14px;" title="ملف وورد منفصل لكل فصل فيه طلاب ضعاف - جاهز للتعبئة اليدوية">📄 خطط علاجية جماعية (وورد)</button>
@@ -838,7 +843,10 @@ function renderAnalysis(s) {
   const printBtn = document.getElementById('er-print-topbottom');
   const exportBtn = document.getElementById('er-export-topbottom');
   const remedialBtn = document.getElementById('er-export-remedial');
-  if (printBtn) printBtn.addEventListener('click', () => printTopBottomReport({ ...s, topStudents, weakStudents }));
+  if (printBtn) printBtn.addEventListener('click', () => {
+    const scopeEl = document.getElementById('er-print-scope');
+    printTopBottomReport({ ...s, topStudents, weakStudents }, scopeEl ? scopeEl.value : 'both');
+  });
   if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel({ ...s, topStudents, weakStudents }));
   if (remedialBtn) remedialBtn.addEventListener('click', () => exportRemedialPlans(weakStudents));
 }
@@ -865,9 +873,12 @@ function studentRankTable(list, title, badgeClass) {
 
 /* ---------- طباعة تقرير أعلى/أدنى ١٥ درجة ---------- */
 const ER_LOGO_DATA_URI = new URL('logo.png', window.location.href).href;
-function printTopBottomReport(s) {
+function printTopBottomReport(s, scope = 'both') {
   const title = currentReport ? currentReport.title : 'تقرير أعلى وأدنى الدرجات';
   const sub = currentReport ? `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'}` : '';
+  const showTop = scope === 'both' || scope === 'top';
+  const showWeak = scope === 'both' || scope === 'weak';
+  const pageTitle = scope === 'top' ? 'أعلى ١٥ درجة' : scope === 'weak' ? 'الطلاب الضعاف' : 'أعلى ١٥ درجة والطلاب الضعاف';
 
   const rowsHtml = (list) => list.length
     ? list.map((st, i) => `<tr>
@@ -880,12 +891,17 @@ function printTopBottomReport(s) {
     : '<tr><td colspan="5">لا يوجد</td></tr>';
 
   const logoHtml = ER_LOGO_DATA_URI ? `<img src="${ER_LOGO_DATA_URI}" alt="شعار" style="height:50px;" />` : '';
+  const colHtml = (heading, list) => `<div>
+        <h3>${esc(heading)}</h3>
+        <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
+        <tbody>${rowsHtml(list)}</tbody></table>
+      </div>`;
 
   const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="UTF-8" />
-<title>أعلى ١٥ درجة والطلاب الضعاف - ${esc(title)}</title>
+<title>${esc(pageTitle)} - ${esc(title)}</title>
 <style>
   body { font-family: 'Tajawal', 'Tahoma', Arial, sans-serif; padding: 24px; color:#16233A; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
   .doc { max-width: 960px; margin: 0 auto; }
@@ -908,22 +924,14 @@ function printTopBottomReport(s) {
     <div class="header">
       ${logoHtml}
       <div style="text-align:center; flex:1;">
-        <h1>تقرير أعلى ١٥ درجة والطلاب الضعاف</h1>
+        <h1>تقرير ${esc(pageTitle)}</h1>
         <p>${esc(title)}${sub ? ' — ' + esc(sub) : ''}</p>
       </div>
       <div style="width:50px;"></div>
     </div>
     <div class="cols">
-      <div>
-        <h3>أعلى ١٥ درجة</h3>
-        <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
-        <tbody>${rowsHtml(s.topStudents)}</tbody></table>
-      </div>
-      <div>
-        <h3>الطلاب الضعاف (أقل من ٥٠٪)</h3>
-        <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
-        <tbody>${rowsHtml(s.weakStudents)}</tbody></table>
-      </div>
+      ${showTop ? colHtml('أعلى ١٥ درجة', s.topStudents) : ''}
+      ${showWeak ? colHtml('الطلاب الضعاف (أقل من ٥٠٪)', s.weakStudents) : ''}
     </div>
     <div class="footer-note">تمت الطباعة من نظام إدارة المدرسة</div>
   </div>
@@ -967,6 +975,11 @@ async function exportTopBottomExcel(s) {
  * بملف zip واحد. */
 const SCHOOL_NAME = 'مدرسة المروج المتوسطة';
 const REMEDIAL_TEMPLATE_URL = new URL('js/templates/remedial-plan-template.docx', window.location.href).href;
+
+// يشيل رموز ممنوعة بأسماء الملفات (Windows/macOS) عشان التنزيل ما يفشل أو يتقطع الاسم
+function safeFileName(s) {
+  return String(s == null ? '' : s).replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 function escXml(s) {
   return String(s == null ? '' : s)
@@ -1018,13 +1031,15 @@ async function exportRemedialPlans(weakStudents) {
         .replace(/\{NAMES\}/g, escXml(namesText));
       docZip.file('word/document.xml', xml);
       const out = await docZip.generateAsync({ type: 'arraybuffer' });
-      zip.file(`الخطة_العلاجية_الجماعية_${sectionLabel}.docx`, out);
+      // اسم الملف يتضمن المرحلة/الصف والفصل عشان يتضح من غير ما تفتحه - مثلاً "ثاني متوسط - الفصل 1.docx"
+      const fileTitle = safeFileName([grade, sectionLabel].filter(Boolean).join(' - ')) || safeFileName(sectionLabel);
+      zip.file(`${fileTitle}.docx`, out);
     }
     const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `الخطط_العلاجية_${title}.zip`;
+    a.download = `${safeFileName(['الخطط العلاجية', grade, subject].filter(Boolean).join(' - ')) || safeFileName(title)}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();
