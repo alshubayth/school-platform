@@ -1031,15 +1031,16 @@ async function exportRemedialPlans(weakStudents) {
         .replace(/\{NAMES\}/g, escXml(namesText));
       docZip.file('word/document.xml', xml);
       const out = await docZip.generateAsync({ type: 'arraybuffer' });
-      // اسم الملف يتضمن المرحلة/الصف والفصل عشان يتضح من غير ما تفتحه - مثلاً "ثاني متوسط - الفصل 1.docx"
-      const fileTitle = safeFileName([grade, sectionLabel].filter(Boolean).join(' - ')) || safeFileName(sectionLabel);
+      // اسم الملف: "خطة علاجية [المادة] [الصف] ف[الفصل]" - مثلاً "خطة علاجية لغتي ثالث متوسط ف1"
+      const sectionShort = section === 'بدون فصل محدد' ? section : ('ف' + section);
+      const fileTitle = safeFileName(['خطة علاجية', subject, grade, sectionShort].filter(Boolean).join(' ')) || safeFileName(sectionLabel);
       zip.file(`${fileTitle}.docx`, out);
     }
     const blob = await zip.generateAsync({ type: 'blob' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${safeFileName(['الخطط العلاجية', grade, subject].filter(Boolean).join(' - ')) || safeFileName(title)}.zip`;
+    a.download = `${safeFileName(['خطط علاجية', subject, grade].filter(Boolean).join(' ')) || safeFileName(title)}.zip`;
     document.body.appendChild(a);
     a.click();
     a.remove();
