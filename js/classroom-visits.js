@@ -205,25 +205,38 @@ const STRATEGIES = [
   'ورقة الدقيقة الواحدة', 'المشاريع العملية', 'أرسل سؤال', 'الاستنتاج',
 ];
 
-// توصيات جاهزة معتمدة من نموذج رسمي فعلي — تُقترح تلقائيًا لما يكون تقدير المؤشر "فرصة تحسين"
-// (ما عندنا توصية رسمية جاهزة لكل المؤشرات، فالباقي يُكتب يدويًا من قِبل الزائر)
-const RECOMMENDATIONS = {
-  16: 'معرفة الطالب بأهداف الدرس يزيد من فرص التعلم وتوجيه الجهود.',
-  20: 'تفعيل دور جميع الطلاب في تنفيذ أنشطة الدرس يسهم في تنمية قدرات المتعلم وتحقيق الأهداف.',
-  27: 'تفعيل سجل المتابعة يسهم في تحفيز وتعزيز تعلم الطلاب وتعديل سلوكهم وتحسين نواتج التعلم.',
-  28: 'تنويع أساليب التقويم وأدواته يسهم في إيجاد بيئة تعلم فاعلة ويحسن من نواتج التعلم.',
+// تعليقات جاهزة معتمدة من النموذج الرسمي (ملف بنود الزيارات المعتمد) - مفتاحة برقم المؤشر ثم فهرس الخيار داخل قائمة options
+// كل مصفوفة بنفس طول options[]: نص تعليق لخيار "مميز" (فهرس 0) أو "فرصة تحسين" (الفهارس الوسطى)، وسلسلة فارغة لباقي الفهارس (حقق الهدف / لم يتم التقييم)
+const OPTION_COMMENTS = {
+  12: ['تميزكم في الإعداد له بالغ الأثر في تنظيم مجريات التدريس.', '', 'الالتزام بالخطة الفصلية، تمكن المعلم من إعطاء كل درس حقه.', 'بناء الإعداد واستكمال جميع عناصره تمكن المعلم من التخطيط الجيد.', 'إعداد الدرس هو خطة منظمة مقصودة يسير عليها المعلم مع طلابه من أجل تحقيق أهداف التعلم.', ''], // الإعداد للخطة والدرس
+  13: ['تميزكم في تحديد أهدافكم وشموليتها ومراعاتها لمهارات التفكير العليا انعكس إيجابا على عملية التعلم ورفع مستوى التمكن لدى الطلاب.', '', 'قابلية القياس للأهداف شرط أساسي في بناء هدف صحيح، يؤدي إلى النتائج المرجوة من عملية التعلم.', 'شمولية الأهداف لجميع عناصر الدرس يجعل من الدرس كتلة واحده يمارسها الطالب ويبني عليها تعلمه اللاحق.', 'وجود الأهداف التعليمية هي الخطوة الأساسية لما سيقدم في الحصة وفي ضوئها يبني المعلم خطة سير الحصة.', ''], // تحديد الأهداف وشموليتها
+  14: ['تميزكم واهتمامكم بالتنوع والابتكار في استراتيجيات التعلم انعكس إيجابا على المتعة والجودة في عملية التعلم.', '', 'انتقاء استراتيجيات التدريس أثناء الإعداد تمكن المعلم من تحديد الأدوار والمهام التي يقوم بها المعلم والمتعلم من أجل تحقيق أهداف الدرس، وتساعد في انتقاء الوسائل التعليمية المناسبة.', 'تحديد استراتيجيات التدريس أثناء الإعداد تمكن المعلم من تحديد الأدوار والمهام التي يقوم بها المعلم والمتعلم من أجل تحقيق أهداف الدرس، وتساعد في انتقاء الوسائل التعليمية المناسبة.', ''], // تحديد الاستراتيجيات المطبقة ومناسبتها
+  15: ['تميزكم في تقديم التهيئة كان له الأثر في إثارة دافعية الطلاب .', '', 'الوقت المناسب للتهيئة يحقق الأهداف المرجو منها.', 'ارتباط التهيئة بالدرس يثير دافعية الطالب للتعلم.', 'وجود التهيئة  يسهم في بناء تعلم منظم.', ''], // تقديم التهيئة المناسبة
+  16: ['تميزكم في عرض الأهداف ومناقشتها ساهم في توجيه الجهد وزيادة الدافعية.', '', 'مناسبة الأهداف يسهم في بناء معرفة الطلاب لمفاهيم الدرس.', 'معرفة الطلاب بأهداف الدرس يزيد من فرص التعلم وتوجيه الجهود.', ''], // أهداف الدرس
+  17: ['تميزكم في اختيار طريقة التدريس المناسبة ساهم في تحقيق الأهداف.', '', 'مراعاة بيئة التعلم عند اختيار طريقة التدريس  يسهم في تحقيق الأهداف .', 'اختيار طريقة التدريس المناسبة يحقق أهداف الدرس.', ''], // طريقة التدريس وملاءمتها لتحقيق الأهداف
+  18: ['تميزكم في توظيف البيئة المحيطة في مفاهيم الدرس وربطها بحياة المتعلم ساهم في بقاء أثر التعلم.', '', 'الاستفادة من البيئة المحيطة يسهم في بقاء أثر التعلم.', ''], // العلاقة بين الدرس والبيئة المحيطة
+  19: ['تميزكم في اختيار الوسيلة المناسبة للدرس كان له الأثر في بقاء أثر التعلم.', '', 'الوسيلة المناسبة للدرس تسهم في بناء التعلم.', 'وجود الوسيلة المناسبة للدرس ضرورة لبناء التعلم.', ''], // فاعلية الوسيلة في تحقيق أهداف التعلم
+  20: ['تميزكم مع طلابكم وتعزيز التفاعل الإيجابي وتعلم الأقران ساهم في فاعلية الأنشطة وتحقيق أهداف الدرس.', '', 'تفعيل دور جميع الطلاب في تنفيذ أنشطة الدرس يسهم في تنمية قدرات المتعلم وتحقيق الأهداف.', 'فاعلية الطالب في تنفيذ الأنشطة تنعكس إيجاباً على أدائه وتسهم في تحقيق الأهداف.', ''], // فاعلية الأنشطة الصفية ودور الطالب في تنفيذها
+  21: ['تميزكم في مراعاة الفروق الفردية أثناء التدريس وتقديم الدعم اللازم لجميع فئات الطلاب حقق العدل في فرص التعلم وحقق الأهداف.', '', 'تقديم الدعم المناسب لجميع فئات الطلاب يسهم في تحقيق العدل في فرص التعلم ويحقق أهدافه.', 'التنويع في أساليب التدريس يسهم في مشاركة جميع الطلاب في عملية التعلم وتحقيق أهدافه.', ''], // مراعاة الفروق الفردية بين الطلاب
+  22: ['تميزكم في إغلاق الدرس ساهم في إبراز وربط الأفكار الرئيسة للمتعلم.', '', 'تحديد المهام المطلوبة من المتعلم يسهم في تكامل بناء المعرفة.', 'تحديد الزمن المناسب لإغلاق الدرس يسهم في تنظيم إجراءات التعلم.', 'ربط الأفكار الرئيسة للدرس يسهم في تنظيم وتسلسل المعرفة.', 'إغلاق الدرس يسهم في تكامل وتنظيم المعرفة.', ''], // إغلاق الدرس
+  23: ['تميزكم في تهيئة البيئة الصفية وتنظيمها ومناسبتها ساهم في تحقق الانضباط الصفي وتحفيز المتعلمين لعملية التعلم.', '', 'الانضباط الصفي يسهم في تحفيز المتعلمين للتعلم وتحقيق أهداف التعلم .', 'مناسبة البيئة لاستراتيجية التدريس يسهم في تنفيذها بشكل فاعل .', 'تنظيم البيئة الصفية يسهم في تحقيق أهداف الدرس.', ''], // البيئة الصفية
+  24: ['تميزكم في مهارات التواصل ساهم في إدارة الصف بفاعلية وإبراز دور المتعلم في عملية التعلم.', '', 'التصرف الإيجابي في المواقف المختلفة يحقق التواصل الفعال.', 'تشجيع أفكار المتعلم يسهم في تحقيق التواصل الفعال.', 'التواصل الفعال بين أطراف العملية التعليمية يحقق أهداف التعلم.', ''], // مهارات التواصل
+  25: ['تميزكم في إدارة وقت الحصة ساهم في استثماره بما يتناسب مع أنشطة الدرس وإجراءاته.', '', 'إعطاء المتعلم الوقت الكافي للتعلم يسهم في تحقيق أهداف التعلم بفاعلية.', 'توزيع الوقت بما تناسب مع مراحل التعلم يسهم في تحقيق أهدافها.', ''], // إدارة الوقت
+  26: ['تميزكم في تفعيل مراحل التقويم وتفعيل الاستراتيجيات المناسبة وتقديم التغذية الراجعة ساهم في بقاء أثر التعلم.', '', 'تقديم التغذية الراجعة يسهم في بقاء أثر التعلم.', 'تفعيل جميع مراحل التقويم وتقديم التغذية الراجعة يسهم في بقاء أثر التعلم.', 'تفعيل مراحل التقويم وتقديم التغذية الراجعة يسهم في بقاء أثر التعلم.', ''], // مراحل التقويم والتغذية الراجعة
+  27: ['تميزكم في تفعيل سجل المتابعة وتوظيفه في تحفيز وتعزيز وتعديل سلوكهم ساهم في تحسين نواتج التعلم.', '', 'تفعيل سجل المتابعة في مراحل التقويم المختلفة يسهم في تحفيز وتعزيز تعلم الطلاب وتعديل سلوكهم وتحسين نواتج التعلم.', 'تفعيل سجل المتابعة يسهم في تحفيز وتعزيز تعلم الطلاب وتعديل سلوكهم وتحسين نواتج التعلم.', ''], // توثيق التقويم والمهام الأدائية أثناء التدريس
+  28: ['تميزكم في تنويع أساليب التقويم وأدواته وتوظيف التطبيقات والبرامج الإلكترونية ساهم في إيجاد بيئة تعلم فاعلة.', '', 'تنويع أساليب التقويم وأدواته يسهم في إيجاد بيئة تعلم فاعلة ويحسن من نواتج التعلم.', ''], // تنويع أساليب التقويم وأدواته (شفهي، كتابي الكتروني)
 };
 
-// تقدير كل خيار حسب ترتيبه: أول خيار = مميز، آخر خيار حقيقي (قبل "لم يتم تقييم") = فرصة تحسين، والباقي = حقق الهدف
+// تقدير كل خيار حسب ترتيبه (مطابق لملف "بنود الزيارات" الرسمي المعتمد):
+// فهرس 0 = مميز، فهرس 1 = حقق الهدف، كل الفهارس من 2 حتى ما قبل الأخير = فرصة تحسين، والفهرس الأخير دايمًا "لم يتم تقييم..." ولا ياخذ تقدير
 // الرموز مطابقة للنموذج الرسمي المعتمد: ✓ = حقق الهدف، ➔ = فرصة تحسين، ⭐ = مميز
-// آخر عنصر بكل قائمة دايمًا "لم يتم تقييم..." ولا ياخذ تقدير
 function tierForOption(indicatorNum, optionText) {
   const opts = INDICATORS[indicatorNum].options;
   const idx = opts.indexOf(optionText);
   if (idx === -1 || idx === opts.length - 1) return null;
   if (idx === 0) return { label: 'مميز', symbol: '⭐' };
-  if (idx === opts.length - 2) return { label: 'فرصة تحسين', symbol: '➔' };
-  return { label: 'حقق الهدف', symbol: '✓' };
+  if (idx === 1) return { label: 'حقق الهدف', symbol: '✓' };
+  return { label: 'فرصة تحسين', symbol: '➔' };
 }
 
 let cvGrade = 'first_intermediate';
@@ -292,6 +305,7 @@ async function renderList(container) {
               <div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:700;">زار: ${visitorTag}</div>
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              ${v.teacher_absent ? `<span class="badge" style="padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700; background:#fdecea; color:#c0392b;">لم تُعقد الحصة</span>` : ''}
               <span class="badge ${v.published ? 'badge-green' : 'badge-gold'}" style="padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700; ${v.published ? 'background:#e4f5ea; color:#1f8a4c;' : 'background:#fdf2df; color:#9a6b1e;'}">${v.published ? 'منشورة للمعلم' : 'غير منشورة'}</span>
               <button class="btn-secondary cv-print-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">طباعة PDF</button>
               ${canEditVisit(v) ? `<button class="btn-secondary cv-edit-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">تعديل</button>` : ''}
@@ -378,6 +392,14 @@ async function renderForm(container, existing) {
       </div>
     </div>
 
+    <div class="form-card" style="background:#fdf2df;">
+      <label style="font-size:13px; display:flex; align-items:center; gap:8px; font-weight:700; color:#9a6b1e;">
+        <input type="checkbox" id="cv-teacher-absent" style="width:auto; margin:0;"${existing?.teacher_absent ? ' checked' : ''} /> المعلم لم يحضر الحصة / الحصة لم تُعقد
+      </label>
+      <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">فعّل هذا الخيار لو الحصة ما انعقدت أصلًا (غياب المعلم مثلًا) - بيلغي تقييم المؤشرات (٢٨ مؤشر) كليًا بدل ما تضطر تختار تقديرات وهمية لها، وما بيحسب أي تقدير "حقق الهدف" أو غيره للزيارة.</p>
+    </div>
+
+    <div id="cv-eval-wrap"${existing?.teacher_absent ? ' style="display:none;"' : ''}>
     <div class="form-card">
       <h4>بيانات إضافية</h4>
       <div class="form-row">
@@ -419,7 +441,8 @@ async function renderForm(container, existing) {
           const currentVal = existing?.ratings?.[num] || '';
           const currentRec = existing?.recommendations?.[num] || '';
           const tier = currentVal ? tierForOption(num, currentVal) : null;
-          const showRec = tier && tier.label === 'فرصة تحسين';
+          const showRec = tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز');
+          const recPlaceholder = tier && tier.label === 'مميز' ? 'ملاحظة تميز (تظهر عند اختيار «مميز»)' : 'التوصية (تظهر عند اختيار «فرصة تحسين»)';
           return `
           <div style="margin-bottom:14px;">
             <label style="font-size:13px; color:var(--navy); display:block; margin-bottom:6px; font-weight:700;">${num}. ${esc(INDICATORS[num].label)}</label>
@@ -428,7 +451,7 @@ async function renderForm(container, existing) {
               ${INDICATORS[num].options.map(o => `<option value="${esc(o)}"${o === currentVal ? ' selected' : ''}>${esc(o)}</option>`).join('')}
             </select>
             <div class="cv-rec-wrap" data-indicator="${num}" style="margin-top:6px; ${showRec ? '' : 'display:none;'}">
-              <input type="text" class="cv-rec-input" data-indicator="${num}" placeholder="التوصية (تظهر عند اختيار «فرصة تحسين»)" value="${esc(currentRec)}" style="font-size:12.5px;" />
+              <input type="text" class="cv-rec-input" data-indicator="${num}" placeholder="${esc(recPlaceholder)}" value="${esc(currentRec)}" style="font-size:12.5px;" />
             </div>
           </div>`;
         }).join('')}
@@ -462,6 +485,7 @@ async function renderForm(container, existing) {
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الاحتياج التدريبي المقترح</label>
       <textarea id="cv-training" rows="3" placeholder="يمكنك تركه فارغ">${esc(existing?.training_need || '')}</textarea>
     </div>
+    </div>
 
     <div class="error-msg" id="cv-save-error"></div>
     <button class="btn-primary" id="cv-save-btn" style="width:auto; padding:12px 26px;">${isEdit ? 'حفظ التعديلات' : 'حفظ الزيارة'}</button>
@@ -483,16 +507,25 @@ async function renderForm(container, existing) {
   document.getElementById('cv-day-select').addEventListener('change', updateSlotInfo);
   document.getElementById('cv-period-select').addEventListener('change', updateSlotInfo);
 
-  // إظهار/إخفاء حقل "التوصية" وتعبئته تلقائيًا لما يتغيّر التقييم إلى "فرصة تحسين"
+  // إظهار/إخفاء قسم تقييم المؤشرات بالكامل حسب حالة "المعلم لم يحضر الحصة"
+  document.getElementById('cv-teacher-absent').addEventListener('change', (e) => {
+    const wrap = document.getElementById('cv-eval-wrap');
+    wrap.style.display = e.target.checked ? 'none' : '';
+  });
+
+  // إظهار/إخفاء حقل "الملاحظة/التوصية" وتعبئته تلقائيًا (من النموذج الرسمي) لما يتغيّر التقييم إلى "مميز" أو "فرصة تحسين"
   container.querySelectorAll('.cv-rating-select').forEach(sel => {
     sel.addEventListener('change', () => {
       const num = sel.dataset.indicator;
       const wrap = container.querySelector(`.cv-rec-wrap[data-indicator="${num}"]`);
       const input = container.querySelector(`.cv-rec-input[data-indicator="${num}"]`);
       const tier = sel.value ? tierForOption(num, sel.value) : null;
-      if (tier && tier.label === 'فرصة تحسين') {
+      if (tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز')) {
         wrap.style.display = '';
-        if (!input.value && RECOMMENDATIONS[num]) input.value = RECOMMENDATIONS[num];
+        input.placeholder = tier.label === 'مميز' ? 'ملاحظة تميز (تظهر عند اختيار «مميز»)' : 'التوصية (تظهر عند اختيار «فرصة تحسين»)';
+        const idx = INDICATORS[num].options.indexOf(sel.value);
+        const suggested = (OPTION_COMMENTS[num] || [])[idx] || '';
+        if (!input.value && suggested) input.value = suggested;
       } else {
         wrap.style.display = 'none';
       }
@@ -595,16 +628,20 @@ async function saveVisit() {
   const visitDate = document.getElementById('cv-visit-date').value;
   if (!visitDate) { errEl.textContent = 'حدد تاريخ الزيارة'; return; }
 
-  const ratings = {};
-  const recommendations = {};
-  const ratingSelects = Array.from(document.querySelectorAll('.cv-rating-select'));
-  for (const sel of ratingSelects) {
-    if (!sel.value) { errEl.textContent = `أكمل تقييم كل المؤشرات (${INDICATORS[sel.dataset.indicator].label})`; sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
-    ratings[sel.dataset.indicator] = sel.value;
-    const recInput = document.querySelector(`.cv-rec-input[data-indicator="${sel.dataset.indicator}"]`);
-    const tier = tierForOption(sel.dataset.indicator, sel.value);
-    if (tier && tier.label === 'فرصة تحسين' && recInput && recInput.value.trim()) {
-      recommendations[sel.dataset.indicator] = recInput.value.trim();
+  const teacherAbsent = document.getElementById('cv-teacher-absent').checked;
+
+  let ratings = {};
+  let recommendations = {};
+  if (!teacherAbsent) {
+    const ratingSelects = Array.from(document.querySelectorAll('.cv-rating-select'));
+    for (const sel of ratingSelects) {
+      if (!sel.value) { errEl.textContent = `أكمل تقييم كل المؤشرات (${INDICATORS[sel.dataset.indicator].label})`; sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      ratings[sel.dataset.indicator] = sel.value;
+      const recInput = document.querySelector(`.cv-rec-input[data-indicator="${sel.dataset.indicator}"]`);
+      const tier = tierForOption(sel.dataset.indicator, sel.value);
+      if (tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز') && recInput && recInput.value.trim()) {
+        recommendations[sel.dataset.indicator] = recInput.value.trim();
+      }
     }
   }
 
@@ -629,6 +666,7 @@ async function saveVisit() {
     visit_purpose: document.getElementById('cv-visit-purpose').value.trim() || null,
     strategies,
     strategies_other: strategiesOther || null,
+    teacher_absent: teacherAbsent,
     ratings,
     recommendations,
     upgrade_math_lughati: upgradeEl ? upgradeEl.value : null,
@@ -671,8 +709,10 @@ function printVisitReport(v) {
     const tier = selected ? tierForOption(num, selected) : null;
     const rec = (v.recommendations || {})[num] || '';
     const tierClass = tier ? ({ 'مميز': 'tier-star', 'حقق الهدف': 'tier-ok', 'فرصة تحسين': 'tier-improve' }[tier.label] || '') : '';
+    const recLabel = tier && tier.label === 'مميز' ? 'ملاحظة تميز' : 'التوصية';
+    const recRowClass = tier && tier.label === 'مميز' ? 'rec-row rec-star' : 'rec-row';
     const recRow = rec
-      ? `<tr class="rec-row"><td colspan="2"><b>التوصية:</b> ${esc(rec)}</td></tr>`
+      ? `<tr class="${recRowClass}"><td colspan="2"><b>${recLabel}:</b> ${esc(rec)}</td></tr>`
       : '';
     return `<tr>
       <td class="ind-cell"><b>${esc(INDICATORS[num].label)}</b><div class="ind-val">${esc(selected || '-')}</div></td>
@@ -680,7 +720,9 @@ function printVisitReport(v) {
     </tr>${recRow}`;
   };
 
-  const sectionsHtml = `
+  const sectionsHtml = v.teacher_absent
+    ? `<div class="extra-box improve" style="justify-content:center; text-align:center; font-weight:700; font-size:13px; padding:14px;">الحصة لم تُعقد (المعلم لم يحضر) — لا يوجد تقييم لمؤشرات الأداء لهذي الزيارة.</div>`
+    : `
     <table class="ratings">
       <tbody>
         ${SECTIONS.map(sec => sectionHtml(sec.title) + sec.nums.map(rowHtml).join('')).join('')}
@@ -735,6 +777,7 @@ function printVisitReport(v) {
   td.tier-cell.tier-improve { color:#c0392b; }
   td.tier-cell.tier-star { color:#b8860b; }
   tr.rec-row td { text-align:right; background:#fdf6e8; color:#7a5b00; font-size:10px; padding:5px 8px; }
+  tr.rec-row.rec-star td { background:#eaf7ee; color:#1f6a3c; }
 
   .extra-box { border:1px solid #cfd6e0; border-radius:5px; padding:7px 10px; margin-bottom:8px; font-size:11.5px; display:flex; gap:8px; }
   .extra-box .lbl { font-weight:700; color:#16233A; flex-shrink:0; }
