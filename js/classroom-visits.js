@@ -439,8 +439,13 @@ async function renderForm(container, existing) {
         <h4>${esc(sec.title)}</h4>
         ${sec.nums.map(num => {
           const currentVal = existing?.ratings?.[num] || '';
-          const currentRec = existing?.recommendations?.[num] || '';
           const tier = currentVal ? tierForOption(num, currentVal) : null;
+          // لو الزيارة قديمة (قبل تفعيل التعليقات الرسمية لكل خيار) وما فيها ملاحظة محفوظة، نقترح التعليق الرسمي المقابل لنفس الخيار
+          let currentRec = existing?.recommendations?.[num] || '';
+          if (!currentRec && tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز')) {
+            const idx = INDICATORS[num].options.indexOf(currentVal);
+            currentRec = (OPTION_COMMENTS[num] || [])[idx] || '';
+          }
           const showRec = tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز');
           const recPlaceholder = tier && tier.label === 'مميز' ? 'ملاحظة تميز (تظهر عند اختيار «مميز»)' : 'التوصية (تظهر عند اختيار «فرصة تحسين»)';
           return `
@@ -707,7 +712,12 @@ function printVisitReport(v) {
   const rowHtml = (num) => {
     const selected = (v.ratings || {})[num] || '';
     const tier = selected ? tierForOption(num, selected) : null;
-    const rec = (v.recommendations || {})[num] || '';
+    // لو ما فيه ملاحظة محفوظة بالزيارة (زيارات قديمة قبل تفعيل التعليقات الرسمية لكل خيار) نرجع للتعليق الرسمي المقابل لنفس الخيار تلقائيًا
+    let rec = (v.recommendations || {})[num] || '';
+    if (!rec && tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز')) {
+      const idx = INDICATORS[num].options.indexOf(selected);
+      rec = (OPTION_COMMENTS[num] || [])[idx] || '';
+    }
     const tierClass = tier ? ({ 'مميز': 'tier-star', 'حقق الهدف': 'tier-ok', 'فرصة تحسين': 'tier-improve' }[tier.label] || '') : '';
     const recLabel = tier && tier.label === 'مميز' ? 'ملاحظة تميز' : 'التوصية';
     const recRowClass = tier && tier.label === 'مميز' ? 'rec-row rec-star' : 'rec-row';
