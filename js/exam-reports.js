@@ -828,6 +828,10 @@ function renderAnalysis(s) {
           <option value="weak">طباعة: الضعاف فقط</option>
           <option value="top">طباعة: أعلى ١٥ فقط</option>
         </select>
+        <select id="er-print-section" style="width:auto; padding:8px 10px; font-size:12px; border:1px solid var(--border); border-radius:8px;">
+          <option value="">كل الفصول</option>
+          ${sectionOptionsFor([...topStudents, ...weakStudents]).map(sec => `<option value="${esc(sec)}">فصل ${esc(sec)}</option>`).join('')}
+        </select>
         <button type="button" class="text-action-btn" id="er-print-topbottom" style="width:auto; padding:8px 14px;">🖨 طباعة</button>
         <button type="button" class="text-action-btn" id="er-export-topbottom" style="width:auto; padding:8px 14px;">⬇ تصدير إكسل</button>
         <button type="button" class="text-action-btn" id="er-export-remedial" style="width:auto; padding:8px 14px;" title="ملف وورد منفصل لكل فصل فيه طلاب ضعاف - جاهز للتعبئة اليدوية">📄 خطط علاجية جماعية (وورد)</button>
@@ -845,10 +849,35 @@ function renderAnalysis(s) {
   const remedialBtn = document.getElementById('er-export-remedial');
   if (printBtn) printBtn.addEventListener('click', () => {
     const scopeEl = document.getElementById('er-print-scope');
-    printTopBottomReport({ ...s, topStudents, weakStudents }, scopeEl ? scopeEl.value : 'both');
+    const sectionEl = document.getElementById('er-print-section');
+    printTopBottomReport({ ...s, topStudents, weakStudents }, scopeEl ? scopeEl.value : 'both', sectionEl ? sectionEl.value : '');
   });
-  if (exportBtn) exportBtn.addEventListener('click', () => exportTopBottomExcel({ ...s, topStudents, weakStudents }));
+  if (exportBtn) exportBtn.addEventListener('click', () => {
+    const sectionEl = document.getElementById('er-print-section');
+    exportTopBottomExcel({ ...s, topStudents, weakStudents }, sectionEl ? sectionEl.value : '');
+  });
   if (remedialBtn) remedialBtn.addEventListener('click', () => exportRemedialPlans(weakStudents));
+}
+
+// يرجع قائمة أرقام الفصول الفريدة الموجودة بقائمة الطلاب، مرتبة تصاعديًا (فصل ١ ثم ٢ ثم ٣...)
+function sectionOptionsFor(list) {
+  const set = new Set(list.map(st => st.section).filter(v => v !== undefined && v !== null && v !== ''));
+  return [...set].sort((a, b) => String(a).localeCompare(String(b), 'ar', { numeric: true }));
+}
+
+// ترتيب الطباعة/التصدير المطلوب: الفصول تصاعديًا (١ ثم ٢ ثم ٣...) وداخل كل فصل الأسماء أبجديًا
+function sortStudentsForPrint(list) {
+  return list.slice().sort((a, b) => {
+    const cmpSec = String(a.section ?? '').localeCompare(String(b.section ?? ''), 'ar', { numeric: true });
+    if (cmpSec !== 0) return cmpSec;
+    return String(a.name || '').localeCompare(String(b.name || ''), 'ar');
+  });
+}
+
+// يفلتر قائمة الطلاب على فصل محدد (لو تحدد) ثم يرتبها بترتيب الطباعة
+function filterAndSortForPrint(list, sectionFilter) {
+  const filtered = sectionFilter ? list.filter(st => String(st.section) === String(sectionFilter)) : list;
+  return sortStudentsForPrint(filtered);
 }
 
 function studentRankTable(list, title, badgeClass) {
@@ -873,12 +902,15 @@ function studentRankTable(list, title, badgeClass) {
 
 /* ---------- طباعة تقرير أعلى/أدنى ١٥ درجة ---------- */
 const ER_LOGO_DATA_URI = new URL('logo.png', window.location.href).href;
-function printTopBottomReport(s, scope = 'both') {
+function printTopBottomReport(s, scope = 'both', sectionFilter = '') {
   const title = currentReport ? currentReport.title : 'تقرير أعلى وأدنى الدرجات';
   const sub = currentReport ? `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'}` : '';
   const showTop = scope === 'both' || scope === 'top';
   const showWeak = scope === 'both' || scope === 'weak';
-  const pageTitle = scope === 'top' ? 'أعلى ١٥ درجة' : scope === 'weak' ? 'الطلاب الضعاف' : 'أعلى ١٥ درجة والطلاب الضعاف';
+  const pageTitleBase = scope === 'top' ? 'أعلى ١٥ درجة' : scope === 'weak' ? 'الطلاب الضعاف' : 'أعلى ١٥ درجة والطلاب الضعاف';
+  const pageTitle = sectionFilter ? `${pageTitleBase} — فصل ${sectionFilter}` : pageTitleBase;
+  const topList = filterAndSortForPrint(s.topStudents, sectionFilter);
+  const weakList = filterAndSortForPrint(s.weakStudents, sectionFilter);
 
   const rowsHtml = (list) => list.length
     ? list.map((st, i) => `<tr>
@@ -930,8 +962,8 @@ function printTopBottomReport(s, scope = 'both') {
       <div style="width:50px;"></div>
     </div>
     <div class="cols">
-      ${showTop ? colHtml('أعلى ١٥ درجة', s.topStudents) : ''}
-      ${showWeak ? colHtml('الطلاب الضعاف (أقل من ٥٠٪)', s.weakStudents) : ''}
+      ${showTop ? colHtml('أعلى ١٥ درجة', topList) : ''}
+      ${showWeak ? colHtml('الطلاب الضعاف (أقل من ٥٠٪)', weakList) : ''}
     </div>
     <div class="footer-note">تمت الطباعة من نظام إدارة المدرسة</div>
   </div>
@@ -948,22 +980,24 @@ function printTopBottomReport(s, scope = 'both') {
 }
 
 /* ---------- تصدير تقرير أعلى/أدنى ١٥ درجة لملف إكسل ---------- */
-async function exportTopBottomExcel(s) {
+async function exportTopBottomExcel(s, sectionFilter = '') {
   await loadXLSX();
   const title = currentReport ? currentReport.title : 'تقرير';
   const header = ['#', 'الاسم', 'الفصل', 'الدرجة', 'النسبة%'];
   const toRows = (list) => list.map((st, i) => [i + 1, st.name || st.id || '-', st.section || '-', Math.round(st.total * 10) / 10, Math.round(st.pct * 100) / 100]);
+  const topList = filterAndSortForPrint(s.topStudents, sectionFilter);
+  const weakList = filterAndSortForPrint(s.weakStudents, sectionFilter);
 
   const aoa = [
-    ['أعلى ١٥ درجة'], header, ...toRows(s.topStudents),
+    ['أعلى ١٥ درجة'], header, ...toRows(topList),
     [],
-    ['الطلاب الضعاف (أقل من ٥٠٪)'], header, ...toRows(s.weakStudents),
+    ['الطلاب الضعاف (أقل من ٥٠٪)'], header, ...toRows(weakList),
   ];
   const ws = XLSX.utils.aoa_to_sheet(aoa);
   ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 12 }, { wch: 10 }, { wch: 10 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'أعلى الدرجات والضعاف');
-  XLSX.writeFile(wb, `${title}_أعلى_الدرجات_والضعاف.xlsx`);
+  XLSX.writeFile(wb, `${title}_أعلى_الدرجات_والضعاف${sectionFilter ? '_فصل' + sectionFilter : ''}.xlsx`);
 }
 
 /* ---------- تصدير "الخطة العلاجية (الجماعية)" - ملف وورد منفصل لكل فصل فيه طلاب ضعاف ----------
