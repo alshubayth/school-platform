@@ -828,10 +828,10 @@ function renderAnalysis(s) {
           <option value="weak">طباعة: الضعاف فقط</option>
           <option value="top">طباعة: أعلى ١٥ فقط</option>
         </select>
-        <select id="er-print-section" style="width:auto; padding:8px 10px; font-size:12px; border:1px solid var(--border); border-radius:8px;">
-          <option value="">كل الفصول</option>
-          ${sectionOptionsFor([...topStudents, ...weakStudents]).map(sec => `<option value="${esc(sec)}">فصل ${esc(sec)}</option>`).join('')}
-        </select>
+        <div id="er-print-sections" style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; border:1px solid var(--border); border-radius:8px; padding:6px 10px;">
+          <label style="font-size:12px; display:flex; align-items:center; gap:4px; font-weight:700;"><input type="checkbox" class="er-section-cb" value="__all__" checked style="width:auto; margin:0;" /> كل الفصول</label>
+          ${sectionOptionsFor([...topStudents, ...weakStudents]).map(sec => `<label style="font-size:12px; display:flex; align-items:center; gap:4px;"><input type="checkbox" class="er-section-cb" value="${esc(sec)}" style="width:auto; margin:0;" /> فصل ${esc(sec)}</label>`).join('')}
+        </div>
         <button type="button" class="text-action-btn" id="er-print-topbottom" style="width:auto; padding:8px 14px;">🖨 طباعة</button>
         <button type="button" class="text-action-btn" id="er-export-topbottom" style="width:auto; padding:8px 14px;">⬇ تصدير إكسل</button>
         <button type="button" class="text-action-btn" id="er-export-remedial" style="width:auto; padding:8px 14px;" title="ملف وورد منفصل لكل فصل فيه طلاب ضعاف - جاهز للتعبئة اليدوية">📄 خطط علاجية جماعية (وورد)</button>
@@ -844,17 +844,41 @@ function renderAnalysis(s) {
     </div>`}
     <div class="error-msg" id="er-remedial-error" style="margin-top:8px;"></div>`;
 
+  // تعامل صندوق "كل الفصول" كمستبعد لباقي الصناديق، وأي فصل محدد يلغي تفعيل "كل الفصول" تلقائيًا
+  const sectionCbs = Array.from(el.querySelectorAll('.er-section-cb'));
+  sectionCbs.forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.value === '__all__') {
+        if (cb.checked) sectionCbs.forEach(o => { if (o !== cb) o.checked = false; });
+      } else {
+        if (cb.checked) {
+          const allCb = sectionCbs.find(o => o.value === '__all__');
+          if (allCb) allCb.checked = false;
+        }
+        const anyChecked = sectionCbs.some(o => o.value !== '__all__' && o.checked);
+        if (!anyChecked) {
+          const allCb = sectionCbs.find(o => o.value === '__all__');
+          if (allCb) allCb.checked = true;
+        }
+      }
+    });
+  });
+  // يرجع مصفوفة الفصول المحددة، أو مصفوفة فاضية لو "كل الفصول" مفعّل (يعني بدون فلترة)
+  function getSelectedSections() {
+    const allCb = sectionCbs.find(o => o.value === '__all__');
+    if (!allCb || allCb.checked) return [];
+    return sectionCbs.filter(o => o.value !== '__all__' && o.checked).map(o => o.value);
+  }
+
   const printBtn = document.getElementById('er-print-topbottom');
   const exportBtn = document.getElementById('er-export-topbottom');
   const remedialBtn = document.getElementById('er-export-remedial');
   if (printBtn) printBtn.addEventListener('click', () => {
     const scopeEl = document.getElementById('er-print-scope');
-    const sectionEl = document.getElementById('er-print-section');
-    printTopBottomReport({ ...s, topStudents, weakStudents }, scopeEl ? scopeEl.value : 'both', sectionEl ? sectionEl.value : '');
+    printTopBottomReport({ ...s, topStudents, weakStudents }, scopeEl ? scopeEl.value : 'both', getSelectedSections());
   });
   if (exportBtn) exportBtn.addEventListener('click', () => {
-    const sectionEl = document.getElementById('er-print-section');
-    exportTopBottomExcel({ ...s, topStudents, weakStudents }, sectionEl ? sectionEl.value : '');
+    exportTopBottomExcel({ ...s, topStudents, weakStudents }, getSelectedSections());
   });
   if (remedialBtn) remedialBtn.addEventListener('click', () => exportRemedialPlans(weakStudents));
 }
@@ -874,9 +898,10 @@ function sortStudentsForPrint(list) {
   });
 }
 
-// يفلتر قائمة الطلاب على فصل محدد (لو تحدد) ثم يرتبها بترتيب الطباعة
-function filterAndSortForPrint(list, sectionFilter) {
-  const filtered = sectionFilter ? list.filter(st => String(st.section) === String(sectionFilter)) : list;
+// يفلتر قائمة الطلاب على فصل واحد أو أكثر (مصفوفة sectionFilters؛ فاضية = بدون فلترة، كل الفصول) ثم يرتبها بترتيب الطباعة
+function filterAndSortForPrint(list, sectionFilters) {
+  const filters = Array.isArray(sectionFilters) ? sectionFilters : (sectionFilters ? [sectionFilters] : []);
+  const filtered = filters.length ? list.filter(st => filters.includes(String(st.section))) : list;
   return sortStudentsForPrint(filtered);
 }
 
@@ -902,15 +927,16 @@ function studentRankTable(list, title, badgeClass) {
 
 /* ---------- طباعة تقرير أعلى/أدنى ١٥ درجة ---------- */
 const ER_LOGO_DATA_URI = new URL('logo.png', window.location.href).href;
-function printTopBottomReport(s, scope = 'both', sectionFilter = '') {
+function printTopBottomReport(s, scope = 'both', sectionFilter = []) {
   const title = currentReport ? currentReport.title : 'تقرير أعلى وأدنى الدرجات';
   const sub = currentReport ? `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'}` : '';
   const showTop = scope === 'both' || scope === 'top';
   const showWeak = scope === 'both' || scope === 'weak';
   const pageTitleBase = scope === 'top' ? 'أعلى ١٥ درجة' : scope === 'weak' ? 'الطلاب الضعاف' : 'أعلى ١٥ درجة والطلاب الضعاف';
-  const pageTitle = sectionFilter ? `${pageTitleBase} — فصل ${sectionFilter}` : pageTitleBase;
-  const topList = filterAndSortForPrint(s.topStudents, sectionFilter);
-  const weakList = filterAndSortForPrint(s.weakStudents, sectionFilter);
+  const sectionFilters = Array.isArray(sectionFilter) ? sectionFilter : (sectionFilter ? [sectionFilter] : []);
+  const pageTitle = sectionFilters.length ? `${pageTitleBase} — فصل ${sectionFilters.join('، ')}` : pageTitleBase;
+  const topList = filterAndSortForPrint(s.topStudents, sectionFilters);
+  const weakList = filterAndSortForPrint(s.weakStudents, sectionFilters);
 
   const rowsHtml = (list) => list.length
     ? list.map((st, i) => `<tr>
@@ -980,13 +1006,14 @@ function printTopBottomReport(s, scope = 'both', sectionFilter = '') {
 }
 
 /* ---------- تصدير تقرير أعلى/أدنى ١٥ درجة لملف إكسل ---------- */
-async function exportTopBottomExcel(s, sectionFilter = '') {
+async function exportTopBottomExcel(s, sectionFilter = []) {
   await loadXLSX();
   const title = currentReport ? currentReport.title : 'تقرير';
   const header = ['#', 'الاسم', 'الفصل', 'الدرجة', 'النسبة%'];
   const toRows = (list) => list.map((st, i) => [i + 1, st.name || st.id || '-', st.section || '-', Math.round(st.total * 10) / 10, Math.round(st.pct * 100) / 100]);
-  const topList = filterAndSortForPrint(s.topStudents, sectionFilter);
-  const weakList = filterAndSortForPrint(s.weakStudents, sectionFilter);
+  const sectionFilters = Array.isArray(sectionFilter) ? sectionFilter : (sectionFilter ? [sectionFilter] : []);
+  const topList = filterAndSortForPrint(s.topStudents, sectionFilters);
+  const weakList = filterAndSortForPrint(s.weakStudents, sectionFilters);
 
   const aoa = [
     ['أعلى ١٥ درجة'], header, ...toRows(topList),
@@ -997,7 +1024,7 @@ async function exportTopBottomExcel(s, sectionFilter = '') {
   ws['!cols'] = [{ wch: 5 }, { wch: 26 }, { wch: 12 }, { wch: 10 }, { wch: 10 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'أعلى الدرجات والضعاف');
-  XLSX.writeFile(wb, `${title}_أعلى_الدرجات_والضعاف${sectionFilter ? '_فصل' + sectionFilter : ''}.xlsx`);
+  XLSX.writeFile(wb, `${title}_أعلى_الدرجات_والضعاف${sectionFilters.length ? '_فصل' + sectionFilters.join('-') : ''}.xlsx`);
 }
 
 /* ---------- تصدير "الخطة العلاجية (الجماعية)" - ملف وورد منفصل لكل فصل فيه طلاب ضعاف ----------
