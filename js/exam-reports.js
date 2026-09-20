@@ -930,7 +930,8 @@ function studentRankTable(list, title, badgeClass) {
 }
 
 /* ---------- طباعة تقرير أعلى/أدنى ١٥ درجة ---------- */
-const ER_LOGO_DATA_URI = new URL('logo.png', window.location.href).href;
+// شعار الهيئة الملكية للجبيل وينبع - يظهر بمخرجات قسم الاختبارات المطبوعة
+const ER_LOGO_DATA_URI = new URL('logo-rc.png', window.location.href).href;
 function printTopBottomReport(s, scope = 'both', sectionFilter = []) {
   const title = currentReport ? currentReport.title : 'تقرير أعلى وأدنى الدرجات';
   const sub = currentReport ? `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'}` : '';
