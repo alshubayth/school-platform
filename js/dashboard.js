@@ -1,4 +1,15 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId } from './core.js';
+
+/* ===== قراءة weekly_plans مقيّدة بمدرسة الحساب (نفس منطق js/weekly-plan.js) ===== */
+async function readWeeklyPlansScoped(weekNumber) {
+  let q = sb.from('weekly_plans').select('subject_id, grade_level').eq('week_number', weekNumber);
+  if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
+  let res = await q;
+  if (res.error && currentSchoolId) {
+    res = await sb.from('weekly_plans').select('subject_id, grade_level').eq('week_number', weekNumber);
+  }
+  return res;
+}
 
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
 function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
@@ -246,7 +257,7 @@ async function renderAdminDashboard(container) {
     sb.from('op_tasks').select('id').eq('plan_status', 'pending'),
     sb.from('op_task_completions').select('id').eq('status', 'pending'),
     sb.from('subjects').select('id'),
-    sb.from('weekly_plans').select('subject_id, grade_level').eq('week_number', 1),
+    readWeeklyPlansScoped(1),
   ]);
 
   const totalCompletions = (completions || []).length;
@@ -310,7 +321,7 @@ async function renderAdminDashboard(container) {
 
 async function renderTeacherDashboard(container) {
   const { data: assignments } = await sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)').eq('teacher_id', currentUserId);
-  const { data: weeklyPlansThisWeek } = await sb.from('weekly_plans').select('subject_id, grade_level').eq('week_number', 1);
+  const { data: weeklyPlansThisWeek } = await readWeeklyPlansScoped(1);
   const enteredSet = new Set((weeklyPlansThisWeek || []).map(p => p.subject_id + '_' + p.grade_level));
 
   const missingAssignments = (assignments || []).filter(a => !enteredSet.has(a.subject_id + '_' + a.grade_level));
