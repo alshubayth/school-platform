@@ -202,6 +202,11 @@ document.getElementById('reset-submit-btn').addEventListener('click', async () =
  * (الطلاب، الاختبارات، الميزانية...) لسا غير معزولة فعليًا بين المدارس (يحتاج مرحلة ثانية منفصلة). */
 export let currentSchoolId = null;
 export let currentSchoolModules = null; // null = بدون قيد (توافق خلفي لحساب مربوط بمدرسة وحدة أو قبل تنفيذ SQL الترقية)
+// الدور الحقيقي المخزّن بقاعدة البيانات - يبقى true دايمًا لحساب "المالك" حتى بعد ما ندخل مدرسة
+// (نغيّر currentProfile.role إلى 'admin' عشان كل شاشات المنصة تعامله كمدير كامل الصلاحيات داخل
+// المدرسة اللي دخلها - بدون هذا العلم كنا بنفقد التمييز عن "مدير" حقيقي بمكانين محددين بس:
+// تبويب "إدارة المدارس والخدمات" وزر "تبديل المدرسة")
+export let isOwnerAccount = false;
 
 export function effectiveRoleForTiles() {
   return currentProfile.role === 'owner' ? 'admin' : currentProfile.role;
@@ -244,6 +249,10 @@ async function showSchoolPicker() {
 async function enterSchool(schoolId, school) {
   currentSchoolId = schoolId;
   await loadSchoolModulesForCurrent();
+  // المالك يشتغل داخل المدرسة اللي دخلها بكل صلاحيات "مدير" (isAdminOrDeputy/isStaff وكل الفحوصات
+  // المشابهة بباقي الأقسام تتحقق من currentProfile.role مباشرة) - isOwnerAccount يبقى العلم الوحيد
+  // اللي يميّزه كمالك حقيقي لتبويب "إدارة المدارس والخدمات" وزر "تبديل المدرسة" بس
+  currentProfile = { ...currentProfile, role: 'admin' };
   document.getElementById('school-picker-screen').classList.add('hidden');
   finishShowingDashboard(school ? school.name : null);
   const { renderMyDutyBanner } = await import('./duty-roster.js');
@@ -258,13 +267,13 @@ function finishShowingDashboard(schoolNameOverride) {
   document.getElementById('school-picker-screen').classList.add('hidden');
   document.getElementById('dashboard-screen').classList.remove('hidden');
   document.getElementById('user-name').textContent = currentProfile.full_name;
-  document.getElementById('user-role-badge').textContent = currentProfile.role === 'owner' ? 'مالك النظام' : (roleLabels[currentProfile.role] || currentProfile.role);
+  document.getElementById('user-role-badge').textContent = isOwnerAccount ? 'مالك النظام' : (roleLabels[currentProfile.role] || currentProfile.role);
   document.getElementById('user-avatar').textContent = (currentProfile.full_name || '؟').trim().charAt(0);
-  document.getElementById('switch-school-btn').classList.toggle('hidden', currentProfile.role !== 'owner');
+  document.getElementById('switch-school-btn').classList.toggle('hidden', !isOwnerAccount);
   const brandSpan = document.querySelector('#dashboard-screen .brand span');
   if (brandSpan && schoolNameOverride) brandSpan.textContent = schoolNameOverride;
   const warnEl = document.getElementById('owner-phase-warning');
-  if (warnEl) warnEl.classList.toggle('hidden', currentProfile.role !== 'owner');
+  if (warnEl) warnEl.classList.toggle('hidden', !isOwnerAccount);
   renderNav();
   renderDashboard();
 }
@@ -284,6 +293,7 @@ export async function loadProfileAndShowDashboard(userId) {
   }
   currentProfile = profile;
   currentUserId = userId;
+  isOwnerAccount = profile.role === 'owner';
 
   if (profile.role === 'owner') {
     await showSchoolPicker();
@@ -323,7 +333,7 @@ sb.auth.getSession().then(({ data }) => { if (data.session) loadProfileAndShowDa
 
 export function isTileAllowed(t) {
   // تبويب "إدارة المدارس والخدمات" خاص بالدور الحقيقي "owner" بس (بدون تحويله لـ"admin")
-  if (t.key === 'schools-admin') return currentProfile.role === 'owner';
+  if (t.key === 'schools-admin') return isOwnerAccount;
   const role = effectiveRoleForTiles();
   if (!t.roles.includes(role)) return false;
   if (t.key === 'plan' && role === 'teacher' && !isOpPlanMember) return false;
