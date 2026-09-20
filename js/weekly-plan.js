@@ -12,6 +12,19 @@ async function writeWithSchoolFallback(fn) {
   return res;
 }
 
+/* ===== قراءة آمنة مقيّدة بمدرسة الحساب الحالي =====
+ * لازم كل قراءة من weekly_plans/weekly_admin_notes/weekly_plan_publish_settings تتقيّد بمدرسة
+ * الحساب، وإلا تختلط بيانات كل المدارس مع بعض بنفس القائمة. نفس منطق runScoped بصفحة أولياء
+ * الأمور: نجرب الاستعلام مع فلتر المدرسة أول، ولو فشل (عمود school_id لسا ما انضاف) نعيد
+ * المحاولة بدونه عشان الصفحة تستمر تشتغل بمدرسة وحدة قبل تنفيذ SQL الترقية. */
+async function readScoped(factory) {
+  let res = await factory(true);
+  if (res.error && currentSchoolId) {
+    res = await factory(false);
+  }
+  return res;
+}
+
 /* ===== رابط صفحة أولياء الأمور (خاص بمدرسة هذا الحساب) =====
  * parent.html يحدد المدرسة من ?school=<slug>. بدون تعدد مدارس (أو قبل تنفيذ ترقية SQL) نستخدم
  * "al-murooj" كافتراضي عشان الرابط يستمر يشتغل بدون تغيير لمدرسة المروج. */
@@ -158,9 +171,13 @@ async function loadFormForCurrentSelection() {
   const titleEl = document.getElementById('weekly-form-title');
   if (!subjectId || !grade) { renderLessonInputs(['']); return; }
 
-  const { data: existing } = await sb.from('weekly_plans')
-    .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections')
-    .eq('subject_id', subjectId).eq('grade_level', grade).eq('week_number', currentWeek).maybeSingle();
+  const { data: existing } = await readScoped(scoped => {
+    let q = sb.from('weekly_plans')
+      .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections')
+      .eq('subject_id', subjectId).eq('grade_level', grade).eq('week_number', currentWeek);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.maybeSingle();
+  });
 
   const testWrap = document.getElementById('weekly-test-sections-wrap');
   if (existing) {
@@ -216,7 +233,11 @@ export async function loadWeeklyModule() {
 }
 
 async function loadPublishToggle() {
-  const { data } = await sb.from('weekly_plan_publish_settings').select('is_published').eq('week_number', currentWeek).maybeSingle();
+  const { data } = await readScoped(scoped => {
+    let q = sb.from('weekly_plan_publish_settings').select('is_published').eq('week_number', currentWeek);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.maybeSingle();
+  });
   document.getElementById('weekly-publish-toggle').checked = !!(data && data.is_published);
 }
 
@@ -225,13 +246,19 @@ document.getElementById('weekly-publish-toggle').addEventListener('change', asyn
   if (isPublished) {
     await writeWithSchoolFallback(extra => sb.from('weekly_plan_publish_settings').upsert({ week_number: currentWeek, is_published: true, updated_at: new Date().toISOString(), ...extra }));
   } else {
-    await sb.from('weekly_plan_publish_settings').delete().eq('week_number', currentWeek);
+    let q = sb.from('weekly_plan_publish_settings').delete().eq('week_number', currentWeek);
+    if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    await q;
   }
 });
 
 async function loadWeeklyAdminNote() {
   const grade = document.getElementById('weekly-grade').value;
-  const { data } = await sb.from('weekly_admin_notes').select('note').eq('grade_level', grade).eq('week_number', currentWeek).maybeSingle();
+  const { data } = await readScoped(scoped => {
+    let q = sb.from('weekly_admin_notes').select('note').eq('grade_level', grade).eq('week_number', currentWeek);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.maybeSingle();
+  });
   document.getElementById('weekly-admin-note-text').value = data ? data.note : '';
   document.getElementById('weekly-admin-note-success').style.display = 'none';
 }
@@ -242,7 +269,9 @@ document.getElementById('weekly-admin-note-save').addEventListener('click', asyn
   const successEl = document.getElementById('weekly-admin-note-success');
 
   if (!note) {
-    await sb.from('weekly_admin_notes').delete().eq('grade_level', grade).eq('week_number', currentWeek);
+    let q = sb.from('weekly_admin_notes').delete().eq('grade_level', grade).eq('week_number', currentWeek);
+    if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    await q;
     successEl.textContent = 'تم حذف الملاحظة (الحقل فارغ).';
   } else {
     await writeWithSchoolFallback(extra => sb.from('weekly_admin_notes').upsert(
@@ -288,8 +317,12 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
   };
 
   // تحديث إذا موجودة خطة لنفس المادة/المرحلة/الأسبوع، وإلا إضافة جديدة
-  const { data: existing } = await sb.from('weekly_plans').select('id')
-    .eq('subject_id', payload.subject_id).eq('grade_level', payload.grade_level).eq('week_number', currentWeek).maybeSingle();
+  const { data: existing } = await readScoped(scoped => {
+    let q = sb.from('weekly_plans').select('id')
+      .eq('subject_id', payload.subject_id).eq('grade_level', payload.grade_level).eq('week_number', currentWeek);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.maybeSingle();
+  });
 
   let error;
   if (existing) {
@@ -323,9 +356,13 @@ function esc(s) {
 
 async function refreshWeeklyList() {
   const grade = document.getElementById('weekly-grade').value;
-  const { data: plans } = await sb.from('weekly_plans')
-    .select('id, grade_level, lessons, performance_tasks, homework, no_homework, has_test, test_sections, subjects(name)')
-    .eq('grade_level', grade).eq('week_number', currentWeek);
+  const { data: plans } = await readScoped(scoped => {
+    let q = sb.from('weekly_plans')
+      .select('id, grade_level, lessons, performance_tasks, homework, no_homework, has_test, test_sections, subjects(name)')
+      .eq('grade_level', grade).eq('week_number', currentWeek);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   const list = document.getElementById('weekly-list');
   list.innerHTML = '';
