@@ -263,12 +263,32 @@ async function renderAdminDashboard(container) {
     { data: allSubjects },
     { data: weeklyPlansThisWeek },
   ] = await Promise.all([
-    sb.from('employees').select('id', { count: 'exact', head: true }),
-    sb.from('employees').select('id', { count: 'exact', head: true }).not('profile_id', 'is', null),
-    sb.from('op_task_completions').select('status'),
-    sb.from('op_tasks').select('id').eq('plan_status', 'pending'),
-    sb.from('op_task_completions').select('id').eq('status', 'pending'),
-    sb.from('subjects').select('id'),
+    readScopedBySchool(scoped => {
+      let q = sb.from('employees').select('id', { count: 'exact', head: true });
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('employees').select('id', { count: 'exact', head: true }).not('profile_id', 'is', null);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('op_task_completions').select('status');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('op_tasks').select('id').eq('plan_status', 'pending');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('op_task_completions').select('id').eq('status', 'pending');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    sb.from('subjects').select('id'), // المواد الدراسية مشتركة بين كل المدارس عن قصد (منهج رسمي موحّد)
     readWeeklyPlansScoped(1),
   ]);
 
@@ -286,9 +306,21 @@ async function renderAdminDashboard(container) {
   let dutyMissingCount = 0;
   if (dayKey) {
     const [{ data: fixed }, { data: weekly }, { data: attendance }] = await Promise.all([
-      sb.from('duty_roster').select('teacher_profile_id, duty_type_id').eq('kind', 'fixed').eq('day_of_week', dayKey),
-      sb.from('duty_roster').select('teacher_profile_id, duty_type_id').eq('kind', 'weekly').eq('day_of_week', dayKey).eq('week_start_date', thisWeekSunday()),
-      sb.from('duty_attendance').select('teacher_profile_id, duty_type_id').eq('duty_date', dateStr),
+      readScopedBySchool(scoped => {
+        let q = sb.from('duty_roster').select('teacher_profile_id, duty_type_id').eq('kind', 'fixed').eq('day_of_week', dayKey);
+        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+        return q;
+      }),
+      readScopedBySchool(scoped => {
+        let q = sb.from('duty_roster').select('teacher_profile_id, duty_type_id').eq('kind', 'weekly').eq('day_of_week', dayKey).eq('week_start_date', thisWeekSunday());
+        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+        return q;
+      }),
+      readScopedBySchool(scoped => {
+        let q = sb.from('duty_attendance').select('teacher_profile_id, duty_type_id').eq('duty_date', dateStr);
+        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+        return q;
+      }),
     ]);
     const todayEntries = [...(fixed || []), ...(weekly || [])];
     const recordedSet = new Set((attendance || []).map(a => a.teacher_profile_id + '_' + a.duty_type_id));
