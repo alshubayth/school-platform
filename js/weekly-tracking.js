@@ -85,10 +85,15 @@ async function refreshWeeklyTracking() {
   // عشان مادة مسندة لمرحلة وحدة بس (مثل التفكير الناقد لثالث متوسط) ما تظهر "ناقصة" بمرحلة ثانية أصلاً ما تُدرّس فيها.
   let wpQuery = sb.from('weekly_plans').select('grade_level, subject_id').eq('week_number', wtWeek);
   if (currentSchoolId) wpQuery = wpQuery.eq('school_id', currentSchoolId);
-  let [{ data: assignments }, { data: enteredPlans, error: wpError }] = await Promise.all([
-    sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)'),
+  let tsQuery = sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)');
+  if (currentSchoolId) tsQuery = tsQuery.eq('school_id', currentSchoolId);
+  let [{ data: assignments, error: tsError }, { data: enteredPlans, error: wpError }] = await Promise.all([
+    tsQuery,
     wpQuery,
   ]);
+  if (tsError && currentSchoolId) {
+    ({ data: assignments } = await sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)'));
+  }
   if (wpError && currentSchoolId) {
     ({ data: enteredPlans } = await sb.from('weekly_plans').select('grade_level, subject_id').eq('week_number', wtWeek));
   }
