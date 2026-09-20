@@ -1665,45 +1665,73 @@
     <div id="admin-tasks-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-20">→ رجوع للرئيسية</span>
 
-      <div class="week-nav" style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
-        <button id="at-week-prev" style="width:auto; padding:8px 16px;">السابق</button>
-        <span id="at-week-label" style="font-weight:700;">الأسبوع 1</span>
-        <button id="at-week-next" style="width:auto; padding:8px 16px;">التالي</button>
+      <div class="at-week-strip-wrap">
+        <div class="at-week-strip" id="at-week-strip"></div>
       </div>
 
-      <div class="form-card">
-        <h4>+ إضافة مهمة</h4>
-        <div class="form-row">
-          <div>
-            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">المهمة</label>
-            <input type="text" id="at-title" placeholder="مثال: متابعة صيانة أجهزة معمل الحاسب" />
+      <div class="at-stat-row">
+        <div class="stat-card compact">
+          <div class="label">مهام هذا الأسبوع</div>
+          <div class="value" id="at-stat-total">0</div>
+        </div>
+        <div class="stat-card compact">
+          <div class="label">تم تنفيذها</div>
+          <div class="value" id="at-stat-done" style="color:var(--green);">0</div>
+        </div>
+        <div class="stat-card compact">
+          <div class="label">متبقية</div>
+          <div class="value" id="at-stat-pending" style="color:var(--gold);">0</div>
+        </div>
+      </div>
+
+      <div class="at-add-card">
+        <div class="at-add-head">
+          <div class="icon-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
           </div>
+          <h4>إضافة مهمة جديدة</h4>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label class="at-field-label">المهمة</label>
+          <input type="text" id="at-title" placeholder="مثال: متابعة صيانة أجهزة معمل الحاسب" />
+        </div>
+
+        <div class="at-add-row">
           <div>
-            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">مسؤول التنفيذ</label>
+            <label class="at-field-label">مسؤول التنفيذ</label>
             <select id="at-responsible"></select>
             <input type="text" id="at-responsible-other" placeholder="اكتب الاسم" style="display:none; margin-top:8px;" />
           </div>
-        </div>
-        <div class="form-row" style="margin-top:10px;">
           <div>
-            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الأولوية</label>
-            <select id="at-priority">
-              <option value="important_urgent">هام وعاجل</option>
-              <option value="important_not_urgent">هام وغير عاجل</option>
-              <option value="urgent_not_important">عاجل وغير هام</option>
-              <option value="not_important_not_urgent">غير هام وغير عاجل</option>
-            </select>
-          </div>
-          <div>
-            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">ملاحظة (اختياري)</label>
+            <label class="at-field-label">ملاحظة (اختياري)</label>
             <input type="text" id="at-note" placeholder="ملاحظة على المهمة" />
           </div>
         </div>
-        <button type="button" class="btn-primary" id="at-add-btn" style="width:auto; padding:10px 20px; margin-top:12px;">+ إضافة المهمة</button>
-        <div class="error-msg" id="at-error" style="margin-top:8px;"></div>
+
+        <label class="at-field-label">الأولوية</label>
+        <div class="at-priority-grid" id="at-priority-grid">
+          <button type="button" class="at-priority-btn active" data-pr="important_urgent">
+            <span class="t">هام وعاجل</span><span class="s">نفّذها الآن</span>
+          </button>
+          <button type="button" class="at-priority-btn" data-pr="important_not_urgent">
+            <span class="t">هام وغير عاجل</span><span class="s">جدولها</span>
+          </button>
+          <button type="button" class="at-priority-btn" data-pr="urgent_not_important">
+            <span class="t">عاجل وغير هام</span><span class="s">فوّضها</span>
+          </button>
+          <button type="button" class="at-priority-btn" data-pr="not_important_not_urgent">
+            <span class="t">غير هام وغير عاجل</span><span class="s">لاحقًا</span>
+          </button>
+        </div>
+
+        <div class="at-add-submit-row">
+          <div class="error-msg" id="at-error" style="margin:0;"></div>
+          <button type="button" class="btn-primary" id="at-add-btn" style="width:auto; padding:10px 22px;">+ إضافة المهمة</button>
+        </div>
       </div>
 
-      <div id="at-tasks-list"></div>
+      <div class="at-board" id="at-board"></div>
     </div>
 
     <div id="placeholder-module" class="panel hidden">
