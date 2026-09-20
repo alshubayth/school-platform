@@ -331,6 +331,22 @@ document.getElementById('logout-btn').addEventListener('click', async () => { aw
 
 sb.auth.getSession().then(({ data }) => { if (data.session) loadProfileAndShowDashboard(data.session.user.id); });
 
+/* ===== أدوات مشتركة لعزل بيانات كل مدرسة (المرحلة الثانية) =====
+ * تُستخدم بكل الملفات اللي تحتاج تفلتر قراءة/كتابة جدول بعمود school_id، مع نفس منطق التوافق
+ * الخلفي: لو الفلترة فشلت (عمود school_id لسا ما انضاف بقاعدة البيانات) نعيد المحاولة بدونها
+ * عشان القسم يستمر يشتغل بمدرسة وحدة قبل تنفيذ SQL الترقية. */
+export async function readScopedBySchool(factory) {
+  let res = await factory(true);
+  if (res.error && currentSchoolId) res = await factory(false);
+  return res;
+}
+export async function writeWithSchool(factory) {
+  const extra = currentSchoolId ? { school_id: currentSchoolId } : {};
+  let res = await factory(extra);
+  if (res.error && currentSchoolId) res = await factory({});
+  return res;
+}
+
 export function isTileAllowed(t) {
   // تبويب "إدارة المدارس والخدمات" خاص بالدور الحقيقي "owner" بس (بدون تحويله لـ"admin")
   if (t.key === 'schools-admin') return isOwnerAccount;
