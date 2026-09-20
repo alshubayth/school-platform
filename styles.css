@@ -321,6 +321,24 @@
   .badge-danger{ background:var(--danger-light); color:var(--danger); }
   .badge-gray{ background:var(--sand); color:var(--slate); }
   .badge-green{ background:var(--green-light); color:var(--green); }
+  .badge-purple{ background:var(--purple-light); color:var(--purple); }
+
+  /* ===== المهام الإدارية (كالندر المدير/الوكيل الأسبوعي) ===== */
+  .at-task-card{
+    background:#fff; border-radius:12px; padding:12px 14px; margin-bottom:10px; box-shadow:var(--shadow-sm);
+    border-inline-start:3px solid var(--border);
+  }
+  .at-task-card.pr-important_urgent{ border-inline-start-color:var(--danger); }
+  .at-task-card.pr-important_not_urgent{ border-inline-start-color:var(--gold); }
+  .at-task-card.pr-urgent_not_important{ border-inline-start-color:var(--purple); }
+  .at-task-card.pr-not_important_not_urgent{ border-inline-start-color:var(--slate); }
+  .at-task-card.status-done{ opacity:0.65; }
+  .at-task-card h6{ margin:0 0 6px; font-size:14px; font-weight:700; line-height:1.4; }
+  .at-task-card .meta{ font-size:12px; color:var(--slate); margin:0 0 8px; }
+  .at-task-card .note{ font-size:12px; color:var(--ink); background:var(--sand); border-radius:8px; padding:8px 10px; margin-top:8px; line-height:1.5; }
+  .at-task-card .badge-row{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin-top:8px; }
+  .at-status-btn{ border:none; cursor:pointer; }
+  .at-delete-btn{ width:28px; height:28px; flex-shrink:0; padding:0; background:var(--danger-light); color:var(--danger); border-radius:8px; display:inline-flex; align-items:center; justify-content:center; border:none; cursor:pointer; }
   .exam-var-chip{ display:inline-block; background:var(--meadow-light); color:var(--meadow); font-size:12.5px; font-weight:600; padding:5px 12px; border-radius:20px; cursor:grab; user-select:none; border:1px dashed var(--meadow); direction:ltr; }
   .exam-var-chip:active{ cursor:grabbing; }
   .ring-wrap{ display:flex; align-items:center; gap:10px; }
