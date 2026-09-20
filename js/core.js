@@ -89,7 +89,7 @@ export const tiles = [
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students' },
   { key: 'exam-reports', icon: icons.examreports, title: 'تقارير الاختبارات', desc: 'تحليل نتائج الاختبارات وبنودها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green', group: 'admin' },
-  { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy'], color: 'diamond-teal', group: 'teachers' },
+  { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
   { key: 'substitutes', icon: icons.substitutes, title: 'بدلاء اليوم', desc: 'تعويض غياب المعلمين وتبديل الحصص', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'computerlab', icon: icons.computerlab, title: 'معمل الحاسب الآلي', desc: 'توزيع الطلاب على أجهزة المعمل وطباعة الملصقات', roles: ['admin','deputy'], color: 'diamond-teal', group: 'extra' },
   { key: 'files', icon: icons.files, title: 'الملفات',              desc: 'رفع الملفات ومشاركتها حسب المجلد', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'extra' },
