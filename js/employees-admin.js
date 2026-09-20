@@ -1,5 +1,6 @@
 import { sb, SUPABASE_URL, currentUserId, roleLabels, gradeLabels,
-         isAdminOrDeputy, toLoginEmail, STAFF_ID_DOMAIN, setupCollapsible } from './core.js';
+         isAdminOrDeputy, toLoginEmail, STAFF_ID_DOMAIN, setupCollapsible,
+         currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 /* ================= بوابة الموظفين ================= */
@@ -81,7 +82,7 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
           if (!res.ok) { failedRows.push(`"${full_name}" — ${result.error || 'خطأ غير معروف'}`); continue; }
 
           if (['admin', 'deputy', 'teacher'].includes(role)) {
-            await sb.from('employees').insert({ full_name, job_title: roleLabels[role], profile_id: result.id });
+            await writeWithSchool(extra => sb.from('employees').insert({ full_name, job_title: roleLabels[role], profile_id: result.id, ...extra }));
           }
           created++;
         } catch (err) {
@@ -117,7 +118,7 @@ document.getElementById('portal-submit').addEventListener('click', async () => {
   if (!name) { errEl.textContent = 'اكتب اسم الموظف على الأقل'; errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
 
-  const { error } = await sb.from('employees').insert({ full_name: name, job_title: title });
+  const { error } = await writeWithSchool(extra => sb.from('employees').insert({ full_name: name, job_title: title, ...extra }));
   if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return; }
 
   document.getElementById('portal-name').value = '';
@@ -126,7 +127,11 @@ document.getElementById('portal-submit').addEventListener('click', async () => {
 });
 
 async function refreshPortalList() {
-  const { data: emps } = await sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role, login_email)');
+  const { data: emps } = await readScopedBySchool(scoped => {
+    let q = sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role, login_email)');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const list = document.getElementById('portal-list');
   list.innerHTML = '';
 
@@ -283,11 +288,12 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
 
     // إضافة الموظف تلقائيًا لجدول الموظفين (بوابة الموظفين) لو دوره من أدوار طاقم العمل
     if (['admin', 'deputy', 'teacher'].includes(role)) {
-      await sb.from('employees').insert({
+      await writeWithSchool(extra => sb.from('employees').insert({
         full_name: name,
         job_title: roleLabels[role],
         profile_id: result.id,
-      });
+        ...extra,
+      }));
     }
 
     if (role === 'teacher') await loadPermsModule();
@@ -301,7 +307,11 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
 
 export async function loadPermsModule() {
   const [{ data: teachers }, { data: subjects }] = await Promise.all([
-    sb.from('profiles').select('id, full_name').eq('role', 'teacher'),
+    readScopedBySchool(scoped => {
+      let q = sb.from('profiles').select('id, full_name').eq('role', 'teacher');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
     sb.from('subjects').select('id, name').order('name'),
   ]);
 
@@ -325,11 +335,12 @@ document.getElementById('perm-submit').addEventListener('click', async () => {
   if (!teacherId) { errEl.textContent = 'لا يوجد معلم لتحديده. أضف حساب معلم أولاً من Supabase.'; errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
 
-  const { error } = await sb.from('teacher_subjects').insert({
+  const { error } = await writeWithSchool(extra => sb.from('teacher_subjects').insert({
     teacher_id: teacherId,
     subject_id: document.getElementById('perm-subject').value,
     grade_level: document.getElementById('perm-grade').value,
-  });
+    ...extra,
+  }));
 
   if (error) {
     errEl.textContent = error.message.includes('duplicate') ? 'هذا التخصيص موجود مسبقًا' : 'حدث خطأ: ' + error.message;
@@ -340,8 +351,11 @@ document.getElementById('perm-submit').addEventListener('click', async () => {
 });
 
 async function refreshPermsList() {
-  const { data: assignments } = await sb.from('teacher_subjects')
-    .select('id, grade_level, profiles(full_name), subjects(name)');
+  const { data: assignments } = await readScopedBySchool(scoped => {
+    let q = sb.from('teacher_subjects').select('id, grade_level, profiles(full_name), subjects(name)');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   const list = document.getElementById('perms-list');
   list.innerHTML = '';
