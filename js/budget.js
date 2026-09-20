@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, myBudgetAccess, setMyBudgetAccess, backToTiles } from './core.js';
+import { sb, currentUserId, currentProfile, myBudgetAccess, setMyBudgetAccess, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 
 document.getElementById('back-to-tiles-13').addEventListener('click', backToTiles);
 
@@ -119,7 +119,11 @@ async function loadBeneficiaries(canPickAnyone) {
     return;
   }
   sel.disabled = false;
-  const { data } = await sb.from('profiles').select('id, full_name').in('role', BENEFICIARY_ROLES).order('full_name');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('profiles').select('id, full_name').in('role', BENEFICIARY_ROLES).order('full_name');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const employees = data || [];
   sel.innerHTML = '<option value="">يُصرف لـ (اختر الموظف)...</option>' +
     employees.map(e => `<option value="${esc(e.full_name)}">${esc(e.full_name)}</option>`).join('');
@@ -127,7 +131,11 @@ async function loadBeneficiaries(canPickAnyone) {
 
 /* ---------- بنود المصروفات (الاختيارية - للتصنيف/الرسم البياني) ---------- */
 async function loadCategories() {
-  const { data } = await sb.from('budget_categories').select('id, name, cap_percentage').order('name');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('budget_categories').select('id, name, cap_percentage').order('name');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   categoriesCache = data || [];
 
   const expSelect = document.getElementById('budget-exp-category');
@@ -179,7 +187,7 @@ document.getElementById('budget-category-submit').addEventListener('click', asyn
   if (!name) return;
   const capRaw = capInput ? capInput.value.trim() : '';
   const cap_percentage = capRaw === '' ? null : Math.max(0, Math.min(100, parseFloat(capRaw)));
-  const { error } = await sb.from('budget_categories').insert({ name, cap_percentage });
+  const { error } = await writeWithSchool(extra => sb.from('budget_categories').insert({ name, cap_percentage, ...extra }));
   if (!error) {
     input.value = '';
     if (capInput) capInput.value = '';
@@ -190,8 +198,16 @@ document.getElementById('budget-category-submit').addEventListener('click', asyn
 /* ---------- صلاحيات القسم (المدير فقط) ---------- */
 async function loadPermsSection() {
   const [{ data: employees }, { data: perms, error: permsError }] = await Promise.all([
-    sb.from('profiles').select('id, full_name').in('role', ['deputy', 'teacher']).order('full_name'),
-    sb.from('budget_permissions').select('id, profile_id, level, profiles!budget_permissions_profile_id_fkey(full_name)'),
+    readScopedBySchool(scoped => {
+      let q = sb.from('profiles').select('id, full_name').in('role', ['deputy', 'teacher']).order('full_name');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_permissions').select('id, profile_id, level, profiles!budget_permissions_profile_id_fkey(full_name)');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
   if (permsError) console.error('budget_permissions fetch error:', permsError);
 
@@ -235,7 +251,7 @@ document.getElementById('budget-perm-submit').addEventListener('click', async ()
   if (!profileId) { errEl.textContent = 'اختر موظف أولاً'; errEl.style.display = 'block'; return; }
   const level = document.getElementById('budget-perm-level').value;
 
-  const { error } = await sb.from('budget_permissions').insert({ profile_id: profileId, level, granted_by: currentUserId });
+  const { error } = await writeWithSchool(extra => sb.from('budget_permissions').insert({ profile_id: profileId, level, granted_by: currentUserId, ...extra }));
   if (error) {
     errEl.textContent = error.message.includes('duplicate') ? 'هذا الموظف عنده صلاحية بالقسم بالفعل — احذفها من القائمة تحت لو تبي تغيّرها' : 'حدث خطأ: ' + error.message;
     errEl.style.display = 'block';
@@ -318,7 +334,7 @@ document.getElementById('budget-rev-submit').addEventListener('click', async () 
   const payload = { description: desc, amount, revenue_type: type, revenue_date: date, semester, notes: notes || null };
   const { error } = isEdit
     ? await sb.from('budget_revenues').update(payload).eq('id', editingRevenueId)
-    : await sb.from('budget_revenues').insert({ ...payload, created_by: currentUserId });
+    : await writeWithSchool(extra => sb.from('budget_revenues').insert({ ...payload, created_by: currentUserId, ...extra }));
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
   if (isEdit && prevType !== type && REVENUE_TO_FUNDING_SOURCE[type] && (prevType === 'سلفة' || prevType === 'مدور سابق')) {
@@ -339,9 +355,13 @@ async function loadRevenuesList() {
   if (!listEl) return;
   listEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
 
-  const { data, error } = await sb.from('budget_revenues')
-    .select('id, description, amount, revenue_date, revenue_type, semester, notes')
-    .order('revenue_date', { ascending: false });
+  const { data, error } = await readScopedBySchool(scoped => {
+    let q = sb.from('budget_revenues')
+      .select('id, description, amount, revenue_date, revenue_type, semester, notes')
+      .order('revenue_date', { ascending: false });
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   if (error) { console.error('budget_revenues fetch error:', error); listEl.innerHTML = '<p style="font-size:12px; color:var(--danger);">تعذر تحميل الإيداعات</p>'; return; }
   revenuesListCache = data || [];
 
@@ -537,7 +557,7 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
     }
   }
 
-  const { data: inserted, error } = await sb.from('budget_expense_requests').insert({
+  const { data: inserted, error } = await writeWithSchool(extra => sb.from('budget_expense_requests').insert({
     category_id: categoryId,
     beneficiary_name: beneficiary,
     funding_source: source,
@@ -547,7 +567,8 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
     request_date: date,
     requested_by: currentUserId,
     status: 'pending',
-  }).select().single();
+    ...extra,
+  }).select().single());
 
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
@@ -573,17 +594,19 @@ async function loadExpensesList(canManage) {
   const container = document.getElementById('budget-expenses-list');
   container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
-  let query = sb.from('budget_expense_requests')
-    .select(`id, statement_number, beneficiary_name, funding_source, funding_source_other,
-      semester, request_date, status, requested_by, confirmed_by, confirmed_at,
-      budget_categories(name),
-      requester:profiles!budget_expense_requests_requested_by_fkey(full_name),
-      confirmer:profiles!budget_expense_requests_confirmed_by_fkey(full_name),
-      budget_expense_items(id, invoice_number, invoice_date, source, description, amount, sort_order)`)
-    .order('created_at', { ascending: false });
-  if (!canManage) query = query.eq('requested_by', currentUserId);
-
-  const { data, error } = await query;
+  const { data, error } = await readScopedBySchool(scoped => {
+    let query = sb.from('budget_expense_requests')
+      .select(`id, statement_number, beneficiary_name, funding_source, funding_source_other,
+        semester, request_date, status, requested_by, confirmed_by, confirmed_at,
+        budget_categories(name),
+        requester:profiles!budget_expense_requests_requested_by_fkey(full_name),
+        confirmer:profiles!budget_expense_requests_confirmed_by_fkey(full_name),
+        budget_expense_items(id, invoice_number, invoice_date, source, description, amount, sort_order)`)
+      .order('created_at', { ascending: false });
+    if (!canManage) query = query.eq('requested_by', currentUserId);
+    if (scoped && currentSchoolId) query = query.eq('school_id', currentSchoolId);
+    return query;
+  });
   if (error) console.error('budget_expense_requests fetch error:', error);
   const rows = data || [];
 
@@ -824,11 +847,23 @@ async function loadDashboard() {
   const semesterFilter = document.getElementById('budget-semester-filter') ? document.getElementById('budget-semester-filter').value : '';
 
   const [{ data: revenues }, { data: requests }, { data: closures }] = await Promise.all([
-    sb.from('budget_revenues').select('amount, revenue_date, semester, revenue_type'),
-    sb.from('budget_expense_requests')
-      .select('request_date, status, semester, category_id, funding_source, budget_categories(name), budget_expense_items(amount)')
-      .eq('status', 'confirmed'),
-    sb.from('budget_semester_closures').select('semester, admin_share_amount, carryover_amount'),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_revenues').select('amount, revenue_date, semester, revenue_type');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_expense_requests')
+        .select('request_date, status, semester, category_id, funding_source, budget_categories(name), budget_expense_items(amount)')
+        .eq('status', 'confirmed');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_semester_closures').select('semester, admin_share_amount, carryover_amount');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   // لوحة العامة وتقسيم النسب تُحسب من دخل "المقصف" بس — السلفة والمدور لهما صناديقهما
@@ -901,7 +936,11 @@ async function loadShareSection() {
 
   const [{ data: settingsRows }, { data: closures }] = await Promise.all([
     sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).single(),
-    sb.from('budget_semester_closures').select('*').order('closed_at', { ascending: false }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_semester_closures').select('*').order('closed_at', { ascending: false });
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
   const settings = settingsRows || { admin_share_percentage: 10, carryover_percentage: 0 };
   const closureList = closures || [];
@@ -962,8 +1001,16 @@ document.getElementById('budget-share-close-submit') && document.getElementById(
 
   const [{ data: settingsRows }, { data: revenues }, { data: existing }] = await Promise.all([
     sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).single(),
-    sb.from('budget_revenues').select('amount, semester').eq('semester', semester).eq('revenue_type', 'مقصف'),
-    sb.from('budget_semester_closures').select('id').eq('semester', semester).single(),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_revenues').select('amount, semester').eq('semester', semester).eq('revenue_type', 'مقصف');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_semester_closures').select('id').eq('semester', semester);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.maybeSingle();
+    }),
   ]);
   const settings = settingsRows || { admin_share_percentage: 10, carryover_percentage: 0 };
   const totalRevenue = (revenues || []).reduce((s, r) => s + Number(r.amount), 0);
@@ -989,7 +1036,7 @@ document.getElementById('budget-share-close-submit') && document.getElementById(
   if (existing && existing.id) {
     ({ error } = await sb.from('budget_semester_closures').update(payload).eq('id', existing.id));
   } else {
-    ({ error } = await sb.from('budget_semester_closures').insert(payload));
+    ({ error } = await writeWithSchool(extra => sb.from('budget_semester_closures').insert({ ...payload, ...extra })));
   }
   if (error) {
     errEl.textContent = 'تعذر تسجيل الإقفال: ' + error.message;
@@ -1011,11 +1058,19 @@ async function loadBatchesLists() {
   openEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
 
   const [{ data: revs }, { data: reqs }] = await Promise.all([
-    sb.from('budget_revenues').select('id, description, amount, revenue_date, revenue_type')
-      .in('revenue_type', ['سلفة', 'مدور سابق']).order('revenue_date', { ascending: false }),
-    sb.from('budget_expense_requests')
-      .select('id, statement_number, request_date, status, funding_revenue_id, beneficiary_name, budget_expense_items(amount, description)')
-      .not('funding_revenue_id', 'is', null),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_revenues').select('id, description, amount, revenue_date, revenue_type')
+        .in('revenue_type', ['سلفة', 'مدور سابق']).order('revenue_date', { ascending: false });
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_expense_requests')
+        .select('id, statement_number, request_date, status, funding_revenue_id, beneficiary_name, budget_expense_items(amount, description)')
+        .not('funding_revenue_id', 'is', null);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   const reqsByBatch = new Map();
