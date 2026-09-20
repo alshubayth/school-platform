@@ -73,6 +73,18 @@
   </div>
 </div>
 
+<!-- ===== شاشة اختيار المدرسة (تظهر فقط لحساب "المالك" اللي يدير أكثر من مدرسة) ===== -->
+<div id="school-picker-screen" class="hidden" style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--sand); padding:24px;">
+  <div style="max-width:640px; width:100%;">
+    <h2 style="text-align:center; margin-bottom:6px;">اختر المدرسة</h2>
+    <p style="text-align:center; color:var(--slate); font-size:13px; margin:0 0 22px;">حسابك يدير أكثر من مدرسة - اختر المدرسة اللي تبي تفتح لوحة تحكمها</p>
+    <div id="school-picker-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px;"></div>
+    <p style="text-align:center; margin-top:22px;">
+      <span class="text-action-btn" id="school-picker-logout-btn">تسجيل خروج</span>
+    </p>
+  </div>
+</div>
+
 <!-- ===== لوحة التحكم ===== -->
 <div id="dashboard-screen" class="hidden">
   <header class="topbar">
@@ -87,6 +99,9 @@
         <div class="name" id="user-name"></div>
         <div class="role" id="user-role-badge"></div>
       </div>
+      <button class="logout-icon hidden" id="switch-school-btn" title="تبديل المدرسة">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4v5h5"/><path d="M20 20v-5h-5"/><path d="M4.5 9a8 8 0 0 1 14-3.5L20 9"/><path d="M19.5 15a8 8 0 0 1-14 3.5L4 15"/></svg>
+      </button>
       <button class="logout-icon" id="logout-btn" title="تسجيل خروج">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
       </button>
@@ -100,6 +115,10 @@
         <p>مرحبًا بك في لوحة تحكم مدرسة المروج</p>
       </div>
       <div id="my-duty-banner"></div>
+
+      <div id="owner-phase-warning" class="hidden" style="background:#FDEDEC; color:var(--danger); border:1px solid #F5B7B1; border-radius:10px; padding:12px 16px; font-size:12.5px; margin-bottom:16px; font-weight:600;">
+        تنبيه: دعم تعدد المدارس لسا بمرحلته الأولى - تقدر تتحكم بالتبويبات الظاهرة لكل مدرسة، لكن بيانات كل قسم (الطلاب، الاختبارات، الميزانية...) لسا غير معزولة فعليًا بين المدارس. لا تُدخل بيانات حقيقية لأكثر من مدرسة حتى تكتمل مرحلة فصل البيانات.
+      </div>
 
       <div id="dash-weekly-schedule" style="margin-bottom:22px;"></div>
 
@@ -1612,6 +1631,28 @@
           <button type="button" id="files-perm-close-btn" style="width:100%; margin-top:16px; background:var(--sand); color:var(--ink); border-radius:10px; padding:10px; border:none; font-weight:700; cursor:pointer; font-size:14px;">تم</button>
         </div>
       </div>
+    </div>
+
+    <div id="schools-admin-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-19">→ رجوع للرئيسية</span>
+
+      <div class="form-card" style="background:var(--sand); margin-bottom:18px;">
+        <h4>إضافة مدرسة جديدة</h4>
+        <div class="form-row">
+          <div>
+            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">اسم المدرسة</label>
+            <input type="text" id="sa-new-name" placeholder="مثال: مدرسة النور المتوسطة" />
+          </div>
+          <div>
+            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">معرّف مختصر (بالإنجليزي، بدون مسافات)</label>
+            <input type="text" id="sa-new-slug" placeholder="مثال: al-noor" />
+          </div>
+        </div>
+        <button type="button" class="btn-primary" id="sa-add-school-btn" style="width:auto; padding:10px 20px; margin-top:10px;">+ إضافة المدرسة</button>
+        <div class="error-msg" id="sa-add-error" style="margin-top:8px;"></div>
+      </div>
+
+      <div id="sa-schools-list"></div>
     </div>
 
     <div id="placeholder-module" class="panel hidden">
