@@ -1,4 +1,4 @@
-import { sb, gradeLabels, backToTiles } from './core.js';
+import { sb, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 
 document.getElementById('back-to-tiles-11').addEventListener('click', backToTiles);
 
@@ -104,9 +104,13 @@ async function renderGrid(overrideMap) {
     map = overrideMap;
   } else {
     container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
-    const { data: existing } = await sb.from('class_schedules')
-      .select('day_of_week, period_number, subject_name, teacher_name')
-      .eq('grade_level', scGrade).eq('class_section', scSection);
+    const { data: existing } = await readScopedBySchool(scoped => {
+      let q = sb.from('class_schedules')
+        .select('day_of_week, period_number, subject_name, teacher_name')
+        .eq('grade_level', scGrade).eq('class_section', scSection);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    });
     map = {};
     (existing || []).forEach(r => { map[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
   }
@@ -178,15 +182,19 @@ async function saveGrid() {
   });
 
   if (rowsToUpsert.length > 0) {
-    const { error } = await sb.from('class_schedules').upsert(rowsToUpsert, { onConflict: 'grade_level,class_section,day_of_week,period_number' });
+    const { error } = await writeWithSchool(extra =>
+      sb.from('class_schedules').upsert(rowsToUpsert.map(r => ({ ...r, ...extra })), { onConflict: 'grade_level,class_section,day_of_week,period_number' })
+    );
     if (error) { statusEl.textContent = 'تعذر الحفظ: ' + error.message; statusEl.style.color = 'var(--danger)'; return; }
   }
 
   // حذف الخلايا اللي رجعت فاضية (لو كانت محفوظة سابقًا)
   for (const k of keysToDelete) {
-    await sb.from('class_schedules').delete()
+    let delQ = sb.from('class_schedules').delete()
       .eq('grade_level', scGrade).eq('class_section', scSection)
       .eq('day_of_week', k.day).eq('period_number', k.period);
+    if (currentSchoolId) delQ = delQ.eq('school_id', currentSchoolId);
+    await delQ;
   }
 
   statusEl.textContent = 'تم الحفظ بنجاح ✓';
