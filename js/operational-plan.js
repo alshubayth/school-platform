@@ -1,5 +1,6 @@
 import { sb, currentUserId, currentProfile, gradeLabels,
-         isOpPlanMember, setOpPlanMember, setupCollapsible } from './core.js';
+         isOpPlanMember, setOpPlanMember, setupCollapsible,
+         currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 /* ================= الخطة التشغيلية ================= */
@@ -106,10 +107,26 @@ let currentSemester = 'semester_1';
 
 async function refreshStructureCaches() {
   const [{ data: goals }, { data: objectives }, { data: programs }, { data: settings }] = await Promise.all([
-    sb.from('strategic_goals').select('id, title'),
-    sb.from('operational_objectives').select('id, title, strategic_goal_id'),
-    sb.from('programs').select('id, title, operational_objective_id, department, school_indicator, plan_code, applies_to_intermediate'),
-    sb.from('op_plan_settings').select('current_semester').eq('id', 1).maybeSingle(),
+    readScopedBySchool(scoped => {
+      let q = sb.from('strategic_goals').select('id, title');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('operational_objectives').select('id, title, strategic_goal_id');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('programs').select('id, title, operational_objective_id, department, school_indicator, plan_code, applies_to_intermediate');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('op_plan_settings').select('current_semester').eq('id', 1);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.maybeSingle();
+    }),
   ]);
   goalsCache = goals || [];
   objectivesCache = objectives || [];
@@ -130,7 +147,11 @@ async function loadOpPlanAdminData() {
   if (semSel) semSel.value = currentSemester;
 
   // قائمة المشاركين المتاحين للإضافة
-  const { data: allStaff } = await sb.from('profiles').select('id, full_name').in('role', ['teacher','deputy']);
+  const { data: allStaff } = await readScopedBySchool(scoped => {
+    let q = sb.from('profiles').select('id, full_name').in('role', ['teacher','deputy']);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const empSelect = document.getElementById('opm-employee');
   empSelect.innerHTML = '';
   (allStaff || []).forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.full_name; empSelect.appendChild(o); });
@@ -154,7 +175,9 @@ async function loadOpPlanAdminData() {
 
 onEl('opplan-semester-select', 'change', async (e) => {
   const val = e.target.value;
-  await sb.from('op_plan_settings').update({ current_semester: val, updated_by: currentUserId }).eq('id', 1);
+  let q = sb.from('op_plan_settings').update({ current_semester: val, updated_by: currentUserId }).eq('id', 1);
+  if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
+  await q;
   currentSemester = val;
 });
 
@@ -173,8 +196,12 @@ let opGuideFilterObjId = null;
 async function loadProgramAssignAdmin() {
   const sel = document.getElementById('opa-employee');
   if (!sel) return;
-  const { data: members } = await sb.from('operational_plan_members')
-    .select('profile_id, profiles!operational_plan_members_profile_id_fkey(id, full_name)');
+  const { data: members } = await readScopedBySchool(scoped => {
+    let q = sb.from('operational_plan_members')
+      .select('profile_id, profiles!operational_plan_members_profile_id_fkey(id, full_name)');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   opaMembersCache = (members || []).map(m => ({ id: m.profile_id, full_name: m.profiles ? m.profiles.full_name : '-' }));
 
   await refreshOpaAssignedNames();
@@ -195,8 +222,12 @@ async function loadProgramAssignAdmin() {
 // بالقائمة عشان المدير يعرف بنظرة وحدة وش مسند ولمين، بغض النظر عن الموظف المختار حاليًا بالقائمة
 let opaAssignedNamesByProgram = new Map();
 async function refreshOpaAssignedNames() {
-  const { data } = await sb.from('program_assignments')
-    .select('program_id, profiles!program_assignments_profile_id_fkey(full_name)');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('program_assignments')
+      .select('program_id, profiles!program_assignments_profile_id_fkey(full_name)');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const map = new Map();
   (data || []).forEach(a => {
     const name = a.profiles ? a.profiles.full_name : null;
@@ -212,7 +243,11 @@ async function renderOpaChecklist() {
   const list = document.getElementById('opa-checklist');
   if (!sel || !list) return;
   if (!sel.value) { list.innerHTML = ''; return; }
-  const { data: assigned } = await sb.from('program_assignments').select('program_id').eq('profile_id', sel.value);
+  const { data: assigned } = await readScopedBySchool(scoped => {
+    let q = sb.from('program_assignments').select('program_id').eq('profile_id', sel.value);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   opaCurrentAssignments = new Set((assigned || []).map(a => a.program_id));
   buildOpaChecklistDom();
 }
@@ -262,7 +297,7 @@ onEl('opa-save', 'click', async () => {
   const toRemove = Array.from(opaCurrentAssignments).filter(id => !checked.has(id));
 
   if (toAdd.length > 0) {
-    await sb.from('program_assignments').insert(toAdd.map(programId => ({ program_id: programId, profile_id: profileId, assigned_by: currentUserId })));
+    await writeWithSchool(extra => sb.from('program_assignments').insert(toAdd.map(programId => ({ program_id: programId, profile_id: profileId, assigned_by: currentUserId, ...extra }))));
   }
   for (const programId of toRemove) {
     await sb.from('program_assignments').delete().eq('program_id', programId).eq('profile_id', profileId);
@@ -304,8 +339,16 @@ async function renderOpPlanGuide() {
   }
 
   const [{ data: allTasks }, { data: allCompletions }] = await Promise.all([
-    sb.from('op_tasks').select('id, program_id, plan_status'),
-    sb.from('op_task_completions').select('id, task_id, status'),
+    readScopedBySchool(scoped => {
+      let q = sb.from('op_tasks').select('id, program_id, plan_status');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('op_task_completions').select('id, task_id, status');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   const tasksByProgram = new Map();
@@ -530,19 +573,27 @@ async function openProgramTasksView(programId) {
   bodyEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
   overlay.classList.remove('hidden');
 
-  const { data: tasks } = await sb.from('op_tasks')
-    .select('id, title, duration_type, week_number, semester, plan_status, employee_profile_id, profiles!op_tasks_employee_profile_id_fkey(full_name)')
-    .eq('program_id', programId)
-    .order('week_number', { ascending: true });
+  const { data: tasks } = await readScopedBySchool(scoped => {
+    let q = sb.from('op_tasks')
+      .select('id, title, duration_type, week_number, semester, plan_status, employee_profile_id, profiles!op_tasks_employee_profile_id_fkey(full_name)')
+      .eq('program_id', programId)
+      .order('week_number', { ascending: true });
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   if (!tasks || tasks.length === 0) {
     bodyEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">ما فيه مهام مدخلة لهذا البرنامج بعد.</p>';
     return;
   }
 
-  const { data: completions } = await sb.from('op_task_completions')
-    .select('task_id, status, period_label')
-    .in('task_id', tasks.map(t => t.id));
+  const { data: completions } = await readScopedBySchool(scoped => {
+    let q = sb.from('op_task_completions')
+      .select('task_id, status, period_label')
+      .in('task_id', tasks.map(t => t.id));
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const completionsByTask = new Map();
   (completions || []).forEach(c => {
     if (!completionsByTask.has(c.task_id)) completionsByTask.set(c.task_id, []);
@@ -648,7 +699,7 @@ onEl('opm-add-member', 'click', async () => {
   const profileId = document.getElementById('opm-employee').value;
   const empName = document.getElementById('opm-employee').selectedOptions[0]?.textContent || '';
   if (!profileId) return;
-  const { error } = await sb.from('operational_plan_members').insert({ profile_id: profileId, added_by: currentUserId });
+  const { error } = await writeWithSchool(extra => sb.from('operational_plan_members').insert({ profile_id: profileId, added_by: currentUserId, ...extra }));
   if (error) {
     alert(error.message.includes('duplicate') ? 'هذا الموظف مضاف مسبقًا للخطة' : 'تعذر الإضافة: ' + error.message);
     return;
@@ -659,7 +710,11 @@ onEl('opm-add-member', 'click', async () => {
 });
 
 async function refreshMembersList() {
-  const { data, error } = await sb.from('operational_plan_members').select('id, profiles!operational_plan_members_profile_id_fkey(full_name)');
+  const { data, error } = await readScopedBySchool(scoped => {
+    let q = sb.from('operational_plan_members').select('id, profiles!operational_plan_members_profile_id_fkey(full_name)');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   if (error) { console.error('refreshMembersList error:', error); }
   const list = document.getElementById('opm-members-list');
   list.innerHTML = '';
@@ -688,7 +743,7 @@ async function refreshMembersList() {
 onEl('og-add', 'click', async () => {
   const title = document.getElementById('og-title').value.trim();
   if (!title) return;
-  await sb.from('strategic_goals').insert({ title });
+  await writeWithSchool(extra => sb.from('strategic_goals').insert({ title, ...extra }));
   document.getElementById('og-title').value = '';
   await loadOpPlanAdminData();
 });
@@ -696,7 +751,7 @@ onEl('oo-add', 'click', async () => {
   const title = document.getElementById('oo-title').value.trim();
   const goalId = document.getElementById('oo-goal').value;
   if (!title || !goalId) return;
-  await sb.from('operational_objectives').insert({ title, strategic_goal_id: goalId });
+  await writeWithSchool(extra => sb.from('operational_objectives').insert({ title, strategic_goal_id: goalId, ...extra }));
   document.getElementById('oo-title').value = '';
   await loadOpPlanAdminData();
 });
@@ -704,7 +759,7 @@ onEl('pr-add', 'click', async () => {
   const title = document.getElementById('pr-title').value.trim();
   const objId = document.getElementById('pr-objective').value;
   if (!title || !objId) return;
-  await sb.from('programs').insert({ title, operational_objective_id: objId });
+  await writeWithSchool(extra => sb.from('programs').insert({ title, operational_objective_id: objId, ...extra }));
   document.getElementById('pr-title').value = '';
   await loadOpPlanAdminData();
 });
@@ -769,9 +824,13 @@ async function deleteProgramFlow(programId, programTitle) {
 const durationLabels = { single_week: 'أسبوع محدد', semester_1: 'الفصل الأول', semester_2: 'الفصل الثاني', full_year: 'طوال العام' };
 
 async function refreshOpPlanApprovals() {
-  const { data: pendingPlans, error: pendingPlansErr } = await sb.from('op_tasks')
-    .select('id, title, description, duration_type, week_number, profiles!op_tasks_employee_profile_id_fkey(full_name), programs(title, plan_code)')
-    .eq('plan_status', 'pending');
+  const { data: pendingPlans, error: pendingPlansErr } = await readScopedBySchool(scoped => {
+    let q = sb.from('op_tasks')
+      .select('id, title, description, duration_type, week_number, profiles!op_tasks_employee_profile_id_fkey(full_name), programs(title, plan_code)')
+      .eq('plan_status', 'pending');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   if (pendingPlansErr) console.error('opplan pendingPlans error:', pendingPlansErr);
 
   const planList = document.getElementById('opplan-pending-plan-list');
@@ -805,9 +864,13 @@ async function refreshOpPlanApprovals() {
     });
   }
 
-  const { data: pendingCompletions } = await sb.from('op_task_completions')
-    .select('id, period_label, status, op_tasks(title, profiles!op_tasks_employee_profile_id_fkey(full_name), programs(title, plan_code))')
-    .eq('status', 'pending');
+  const { data: pendingCompletions } = await readScopedBySchool(scoped => {
+    let q = sb.from('op_task_completions')
+      .select('id, period_label, status, op_tasks(title, profiles!op_tasks_employee_profile_id_fkey(full_name), programs(title, plan_code))')
+      .eq('status', 'pending');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   const compList = document.getElementById('opplan-pending-completion-list');
   compList.innerHTML = '';
@@ -840,7 +903,11 @@ async function refreshOpPlanApprovals() {
     });
   }
 
-  const { data: allCompletions } = await sb.from('op_task_completions').select('status');
+  const { data: allCompletions } = await readScopedBySchool(scoped => {
+    let q = sb.from('op_task_completions').select('status');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const total = (allCompletions || []).length;
   const approved = (allCompletions || []).filter(c => c.status === 'approved').length;
   document.getElementById('opplan-stat-rate').textContent = total ? Math.round((approved/total)*100) + '%' : '-';
@@ -862,10 +929,19 @@ onEl('opplan-reset-confirm', 'click', async () => {
   btn.textContent = 'جارٍ الحذف...';
 
   // نحذف الإنجازات الأسبوعية أولاً (مرتبطة بالمهام)، ثم المهام نفسها، ثم نرجّع كل إسناد
-  // برنامج لحالة "لم يبدأ" بما إن كل مهامه المُدخلة صارت محذوفة
-  const { error: err1 } = await sb.from('op_task_completions').delete().not('id', 'is', null);
-  const { error: err2 } = await sb.from('op_tasks').delete().not('id', 'is', null);
-  const { error: err3 } = await sb.from('program_assignments').update({ tasks_entry_complete: false }).not('id', 'is', null);
+  // برنامج لحالة "لم يبدأ" بما إن كل مهامه المُدخلة صارت محذوفة — كل هذا مقيّد بمدرسة المدير
+  // الحالي فقط (currentSchoolId) عشان ما يمسح بيانات مدارس ثانية بالخطأ
+  let q1 = sb.from('op_task_completions').delete().not('id', 'is', null);
+  let q2 = sb.from('op_tasks').delete().not('id', 'is', null);
+  let q3 = sb.from('program_assignments').update({ tasks_entry_complete: false }).not('id', 'is', null);
+  if (currentSchoolId) {
+    q1 = q1.eq('school_id', currentSchoolId);
+    q2 = q2.eq('school_id', currentSchoolId);
+    q3 = q3.eq('school_id', currentSchoolId);
+  }
+  const { error: err1 } = await q1;
+  const { error: err2 } = await q2;
+  const { error: err3 } = await q3;
 
   btn.disabled = false;
   btn.textContent = originalText;
@@ -896,9 +972,13 @@ async function loadOpPlanEmployeeData() {
 let myProgAssignments = [];
 
 async function loadMyProgramAssignments() {
-  const { data: assigned } = await sb.from('program_assignments')
-    .select('id, program_id, tasks_entry_complete, programs(id, title, plan_code, department, school_indicator, operational_objective_id)')
-    .eq('profile_id', currentUserId);
+  const { data: assigned } = await readScopedBySchool(scoped => {
+    let q = sb.from('program_assignments')
+      .select('id, program_id, tasks_entry_complete, programs(id, title, plan_code, department, school_indicator, operational_objective_id)')
+      .eq('profile_id', currentUserId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   myProgAssignments = assigned || [];
   await renderMyProgramList();
 }
@@ -912,7 +992,11 @@ async function renderMyProgramList() {
   }
 
   // عدّاد المهام المدخلة فعليًا لكل برنامج (بدون فلترة بحالة الاعتماد - هذا للإدخال مو للاعتماد)
-  const { data: myTasks } = await sb.from('op_tasks').select('id, program_id').eq('employee_profile_id', currentUserId);
+  const { data: myTasks } = await readScopedBySchool(scoped => {
+    let q = sb.from('op_tasks').select('id, program_id').eq('employee_profile_id', currentUserId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const countByProgram = new Map();
   (myTasks || []).forEach(t => { if (!t.program_id) return; countByProgram.set(t.program_id, (countByProgram.get(t.program_id) || 0) + 1); });
 
@@ -980,11 +1064,15 @@ async function renderProgramEditor(body, assignment, program) {
   body.innerHTML = '<p style="font-size:12px; color:var(--slate);">جارٍ التحميل...</p>';
   // نعرض مهام "أسبوع محدد" الخاصة بالفصل الحالي بس (أسابيع الفصل الثاني السابقة، إن وجدت،
   // ترقيمها منفصل تمامًا) + كل المهام المتكررة (فصل/سنة) بغض النظر عن الفصل
-  const { data: existing } = await sb.from('op_tasks')
-    .select('id, title, duration_type, week_number, plan_status')
-    .eq('employee_profile_id', currentUserId).eq('program_id', program.id)
-    .or(`and(duration_type.eq.single_week,semester.eq.${currentSemester}),duration_type.neq.single_week`)
-    .order('week_number', { ascending: true });
+  const { data: existing } = await readScopedBySchool(scoped => {
+    let q = sb.from('op_tasks')
+      .select('id, title, duration_type, week_number, plan_status')
+      .eq('employee_profile_id', currentUserId).eq('program_id', program.id)
+      .or(`and(duration_type.eq.single_week,semester.eq.${currentSemester}),duration_type.neq.single_week`)
+      .order('week_number', { ascending: true });
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   const statusLabel = { approved: 'معتمدة', rejected: 'مرفوضة', pending: 'بانتظار الاعتماد' };
   const statusColor = { approved: 'var(--status-good)', rejected: 'var(--status-bad)', pending: 'var(--status-idle)' };
@@ -1060,7 +1148,7 @@ async function renderProgramEditor(body, assignment, program) {
       payloads.push(payload);
     }
     if (payloads.length === 0) return true;
-    const { error } = await sb.from('op_tasks').insert(payloads);
+    const { error } = await writeWithSchool(extra => sb.from('op_tasks').insert(payloads.map(p => ({ ...p, ...extra }))));
     if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return false; }
     return true;
   }
@@ -1171,7 +1259,7 @@ onEl('opt-excel-upload', 'click', async () => {
           payload.recurrence = recurrenceText === 'يومي' ? 'daily' : 'weekly';
         }
 
-        const { error } = await sb.from('op_tasks').insert(payload);
+        const { error } = await writeWithSchool(extra => sb.from('op_tasks').insert({ ...payload, ...extra }));
         if (error) { skippedRows.push(`"${title}" — ${error.message}`); continue; }
         added++;
       }
@@ -1248,10 +1336,14 @@ async function refreshMyTasks() {
   renderWeekStrip();
   // "أسبوع محدد" لازم يترافق بفلترة الفصل الحالي (الترقيم يرجع لـ1 كل فصل) - المهام المتكررة
   // (فصل/سنة) تطلع دايمًا بغض النظر عن الفصل الحالي
-  const { data: tasks } = await sb.from('op_tasks')
-    .select('id, title, description, duration_type, week_number, plan_status, plan_review_note')
-    .eq('employee_profile_id', currentUserId)
-    .or(`and(duration_type.eq.single_week,semester.eq.${currentSemester},week_number.eq.${opPlanWeek}),duration_type.neq.single_week`);
+  const { data: tasks } = await readScopedBySchool(scoped => {
+    let q = sb.from('op_tasks')
+      .select('id, title, description, duration_type, week_number, plan_status, plan_review_note')
+      .eq('employee_profile_id', currentUserId)
+      .or(`and(duration_type.eq.single_week,semester.eq.${currentSemester},week_number.eq.${opPlanWeek}),duration_type.neq.single_week`);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   const kanban = document.getElementById('opplan-my-tasks');
   kanban.innerHTML = '';
@@ -1265,7 +1357,11 @@ async function refreshMyTasks() {
   const withCompletions = await Promise.all(tasks.map(async (t) => {
     let completionForWeek = null;
     if (t.plan_status === 'approved') {
-      const { data: comp } = await sb.from('op_task_completions').select('id, status').eq('task_id', t.id).eq('period_label', 'الأسبوع ' + opPlanWeek).maybeSingle();
+      const { data: comp } = await readScopedBySchool(scoped => {
+        let q = sb.from('op_task_completions').select('id, status').eq('task_id', t.id).eq('period_label', 'الأسبوع ' + opPlanWeek);
+        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+        return q.maybeSingle();
+      });
       completionForWeek = comp;
     }
     return { t, completionForWeek };
@@ -1302,7 +1398,7 @@ async function refreshMyTasks() {
       btn.className = 'btn-primary';
       btn.textContent = 'تم التنفيذ';
       btn.addEventListener('click', async () => {
-        await sb.from('op_task_completions').insert({ task_id: t.id, period_label: 'الأسبوع ' + opPlanWeek, period_date: null });
+        await writeWithSchool(extra => sb.from('op_task_completions').insert({ task_id: t.id, period_label: 'الأسبوع ' + opPlanWeek, period_date: null, ...extra }));
         await refreshMyTasks();
       });
       card.appendChild(btn);
