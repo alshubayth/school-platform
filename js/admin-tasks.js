@@ -4,8 +4,12 @@ import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, wr
  * (نفس نمط "مهامي الأسبوعية" بالخطة التشغيلية)، وعرض المهام كأربع أرباع ملوّنة حسب الأولوية
  * بدل قائمة نصية طويلة ===== */
 
-const WEEKS_TOTAL = 40;
+// نفس عدد أسابيع الفصل الدراسي المستخدم بالخطة التشغيلية (WEEKS_PER_SEMESTER بملف
+// operational-plan.js) - 19 أسبوع لكل فصل، والترقيم يرجع لـ1 من جديد كل فصل
+const WEEKS_PER_SEMESTER = 19;
+const SEMESTER_LABELS = { semester_1: 'الفصل الأول', semester_2: 'الفصل الثاني' };
 let atWeek = 1;
+let currentSemester = 'semester_1';
 let selectedPriority = 'important_urgent';
 let staffCache = [];
 
@@ -20,10 +24,25 @@ const PRIORITY_LABELS = {
 function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
 export async function loadAdminTasksModule() {
-  await loadStaffOptions();
+  await Promise.all([loadStaffOptions(), loadCurrentSemester()]);
   renderWeekStrip();
   renderPriorityGrid();
   await refreshBoard();
+}
+
+// الفصل الدراسي الحالي يُقرأ فقط من نفس إعداد الخطة التشغيلية (op_plan_settings) - القسم هذا
+// ما يغيّره، عشان ما يصير تعارض بين مكانين يتحكمون بنفس الإعداد
+async function loadCurrentSemester() {
+  let res;
+  if (!currentSchoolId) {
+    res = await sb.from('op_plan_settings').select('current_semester').eq('id', 1).maybeSingle();
+  } else {
+    res = await sb.from('op_plan_settings').select('current_semester').eq('school_id', currentSchoolId).maybeSingle();
+    if (res.error) res = await sb.from('op_plan_settings').select('current_semester').eq('id', 1).maybeSingle();
+  }
+  currentSemester = (res.data && res.data.current_semester) || 'semester_1';
+  const label = document.getElementById('at-semester-label');
+  if (label) label.textContent = SEMESTER_LABELS[currentSemester] || currentSemester;
 }
 
 async function loadStaffOptions() {
@@ -46,7 +65,7 @@ document.getElementById('at-responsible').addEventListener('change', (e) => {
 function renderWeekStrip() {
   const strip = document.getElementById('at-week-strip');
   strip.innerHTML = '';
-  for (let w = 1; w <= WEEKS_TOTAL; w++) {
+  for (let w = 1; w <= WEEKS_PER_SEMESTER; w++) {
     const pill = document.createElement('button');
     pill.type = 'button';
     pill.className = 'at-week-pill' + (w === atWeek ? ' active' : '');
@@ -92,6 +111,7 @@ document.getElementById('at-add-btn').addEventListener('click', async () => {
 
   const row = {
     week_number: atWeek,
+    semester: currentSemester,
     title,
     responsible_profile_id: respSel === '__other__' ? null : respSel,
     responsible_other: respSel === '__other__' ? respOther : null,
@@ -126,6 +146,7 @@ async function refreshBoard() {
     let q = sb.from('admin_weekly_tasks')
       .select('id, title, responsible_profile_id, responsible_other, priority, status, note, profiles(full_name)')
       .eq('week_number', atWeek)
+      .eq('semester', currentSemester)
       .order('created_at', { ascending: true });
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
