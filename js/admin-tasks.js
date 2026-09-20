@@ -1,24 +1,29 @@
 import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 
-/* ===== المهام الإدارية: كالندر بسيط للمدير/الوكيل - يتنقل بين الأسابيع، كل أسبوع فيه مهام
- * مع مسؤول تنفيذ وحالة (نفذ/لم ينفذ بعد) وتصنيف أولوية (مصفوفة أيزنهاور) وملاحظة اختيارية ===== */
+/* ===== المهام الإدارية: لوحة مصفوفة أيزنهاور أسبوعية للمدير/الوكيل - شريط أسابيع أفقي
+ * (نفس نمط "مهامي الأسبوعية" بالخطة التشغيلية)، وعرض المهام كأربع أرباع ملوّنة حسب الأولوية
+ * بدل قائمة نصية طويلة ===== */
 
+const WEEKS_TOTAL = 40;
 let atWeek = 1;
+let selectedPriority = 'important_urgent';
 let staffCache = [];
 
+const PRIORITY_ORDER = ['important_urgent', 'important_not_urgent', 'urgent_not_important', 'not_important_not_urgent'];
 const PRIORITY_LABELS = {
-  important_urgent: { label: 'هام وعاجل', badge: 'badge-danger' },
-  important_not_urgent: { label: 'هام وغير عاجل', badge: 'badge-gold' },
-  urgent_not_important: { label: 'عاجل وغير هام', badge: 'badge-purple' },
-  not_important_not_urgent: { label: 'غير هام وغير عاجل', badge: 'badge-gray' },
+  important_urgent: 'هام وعاجل',
+  important_not_urgent: 'هام وغير عاجل',
+  urgent_not_important: 'عاجل وغير هام',
+  not_important_not_urgent: 'غير هام وغير عاجل',
 };
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
 
 export async function loadAdminTasksModule() {
   await loadStaffOptions();
-  document.getElementById('at-week-label').textContent = 'الأسبوع ' + atWeek;
-  await refreshTasksList();
+  renderWeekStrip();
+  renderPriorityGrid();
+  await refreshBoard();
 }
 
 async function loadStaffOptions() {
@@ -37,13 +42,41 @@ document.getElementById('at-responsible').addEventListener('change', (e) => {
   document.getElementById('at-responsible-other').style.display = e.target.value === '__other__' ? '' : 'none';
 });
 
-document.getElementById('at-week-prev').addEventListener('click', () => {
-  if (atWeek > 1) { atWeek--; loadAdminTasksModule(); }
-});
-document.getElementById('at-week-next').addEventListener('click', () => {
-  if (atWeek < 40) { atWeek++; loadAdminTasksModule(); }
-});
+/* ---------- شريط الأسابيع الأفقي ---------- */
+function renderWeekStrip() {
+  const strip = document.getElementById('at-week-strip');
+  strip.innerHTML = '';
+  for (let w = 1; w <= WEEKS_TOTAL; w++) {
+    const pill = document.createElement('button');
+    pill.type = 'button';
+    pill.className = 'at-week-pill' + (w === atWeek ? ' active' : '');
+    pill.textContent = String(w);
+    pill.title = 'الأسبوع ' + w;
+    pill.addEventListener('click', () => {
+      if (w === atWeek) return;
+      atWeek = w;
+      renderWeekStrip();
+      refreshBoard();
+    });
+    strip.appendChild(pill);
+  }
+  const activePill = strip.querySelector('.at-week-pill.active');
+  if (activePill) activePill.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+}
 
+/* ---------- منتقي الأولوية (مربعات مصفوفة أيزنهاور) ---------- */
+function renderPriorityGrid() {
+  const grid = document.getElementById('at-priority-grid');
+  grid.querySelectorAll('.at-priority-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.pr === selectedPriority);
+    btn.onclick = () => {
+      selectedPriority = btn.dataset.pr;
+      renderPriorityGrid();
+    };
+  });
+}
+
+/* ---------- إضافة مهمة ---------- */
 document.getElementById('at-add-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('at-error');
   errEl.style.display = 'none';
@@ -51,7 +84,6 @@ document.getElementById('at-add-btn').addEventListener('click', async () => {
   const title = document.getElementById('at-title').value.trim();
   const respSel = document.getElementById('at-responsible').value;
   const respOther = document.getElementById('at-responsible-other').value.trim();
-  const priority = document.getElementById('at-priority').value;
   const note = document.getElementById('at-note').value.trim();
 
   if (!title) { errEl.textContent = 'اكتب المهمة أولاً'; errEl.style.display = 'block'; return; }
@@ -63,7 +95,7 @@ document.getElementById('at-add-btn').addEventListener('click', async () => {
     title,
     responsible_profile_id: respSel === '__other__' ? null : respSel,
     responsible_other: respSel === '__other__' ? respOther : null,
-    priority,
+    priority: selectedPriority,
     status: 'pending',
     note: note || null,
     created_by: currentUserId,
@@ -82,12 +114,13 @@ document.getElementById('at-add-btn').addEventListener('click', async () => {
   document.getElementById('at-responsible-other').style.display = 'none';
   document.getElementById('at-responsible').value = staffCache[0] ? staffCache[0].id : '__other__';
 
-  await refreshTasksList();
+  await refreshBoard();
 });
 
-async function refreshTasksList() {
-  const list = document.getElementById('at-tasks-list');
-  list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
+/* ---------- لوحة الأرباع الأربعة ---------- */
+async function refreshBoard() {
+  const board = document.getElementById('at-board');
+  board.innerHTML = '<div class="placeholder" style="padding:20px; grid-column:1/-1;"><p>جارٍ التحميل...</p></div>';
 
   const { data: tasks, error } = await readScopedBySchool(scoped => {
     let q = sb.from('admin_weekly_tasks')
@@ -99,50 +132,60 @@ async function refreshTasksList() {
   });
 
   if (error) {
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>تعذّر تحميل المهام</p></div>';
+    board.innerHTML = '<div class="placeholder" style="padding:20px; grid-column:1/-1;"><p>تعذّر تحميل المهام</p></div>';
     return;
   }
 
-  if (!tasks || tasks.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه مهام مضافة لهذا الأسبوع بعد</p></div>';
-    return;
-  }
+  const rows = tasks || [];
+  document.getElementById('at-stat-total').textContent = rows.length;
+  document.getElementById('at-stat-done').textContent = rows.filter(t => t.status === 'done').length;
+  document.getElementById('at-stat-pending').textContent = rows.filter(t => t.status !== 'done').length;
 
-  list.innerHTML = '';
-  tasks.forEach(t => {
-    const pr = PRIORITY_LABELS[t.priority] || PRIORITY_LABELS.not_important_not_urgent;
-    const responsibleName = t.responsible_profile_id ? (t.profiles ? t.profiles.full_name : '-') : t.responsible_other;
-    const isDone = t.status === 'done';
-
-    const card = document.createElement('div');
-    card.className = `at-task-card pr-${t.priority}${isDone ? ' status-done' : ''}`;
-    card.innerHTML = `
-      <div style="display:flex; align-items:flex-start; gap:10px;">
-        <div style="flex:1; min-width:0;">
-          <h6>${esc(t.title)}</h6>
-          <p class="meta">مسؤول التنفيذ: ${esc(responsibleName || '-')}</p>
-        </div>
-        <button class="at-delete-btn" title="حذف المهمة">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
-        </button>
-      </div>
-      <div class="badge-row">
-        <span class="badge ${pr.badge}">${pr.label}</span>
-        <span class="badge ${isDone ? 'badge-green' : 'badge-gray'} at-status-btn">${isDone ? '✓ نفذ' : 'لم ينفذ بعد'}</span>
-      </div>
-      ${t.note ? `<div class="note">${esc(t.note)}</div>` : ''}`;
-
-    card.querySelector('.at-status-btn').addEventListener('click', async () => {
-      await sb.from('admin_weekly_tasks').update({ status: isDone ? 'pending' : 'done' }).eq('id', t.id);
-      await refreshTasksList();
-    });
-    card.querySelector('.at-delete-btn').addEventListener('click', async () => {
-      await sb.from('admin_weekly_tasks').delete().eq('id', t.id);
-      await refreshTasksList();
-    });
-
-    list.appendChild(card);
+  board.innerHTML = '';
+  PRIORITY_ORDER.forEach(pr => {
+    const quad = document.createElement('div');
+    quad.className = `at-quad q-${pr}`;
+    const prTasks = rows.filter(t => t.priority === pr);
+    quad.innerHTML = `
+      <div class="at-quad-head"><span class="dot"></span><span>${PRIORITY_LABELS[pr]}</span><span class="count">${prTasks.length}</span></div>
+      <div class="at-quad-body"></div>`;
+    const body = quad.querySelector('.at-quad-body');
+    if (prTasks.length === 0) {
+      body.innerHTML = '<div class="at-quad-empty">ما فيه مهام هنا</div>';
+    } else {
+      prTasks.forEach(t => body.appendChild(buildTaskCard(t)));
+    }
+    board.appendChild(quad);
   });
+}
+
+function buildTaskCard(t) {
+  const responsibleName = t.responsible_profile_id ? (t.profiles ? t.profiles.full_name : '-') : t.responsible_other;
+  const isDone = t.status === 'done';
+
+  const card = document.createElement('div');
+  card.className = `at-task-card pr-${t.priority}${isDone ? ' status-done' : ''}`;
+  card.innerHTML = `
+    <h6>${esc(t.title)}</h6>
+    <p class="meta">مسؤول التنفيذ: ${esc(responsibleName || '-')}</p>
+    ${t.note ? `<div class="note">${esc(t.note)}</div>` : ''}
+    <div class="foot-row">
+      <button class="at-status-toggle ${isDone ? 'done' : 'pending'}">${isDone ? '✓ نفذ' : 'لم ينفذ بعد'}</button>
+      <button class="at-delete-btn" title="حذف المهمة">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+      </button>
+    </div>`;
+
+  card.querySelector('.at-status-toggle').addEventListener('click', async () => {
+    await sb.from('admin_weekly_tasks').update({ status: isDone ? 'pending' : 'done' }).eq('id', t.id);
+    await refreshBoard();
+  });
+  card.querySelector('.at-delete-btn').addEventListener('click', async () => {
+    await sb.from('admin_weekly_tasks').delete().eq('id', t.id);
+    await refreshBoard();
+  });
+
+  return card;
 }
 
 document.getElementById('back-to-tiles-20').addEventListener('click', backToTiles);
