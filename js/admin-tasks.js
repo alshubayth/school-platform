@@ -144,7 +144,7 @@ async function refreshBoard() {
 
   const { data: tasks, error } = await readScopedBySchool(scoped => {
     let q = sb.from('admin_weekly_tasks')
-      .select('id, title, responsible_profile_id, responsible_other, priority, status, note, profiles(full_name)')
+      .select('id, title, responsible_profile_id, responsible_other, priority, status, note, profiles!admin_weekly_tasks_responsible_profile_id_fkey(full_name)')
       .eq('week_number', atWeek)
       .eq('semester', currentSemester)
       .order('created_at', { ascending: true });
