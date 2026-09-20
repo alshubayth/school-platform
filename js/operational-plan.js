@@ -122,11 +122,14 @@ async function refreshStructureCaches() {
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q;
     }),
-    readScopedBySchool(scoped => {
-      let q = sb.from('op_plan_settings').select('current_semester').eq('id', 1);
-      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-      return q.maybeSingle();
-    }),
+    (async () => {
+      // كل مدرسة لها صف إعدادات خاص فيها الآن (school_id)، بدل صف واحد مشترك (id = 1) بين
+      // كل المدارس. لو المدرسة ما عندها صف بعد (مدرسة جديدة)، نستخدم القيمة الافتراضية بهدوء.
+      if (!currentSchoolId) return sb.from('op_plan_settings').select('current_semester').eq('id', 1).maybeSingle();
+      const res = await sb.from('op_plan_settings').select('current_semester').eq('school_id', currentSchoolId).maybeSingle();
+      if (res.error) return sb.from('op_plan_settings').select('current_semester').eq('id', 1).maybeSingle();
+      return res;
+    })(),
   ]);
   goalsCache = goals || [];
   objectivesCache = objectives || [];
@@ -175,9 +178,13 @@ async function loadOpPlanAdminData() {
 
 onEl('opplan-semester-select', 'change', async (e) => {
   const val = e.target.value;
-  let q = sb.from('op_plan_settings').update({ current_semester: val, updated_by: currentUserId }).eq('id', 1);
-  if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
-  await q;
+  if (currentSchoolId) {
+    const { error } = await sb.from('op_plan_settings')
+      .upsert({ school_id: currentSchoolId, current_semester: val, updated_by: currentUserId }, { onConflict: 'school_id' });
+    if (error) await sb.from('op_plan_settings').update({ current_semester: val, updated_by: currentUserId }).eq('id', 1);
+  } else {
+    await sb.from('op_plan_settings').update({ current_semester: val, updated_by: currentUserId }).eq('id', 1);
+  }
   currentSemester = val;
 });
 
