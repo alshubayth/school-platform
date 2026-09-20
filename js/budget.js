@@ -929,13 +929,29 @@ function renderSourceStats(mqasafBalance) {
     statCard('رصيد المقصف', fmtAmount(mqasafBalance), 'var(--green)', 'إجمالي ما دخل منه', 'revenue');
 }
 
-/* ---------- نصيب الإدارة + المدوَّر (تُحسب آخر كل فصل دراسي) ---------- */
+/* ---------- نصيب الإدارة + المدوَّر (تُحسب آخر كل فصل دراسي) ----------
+   كل مدرسة لها صف إعدادات خاص فيها (school_id)، بدل صف واحد مشترك (id = 1) بين كل
+   المدارس كما كان سابقًا. لو المدرسة ما عندها صف بعد (مدرسة جديدة)، نرجّع القيم
+   الافتراضية بهدوء بدل ما نرمي خطأ. */
+async function fetchShareSettings() {
+  if (!currentSchoolId) {
+    const { data } = await sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).maybeSingle();
+    return data;
+  }
+  const { data, error } = await sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('school_id', currentSchoolId).maybeSingle();
+  if (error) {
+    const fallback = await sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).maybeSingle();
+    return fallback.data;
+  }
+  return data;
+}
+
 async function loadShareSection() {
   const wrap = document.getElementById('budget-share-section');
   if (!wrap) return;
 
-  const [{ data: settingsRows }, { data: closures }] = await Promise.all([
-    sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).single(),
+  const [settingsRows, { data: closures }] = await Promise.all([
+    fetchShareSettings(),
     readScopedBySchool(scoped => {
       let q = sb.from('budget_semester_closures').select('*').order('closed_at', { ascending: false });
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
@@ -980,7 +996,16 @@ document.getElementById('budget-share-settings-save') && document.getElementById
     errEl.style.display = 'block';
     return;
   }
-  const { error } = await sb.from('budget_share_settings').update({ admin_share_percentage, carryover_percentage, updated_by: currentUserId }).eq('id', 1);
+  let error;
+  if (currentSchoolId) {
+    ({ error } = await sb.from('budget_share_settings')
+      .upsert({ school_id: currentSchoolId, admin_share_percentage, carryover_percentage, updated_by: currentUserId }, { onConflict: 'school_id' }));
+    if (error) {
+      ({ error } = await sb.from('budget_share_settings').update({ admin_share_percentage, carryover_percentage, updated_by: currentUserId }).eq('id', 1));
+    }
+  } else {
+    ({ error } = await sb.from('budget_share_settings').update({ admin_share_percentage, carryover_percentage, updated_by: currentUserId }).eq('id', 1));
+  }
   if (error) {
     errEl.textContent = 'تعذر الحفظ: ' + error.message;
     errEl.style.display = 'block';
@@ -999,8 +1024,8 @@ document.getElementById('budget-share-close-submit') && document.getElementById(
     return;
   }
 
-  const [{ data: settingsRows }, { data: revenues }, { data: existing }] = await Promise.all([
-    sb.from('budget_share_settings').select('admin_share_percentage, carryover_percentage').eq('id', 1).single(),
+  const [settingsRows, { data: revenues }, { data: existing }] = await Promise.all([
+    fetchShareSettings(),
     readScopedBySchool(scoped => {
       let q = sb.from('budget_revenues').select('amount, semester').eq('semester', semester).eq('revenue_type', 'مقصف');
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
