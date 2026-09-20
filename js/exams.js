@@ -1,4 +1,4 @@
-import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels } from './core.js';
+import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 const SCHOOL_LOGO = new URL('logo.png', window.location.href).href;
@@ -50,7 +50,11 @@ export async function loadExamsModule() {
 
 /* ---------- استيراد الطلاب ---------- */
 async function refreshStudentStats() {
-  const { data } = await sb.from('students').select('grade_level');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('students').select('grade_level');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const grades = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
   const counts = { first_intermediate: 0, second_intermediate: 0, third_intermediate: 0 };
   (data || []).forEach(s => { if (counts[s.grade_level] !== undefined) counts[s.grade_level]++; });
@@ -137,7 +141,7 @@ document.getElementById('exam-import-btn').addEventListener('click', async () =>
         return;
       }
 
-      const { error } = await sb.from('students').upsert(students, { onConflict: 'national_id' });
+      const { error } = await writeWithSchool(extra => sb.from('students').upsert(students.map(s => ({ ...s, ...extra })), { onConflict: 'national_id' }));
       if (error) { errEl.textContent = 'تعذر الاستيراد: ' + error.message; errEl.style.display = 'block'; return; }
 
       alert(`تم استيراد ${students.length} طالب بنجاح`);
@@ -170,12 +174,13 @@ document.getElementById('exam-period-add').addEventListener('click', async () =>
     return;
   }
 
-  const { error } = await sb.from('exam_periods').insert({
+  const { error } = await writeWithSchool(extra => sb.from('exam_periods').insert({
     name, academic_year: academicYear || null, semester,
     committee_count: committeeCount,
     seat_start_first: seatFirst, seat_start_second: seatSecond, seat_start_third: seatThird,
     special_seat_start: specialSeatStart, created_by: currentUserId,
-  });
+    ...extra,
+  }));
   if (error) { errEl.textContent = 'تعذر الإنشاء: ' + error.message; errEl.style.display = 'block'; return; }
 
   document.getElementById('exam-period-name').value = '';
@@ -185,7 +190,11 @@ document.getElementById('exam-period-add').addEventListener('click', async () =>
 });
 
 async function refreshPeriodsList() {
-  const { data } = await sb.from('exam_periods').select('*').order('created_at', { ascending: false });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_periods').select('*');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('created_at', { ascending: false });
+  });
   const list = document.getElementById('exam-periods-list');
   list.innerHTML = '';
   if (!data || data.length === 0) {
@@ -229,7 +238,11 @@ async function refreshCommitteeLocations() {
   container.innerHTML = '';
   if (!currentPeriodId || !currentPeriodRow) return;
 
-  const { data } = await sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const existing = {};
   (data || []).forEach(row => { existing[row.committee_number] = row.location || ''; });
 
@@ -257,7 +270,7 @@ document.getElementById('exam-locations-save').addEventListener('click', async (
     location: input.value.trim(),
   }));
 
-  const { error } = await sb.from('exam_committee_locations').upsert(rows, { onConflict: 'period_id,committee_number' });
+  const { error } = await writeWithSchool(extra => sb.from('exam_committee_locations').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'period_id,committee_number' }));
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
   successEl.style.display = 'block';
 
@@ -279,8 +292,12 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
   resultsEl.innerHTML = '';
   if (!q || !currentPeriodId) return;
 
-  const { data } = await sb.from('students').select('id, full_name, national_id, grade_level')
-    .or(`full_name.ilike.%${q}%,national_id.ilike.%${q}%`).order('full_name').limit(15);
+  const { data } = await readScopedBySchool(scoped => {
+    let query = sb.from('students').select('id, full_name, national_id, grade_level')
+      .or(`full_name.ilike.%${q}%,national_id.ilike.%${q}%`);
+    if (scoped && currentSchoolId) query = query.eq('school_id', currentSchoolId);
+    return query.order('full_name').limit(15);
+  });
 
   if (!data || data.length === 0) {
     resultsEl.innerHTML = '<div class="placeholder" style="padding:14px;"><p>ما فيه نتائج</p></div>';
@@ -296,7 +313,7 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
     row.querySelector('.add-special-btn').addEventListener('click', async () => {
       const conditionNote = prompt('الحالة (مثل: صعوبات تعلم، توحد، إعاقة حركية) — اختياري:', '');
       if (conditionNote === null) return;
-      const { error } = await sb.from('exam_special_members').insert({ period_id: currentPeriodId, student_id: s.id, condition_note: conditionNote.trim() || null });
+      const { error } = await writeWithSchool(extra => sb.from('exam_special_members').insert({ period_id: currentPeriodId, student_id: s.id, condition_note: conditionNote.trim() || null, ...extra }));
       if (error) { alert(error.message.includes('duplicate') ? 'هذا الطالب مضاف مسبقًا' : 'تعذر الإضافة: ' + error.message); return; }
       document.getElementById('exam-special-search').value = '';
       resultsEl.innerHTML = '';
@@ -307,7 +324,11 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
 });
 
 async function refreshSpecialList() {
-  const { data } = await sb.from('exam_special_members').select('id, condition_note, students(full_name, national_id, grade_level)').eq('period_id', currentPeriodId);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_special_members').select('id, condition_note, students(full_name, national_id, grade_level)').eq('period_id', currentPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const list = document.getElementById('exam-special-list');
   list.innerHTML = '';
   if (!data || data.length === 0) {
@@ -351,8 +372,16 @@ document.getElementById('exam-generate-btn').addEventListener('click', async () 
   if (!confirm('توليد التوزيع يعيد ترقيم وتسكين كل الطلاب من الصفر لهذه الفترة. متأكد؟')) return;
 
   const [{ data: allStudents }, { data: specialMembers }] = await Promise.all([
-    sb.from('students').select('id, full_name, grade_level'),
-    sb.from('exam_special_members').select('student_id').eq('period_id', currentPeriodId),
+    readScopedBySchool(scoped => {
+      let q = sb.from('students').select('id, full_name, grade_level');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_special_members').select('student_id').eq('period_id', currentPeriodId);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   const specialIds = new Set((specialMembers || []).map(m => m.student_id));
@@ -405,7 +434,7 @@ document.getElementById('exam-generate-btn').addEventListener('click', async () 
   });
 
   await sb.from('exam_committee_assignments').delete().eq('period_id', currentPeriodId);
-  const { error } = await sb.from('exam_committee_assignments').insert(assignments);
+  const { error } = await writeWithSchool(extra => sb.from('exam_committee_assignments').insert(assignments.map(a => ({ ...a, ...extra }))));
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
   await sb.from('exam_periods').update({ generated_at: new Date().toISOString() }).eq('id', currentPeriodId);
@@ -420,11 +449,13 @@ async function refreshResults() {
   container.innerHTML = '';
   if (!currentPeriodId) return;
 
-  const { data } = await sb.from('exam_committee_assignments')
-    .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
-    .eq('period_id', currentPeriodId)
-    .order('committee_number', { ascending: true })
-    .order('seat_number', { ascending: true });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_committee_assignments')
+      .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
+      .eq('period_id', currentPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('committee_number', { ascending: true }).order('seat_number', { ascending: true });
+  });
 
   if (!data || data.length === 0) {
     container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما تم توليد أي توزيع لهذه الفترة بعد</p></div>';
@@ -565,11 +596,13 @@ function printCommittee(title, rows) {
 
 async function printAllCommittees(win) {
   if (!currentPeriodId) { win.close(); return; }
-  const { data } = await sb.from('exam_committee_assignments')
-    .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
-    .eq('period_id', currentPeriodId)
-    .order('committee_number', { ascending: true })
-    .order('seat_number', { ascending: true });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_committee_assignments')
+      .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
+      .eq('period_id', currentPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('committee_number', { ascending: true }).order('seat_number', { ascending: true });
+  });
 
   if (!data || data.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
 
@@ -623,9 +656,21 @@ async function printClassSheets(win) {
   if (!currentPeriodId) { win.close(); return; }
 
   const [{ data: students }, { data: assignments }, { data: locations }] = await Promise.all([
-    sb.from('students').select('id, full_name, national_id, grade_level, class_section'),
-    sb.from('exam_committee_assignments').select('student_id, committee_number, seat_number, is_special').eq('period_id', currentPeriodId),
-    sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId),
+    readScopedBySchool(scoped => {
+      let q = sb.from('students').select('id, full_name, national_id, grade_level, class_section');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_committee_assignments').select('student_id, committee_number, seat_number, is_special').eq('period_id', currentPeriodId);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
@@ -708,11 +753,18 @@ async function printSpecialConditions(win) {
   if (!currentPeriodId) { win.close(); return; }
 
   const [{ data: assignments }, { data: members }] = await Promise.all([
-    sb.from('exam_committee_assignments')
-      .select('student_id, seat_number, students(full_name, national_id, grade_level)')
-      .eq('period_id', currentPeriodId).eq('is_special', true)
-      .order('seat_number', { ascending: true }),
-    sb.from('exam_special_members').select('student_id, condition_note').eq('period_id', currentPeriodId),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_committee_assignments')
+        .select('student_id, seat_number, students(full_name, national_id, grade_level)')
+        .eq('period_id', currentPeriodId).eq('is_special', true);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('seat_number', { ascending: true });
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_special_members').select('student_id, condition_note').eq('period_id', currentPeriodId);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه طلاب باللجنة الخاصة مسكّنين لهذه الفترة بعد'); return; }
@@ -775,8 +827,16 @@ async function printCommitteeRoster(win) {
   if (!currentPeriodId || !currentPeriodRow) { win.close(); return; }
 
   const [{ data: assignments }, { data: locations }] = await Promise.all([
-    sb.from('exam_committee_assignments').select('committee_number, is_special, students(grade_level)').eq('period_id', currentPeriodId),
-    sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_committee_assignments').select('committee_number, is_special, students(grade_level)').eq('period_id', currentPeriodId);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
@@ -972,11 +1032,13 @@ async function downloadLabelsPdf(innerHtml, filename) {
 async function printStudentLabels() {
   if (!currentPeriodId) return;
 
-  const { data } = await sb.from('exam_committee_assignments')
-    .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
-    .eq('period_id', currentPeriodId)
-    .order('committee_number', { ascending: true })
-    .order('seat_number', { ascending: true });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_committee_assignments')
+      .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
+      .eq('period_id', currentPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('committee_number', { ascending: true }).order('seat_number', { ascending: true });
+  });
 
   if (!data || data.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
 
@@ -998,11 +1060,13 @@ async function printStudentLabels() {
 async function printStudentLabelsByGrade() {
   if (!currentPeriodId) return;
 
-  const { data } = await sb.from('exam_committee_assignments')
-    .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
-    .eq('period_id', currentPeriodId)
-    .order('committee_number', { ascending: true })
-    .order('seat_number', { ascending: true });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_committee_assignments')
+      .select('committee_number, is_special, seat_number, students(full_name, national_id, grade_level)')
+      .eq('period_id', currentPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('committee_number', { ascending: true }).order('seat_number', { ascending: true });
+  });
 
   if (!data || data.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
 
@@ -1039,14 +1103,26 @@ document.getElementById('exam-messages-export-btn').addEventListener('click', as
   const template = document.getElementById('exam-message-template').value;
   if (!template.trim()) { errEl.textContent = 'اكتب نص الرسالة أولاً'; errEl.style.display = 'block'; return; }
 
-  const { data: assignments } = await sb.from('exam_committee_assignments')
-    .select('student_id, committee_number, seat_number, is_special').eq('period_id', currentPeriodId);
+  const { data: assignments } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_committee_assignments')
+      .select('student_id, committee_number, seat_number, is_special').eq('period_id', currentPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   if (!assignments || assignments.length === 0) { errEl.textContent = 'ما فيه توزيع مولّد لهذه الفترة بعد'; errEl.style.display = 'block'; return; }
 
   const [{ data: students }, { data: locations }] = await Promise.all([
-    sb.from('students').select('id, full_name, grade_level, mobile'),
-    sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId),
+    readScopedBySchool(scoped => {
+      let q = sb.from('students').select('id, full_name, grade_level, mobile');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   const studentMap = {};
