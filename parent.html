@@ -192,8 +192,12 @@
     <img id="hero-logo" src="logo.png" alt="شعار مدرسة المروج المتوسطة" />
     <div>
       <h1>خطة الأسبوع الدراسي</h1>
-      <p class="sub">مدرسة المروج المتوسطة</p>
+      <p class="sub" id="hero-school-name">مدرسة المروج المتوسطة</p>
     </div>
+  </div>
+
+  <div id="school-not-found" class="hidden" style="padding:40px 20px; text-align:center; color:#c0392b; font-weight:700;">
+    تعذر تحديد المدرسة. تأكد إن الرابط اللي استخدمته صحيح، أو تواصل مع إدارة المدرسة.
   </div>
 
   <div id="weekly-view">
@@ -351,6 +355,24 @@ const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
+/* ===== تحديد المدرسة من رابط الصفحة (?school=المعرف-المختصر) =====
+ * بدون باراميتر (رابط قديم كان يشتغل قبل دعم تعدد المدارس) نفترض مدرسة المروج تلقائيًا
+ * حتى ما ينكسر أي رابط سبق إرساله لأولياء الأمور. */
+let currentSchoolId = null;
+let currentSchoolName = 'مدرسة المروج المتوسطة';
+async function resolveSchool() {
+  const slug = new URLSearchParams(location.search).get('school') || 'al-murooj';
+  const { data } = await sb.from('schools').select('id, name').eq('slug', slug).maybeSingle();
+  if (data) {
+    currentSchoolId = data.id;
+    currentSchoolName = data.name;
+    const nameEl = document.getElementById('hero-school-name');
+    if (nameEl) nameEl.textContent = data.name;
+    document.title = 'خطة الأسبوع - ' + data.name;
+  }
+  return data;
+}
+
 let publishedWeeks = [];
 let currentWeekIndex = 0;
 let currentGrade = 'first_intermediate';
@@ -404,8 +426,24 @@ document.getElementById('grade-tabs').addEventListener('click', (e) => {
   loadPlans();
 });
 
+// يشغّل استعلام بفلتر المدرسة، ولو فشل (مثلًا عمود school_id لسا ما انضاف بقاعدة البيانات
+// لأن SQL ترقية تعدد المدارس ما نُفذ بعد) يعيد المحاولة بدون الفلتر - عشان الصفحة تستمر
+// تشتغل عادي (بمدرسة وحدة) بدل ما تنكسر بسبب ترتيب رفع الملفات مقابل تنفيذ SQL
+async function runScoped(factory) {
+  let res = await factory(true);
+  if (res.error && currentSchoolId) {
+    console.warn('استعلام مع فلتر المدرسة فشل - إعادة المحاولة بدونه:', res.error.message);
+    res = await factory(false);
+  }
+  return res;
+}
+
 async function loadPublishedWeeks() {
-  const { data } = await sb.from('weekly_plan_publish_settings').select('week_number').eq('is_published', true).order('week_number', { ascending: true });
+  const { data } = await runScoped(scoped => {
+    let q = sb.from('weekly_plan_publish_settings').select('week_number').eq('is_published', true);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('week_number', { ascending: true });
+  });
   publishedWeeks = (data || []).map(r => r.week_number);
   currentWeekIndex = publishedWeeks.length > 0 ? publishedWeeks.length - 1 : 0;
 }
@@ -439,8 +477,11 @@ async function loadPlans() {
   renderWeekTabs();
   const currentWeek = publishedWeeks[currentWeekIndex];
 
-  const { data: noteData, error: noteError } = await sb.from('weekly_admin_notes')
-    .select('note').eq('grade_level', currentGrade).eq('week_number', currentWeek).maybeSingle();
+  const { data: noteData, error: noteError } = await runScoped(scoped => {
+    let q = sb.from('weekly_admin_notes').select('note').eq('grade_level', currentGrade).eq('week_number', currentWeek);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.maybeSingle();
+  });
   if (noteError) console.warn('weekly_admin_notes fetch failed (likely missing RLS public-read policy):', noteError);
 
   const noteContainer = document.getElementById('admin-note-container');
@@ -454,9 +495,13 @@ async function loadPlans() {
     noteContainer.innerHTML = '';
   }
 
-  const { data: plans, error } = await sb.from('weekly_plans')
-    .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections, subjects(name)')
-    .eq('grade_level', currentGrade).eq('week_number', currentWeek);
+  const { data: plans, error } = await runScoped(scoped => {
+    let q = sb.from('weekly_plans')
+      .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections, subjects(name)')
+      .eq('grade_level', currentGrade).eq('week_number', currentWeek);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   const bentoContainer = document.getElementById('bento-container');
   const alertContainer = document.getElementById('alert-container');
@@ -642,14 +687,14 @@ function buildWeeklyPlanPrintHtml() {
       <img src="${document.getElementById('hero-logo').src}" />
       <div class="title">
         <h1>الخطة الأسبوعية</h1>
-        <p>مدرسة المروج — ${gradeLabel} — ${weekLabel}</p>
+        <p>${currentSchoolName} — ${gradeLabel} — ${weekLabel}</p>
       </div>
       <div class="date">تاريخ الطباعة<br>${printDate}</div>
     </div>
     ${noteEl ? `<div class="plan-note"><span class="ic-em">🔔</span><div><b>تعليمات الإدارة:</b> ${noteEl.textContent}</div></div>` : ''}
     ${testSubjects.length > 0 ? `<div class="plan-test-summary"><span class="ic-em">⚠️</span><div><b>تذكير مهم:</b> يوجد اختبار في ${testSubjects.join('، ')}</div></div>` : ''}
     <div class="cards-grid">${cardsHtml}</div>
-    <p class="print-footer">مدرسة المروج — نظام إدارة المدرسة</p>`;
+    <p class="print-footer">${currentSchoolName} — نظام إدارة المدرسة</p>`;
 }
 function shareWeeklyPlanPdf() {
   if (!lastPlans || lastPlans.length === 0) return;
@@ -664,7 +709,19 @@ function shareWeeklyPlanPdf() {
   else { img.onload = doPrint; img.onerror = doPrint; }
 }
 
-loadPublishedWeeks().then(loadPlans);
+async function bootParentPage() {
+  const school = await resolveSchool();
+  if (!school) {
+    document.getElementById('school-not-found').classList.remove('hidden');
+    document.getElementById('weekly-view').classList.add('hidden-view');
+    document.getElementById('schedule-view').classList.add('hidden-view');
+    document.getElementById('bottom-nav').classList.add('hidden-view');
+    return;
+  }
+  await loadPublishedWeeks();
+  await loadPlans();
+}
+bootParentPage();
 
 /* ===== الجدول الدراسي ===== */
 const SCHEDULE_DAYS = [
@@ -713,7 +770,11 @@ async function refreshScheduleSections() {
   sel.innerHTML = '<option value="">جارٍ التحميل...</option>';
   document.getElementById('sch-table-container').innerHTML = '';
 
-  const { data } = await sb.from('class_schedules').select('class_section').eq('grade_level', schGrade);
+  const { data } = await runScoped(scoped => {
+    let q = sb.from('class_schedules').select('class_section').eq('grade_level', schGrade);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const sections = [...new Set((data || []).map(r => r.class_section))].sort((a, b) => a - b);
 
   if (sections.length === 0) {
@@ -731,9 +792,13 @@ async function loadScheduleTable() {
   if (!schSection) { container.innerHTML = ''; return; }
   container.innerHTML = '<div class="empty-state"><p>جارٍ التحميل...</p></div>';
 
-  const { data } = await sb.from('class_schedules')
-    .select('day_of_week, period_number, subject_name, teacher_name')
-    .eq('grade_level', schGrade).eq('class_section', schSection);
+  const { data } = await runScoped(scoped => {
+    let q = sb.from('class_schedules')
+      .select('day_of_week, period_number, subject_name, teacher_name')
+      .eq('grade_level', schGrade).eq('class_section', schSection);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   const map = {};
   (data || []).forEach(r => { map[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
@@ -809,7 +874,7 @@ function buildSchedulePrintHtml() {
       <img src="${document.getElementById('hero-logo').src}" />
       <div class="title">
         <h1>الجدول الدراسي</h1>
-        <p>مدرسة المروج — ${gradeLabel} — الفصل ${schSection}</p>
+        <p>${currentSchoolName} — ${gradeLabel} — الفصل ${schSection}</p>
       </div>
       <div class="date">تاريخ الطباعة<br>${printDate}</div>
     </div>
@@ -819,7 +884,7 @@ function buildSchedulePrintHtml() {
       </thead>
       <tbody>${rows}</tbody>
     </table>
-    <p class="print-footer">مدرسة المروج — نظام إدارة المدرسة</p>`;
+    <p class="print-footer">${currentSchoolName} — نظام إدارة المدرسة</p>`;
 }
 
 document.getElementById('sch-print-btn').addEventListener('click', () => {
