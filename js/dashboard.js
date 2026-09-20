@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool } from './core.js';
 
 /* ===== قراءة weekly_plans مقيّدة بمدرسة الحساب (نفس منطق js/weekly-plan.js) ===== */
 async function readWeeklyPlansScoped(weekNumber) {
@@ -35,8 +35,12 @@ function classColorVar(i) { return `var(${CLASS_COLOR_VARS[i % CLASS_COLOR_VARS.
 async function renderMyWeeklyScheduleGrid() {
   const wrap = document.getElementById('dash-weekly-schedule');
   if (!wrap) return;
-  const { data: rows } = await sb.from('class_schedules')
-    .select('day_of_week, period_number, grade_level, class_section, subject_name, teacher_name');
+  const { data: rows } = await readScopedBySchool(scoped => {
+    let q = sb.from('class_schedules')
+      .select('day_of_week, period_number, grade_level, class_section, subject_name, teacher_name');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const myName = normalizeArText(currentProfile.full_name);
   const mine = (rows || []).filter(r => normalizeArText(r.teacher_name) === myName);
   if (mine.length === 0) { wrap.innerHTML = ''; return; }
@@ -86,8 +90,16 @@ async function renderMyWeeklyScheduleGrid() {
 async function loadMyTodayScheduleLines(dayKey, dateStr) {
   const myName = normalizeArText(currentProfile.full_name);
   const [{ data: baselineRows }, { data: changeRows }] = await Promise.all([
-    sb.from('class_schedules').select('*').eq('day_of_week', dayKey),
-    sb.from('daily_schedule_changes').select('*').eq('change_date', dateStr),
+    readScopedBySchool(scoped => {
+      let q = sb.from('class_schedules').select('*').eq('day_of_week', dayKey);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('daily_schedule_changes').select('*').eq('change_date', dateStr);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
   const baseline = baselineRows || [];
   const changes = changeRows || [];
