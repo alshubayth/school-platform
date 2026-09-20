@@ -1,7 +1,8 @@
 import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
-const SCHOOL_LOGO = new URL('logo.png', window.location.href).href;
+// شعار الهيئة الملكية للجبيل وينبع - يظهر بمخرجات قسم الاختبارات المطبوعة
+const SCHOOL_LOGO = new URL('logo-rc.png', window.location.href).href;
 
 setupCollapsible('exam-import-toggle', 'exam-import-body', 'exam-import-chevron');
 setupCollapsible('exam-period-toggle', 'exam-period-body', 'exam-period-chevron');
