@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, gradeLabels, backToTiles } from './core.js';
+import { sb, currentUserId, currentProfile, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { DAYS, PERIODS } from './schedule.js';
 import { VOUCHER_LOGO_DATA_URI } from './budget.js';
 
@@ -274,8 +274,11 @@ async function renderView() {
 async function renderList(container) {
   container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
-  let query = sb.from('classroom_visits').select('*, profiles!classroom_visits_visitor_id_fkey(full_name)').order('visit_date', { ascending: false }).order('created_at', { ascending: false });
-  const { data, error } = await query;
+  const { data, error } = await readScopedBySchool(scoped => {
+    let query = sb.from('classroom_visits').select('*, profiles!classroom_visits_visitor_id_fkey(full_name)');
+    if (scoped && currentSchoolId) query = query.eq('school_id', currentSchoolId);
+    return query.order('visit_date', { ascending: false }).order('created_at', { ascending: false });
+  });
   const visits = data || [];
 
   let html = '';
@@ -576,14 +579,22 @@ async function refreshSectionOptions() {
 async function loadScheduleForSlotPicker() {
   cvSchedule = {};
   if (!cvSection) return;
-  const { data } = await sb.from('class_schedules')
-    .select('day_of_week, period_number, subject_name, teacher_name')
-    .eq('grade_level', cvGrade).eq('class_section', cvSection);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('class_schedules')
+      .select('day_of_week, period_number, subject_name, teacher_name')
+      .eq('grade_level', cvGrade).eq('class_section', cvSection);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   (data || []).forEach(r => { cvSchedule[r.day_of_week + '-' + r.period_number] = { subject: r.subject_name || '', teacher: r.teacher_name || '' }; });
 }
 
 async function loadTeachersList() {
-  const { data } = await sb.from('profiles').select('id, full_name').eq('role', 'teacher').order('full_name');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('profiles').select('id, full_name').eq('role', 'teacher');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('full_name');
+  });
   cvTeachers = data || [];
   const sel = document.getElementById('cv-teacher-select');
   if (sel) sel.innerHTML = '<option value="">اختر حساب المعلم</option>' + cvTeachers.map(t => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('');
@@ -690,7 +701,7 @@ async function saveVisit() {
     payload.visitor_id = currentUserId;
     payload.visitor_role = currentProfile.role;
     payload.published = false;
-    ({ error } = await sb.from('classroom_visits').insert(payload));
+    ({ error } = await writeWithSchool(extra => sb.from('classroom_visits').insert({ ...payload, ...extra })));
   }
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; return; }
 
