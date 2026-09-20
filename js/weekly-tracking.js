@@ -1,4 +1,4 @@
-import { sb, gradeLabels, currentProfile, currentUserId, isAdminOrDeputy, currentSchoolId } from './core.js';
+import { sb, gradeLabels, currentProfile, currentUserId, isAdminOrDeputy, currentSchoolId, writeWithSchool } from './core.js';
 
 let wtWeek = 1;
 
@@ -13,10 +13,22 @@ export async function loadWeeklyTrackingModule() {
 
 /* ---------- صلاحية عرض القسم لمعلمين محددين (المدير/الوكيل) ---------- */
 async function loadPermsSection() {
-  const [{ data: teachers }, { data: perms, error: permsError }] = await Promise.all([
-    sb.from('profiles').select('id, full_name').eq('role', 'teacher').order('full_name'),
-    sb.from('weekly_tracking_permissions').select('id, profile_id, profiles!weekly_tracking_permissions_profile_id_fkey(full_name)'),
+  // مقيّد بمدرسة الحساب الحالي - وإلا قائمة "إعطاء الصلاحية" تطلع معلمين من كل المدارس مع بعض
+  let teachersQuery = sb.from('profiles').select('id, full_name').eq('role', 'teacher').order('full_name');
+  if (currentSchoolId) teachersQuery = teachersQuery.eq('school_id', currentSchoolId);
+  let permsQuery = sb.from('weekly_tracking_permissions').select('id, profile_id, profiles!weekly_tracking_permissions_profile_id_fkey(full_name)');
+  if (currentSchoolId) permsQuery = permsQuery.eq('school_id', currentSchoolId);
+
+  let [{ data: teachers, error: teachersError }, { data: perms, error: permsError }] = await Promise.all([
+    teachersQuery,
+    permsQuery,
   ]);
+  if (teachersError && currentSchoolId) {
+    ({ data: teachers } = await sb.from('profiles').select('id, full_name').eq('role', 'teacher').order('full_name'));
+  }
+  if (permsError && currentSchoolId) {
+    ({ data: perms, error: permsError } = await sb.from('weekly_tracking_permissions').select('id, profile_id, profiles!weekly_tracking_permissions_profile_id_fkey(full_name)'));
+  }
   if (permsError) console.error('weekly_tracking_permissions fetch error:', permsError);
 
   const grantedIds = new Set((perms || []).map(p => p.profile_id));
@@ -64,7 +76,8 @@ document.getElementById('wt-perm-submit').addEventListener('click', async () => 
   const profileId = document.getElementById('wt-perm-employee').value;
   if (!profileId) { errEl.textContent = 'اختر معلم أولاً'; errEl.style.display = 'block'; return; }
 
-  const { error } = await sb.from('weekly_tracking_permissions').insert({ profile_id: profileId, granted_by: currentUserId });
+  const { error } = await writeWithSchool(extra =>
+    sb.from('weekly_tracking_permissions').insert({ profile_id: profileId, granted_by: currentUserId, ...extra }));
   if (error) {
     errEl.textContent = error.message.includes('duplicate') ? 'هذا المعلم عنده الصلاحية بالفعل' : 'حدث خطأ: ' + error.message;
     errEl.style.display = 'block';
