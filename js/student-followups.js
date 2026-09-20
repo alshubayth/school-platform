@@ -1,4 +1,4 @@
-import { sb, currentUserId, gradeLabels, backToTiles } from './core.js';
+import { sb, currentUserId, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { VOUCHER_LOGO_DATA_URI } from './budget.js';
 
 document.getElementById('back-to-tiles-12').addEventListener('click', backToTiles);
@@ -84,7 +84,11 @@ async function refreshSectionOptions() {
   sectionSelect.innerHTML = '<option value="">جارٍ التحميل...</option>';
   document.getElementById('sf-students-list').innerHTML = '';
 
-  const { data } = await sb.from('students').select('class_section').eq('grade_level', sfGrade);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('students').select('class_section').eq('grade_level', sfGrade);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const sections = [...new Set((data || []).map(s => s.class_section).filter(n => n > 0))].sort((a, b) => a - b);
 
   if (sections.length === 0) {
@@ -109,8 +113,12 @@ async function renderStudentsList() {
   if (!sfSection) { container.innerHTML = ''; return; }
   container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
-  const { data } = await sb.from('students').select('id, full_name, national_id')
-    .eq('grade_level', sfGrade).eq('class_section', sfSection).order('full_name');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('students').select('id, full_name, national_id')
+      .eq('grade_level', sfGrade).eq('class_section', sfSection).order('full_name');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   studentsCache = data || [];
   renderFilteredStudentRows();
 }
@@ -205,11 +213,12 @@ function buildStudentRow(student) {
         score = parseFloat(input.value);
       }
 
-      const { error } = await sb.from('student_followups').insert({
+      const { error } = await writeWithSchool(extra => sb.from('student_followups').insert({
         student_id: student.id, grade_level: sfGrade, class_section: sfSection,
         record_date: sfDate, type, note_text: noteText, score,
         created_by: currentUserId,
-      });
+        ...extra,
+      }));
       if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
       if (type === 'note') { card.querySelector('.sf-note-input').value = ''; }
@@ -237,9 +246,13 @@ function buildStudentRow(student) {
 
 async function renderLog(logWrap, studentId) {
   logWrap.innerHTML = '<p style="font-size:12.5px; color:var(--slate);">جارٍ التحميل...</p>';
-  const { data } = await sb.from('student_followups')
-    .select('id, record_date, type, note_text, score')
-    .eq('student_id', studentId).order('record_date', { ascending: false }).order('created_at', { ascending: false });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('student_followups')
+      .select('id, record_date, type, note_text, score')
+      .eq('student_id', studentId).order('record_date', { ascending: false }).order('created_at', { ascending: false });
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
 
   const rows = data || [];
   if (rows.length === 0) {
@@ -294,7 +307,11 @@ async function refreshOverviewSectionOptions() {
   document.getElementById('sfo-class-stats').innerHTML = '';
   document.getElementById('sfo-student-list').innerHTML = '';
 
-  const { data } = await sb.from('students').select('class_section').eq('grade_level', sfoGrade);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('students').select('class_section').eq('grade_level', sfoGrade);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const sections = [...new Set((data || []).map(s => s.class_section).filter(n => n > 0))].sort((a, b) => a - b);
 
   if (sections.length === 0) {
@@ -322,8 +339,16 @@ async function loadOverviewClassData() {
   listEl.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
   const [{ data: students }, { data: followups }] = await Promise.all([
-    sb.from('students').select('id, full_name').eq('grade_level', sfoGrade).eq('class_section', sfoSection).order('full_name'),
-    sb.from('student_followups').select('id, student_id, type, score').eq('grade_level', sfoGrade).eq('class_section', sfoSection),
+    readScopedBySchool(scoped => {
+      let q = sb.from('students').select('id, full_name').eq('grade_level', sfoGrade).eq('class_section', sfoSection).order('full_name');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('student_followups').select('id, student_id, type, score').eq('grade_level', sfoGrade).eq('class_section', sfoSection);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
   sfoStudentsCache = students || [];
   sfoFollowupsCache = followups || [];
@@ -434,9 +459,13 @@ async function openStudentDetail(studentId) {
   document.getElementById('sf-detail-name').textContent = student.full_name;
   document.getElementById('sf-detail-sub').textContent = `${gradeLabels[sfoGrade] || ''} — الفصل ${sfoSection ?? ''}`;
 
-  const { data } = await sb.from('student_followups')
-    .select('id, record_date, type, note_text, score')
-    .eq('student_id', studentId).order('record_date', { ascending: false }).order('created_at', { ascending: false });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('student_followups')
+      .select('id, record_date, type, note_text, score')
+      .eq('student_id', studentId).order('record_date', { ascending: false }).order('created_at', { ascending: false });
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const rows = data || [];
 
   renderDetailStats(rows);
@@ -469,9 +498,13 @@ function renderDetailLog(rows) {
   }
   detailLog.innerHTML = '';
   rows.forEach(r => detailLog.appendChild(buildLogLine(r, async () => {
-    const { data } = await sb.from('student_followups')
-      .select('id, record_date, type, note_text, score')
-      .eq('student_id', sfDetailStudentId).order('record_date', { ascending: false }).order('created_at', { ascending: false });
+    const { data } = await readScopedBySchool(scoped => {
+      let q = sb.from('student_followups')
+        .select('id, record_date, type, note_text, score')
+        .eq('student_id', sfDetailStudentId).order('record_date', { ascending: false }).order('created_at', { ascending: false });
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    });
     const fresh = data || [];
     renderDetailStats(fresh);
     renderDetailLog(fresh);
@@ -488,9 +521,13 @@ async function printStudentReport(studentId) {
     || (await sb.from('students').select('id, full_name, grade_level, class_section').eq('id', studentId).maybeSingle()).data;
   if (!student) return;
 
-  const { data } = await sb.from('student_followups')
-    .select('id, record_date, type, note_text, score')
-    .eq('student_id', studentId).order('record_date', { ascending: false }).order('created_at', { ascending: false });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('student_followups')
+      .select('id, record_date, type, note_text, score')
+      .eq('student_id', studentId).order('record_date', { ascending: false }).order('created_at', { ascending: false });
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const rows = data || [];
   const notes = rows.filter(r => r.type === 'note');
   const participationScores = rows.filter(r => r.type === 'participation' && r.score != null).map(r => r.score);
