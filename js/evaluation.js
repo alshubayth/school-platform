@@ -1,4 +1,4 @@
-import { sb, currentProfile } from './core.js';
+import { sb, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { VOUCHER_LOGO_DATA_URI } from './budget.js';
 
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
@@ -32,17 +32,32 @@ export async function loadNotesModule() {
 
 async function refreshAll() {
   const queries = [
-    sb.from('employees').select('id, full_name, job_title, profile_id').order('full_name'),
+    readScopedBySchool(scoped => {
+      let q = sb.from('employees').select('id, full_name, job_title, profile_id');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('full_name');
+    }),
     sb.from('perf_criteria').select('id, name, sort_order, weight').order('sort_order'),
     sb.from('perf_details').select('id, criterion_id, name, weight_type, weight_value, active').order('created_at'),
     sb.from('perf_settings').select('academic_year').eq('id', 1).maybeSingle(),
-    sb.from('class_schedules').select('teacher_name'),
-    sb.from('duty_roster').select('teacher_profile_id'),
+    readScopedBySchool(scoped => {
+      let q = sb.from('class_schedules').select('teacher_name');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('duty_roster').select('teacher_profile_id');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ];
   if (isAdmin) {
-    queries.push(sb.from('perf_violations')
-      .select('id, employee_id, criterion_id, detail_id, academic_year, occurred_date, content, computed_deduction, recorded_by, created_at, perf_criteria(name), perf_details(name), profiles:recorded_by(full_name)')
-      .order('created_at', { ascending: false }));
+    queries.push(readScopedBySchool(scoped => {
+      let q = sb.from('perf_violations')
+        .select('id, employee_id, criterion_id, detail_id, academic_year, occurred_date, content, computed_deduction, recorded_by, created_at, perf_criteria(name), perf_details(name), profiles:recorded_by(full_name)');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('created_at', { ascending: false });
+    }));
   }
   const results = await Promise.all(queries);
   employeesCache = results[0].data || [];
@@ -450,7 +465,7 @@ document.getElementById('note-submit').addEventListener('click', async () => {
 
   errEl.style.display = 'none';
   const { data: userData } = await sb.auth.getUser();
-  const { error } = await sb.from('perf_violations').insert({
+  const { error } = await writeWithSchool(extra => sb.from('perf_violations').insert({
     employee_id: employeeId,
     criterion_id: criterionId,
     detail_id: detailId,
@@ -459,7 +474,8 @@ document.getElementById('note-submit').addEventListener('click', async () => {
     content,
     computed_deduction: deduction,
     recorded_by: userData.user.id,
-  });
+    ...extra,
+  }));
   if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return; }
 
   document.getElementById('note-text').value = '';
