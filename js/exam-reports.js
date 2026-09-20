@@ -1,4 +1,4 @@
-import { sb, currentUserId, backToTiles } from './core.js';
+import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
@@ -394,7 +394,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   const keyRaw = buildManualKey(letterSelections, parsedData.choiceCounts, reversedOrder);
 
   const stats = computeExamStats({ ...parsedData, keyRaw, reversedOrder });
-  const { error } = await sb.from('exam_reports').insert({
+  const { error } = await writeWithSchool(extra => sb.from('exam_reports').insert({
     title,
     subject_name: document.getElementById('er-subject').value.trim() || null,
     grade_level: document.getElementById('er-grade').value.trim() || null,
@@ -408,7 +408,8 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     // ترميز الاختيارات المستخدم عشان تعديل المفتاح لاحقًا يفهم نفس الحروف صح
     raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder },
     created_by: currentUserId,
-  });
+    ...extra,
+  }));
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
   parsedData = null;
@@ -419,9 +420,12 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
 
 async function loadSavedList() {
   const listEl = document.getElementById('er-saved-list');
-  const { data, error } = await sb.from('exam_reports')
-    .select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at')
-    .order('created_at', { ascending: false });
+  const { data, error } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_reports')
+      .select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('created_at', { ascending: false });
+  });
   if (error) { listEl.innerHTML = '<p style="color:var(--danger); font-size:12.5px;">تعذر تحميل التقارير</p>'; return; }
   if (!data || data.length === 0) {
     listEl.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه تقارير محفوظة بعد</p></div>';
