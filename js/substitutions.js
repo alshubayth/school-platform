@@ -7,7 +7,7 @@
  *     حصة معلم غايب لوقت ثاني بنفس الفصل - عشان الفصل ما تضيع عليه حصته)
  * أي عملية تبديل تتحقق أول من عدم تعارضها مع حصص المعلمين الثانية بنفس الوقت قبل حفظها.
  */
-import { sb, currentUserId, currentProfile, isAdminOrDeputy, gradeLabels, backToTiles } from './core.js';
+import { sb, currentUserId, currentProfile, isAdminOrDeputy, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 
 document.getElementById('back-to-tiles-15').addEventListener('click', backToTiles);
 
@@ -47,14 +47,22 @@ export async function loadSubstitutionsModule() {
 }
 
 async function loadAllTeacherNames() {
-  const { data } = await sb.from('class_schedules').select('teacher_name');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('class_schedules').select('teacher_name');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const set = new Set((data || []).map(r => normalizeArText(r.teacher_name)).filter(Boolean));
   allTeacherNames = [...set].sort((a, b) => a.localeCompare(b, 'ar'));
 }
 
 async function loadSectionsForGrade(grade) {
   if (sectionsByGrade[grade]) return sectionsByGrade[grade];
-  const { data } = await sb.from('class_schedules').select('class_section').eq('grade_level', grade);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('class_schedules').select('class_section').eq('grade_level', grade);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const secs = [...new Set((data || []).map(r => r.class_section))].sort((a, b) => a - b);
   sectionsByGrade[grade] = secs;
   return secs;
@@ -79,9 +87,21 @@ async function refreshForDate() {
     return;
   }
   const [{ data: schedRows }, { data: absRows }, { data: changeRows }] = await Promise.all([
-    sb.from('class_schedules').select('*').eq('day_of_week', dayKey),
-    sb.from('daily_teacher_absences').select('*').eq('absence_date', subDate).order('created_at'),
-    sb.from('daily_schedule_changes').select('*').eq('change_date', subDate).order('period_number'),
+    readScopedBySchool(scoped => {
+      let q = sb.from('class_schedules').select('*').eq('day_of_week', dayKey);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('daily_teacher_absences').select('*').eq('absence_date', subDate);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('created_at');
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('daily_schedule_changes').select('*').eq('change_date', subDate);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('period_number');
+    }),
   ]);
   scheduleCache = schedRows || [];
   absencesCache = absRows || [];
@@ -133,9 +153,9 @@ document.getElementById('sub-absence-add-btn').addEventListener('click', async (
   if (!dayKey) { errEl.textContent = 'هذا اليوم إجازة أسبوعية - ما فيه جدول حصص'; errEl.style.display = 'block'; return; }
   const name = document.getElementById('sub-absence-teacher-select').value;
   if (!name) { errEl.textContent = 'اختر اسم المعلم أولاً'; errEl.style.display = 'block'; return; }
-  const { error } = await sb.from('daily_teacher_absences').insert({
-    absence_date: subDate, teacher_name: name, created_by: currentUserId,
-  });
+  const { error } = await writeWithSchool(extra => sb.from('daily_teacher_absences').insert({
+    absence_date: subDate, teacher_name: name, created_by: currentUserId, ...extra,
+  }));
   if (error) { errEl.textContent = 'تعذّرت الإضافة: ' + error.message; errEl.style.display = 'block'; return; }
   await refreshForDate();
 });
@@ -188,7 +208,11 @@ function buildTeacherMoveOptions(teacherName, currentPeriod, grade, section) {
 }
 // يعيد تحميل daily_schedule_changes فقط (بعد أي كتابة) عشان الكاش يبقى محدّث أثناء سلسلة تبديلات متتالية
 async function reloadChangesCache() {
-  const { data } = await sb.from('daily_schedule_changes').select('*').eq('change_date', subDate).order('period_number');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('daily_schedule_changes').select('*').eq('change_date', subDate);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('period_number');
+  });
   changesCache = data || [];
 }
 // يبدّل حصتين لنفس الفصل (المادة والمعلم يتبادلون) بعد التأكد إن ما فيه تعارض على أي معلم منقول
@@ -216,7 +240,7 @@ async function performClassSwap(grade, section, pA, pB) {
     { change_date: subDate, day_of_week: dayKey, grade_level: grade, class_section: section, period_number: pB,
       teacher_name: effA.teacher, subject_name: effA.subject, reason: 'swap', note: `تبديل مع الحصة ${pA}`, created_by: currentUserId },
   ];
-  const { error } = await sb.from('daily_schedule_changes').upsert(rows, { onConflict: 'change_date,grade_level,class_section,period_number' });
+  const { error } = await writeWithSchool(extra => sb.from('daily_schedule_changes').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'change_date,grade_level,class_section,period_number' }));
   if (error) return { ok: false, message: 'تعذّر التبديل: ' + error.message };
   await reloadChangesCache();
   return { ok: true };
@@ -313,7 +337,7 @@ async function performMerge(grade, section, period, absentSubject, absentName, m
       note: `بديل عن ${absentName}`, created_by: currentUserId,
     });
   }
-  const { error } = await sb.from('daily_schedule_changes').upsert(rows, { onConflict: 'change_date,grade_level,class_section,period_number' });
+  const { error } = await writeWithSchool(extra => sb.from('daily_schedule_changes').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'change_date,grade_level,class_section,period_number' }));
   if (error) return { ok: false, message: 'تعذّر الدمج: ' + error.message };
   await reloadChangesCache();
   return { ok: true };
@@ -322,12 +346,13 @@ async function performMerge(grade, section, period, absentSubject, absentName, m
 // تعيين معلم بديل عادي بحصة معيّنة (بدون أي تحقق تعارض - يُستدعى بعد التأكد إن المعلم متاح)
 async function assignSubstitute(grade, section, period, absentSubject, absentName, teacherName) {
   const dayKey = dayKeyFromDate(subDate);
-  const { error } = await sb.from('daily_schedule_changes').upsert({
+  const { error } = await writeWithSchool(extra => sb.from('daily_schedule_changes').upsert({
     change_date: subDate, day_of_week: dayKey,
     grade_level: grade, class_section: section, period_number: period,
     teacher_name: teacherName, subject_name: absentSubject || null,
     reason: 'substitute', note: `بديل عن ${absentName}`, created_by: currentUserId,
-  }, { onConflict: 'change_date,grade_level,class_section,period_number' });
+    ...extra,
+  }, { onConflict: 'change_date,grade_level,class_section,period_number' }));
   if (error) return { ok: false, message: 'تعذّرت الإضافة: ' + error.message };
   await reloadChangesCache();
   return { ok: true };
