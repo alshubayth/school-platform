@@ -198,6 +198,7 @@
 
   <div id="school-not-found" class="hidden" style="padding:40px 20px; text-align:center; color:#c0392b; font-weight:700;">
     تعذر تحديد المدرسة. تأكد إن الرابط اللي استخدمته صحيح، أو تواصل مع إدارة المدرسة.
+    <div id="school-not-found-detail" style="margin-top:10px; font-weight:500; font-size:12.5px; color:#8a3a30; direction:ltr; unicode-bidi:plaintext;"></div>
   </div>
 
   <div id="weekly-view">
@@ -362,7 +363,11 @@ let currentSchoolId = null;
 let currentSchoolName = 'مدرسة المروج المتوسطة';
 async function resolveSchool() {
   const slug = new URLSearchParams(location.search).get('school') || 'al-murooj';
-  const { data } = await sb.from('schools').select('id, name').eq('slug', slug).maybeSingle();
+  const { data, error } = await sb.from('schools').select('id, name').eq('slug', slug).maybeSingle();
+  if (error) {
+    console.error('resolveSchool error:', error);
+    window.__resolveSchoolError = error;
+  }
   if (data) {
     currentSchoolId = data.id;
     currentSchoolName = data.name;
@@ -712,6 +717,13 @@ function shareWeeklyPlanPdf() {
 async function bootParentPage() {
   const school = await resolveSchool();
   if (!school) {
+    const detailEl = document.getElementById('school-not-found-detail');
+    if (detailEl) {
+      const err = window.__resolveSchoolError;
+      detailEl.textContent = err
+        ? `(${err.code || '?'}) ${err.message || ''}`
+        : '(لا يوجد خطأ من الخادم - الاستعلام رجع فاضي: تأكد أن slug المدرسة صحيح بجدول schools)';
+    }
     document.getElementById('school-not-found').classList.remove('hidden');
     document.getElementById('weekly-view').classList.add('hidden-view');
     document.getElementById('schedule-view').classList.add('hidden-view');
