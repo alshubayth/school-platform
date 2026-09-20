@@ -66,6 +66,7 @@ const icons = {
   files: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>',
   examreports: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/><path d="M8 16.5h3l1.2 2.4 1.3-4.8 1 2.4h2"/></svg>',
   admintasks: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8 14.5 2 2 4-4.5"/></svg>',
+  contacts: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
 };
 
 // تجميع الأقسام لأربع مجموعات بالهيدر العلوي وبشبكة الرئيسية بدل عرضها كلها بصف واحد طويل
@@ -97,6 +98,7 @@ export const tiles = [
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold', group: 'extra' },
   { key: 'schools-admin', icon: icons.perms, title: 'إدارة المدارس والخدمات', desc: 'إضافة مدرسة جديدة وتفعيل خدماتها', roles: ['owner'], color: 'diamond-navy', group: 'admin' },
   { key: 'admin-tasks', icon: icons.admintasks, title: 'المهام الإدارية', desc: 'مهام كل أسبوع ومسؤول تنفيذها وحالتها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'admin' },
+  { key: 'school-contacts', icon: icons.contacts, title: 'بيانات التواصل', desc: 'أرقام تواصل المدرسة اللي تظهر لولي الأمر', roles: ['admin','deputy'], color: 'diamond-green', group: 'admin' },
 ];
 
 document.getElementById('login-btn').addEventListener('click', async () => {
@@ -454,6 +456,7 @@ export function hideAllModules() {
   document.getElementById('files-module').classList.add('hidden');
   document.getElementById('schools-admin-module').classList.add('hidden');
   document.getElementById('admin-tasks-module').classList.add('hidden');
+  document.getElementById('school-contacts-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -548,6 +551,10 @@ export async function openTile(key, title) {
     document.getElementById('admin-tasks-module').classList.remove('hidden');
     const { loadAdminTasksModule } = await import('./admin-tasks.js');
     loadAdminTasksModule();
+  } else if (key === 'school-contacts') {
+    document.getElementById('school-contacts-module').classList.remove('hidden');
+    const { loadSchoolContactsModule } = await import('./school-contacts.js');
+    loadSchoolContactsModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
