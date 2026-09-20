@@ -7,7 +7,7 @@
  * لو فصل معيّن عدد طلابه أكثر من عدد الأجهزة، الزيادة (لهذا الفصل بالذات) تظهر كتنبيه بدون
  * جهاز، بدون ما يأثر على باقي الفصول.
  */
-import { sb, currentUserId, gradeLabels, backToTiles } from './core.js';
+import { sb, currentUserId, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 
 document.getElementById('back-to-tiles-16').addEventListener('click', backToTiles);
 
@@ -32,7 +32,11 @@ export async function loadComputerLabModule() {
 
 /* ---------- إعداد عدد أجهزة المعمل ---------- */
 async function loadSettings() {
-  const { data } = await sb.from('lab_settings').select('*').eq('teacher_id', currentUserId);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('lab_settings').select('*').eq('teacher_id', currentUserId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const row = (data || [])[0];
   computerCount = row ? row.computer_count : null;
   document.getElementById('lab-computer-count').value = computerCount || '';
@@ -43,7 +47,7 @@ document.getElementById('lab-save-settings-btn').addEventListener('click', async
   errEl.style.display = 'none';
   const n = Number(document.getElementById('lab-computer-count').value);
   if (!n || n < 1) { errEl.textContent = 'أدخل عدد أجهزة صحيح'; errEl.style.display = 'block'; return; }
-  const { error } = await sb.from('lab_settings').upsert({ teacher_id: currentUserId, computer_count: n }, { onConflict: 'teacher_id' });
+  const { error } = await writeWithSchool(extra => sb.from('lab_settings').upsert({ teacher_id: currentUserId, computer_count: n, ...extra }, { onConflict: 'teacher_id' }));
   if (error) { errEl.textContent = 'تعذّر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
   computerCount = n;
   await renderSeatingSection();
@@ -69,7 +73,11 @@ function renderGradeTabs() {
 async function refreshSectionOptions() {
   const sel = document.getElementById('lab-section-select');
   sel.innerHTML = '<option value="">جارٍ التحميل...</option>';
-  const { data } = await sb.from('students').select('class_section').eq('grade_level', labGrade);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('students').select('class_section').eq('grade_level', labGrade);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const sections = [...new Set((data || []).map(s => s.class_section).filter(n => n > 0))].sort((a, b) => a - b);
   sel.innerHTML = sections.length === 0
     ? '<option value="">ما فيه طلاب مسجلين لهذه المرحلة بعد</option>'
@@ -82,16 +90,20 @@ document.getElementById('lab-add-class-btn').addEventListener('click', async () 
   const section = Number(document.getElementById('lab-section-select').value);
   if (!section) { errEl.textContent = 'اختر الفصل أولاً'; errEl.style.display = 'block'; return; }
 
-  const { error } = await sb.from('lab_classes').upsert({
-    teacher_id: currentUserId, grade_level: labGrade, class_section: section,
-  }, { onConflict: 'teacher_id,grade_level,class_section' });
+  const { error } = await writeWithSchool(extra => sb.from('lab_classes').upsert({
+    teacher_id: currentUserId, grade_level: labGrade, class_section: section, ...extra,
+  }, { onConflict: 'teacher_id,grade_level,class_section' }));
   if (error) { errEl.textContent = 'تعذّرت الإضافة: ' + error.message; errEl.style.display = 'block'; return; }
   await refreshClassesList();
   await renderSeatingSection();
 });
 
 async function refreshClassesList() {
-  const { data } = await sb.from('lab_classes').select('*').eq('teacher_id', currentUserId).order('created_at');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('lab_classes').select('*').eq('teacher_id', currentUserId).order('created_at');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   classesCache = data || [];
   renderClassesChips();
 }
@@ -121,8 +133,12 @@ function renderClassesChips() {
 // تتزامن أبدًا بنفس الوقت بالمعمل). يضمن كل طالب جديد ياخذ أول رقم فاضي *داخل فصله* فقط،
 // بدون ما يغيّر توزيع أي طالب موزّع مسبقًا (لا بفصله ولا بأي فصل ثاني).
 async function ensureSeatingForClass(lc) {
-  const { data: rosterData } = await sb.from('students').select('id, full_name')
-    .eq('grade_level', lc.grade_level).eq('class_section', lc.class_section).order('full_name');
+  const { data: rosterData } = await readScopedBySchool(scoped => {
+    let q = sb.from('students').select('id, full_name')
+      .eq('grade_level', lc.grade_level).eq('class_section', lc.class_section).order('full_name');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const roster = rosterData || [];
   const rosterIds = new Set(roster.map(s => s.id));
 
@@ -145,7 +161,7 @@ async function ensureSeatingForClass(lc) {
   const newRows = unassigned.slice(0, freeNumbers.length).map((s, i) => ({
     teacher_id: currentUserId, lab_class_id: lc.id, student_id: s.id, computer_number: freeNumbers[i],
   }));
-  if (newRows.length) await sb.from('lab_seat_assignments').insert(newRows);
+  if (newRows.length) await writeWithSchool(extra => sb.from('lab_seat_assignments').insert(newRows.map(r => ({ ...r, ...extra }))));
 
   const { data: finalSeats } = await sb.from('lab_seat_assignments').select('*').eq('lab_class_id', lc.id).order('computer_number');
   const infoById = new Map(roster.map(s => [s.id, s]));
