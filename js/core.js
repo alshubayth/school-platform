@@ -65,6 +65,7 @@ const icons = {
   computerlab: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
   files: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>',
   examreports: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/><path d="M8 16.5h3l1.2 2.4 1.3-4.8 1 2.4h2"/></svg>',
+  admintasks: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8 14.5 2 2 4-4.5"/></svg>',
 };
 
 // تجميع الأقسام لأربع مجموعات بالهيدر العلوي وبشبكة الرئيسية بدل عرضها كلها بصف واحد طويل
@@ -95,6 +96,7 @@ export const tiles = [
   { key: 'files', icon: icons.files, title: 'الملفات',              desc: 'رفع الملفات ومشاركتها حسب المجلد', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'extra' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold', group: 'extra' },
   { key: 'schools-admin', icon: icons.perms, title: 'إدارة المدارس والخدمات', desc: 'إضافة مدرسة جديدة وتفعيل خدماتها', roles: ['owner'], color: 'diamond-navy', group: 'admin' },
+  { key: 'admin-tasks', icon: icons.admintasks, title: 'المهام الإدارية', desc: 'مهام كل أسبوع ومسؤول تنفيذها وحالتها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'admin' },
 ];
 
 document.getElementById('login-btn').addEventListener('click', async () => {
@@ -451,6 +453,7 @@ export function hideAllModules() {
   document.getElementById('computerlab-module').classList.add('hidden');
   document.getElementById('files-module').classList.add('hidden');
   document.getElementById('schools-admin-module').classList.add('hidden');
+  document.getElementById('admin-tasks-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -541,6 +544,10 @@ export async function openTile(key, title) {
     document.getElementById('schools-admin-module').classList.remove('hidden');
     const { loadSchoolAdminModule } = await import('./school-admin.js');
     loadSchoolAdminModule();
+  } else if (key === 'admin-tasks') {
+    document.getElementById('admin-tasks-module').classList.remove('hidden');
+    const { loadAdminTasksModule } = await import('./admin-tasks.js');
+    loadAdminTasksModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
