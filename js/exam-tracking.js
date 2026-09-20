@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isAdminOrDeputy, gradeLabels, backToTiles } from './core.js';
+import { sb, currentUserId, currentProfile, isAdminOrDeputy, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 
 document.getElementById('back-to-tiles-10').addEventListener('click', backToTiles);
 
@@ -25,7 +25,11 @@ let tadqeeqIds = [];
 let periodsCache = [];
 
 export async function loadExamTrackingTile() {
-  const { data } = await sb.from('exam_periods').select('id, name').order('created_at', { ascending: false });
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_periods').select('id, name');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('created_at', { ascending: false });
+  });
   periodsCache = data || [];
   const select = document.getElementById('tracking-period-select');
   select.innerHTML = '<option value="">اختر فترة الاختبار...</option>';
@@ -46,7 +50,11 @@ async function initExamTracking(periodId) {
   document.getElementById('exam-tracking-list').innerHTML = '';
 
   if (staffCache.length === 0) {
-    const { data } = await sb.from('profiles').select('id, full_name, role').in('role', ['teacher', 'admin', 'deputy']).order('full_name');
+    const { data } = await readScopedBySchool(scoped => {
+      let q = sb.from('profiles').select('id, full_name, role').in('role', ['teacher', 'admin', 'deputy']);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('full_name');
+    });
     staffCache = data || [];
   }
   if (subjectsCache.length === 0) {
@@ -66,7 +74,11 @@ async function initExamTracking(periodId) {
 
 /* ---------- فرق الكنترول والتدقيق ---------- */
 async function refreshTeams() {
-  const { data } = await sb.from('exam_period_teams').select('team_type, member_id').eq('period_id', trackingPeriodId);
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_period_teams').select('team_type, member_id').eq('period_id', trackingPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   kontrolIds = (data || []).filter(r => r.team_type === 'kontrol').map(r => r.member_id);
   tadqeeqIds = (data || []).filter(r => r.team_type === 'tadqeeq').map(r => r.member_id);
 
@@ -99,7 +111,7 @@ document.getElementById('exam-teams-save').addEventListener('click', async () =>
     ...checkedKontrol.map(id => ({ period_id: trackingPeriodId, team_type: 'kontrol', member_id: id })),
     ...checkedTadqeeq.map(id => ({ period_id: trackingPeriodId, team_type: 'tadqeeq', member_id: id })),
   ];
-  if (rows.length > 0) await sb.from('exam_period_teams').insert(rows);
+  if (rows.length > 0) await writeWithSchool(extra => sb.from('exam_period_teams').insert(rows.map(r => ({ ...r, ...extra }))));
 
   kontrolIds = checkedKontrol;
   tadqeeqIds = checkedTadqeeq;
@@ -120,9 +132,10 @@ document.getElementById('exam-track-add-btn').addEventListener('click', async ()
 
   if (!subjectId || !teacherId) { errEl.textContent = 'اختر المادة والمعلم المسؤول'; errEl.style.display = 'block'; return; }
 
-  const { error } = await sb.from('exam_subject_assignments').insert({
+  const { error } = await writeWithSchool(extra => sb.from('exam_subject_assignments').insert({
     period_id: trackingPeriodId, subject_id: subjectId, grade_level: grade, responsible_teacher_id: teacherId,
-  });
+    ...extra,
+  }));
   if (error) {
     errEl.textContent = error.message.includes('duplicate') ? 'هذي المادة/المرحلة مضافة مسبقًا لهذه الفترة' : 'تعذرت الإضافة: ' + error.message;
     errEl.style.display = 'block';
@@ -161,9 +174,13 @@ function formatDateTime(iso) {
 }
 
 async function refreshAssignments() {
-  const { data: assignments } = await sb.from('exam_subject_assignments')
-    .select('id, subject_id, grade_level, responsible_teacher_id, subjects(name)')
-    .eq('period_id', trackingPeriodId).order('created_at', { ascending: true });
+  const { data: assignments } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_subject_assignments')
+      .select('id, subject_id, grade_level, responsible_teacher_id, subjects(name)')
+      .eq('period_id', trackingPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('created_at', { ascending: true });
+  });
 
   const container = document.getElementById('exam-tracking-list');
   container.innerHTML = '';
@@ -173,7 +190,11 @@ async function refreshAssignments() {
   }
 
   const assignmentIds = assignments.map(a => a.id);
-  const { data: allLogs } = await sb.from('exam_stage_log').select('assignment_id, stage_number, completed_by, completed_at').in('assignment_id', assignmentIds);
+  const { data: allLogs } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_stage_log').select('assignment_id, stage_number, completed_by, completed_at').in('assignment_id', assignmentIds);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
   const logsByAssignment = {};
   (allLogs || []).forEach(l => {
     if (!logsByAssignment[l.assignment_id]) logsByAssignment[l.assignment_id] = [];
@@ -272,13 +293,18 @@ function renderStageTracker(container, assignment, logs, badge) {
   stageWrap.querySelectorAll('.stage-approve-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const stageNum = parseInt(btn.dataset.stage);
-      const { error } = await sb.from('exam_stage_log').insert({
+      const { error } = await writeWithSchool(extra => sb.from('exam_stage_log').insert({
         assignment_id: assignment.id, stage_number: stageNum, completed_by: currentUserId,
-      });
+        ...extra,
+      }));
       if (error) { alert('تعذر اعتماد المرحلة: ' + error.message); return; }
 
-      const { data: freshLogs } = await sb.from('exam_stage_log')
-        .select('assignment_id, stage_number, completed_by, completed_at').eq('assignment_id', assignment.id);
+      const { data: freshLogs } = await readScopedBySchool(scoped => {
+        let q = sb.from('exam_stage_log')
+          .select('assignment_id, stage_number, completed_by, completed_at').eq('assignment_id', assignment.id);
+        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+        return q;
+      });
       const newLogs = freshLogs || [];
       if (badge) badge.textContent = `${newLogs.length}/12 مرحلة`;
       renderStageTracker(container, assignment, newLogs, badge);
@@ -293,9 +319,17 @@ async function renderAbsenceSection(container, assignment) {
   container.appendChild(absenceWrap);
 
   const [{ data: assignedStudents }, { data: absences }] = await Promise.all([
-    sb.from('exam_committee_assignments').select('student_id, committee_number, seat_number, is_special, students(full_name, national_id, grade_level)')
-      .eq('period_id', trackingPeriodId),
-    sb.from('exam_student_absences').select('student_id').eq('assignment_id', assignment.id),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_committee_assignments').select('student_id, committee_number, seat_number, is_special, students(full_name, national_id, grade_level)')
+        .eq('period_id', trackingPeriodId);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_student_absences').select('student_id').eq('assignment_id', assignment.id);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
   ]);
 
   const absentIds = new Set((absences || []).map(a => a.student_id));
@@ -326,7 +360,7 @@ async function renderAbsenceSection(container, assignment) {
     await sb.from('exam_student_absences').delete().eq('assignment_id', assignment.id);
     if (checkedIds.length > 0) {
       const rows = checkedIds.map(sid => ({ assignment_id: assignment.id, student_id: sid, recorded_by: currentUserId }));
-      await sb.from('exam_student_absences').insert(rows);
+      await writeWithSchool(extra => sb.from('exam_student_absences').insert(rows.map(r => ({ ...r, ...extra }))));
     }
     alert('تم حفظ الغياب');
   });
