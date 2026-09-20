@@ -272,8 +272,6 @@ function finishShowingDashboard(schoolNameOverride) {
   document.getElementById('switch-school-btn').classList.toggle('hidden', !isOwnerAccount);
   const brandSpan = document.querySelector('#dashboard-screen .brand span');
   if (brandSpan && schoolNameOverride) brandSpan.textContent = schoolNameOverride;
-  const warnEl = document.getElementById('owner-phase-warning');
-  if (warnEl) warnEl.classList.toggle('hidden', !isOwnerAccount);
   renderNav();
   renderDashboard();
 }
