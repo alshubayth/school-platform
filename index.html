@@ -1737,6 +1737,76 @@
       <div id="at-tasks-list"></div>
     </div>
 
+    <div id="school-contacts-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-21">→ رجوع للرئيسية</span>
+
+      <div class="sc-add-card">
+        <div class="sc-add-head">
+          <div class="icon-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </div>
+          <h4 id="sc-form-title">إضافة بيانات تواصل جديدة</h4>
+        </div>
+
+        <div class="at-add-row" style="margin-bottom:14px;">
+          <div>
+            <label class="at-field-label">المجموعة</label>
+            <input type="text" id="sc-group" list="sc-group-options" placeholder="مثال: الإدارة" />
+            <datalist id="sc-group-options"></datalist>
+          </div>
+          <div>
+            <label class="at-field-label">المسمى / الصفة</label>
+            <input type="text" id="sc-role" placeholder="مثال: وكيل شؤون الطلاب" />
+          </div>
+        </div>
+
+        <div class="at-add-row" style="margin-bottom:14px;">
+          <div>
+            <label class="at-field-label">الاسم (اختياري)</label>
+            <input type="text" id="sc-name" placeholder="اسم الشخص" />
+          </div>
+          <div>
+            <label class="at-field-label">وصف إضافي (اختياري)</label>
+            <input type="text" id="sc-sub" placeholder="مثال: أول متوسط (1-2-3-4)" />
+          </div>
+        </div>
+
+        <div class="at-add-row" style="margin-bottom:14px;">
+          <div>
+            <label class="at-field-label">رقم الجوال / الهاتف</label>
+            <input type="tel" id="sc-phone" placeholder="05XXXXXXXX" dir="ltr" style="text-align:right;" />
+          </div>
+          <div>
+            <label class="at-field-label">ملاحظة (اختياري)</label>
+            <input type="text" id="sc-note" placeholder="مثال: وقت الدوام الرسمي" />
+          </div>
+        </div>
+
+        <label class="at-field-label">وسيلة التواصل</label>
+        <div class="sc-type-grid" id="sc-type-grid">
+          <button type="button" class="sc-type-btn active" data-type="call">
+            <span class="t">اتصال فقط</span>
+          </button>
+          <button type="button" class="sc-type-btn" data-type="whatsapp">
+            <span class="t">واتساب فقط</span>
+          </button>
+          <button type="button" class="sc-type-btn" data-type="both">
+            <span class="t">اتصال وواتساب</span>
+          </button>
+        </div>
+
+        <div class="at-add-submit-row">
+          <div class="error-msg" id="sc-error" style="margin:0;"></div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn-secondary hidden" id="sc-cancel-edit-btn" style="width:auto; padding:10px 18px;">إلغاء التعديل</button>
+            <button type="button" class="btn-primary" id="sc-add-btn" style="width:auto; padding:10px 22px;">+ إضافة</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sc-contacts-list"></div>
+    </div>
+
     <div id="placeholder-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-2">→ رجوع للرئيسية</span>
       <div class="placeholder">
