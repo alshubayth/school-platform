@@ -1662,6 +1662,50 @@
       <div id="sa-schools-list"></div>
     </div>
 
+    <div id="admin-tasks-module" class="panel hidden">
+      <span class="back-link" id="back-to-tiles-20">→ رجوع للرئيسية</span>
+
+      <div class="week-nav" style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
+        <button id="at-week-prev" style="width:auto; padding:8px 16px;">السابق</button>
+        <span id="at-week-label" style="font-weight:700;">الأسبوع 1</span>
+        <button id="at-week-next" style="width:auto; padding:8px 16px;">التالي</button>
+      </div>
+
+      <div class="form-card">
+        <h4>+ إضافة مهمة</h4>
+        <div class="form-row">
+          <div>
+            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">المهمة</label>
+            <input type="text" id="at-title" placeholder="مثال: متابعة صيانة أجهزة معمل الحاسب" />
+          </div>
+          <div>
+            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">مسؤول التنفيذ</label>
+            <select id="at-responsible"></select>
+            <input type="text" id="at-responsible-other" placeholder="اكتب الاسم" style="display:none; margin-top:8px;" />
+          </div>
+        </div>
+        <div class="form-row" style="margin-top:10px;">
+          <div>
+            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الأولوية</label>
+            <select id="at-priority">
+              <option value="important_urgent">هام وعاجل</option>
+              <option value="important_not_urgent">هام وغير عاجل</option>
+              <option value="urgent_not_important">عاجل وغير هام</option>
+              <option value="not_important_not_urgent">غير هام وغير عاجل</option>
+            </select>
+          </div>
+          <div>
+            <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">ملاحظة (اختياري)</label>
+            <input type="text" id="at-note" placeholder="ملاحظة على المهمة" />
+          </div>
+        </div>
+        <button type="button" class="btn-primary" id="at-add-btn" style="width:auto; padding:10px 20px; margin-top:12px;">+ إضافة المهمة</button>
+        <div class="error-msg" id="at-error" style="margin-top:8px;"></div>
+      </div>
+
+      <div id="at-tasks-list"></div>
+    </div>
+
     <div id="placeholder-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-2">→ رجوع للرئيسية</span>
       <div class="placeholder">
