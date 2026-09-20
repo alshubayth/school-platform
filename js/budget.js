@@ -696,8 +696,9 @@ async function updateExpenseStatus(id, status) {
 }
 
 /* ---------- طباعة السند (بيان الصرف) ---------- */
-// شعار الهيئة الملكية للجبيل وينبع (مثبّت كـ Base64 عشان يظهر بالسند المطبوع بدون أي اتصال إنترنت)
-export const VOUCHER_LOGO_DATA_URI = new URL('logo.png', window.location.href).href;
+// شعار الهيئة الملكية للجبيل وينبع - يظهر بكل المطبوعات الرسمية (سند الصرف، الزيارات الصفية،
+// متابعات الطلاب، التقييم)، بعكس شعار المدرسة (logo.png) المستخدم بواجهة النظام فقط
+export const VOUCHER_LOGO_DATA_URI = new URL('logo-rc.png', window.location.href).href;
 const VOUCHER_ORG_NAME = 'مدرسة المروج';
 const VOUCHER_ORG_SUB = '';
 const VOUCHER_MANAGER_NAME = 'منيف بن محمد النفيعي';
