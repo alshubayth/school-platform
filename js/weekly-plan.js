@@ -1,4 +1,42 @@
-import { sb, currentUserId, currentProfile, isAdminOrDeputy, isStaff, gradeLabels } from './core.js';
+import { sb, currentUserId, currentProfile, isAdminOrDeputy, isStaff, gradeLabels, currentSchoolId } from './core.js';
+
+/* ===== كتابة آمنة لعمود school_id قبل/بعد تنفيذ ترقية SQL للمرحلة الثانية =====
+ * لو عمود school_id لسا ما انضاف لهذا الجدول بقاعدة البيانات (رفع الكود صار قبل تنفيذ SQL
+ * الترقية)، الكتابة به تفشل - فنعيد المحاولة بدونه عشان الحفظ يستمر يشتغل عادي بمدرسة وحدة. */
+async function writeWithSchoolFallback(fn) {
+  const withSchool = currentSchoolId ? { school_id: currentSchoolId } : {};
+  let res = await fn(withSchool);
+  if (res.error && currentSchoolId) {
+    res = await fn({});
+  }
+  return res;
+}
+
+/* ===== رابط صفحة أولياء الأمور (خاص بمدرسة هذا الحساب) =====
+ * parent.html يحدد المدرسة من ?school=<slug>. بدون تعدد مدارس (أو قبل تنفيذ ترقية SQL) نستخدم
+ * "al-murooj" كافتراضي عشان الرابط يستمر يشتغل بدون تغيير لمدرسة المروج. */
+async function buildParentPageUrl() {
+  let slug = 'al-murooj';
+  if (currentSchoolId) {
+    const { data } = await sb.from('schools').select('slug').eq('id', currentSchoolId).maybeSingle();
+    if (data && data.slug) slug = data.slug;
+  }
+  const base = location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/[^/]*$/, '/');
+  return base + 'parent.html?school=' + encodeURIComponent(slug);
+}
+
+document.getElementById('weekly-copy-parent-link').addEventListener('click', async () => {
+  const msgEl = document.getElementById('weekly-copy-parent-link-msg');
+  const url = await buildParentPageUrl();
+  try {
+    await navigator.clipboard.writeText(url);
+    msgEl.textContent = 'تم نسخ الرابط: ' + url;
+  } catch (e) {
+    msgEl.textContent = 'تعذر النسخ التلقائي - انسخه يدويًا: ' + url;
+  }
+  msgEl.style.display = 'block';
+  setTimeout(() => { msgEl.style.display = 'none'; }, 6000);
+});
 
 /* ===== تقييد نموذج الخطة الأسبوعية للمعلم حسب تخصصه ===== */
 let teacherAssignments = [];
@@ -154,6 +192,7 @@ export async function loadWeeklyModule() {
   document.getElementById('weekly-form-card').classList.toggle('hidden', !isStaff());
   document.getElementById('weekly-admin-note-card').classList.toggle('hidden', !isAdminOrDeputy());
   document.getElementById('weekly-publish-card').classList.toggle('hidden', !isAdminOrDeputy());
+  document.getElementById('weekly-parent-link-card').classList.toggle('hidden', !isAdminOrDeputy());
   document.getElementById('week-label').textContent = 'الأسبوع ' + currentWeek;
 
   if (currentProfile.role === 'teacher') {
@@ -184,7 +223,7 @@ async function loadPublishToggle() {
 document.getElementById('weekly-publish-toggle').addEventListener('change', async (e) => {
   const isPublished = e.target.checked;
   if (isPublished) {
-    await sb.from('weekly_plan_publish_settings').upsert({ week_number: currentWeek, is_published: true, updated_at: new Date().toISOString() });
+    await writeWithSchoolFallback(extra => sb.from('weekly_plan_publish_settings').upsert({ week_number: currentWeek, is_published: true, updated_at: new Date().toISOString(), ...extra }));
   } else {
     await sb.from('weekly_plan_publish_settings').delete().eq('week_number', currentWeek);
   }
@@ -206,10 +245,10 @@ document.getElementById('weekly-admin-note-save').addEventListener('click', asyn
     await sb.from('weekly_admin_notes').delete().eq('grade_level', grade).eq('week_number', currentWeek);
     successEl.textContent = 'تم حذف الملاحظة (الحقل فارغ).';
   } else {
-    await sb.from('weekly_admin_notes').upsert(
-      { grade_level: grade, week_number: currentWeek, note, created_by: currentUserId },
+    await writeWithSchoolFallback(extra => sb.from('weekly_admin_notes').upsert(
+      { grade_level: grade, week_number: currentWeek, note, created_by: currentUserId, ...extra },
       { onConflict: 'grade_level,week_number' }
-    );
+    ));
     successEl.textContent = 'تم حفظ الملاحظة بنجاح.';
   }
   successEl.style.display = 'block';
@@ -256,7 +295,7 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
   if (existing) {
     ({ error } = await sb.from('weekly_plans').update(payload).eq('id', existing.id));
   } else {
-    ({ error } = await sb.from('weekly_plans').insert(payload));
+    ({ error } = await writeWithSchoolFallback(extra => sb.from('weekly_plans').insert({ ...payload, ...extra })));
   }
 
   if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return; }
@@ -276,6 +315,12 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
   setTimeout(() => { successEl.style.display = 'none'; }, 3500);
 });
 
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s == null ? '' : String(s);
+  return d.innerHTML;
+}
+
 async function refreshWeeklyList() {
   const grade = document.getElementById('weekly-grade').value;
   const { data: plans } = await sb.from('weekly_plans')
@@ -290,42 +335,51 @@ async function refreshWeeklyList() {
     return;
   }
 
+  const tableCard = document.createElement('div');
+  tableCard.className = 'wp-table-card';
+  const table = document.createElement('table');
+  table.className = 'wp-table';
+  tableCard.appendChild(table);
+  list.appendChild(tableCard);
+
   plans.forEach(p => {
-    const card = document.createElement('div');
-    card.className = 'form-card';
-    card.style.marginBottom = '12px';
-    renderPlanViewMode(card, p);
-    list.appendChild(card);
+    const row = document.createElement('tr');
+    renderPlanViewMode(row, p);
+    table.appendChild(row);
   });
 }
 
-function renderPlanViewMode(card, p) {
-  const testBadge = p.has_test
-    ? `<span style="font-size:11.5px; background:var(--danger-light); color:var(--danger); padding:3px 10px; border-radius:20px; font-weight:600; margin-right:8px;">يوجد اختبار — ${formatTestSections(p.test_sections)}</span>`
+function renderPlanViewMode(row, p) {
+  const testTag = p.has_test
+    ? `<span class="wp-tag wp-tag-test">اختبار</span><div class="wp-topic-text">${esc(formatTestSections(p.test_sections))}</div>`
     : '';
   const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [];
   const lessonsHtml = lessonsList.length > 1
-    ? '<ul style="margin:4px 0 6px; padding-right:18px;">' + lessonsList.map(l => `<li>${l}</li>`).join('') + '</ul>'
-    : `<p style="margin:0 0 6px;"><strong>الدرس:</strong> ${lessonsList[0] || '-'}</p>`;
+    ? '<ul style="margin:6px 0 0; padding-right:18px;">' + lessonsList.map(l => `<li>${esc(l)}</li>`).join('') + '</ul>'
+    : `<div class="wp-topic-text">${esc(lessonsList[0] || '-')}</div>`;
   const editBtnHtml = isAdminOrDeputy()
-    ? `<button class="weekly-edit-btn" style="width:auto; background:var(--sand); color:var(--ink); margin-left:6px;" data-id="${p.id}">تعديل</button>`
+    ? `<button class="weekly-edit-btn" style="background:var(--sand); color:var(--ink);" data-id="${p.id}">تعديل</button>`
     : '';
   const deleteBtnHtml = isAdminOrDeputy()
-    ? `<button class="weekly-delete-btn" style="width:auto; background:var(--danger-light); color:var(--danger);" data-id="${p.id}">حذف</button>`
+    ? `<button class="weekly-delete-btn" style="background:var(--danger-light); color:var(--danger);" data-id="${p.id}">حذف</button>`
     : '';
-  card.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-      <h4 style="color:var(--meadow); margin:0; display:flex; align-items:center;">${p.subjects ? p.subjects.name : ''}${testBadge}</h4>
-      <div>${editBtnHtml}${deleteBtnHtml}</div>
-    </div>
-    ${lessonsHtml}
-    <p style="margin:0 0 6px;"><strong>المهام الأدائية:</strong> ${p.performance_tasks || '-'}</p>
-    <p style="margin:0;"><strong>الواجبات:</strong> ${p.no_homework ? 'لا يوجد واجب' : (p.homework || '-')}</p>`;
+  row.innerHTML = `
+    <td class="wp-subj-cell">${esc(p.subjects ? p.subjects.name : '')}</td>
+    <td>
+      <span class="wp-tag wp-tag-lesson">درس</span>
+      ${lessonsHtml}
+      ${p.performance_tasks ? `<span class="wp-tag wp-tag-lesson" style="margin-top:10px; display:inline-block;">مهام أدائية</span><div class="wp-topic-text">${esc(p.performance_tasks)}</div>` : ''}
+      ${p.no_homework
+        ? `<div class="wp-no-hw">لا يوجد واجب هذا الأسبوع</div>`
+        : (p.homework ? `<span class="wp-tag wp-tag-hw" style="margin-top:10px; display:inline-block;">واجب</span><div class="wp-topic-text">${esc(p.homework)}</div>` : '')}
+      ${testTag}
+      ${(editBtnHtml || deleteBtnHtml) ? `<div class="wp-row-actions">${editBtnHtml}${deleteBtnHtml}</div>` : ''}
+    </td>`;
 
-  const editBtn = card.querySelector('.weekly-edit-btn');
-  if (editBtn) editBtn.addEventListener('click', () => renderPlanEditMode(card, p));
+  const editBtn = row.querySelector('.weekly-edit-btn');
+  if (editBtn) editBtn.addEventListener('click', () => renderPlanEditMode(row, p));
 
-  const delBtn = card.querySelector('.weekly-delete-btn');
+  const delBtn = row.querySelector('.weekly-delete-btn');
   if (delBtn) {
     delBtn.addEventListener('click', async () => {
       if (!confirm(`متأكد تبي تحذف خطة "${p.subjects ? p.subjects.name : 'هذه المادة'}" لهذا الأسبوع؟`)) return;
@@ -338,8 +392,10 @@ function renderPlanViewMode(card, p) {
 
 function renderPlanEditMode(card, p) {
   const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [''];
+  // card هنا صف جدول (tr) - المحتوى لازم يكون داخل td واحدة تمتد على العمودين عشان يبقى الجدول صالح
   card.innerHTML = `
-    <h4 style="color:var(--meadow); margin:0 0 10px;">${p.subjects ? p.subjects.name : ''} — تعديل (بواسطة الإدارة)</h4>
+    <td colspan="2">
+    <h4 style="color:var(--meadow); margin:0 0 10px;">${esc(p.subjects ? p.subjects.name : '')} — تعديل (بواسطة الإدارة)</h4>
     <div class="edit-lessons-container"></div>
     <span class="text-action-btn edit-add-lesson-btn" style="display:inline-block; margin-bottom:14px;">+ إضافة درس</span>
     <textarea class="edit-tasks" rows="2" placeholder="المهام الأدائية">${p.performance_tasks || ''}</textarea>
@@ -358,7 +414,8 @@ function renderPlanEditMode(card, p) {
     </div>
     <div class="error-msg edit-error"></div>
     <button class="btn-primary edit-save-btn" style="width:auto; padding:10px 18px;">حفظ التعديل</button>
-    <span class="text-action-btn edit-cancel-btn" style="margin-right:10px;">إلغاء</span>`;
+    <span class="text-action-btn edit-cancel-btn" style="margin-right:10px;">إلغاء</span>
+    </td>`;
 
   const editHomeworkField = card.querySelector('.edit-homework');
   card.querySelector('.edit-no-homework').addEventListener('change', (e) => {
