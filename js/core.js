@@ -94,6 +94,7 @@ export const tiles = [
   { key: 'computerlab', icon: icons.computerlab, title: 'معمل الحاسب الآلي', desc: 'توزيع الطلاب على أجهزة المعمل وطباعة الملصقات', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'extra' },
   { key: 'files', icon: icons.files, title: 'الملفات',              desc: 'رفع الملفات ومشاركتها حسب المجلد', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'extra' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold', group: 'extra' },
+  { key: 'schools-admin', icon: icons.perms, title: 'إدارة المدارس والخدمات', desc: 'إضافة مدرسة جديدة وتفعيل خدماتها', roles: ['owner'], color: 'diamond-navy', group: 'admin' },
 ];
 
 document.getElementById('login-btn').addEventListener('click', async () => {
@@ -193,8 +194,89 @@ document.getElementById('reset-submit-btn').addEventListener('click', async () =
   }, 1200);
 });
 
+/* ===== المرحلة الأولى من دعم تعدد المدارس (Multi-tenant) =====
+ * حساب دوره "owner" (مالك) ما يرتبط بمدرسة معينة - يشوف شاشة اختيار مدرسة، ويفتح لوحة تحكم
+ * المدرسة اللي يختارها (بصلاحيات "مدير" بالتبويبات). كل مدرسة عندها قائمة خدمات مفعّلة
+ * بجدول school_modules، فتختفي تبويبات الخدمات الغير مشترك فيها المدرسة تلقائيًا.
+ * ملاحظة مهمة: هذي المرحلة توفر التنقل بين المدارس وتفعيل/تعطيل الخدمات بس - بيانات كل قسم
+ * (الطلاب، الاختبارات، الميزانية...) لسا غير معزولة فعليًا بين المدارس (يحتاج مرحلة ثانية منفصلة). */
+export let currentSchoolId = null;
+export let currentSchoolModules = null; // null = بدون قيد (توافق خلفي لحساب مربوط بمدرسة وحدة أو قبل تنفيذ SQL الترقية)
+
+export function effectiveRoleForTiles() {
+  return currentProfile.role === 'owner' ? 'admin' : currentProfile.role;
+}
+
+export async function loadSchoolModulesForCurrent() {
+  if (!currentSchoolId) { currentSchoolModules = null; return; }
+  const { data, error } = await sb.from('school_modules').select('module_key, enabled').eq('school_id', currentSchoolId);
+  currentSchoolModules = (error || !data) ? null : data.filter(r => r.enabled).map(r => r.module_key);
+}
+
+function escHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+
+async function showSchoolPicker() {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('dashboard-screen').classList.add('hidden');
+  document.getElementById('school-picker-screen').classList.remove('hidden');
+  const list = document.getElementById('school-picker-list');
+  list.innerHTML = '<p style="text-align:center; color:var(--slate); grid-column:1/-1;">جارٍ التحميل...</p>';
+
+  const { data: schools, error } = await sb.from('schools').select('id, name').order('name');
+  if (error) {
+    list.innerHTML = `<p style="color:var(--danger); text-align:center; grid-column:1/-1;">تعذر تحميل قائمة المدارس: ${escHtml(error.message)}</p>`;
+    return;
+  }
+  if (!schools || !schools.length) {
+    list.innerHTML = '<p style="text-align:center; color:var(--slate); grid-column:1/-1;">ما فيه أي مدرسة مضافة بعد.</p>';
+    return;
+  }
+  list.innerHTML = schools.map(s => `
+    <div class="form-card school-picker-card" data-id="${s.id}" style="text-align:center; cursor:pointer; margin:0;">
+      <div style="font-weight:700; font-size:14px; margin-bottom:10px;">${escHtml(s.name)}</div>
+      <button type="button" class="btn-primary" style="width:auto; padding:8px 20px; pointer-events:none;">دخول</button>
+    </div>`).join('');
+  list.querySelectorAll('.school-picker-card').forEach(card => {
+    card.addEventListener('click', () => enterSchool(card.dataset.id, schools.find(s => s.id === card.dataset.id)));
+  });
+}
+
+async function enterSchool(schoolId, school) {
+  currentSchoolId = schoolId;
+  await loadSchoolModulesForCurrent();
+  document.getElementById('school-picker-screen').classList.add('hidden');
+  finishShowingDashboard(school ? school.name : null);
+  const { renderMyDutyBanner } = await import('./duty-roster.js');
+  renderMyDutyBanner();
+}
+
+document.getElementById('school-picker-logout-btn').addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+document.getElementById('switch-school-btn').addEventListener('click', () => { showSchoolPicker(); });
+
+function finishShowingDashboard(schoolNameOverride) {
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('school-picker-screen').classList.add('hidden');
+  document.getElementById('dashboard-screen').classList.remove('hidden');
+  document.getElementById('user-name').textContent = currentProfile.full_name;
+  document.getElementById('user-role-badge').textContent = currentProfile.role === 'owner' ? 'مالك النظام' : (roleLabels[currentProfile.role] || currentProfile.role);
+  document.getElementById('user-avatar').textContent = (currentProfile.full_name || '؟').trim().charAt(0);
+  document.getElementById('switch-school-btn').classList.toggle('hidden', currentProfile.role !== 'owner');
+  const brandSpan = document.querySelector('#dashboard-screen .brand span');
+  if (brandSpan && schoolNameOverride) brandSpan.textContent = schoolNameOverride;
+  const warnEl = document.getElementById('owner-phase-warning');
+  if (warnEl) warnEl.classList.toggle('hidden', currentProfile.role !== 'owner');
+  renderNav();
+  renderDashboard();
+}
+
 export async function loadProfileAndShowDashboard(userId) {
-  const { data: profile, error } = await sb.from('profiles').select('full_name, role').eq('id', userId).single();
+  // نحاول نجيب school_id واسم المدرسة (موجودين بس بعد تنفيذ SQL ترقية تعدد المدارس) - ولو فشل
+  // (عمود/جدول لسا ما انضاف) نرجع تلقائيًا لنفس الاستعلام القديم عشان تسجيل الدخول يستمر يشتغل عادي
+  let profile, error;
+  ({ data: profile, error } = await sb.from('profiles').select('full_name, role, school_id, schools(name)').eq('id', userId).single());
+  if (error) {
+    ({ data: profile, error } = await sb.from('profiles').select('full_name, role').eq('id', userId).single());
+  }
   if (error || !profile) {
     document.getElementById('login-error').textContent = 'تم الدخول لكن حسابك غير مربوط بدور بعد.';
     document.getElementById('login-error').style.display = 'block';
@@ -202,6 +284,14 @@ export async function loadProfileAndShowDashboard(userId) {
   }
   currentProfile = profile;
   currentUserId = userId;
+
+  if (profile.role === 'owner') {
+    await showSchoolPicker();
+    return;
+  }
+
+  currentSchoolId = profile.school_id || null;
+  await loadSchoolModulesForCurrent();
 
   if (profile.role === 'teacher') {
     const { data: membership } = await sb.from('operational_plan_members').select('id').eq('profile_id', userId).maybeSingle();
@@ -222,13 +312,7 @@ export async function loadProfileAndShowDashboard(userId) {
     myBudgetAccess = budgetPerm ? budgetPerm.level : null;
   }
 
-  document.getElementById('login-screen').classList.add('hidden');
-  document.getElementById('dashboard-screen').classList.remove('hidden');
-  document.getElementById('user-name').textContent = profile.full_name;
-  document.getElementById('user-role-badge').textContent = roleLabels[profile.role] || profile.role;
-  document.getElementById('user-avatar').textContent = (profile.full_name || '؟').trim().charAt(0);
-  renderNav();
-  renderDashboard();
+  finishShowingDashboard(profile.schools ? profile.schools.name : null);
   const { renderMyDutyBanner } = await import('./duty-roster.js');
   renderMyDutyBanner();
 }
@@ -238,10 +322,16 @@ document.getElementById('logout-btn').addEventListener('click', async () => { aw
 sb.auth.getSession().then(({ data }) => { if (data.session) loadProfileAndShowDashboard(data.session.user.id); });
 
 export function isTileAllowed(t) {
-  if (!t.roles.includes(currentProfile.role)) return false;
-  if (t.key === 'plan' && currentProfile.role === 'teacher' && !isOpPlanMember) return false;
-  if (t.key === 'tracking' && currentProfile.role === 'teacher' && !hasExamAssignment) return false;
-  if (t.key === 'weekly-tracking' && currentProfile.role === 'teacher' && !hasWeeklyTrackingAccess) return false;
+  // تبويب "إدارة المدارس والخدمات" خاص بالدور الحقيقي "owner" بس (بدون تحويله لـ"admin")
+  if (t.key === 'schools-admin') return currentProfile.role === 'owner';
+  const role = effectiveRoleForTiles();
+  if (!t.roles.includes(role)) return false;
+  if (t.key === 'plan' && role === 'teacher' && !isOpPlanMember) return false;
+  if (t.key === 'tracking' && role === 'teacher' && !hasExamAssignment) return false;
+  if (t.key === 'weekly-tracking' && role === 'teacher' && !hasWeeklyTrackingAccess) return false;
+  // فلترة حسب الخدمات المفعّلة لهذي المدرسة (المرحلة الأولى من دعم تعدد المدارس) - لو ما فيه
+  // قائمة خدمات محمّلة (توافق خلفي، أو قبل تنفيذ SQL الترقية) نسمح بعرض كل شي زي ما هو
+  if (Array.isArray(currentSchoolModules) && !currentSchoolModules.includes(t.key)) return false;
   return true;
 }
 
@@ -336,6 +426,7 @@ export function hideAllModules() {
   document.getElementById('substitutes-module').classList.add('hidden');
   document.getElementById('computerlab-module').classList.add('hidden');
   document.getElementById('files-module').classList.add('hidden');
+  document.getElementById('schools-admin-module').classList.add('hidden');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -422,6 +513,10 @@ export async function openTile(key, title) {
     document.getElementById('files-module').classList.remove('hidden');
     const { loadFilesModule } = await import('./files.js');
     loadFilesModule();
+  } else if (key === 'schools-admin') {
+    document.getElementById('schools-admin-module').classList.remove('hidden');
+    const { loadSchoolAdminModule } = await import('./school-admin.js');
+    loadSchoolAdminModule();
   } else {
     document.getElementById('placeholder-module').classList.remove('hidden');
     document.getElementById('placeholder-text').textContent = `قسم "${title}" قيد التطوير حاليًا`;
@@ -442,3 +537,4 @@ document.getElementById('back-to-tiles-4').addEventListener('click', backToTiles
 document.getElementById('back-to-tiles-5').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-7').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-6').addEventListener('click', backToTiles);
+document.getElementById('back-to-tiles-19').addEventListener('click', backToTiles);
