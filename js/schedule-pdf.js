@@ -1,4 +1,4 @@
-import { sb, gradeLabels } from './core.js';
+import { sb, gradeLabels, currentSchoolId, writeWithSchool } from './core.js';
 import { SCHEDULE_SUBJECTS, previewInGrid } from './schedule.js';
 import { loadPdfJs } from './lib-loader.js';
 
@@ -528,7 +528,9 @@ async function commitAllParsed() {
   }
 
   for (const cls of parsedClasses) {
-    await sb.from('class_schedules').delete().eq('grade_level', cls.grade).eq('class_section', cls.section);
+    let delQ = sb.from('class_schedules').delete().eq('grade_level', cls.grade).eq('class_section', cls.section);
+    if (currentSchoolId) delQ = delQ.eq('school_id', currentSchoolId);
+    await delQ;
     const rows = [];
     Object.entries(cls.map).forEach(([key, val]) => {
       if (!val.subject) return;
@@ -542,7 +544,7 @@ async function commitAllParsed() {
     for (let i = 0; i < rows.length; i += 200) {
       const chunk = rows.slice(i, i + 200);
       if (chunk.length === 0) continue;
-      const { error } = await sb.from('class_schedules').insert(chunk);
+      const { error } = await writeWithSchool(extra => sb.from('class_schedules').insert(chunk.map(r => ({ ...r, ...extra }))));
       if (error) {
         statusEl.textContent = `تعذر حفظ ${gradeLabels[cls.grade]} - الفصل ${cls.section}: ${error.message}`;
         statusEl.style.color = 'var(--danger)';
