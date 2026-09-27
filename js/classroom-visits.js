@@ -308,7 +308,6 @@ async function renderList(container) {
               <div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:700;">زار: ${visitorTag}</div>
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              ${v.teacher_absent ? `<span class="badge" style="padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700; background:#fdecea; color:#c0392b;">لم تُعقد الحصة</span>` : ''}
               <span class="badge ${v.published ? 'badge-green' : 'badge-gold'}" style="padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700; ${v.published ? 'background:#e4f5ea; color:#1f8a4c;' : 'background:#fdf2df; color:#9a6b1e;'}">${v.published ? 'منشورة للمعلم' : 'غير منشورة'}</span>
               <button class="btn-secondary cv-print-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">طباعة PDF</button>
               ${canEditVisit(v) ? `<button class="btn-secondary cv-edit-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">تعديل</button>` : ''}
@@ -395,14 +394,6 @@ async function renderForm(container, existing) {
       </div>
     </div>
 
-    <div class="form-card" style="background:#fdf2df;">
-      <label style="font-size:13px; display:flex; align-items:center; gap:8px; font-weight:700; color:#9a6b1e;">
-        <input type="checkbox" id="cv-teacher-absent" style="width:auto; margin:0;"${existing?.teacher_absent ? ' checked' : ''} /> المعلم لم يحضر الحصة / الحصة لم تُعقد
-      </label>
-      <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">فعّل هذا الخيار لو الحصة ما انعقدت أصلًا (غياب المعلم مثلًا) - بيلغي تقييم المؤشرات (٢٨ مؤشر) كليًا بدل ما تضطر تختار تقديرات وهمية لها، وما بيحسب أي تقدير "حقق الهدف" أو غيره للزيارة.</p>
-    </div>
-
-    <div id="cv-eval-wrap"${existing?.teacher_absent ? ' style="display:none;"' : ''}>
     <div class="form-card">
       <h4>بيانات إضافية</h4>
       <div class="form-row">
@@ -493,7 +484,6 @@ async function renderForm(container, existing) {
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">الاحتياج التدريبي المقترح</label>
       <textarea id="cv-training" rows="3" placeholder="يمكنك تركه فارغ">${esc(existing?.training_need || '')}</textarea>
     </div>
-    </div>
 
     <div class="error-msg" id="cv-save-error"></div>
     <button class="btn-primary" id="cv-save-btn" style="width:auto; padding:12px 26px;">${isEdit ? 'حفظ التعديلات' : 'حفظ الزيارة'}</button>
@@ -514,12 +504,6 @@ async function renderForm(container, existing) {
 
   document.getElementById('cv-day-select').addEventListener('change', updateSlotInfo);
   document.getElementById('cv-period-select').addEventListener('change', updateSlotInfo);
-
-  // إظهار/إخفاء قسم تقييم المؤشرات بالكامل حسب حالة "المعلم لم يحضر الحصة"
-  document.getElementById('cv-teacher-absent').addEventListener('change', (e) => {
-    const wrap = document.getElementById('cv-eval-wrap');
-    wrap.style.display = e.target.checked ? 'none' : '';
-  });
 
   // إظهار/إخفاء حقل "الملاحظة/التوصية" وتعبئته تلقائيًا (من النموذج الرسمي) لما يتغيّر التقييم إلى "مميز" أو "فرصة تحسين"
   container.querySelectorAll('.cv-rating-select').forEach(sel => {
@@ -646,20 +630,16 @@ async function saveVisit() {
   const visitDate = document.getElementById('cv-visit-date').value;
   if (!visitDate) { showErr('حدد تاريخ الزيارة'); return; }
 
-  const teacherAbsent = document.getElementById('cv-teacher-absent').checked;
-
   let ratings = {};
   let recommendations = {};
-  if (!teacherAbsent) {
-    const ratingSelects = Array.from(document.querySelectorAll('.cv-rating-select'));
-    for (const sel of ratingSelects) {
-      if (!sel.value) { showErr(`أكمل تقييم كل المؤشرات (${INDICATORS[sel.dataset.indicator].label})`); sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
-      ratings[sel.dataset.indicator] = sel.value;
-      const recInput = document.querySelector(`.cv-rec-input[data-indicator="${sel.dataset.indicator}"]`);
-      const tier = tierForOption(sel.dataset.indicator, sel.value);
-      if (tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز') && recInput && recInput.value.trim()) {
-        recommendations[sel.dataset.indicator] = recInput.value.trim();
-      }
+  const ratingSelects = Array.from(document.querySelectorAll('.cv-rating-select'));
+  for (const sel of ratingSelects) {
+    if (!sel.value) { showErr(`أكمل تقييم كل المؤشرات (${INDICATORS[sel.dataset.indicator].label})`); sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    ratings[sel.dataset.indicator] = sel.value;
+    const recInput = document.querySelector(`.cv-rec-input[data-indicator="${sel.dataset.indicator}"]`);
+    const tier = tierForOption(sel.dataset.indicator, sel.value);
+    if (tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز') && recInput && recInput.value.trim()) {
+      recommendations[sel.dataset.indicator] = recInput.value.trim();
     }
   }
 
@@ -684,7 +664,6 @@ async function saveVisit() {
     visit_purpose: document.getElementById('cv-visit-purpose').value.trim() || null,
     strategies,
     strategies_other: strategiesOther || null,
-    teacher_absent: teacherAbsent,
     ratings,
     recommendations,
     upgrade_math_lughati: upgradeEl ? upgradeEl.value : null,
@@ -743,9 +722,7 @@ function printVisitReport(v) {
     </tr>${recRow}`;
   };
 
-  const sectionsHtml = v.teacher_absent
-    ? `<div class="extra-box improve" style="justify-content:center; text-align:center; font-weight:700; font-size:13px; padding:14px;">الحصة لم تُعقد (المعلم لم يحضر) — لا يوجد تقييم لمؤشرات الأداء لهذي الزيارة.</div>`
-    : `
+  const sectionsHtml = `
     <table class="ratings">
       <tbody>
         ${SECTIONS.map(sec => sectionHtml(sec.title) + sec.nums.map(rowHtml).join('')).join('')}
