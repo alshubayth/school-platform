@@ -629,20 +629,22 @@ function updateSlotInfo() {
 
 async function saveVisit() {
   const errEl = document.getElementById('cv-save-error');
+  const showErr = (msg) => { errEl.textContent = msg; errEl.style.display = 'block'; errEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
   errEl.textContent = '';
+  errEl.style.display = 'none';
 
   const day = document.getElementById('cv-day-select').value;
   const period = document.getElementById('cv-period-select').value;
-  if (!cvSection || !day || !period) { errEl.textContent = 'اختر الفصل واليوم والحصة'; return; }
+  if (!cvSection || !day || !period) { showErr('اختر الفصل واليوم والحصة'); return; }
   const cell = cvSchedule[day + '-' + period];
-  if (!cell || !cell.subject) { errEl.textContent = 'لا توجد مادة مسجلة بهذي الحصة بالجدول الدراسي'; return; }
-  if (!cell.teacher) { errEl.textContent = 'لا يوجد اسم معلم مسجل بهذي الحصة بالجدول الدراسي'; return; }
+  if (!cell || !cell.subject) { showErr('لا توجد مادة مسجلة بهذي الحصة بالجدول الدراسي'); return; }
+  if (!cell.teacher) { showErr('لا يوجد اسم معلم مسجل بهذي الحصة بالجدول الدراسي'); return; }
 
   const teacherProfileId = document.getElementById('cv-teacher-select').value;
-  if (!teacherProfileId) { errEl.textContent = 'اختر حساب المعلم على النظام (بيانات المطابقة التلقائية ما لقت حساب مطابق) — بدون هذا ما يقدر المعلم يشوف الزيارة حتى لو نشرتها'; document.getElementById('cv-teacher-select').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  if (!teacherProfileId) { showErr('اختر حساب المعلم على النظام (بيانات المطابقة التلقائية ما لقت حساب مطابق) — بدون هذا ما يقدر المعلم يشوف الزيارة حتى لو نشرتها'); document.getElementById('cv-teacher-select').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
 
   const visitDate = document.getElementById('cv-visit-date').value;
-  if (!visitDate) { errEl.textContent = 'حدد تاريخ الزيارة'; return; }
+  if (!visitDate) { showErr('حدد تاريخ الزيارة'); return; }
 
   const teacherAbsent = document.getElementById('cv-teacher-absent').checked;
 
@@ -651,7 +653,7 @@ async function saveVisit() {
   if (!teacherAbsent) {
     const ratingSelects = Array.from(document.querySelectorAll('.cv-rating-select'));
     for (const sel of ratingSelects) {
-      if (!sel.value) { errEl.textContent = `أكمل تقييم كل المؤشرات (${INDICATORS[sel.dataset.indicator].label})`; sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+      if (!sel.value) { showErr(`أكمل تقييم كل المؤشرات (${INDICATORS[sel.dataset.indicator].label})`); sel.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
       ratings[sel.dataset.indicator] = sel.value;
       const recInput = document.querySelector(`.cv-rec-input[data-indicator="${sel.dataset.indicator}"]`);
       const tier = tierForOption(sel.dataset.indicator, sel.value);
@@ -703,7 +705,7 @@ async function saveVisit() {
     payload.published = false;
     ({ error } = await writeWithSchool(extra => sb.from('classroom_visits').insert({ ...payload, ...extra })));
   }
-  if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; return; }
+  if (error) { showErr('تعذر الحفظ: ' + error.message); return; }
 
   cvEditingVisit = null;
   cvView = 'list';
