@@ -388,9 +388,10 @@ async function renderForm(container, existing) {
       </div>
       <div id="cv-slot-info" style="margin-top:10px; font-size:13px; color:var(--navy); font-weight:700;"></div>
       <div style="margin-top:12px;">
-        <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">حساب المعلم على النظام</label>
-        <select id="cv-teacher-select"><option value="">اختر حساب المعلم</option></select>
+        <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">المعلم اللي زُرت حصته فعليًا</label>
+        <select id="cv-teacher-select"><option value="">اختر المعلم</option></select>
         <div id="cv-teacher-hint" style="font-size:11.5px; color:var(--danger); margin-top:4px;"></div>
+        <p style="font-size:11px; color:var(--slate); margin:6px 0 0;">يُختار تلقائيًا حسب الجدول الدراسي - لو الحصة كانت لمعلم بديل ذاك اليوم، غيّره يدويًا من القائمة للمعلم الصحيح.</p>
       </div>
     </div>
 
@@ -596,7 +597,7 @@ function updateSlotInfo() {
     infoEl.innerHTML = '<span style="color:var(--danger);">لا توجد مادة مسجلة بهذي الحصة بالجدول الدراسي — تأكد من اختيار الحصة الصحيحة أو حدّث الجدول أولًا.</span>';
     return;
   }
-  infoEl.innerHTML = `المادة: <b>${esc(cell.subject)}</b> — المعلم: <b>${esc(cell.teacher || '-')}</b>`;
+  infoEl.innerHTML = `المادة: <b>${esc(cell.subject)}</b> — المعلم المسجّل بالجدول: <b>${esc(cell.teacher || '-')}</b>`;
 
   // محاولة ربط تلقائي بين اسم المعلم المكتوب بجدول الحصص وحساب معلم فعلي على النظام
   // (الاسم بجدول الحصص نص حر ممكن ما يطابق حرفيًا اسم الحساب، فهذا الربط ضروري حتى يقدر المعلم يشوف زيارته)
@@ -622,10 +623,13 @@ async function saveVisit() {
   if (!cvSection || !day || !period) { showErr('اختر الفصل واليوم والحصة'); return; }
   const cell = cvSchedule[day + '-' + period];
   if (!cell || !cell.subject) { showErr('لا توجد مادة مسجلة بهذي الحصة بالجدول الدراسي'); return; }
-  if (!cell.teacher) { showErr('لا يوجد اسم معلم مسجل بهذي الحصة بالجدول الدراسي'); return; }
 
   const teacherProfileId = document.getElementById('cv-teacher-select').value;
-  if (!teacherProfileId) { showErr('اختر حساب المعلم على النظام (بيانات المطابقة التلقائية ما لقت حساب مطابق) — بدون هذا ما يقدر المعلم يشوف الزيارة حتى لو نشرتها'); document.getElementById('cv-teacher-select').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  if (!teacherProfileId) { showErr('اختر المعلم اللي زرت حصته من القائمة'); document.getElementById('cv-teacher-select').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  // اسم المعلم المحفوظ مع الزيارة يُؤخذ من المعلم المختار فعليًا بالقائمة (يدعم تغييره يدويًا لمعلم بديل)
+  // بدل الاسم الثابت بالجدول الدراسي الرسمي
+  const teacherAccount = cvTeachers.find(t => t.id === teacherProfileId);
+  const effectiveTeacherName = teacherAccount ? teacherAccount.full_name : cell.teacher;
 
   const visitDate = document.getElementById('cv-visit-date').value;
   if (!visitDate) { showErr('حدد تاريخ الزيارة'); return; }
@@ -655,7 +659,7 @@ async function saveVisit() {
     class_section: cvSection,
     day_of_week: day,
     period_number: parseInt(period),
-    teacher_name: cell.teacher,
+    teacher_name: effectiveTeacherName,
     teacher_profile_id: teacherProfileId,
     subject_name: cell.subject,
     specialization: document.getElementById('cv-specialization').value.trim() || null,
