@@ -313,18 +313,33 @@ onEl('opa-checklist', 'change', (e) => {
 onEl('opa-save', 'click', async () => {
   const sel = document.getElementById('opa-employee');
   const msgEl = document.getElementById('opa-save-msg');
+  const errEl = document.getElementById('opa-save-error');
+  if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
   if (!sel || !sel.value) return;
   const profileId = sel.value;
   const checked = opaPendingChecked;
   const toAdd = Array.from(checked).filter(id => !opaCurrentAssignments.has(id));
   const toRemove = Array.from(opaCurrentAssignments).filter(id => !checked.has(id));
 
+  const errors = [];
   if (toAdd.length > 0) {
-    await writeWithSchool(extra => sb.from('program_assignments').insert(toAdd.map(programId => ({ program_id: programId, profile_id: profileId, assigned_by: currentUserId, ...extra }))));
+    const { error } = await writeWithSchool(extra => sb.from('program_assignments').insert(toAdd.map(programId => ({ program_id: programId, profile_id: profileId, assigned_by: currentUserId, ...extra }))));
+    if (error) errors.push(error.message);
   }
   for (const programId of toRemove) {
-    await sb.from('program_assignments').delete().eq('program_id', programId).eq('profile_id', profileId);
+    const { error } = await sb.from('program_assignments').delete().eq('program_id', programId).eq('profile_id', profileId);
+    if (error) errors.push(error.message);
   }
+
+  if (errors.length > 0) {
+    if (errEl) { errEl.textContent = 'تعذر حفظ بعض التغييرات: ' + errors.join(' | '); errEl.style.display = 'block'; }
+    // نعيد تحميل الحالة الفعلية من القاعدة بدل ما نفترض نجاح كل التغييرات، عشان القائمة تعكس
+    // اللي فعلاً انحفظ لا أكثر ولا أقل
+    await renderOpaChecklist();
+    await refreshOpaAssignedNames();
+    return;
+  }
+
   opaCurrentAssignments = new Set(checked);
   opaPendingChecked = new Set(checked);
   await refreshOpaAssignedNames();
