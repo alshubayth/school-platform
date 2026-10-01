@@ -239,6 +239,12 @@
   </div>
 
   <div id="schedule-view" class="hidden-view">
+    <div class="tabs" id="sch-grade-tabs">
+      <button class="tab active" data-grade="first_intermediate">أول متوسط</button>
+      <button class="tab" data-grade="second_intermediate">ثاني متوسط</button>
+      <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
+    </div>
+
     <div id="sch-coverage-card" class="schedule-card hidden-view" style="margin-bottom:14px;">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
         <h3 id="sch-coverage-title" style="font-size:14px; margin:0;">جدول الاختبارات الفترية</h3>
@@ -249,12 +255,6 @@
       </div>
       <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">تاريخ كل اختبار والمادة المقطوعة له</p>
       <div id="sch-coverage-list"></div>
-    </div>
-
-    <div class="tabs" id="sch-grade-tabs">
-      <button class="tab active" data-grade="first_intermediate">أول متوسط</button>
-      <button class="tab" data-grade="second_intermediate">ثاني متوسط</button>
-      <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
     </div>
 
     <div class="section-select-wrap" style="display:flex; gap:10px; align-items:stretch;">
