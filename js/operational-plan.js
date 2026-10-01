@@ -194,6 +194,11 @@ onEl('opplan-semester-select', 'change', async (e) => {
    مباشرة ويدخل مهامه الأسبوعية بدون أي اختيار متكرر */
 let opaMembersCache = [];
 let opaCurrentAssignments = new Set();
+// نسخة عمل من الاختيارات الحالية بالقائمة (قبل الحفظ) - منفصلة عن opaCurrentAssignments (المحفوظ
+// فعليًا بقاعدة البيانات) عشان ما تنفقد تحديدات سابقة لو المدير بحث/فلتر القائمة بين كل اختيار
+// وثاني، لأن البحث يعيد بناء القائمة بالكامل (innerHTML) وكان ياخذ حالة "محدد" من opaCurrentAssignments
+// مباشرة فيفقد أي تحديد غير محفوظ بعد لما البرنامج يختفي من نتائج البحث الجديد
+let opaPendingChecked = new Set();
 
 // فلتر داشبورد المدير: هدف استراتيجي/تشغيلي مختار حاليًا (null = بدون فلتر) - يُطبّق على شبكة
 // البرامج بالأسفل فقط (الإحصائيات والرسومين وبطاقات الأهداف نفسها تبقى تعرض الصورة الكاملة)
@@ -256,6 +261,7 @@ async function renderOpaChecklist() {
     return q;
   });
   opaCurrentAssignments = new Set((assigned || []).map(a => a.program_id));
+  opaPendingChecked = new Set(opaCurrentAssignments);
   buildOpaChecklistDom();
 }
 
@@ -282,7 +288,7 @@ function buildOpaChecklistDom() {
       const names = opaAssignedNamesByProgram.get(p.id) || [];
       return `
       <label class="opa-item">
-        <input type="checkbox" data-program-id="${p.id}" ${opaCurrentAssignments.has(p.id) ? 'checked' : ''} />
+        <input type="checkbox" data-program-id="${p.id}" ${opaPendingChecked.has(p.id) ? 'checked' : ''} />
         ${p.plan_code ? `<span class="code">${esc(p.plan_code)}</span>` : ''}
         <span>${esc(p.title)}</span>
         ${names.length ? `<span class="opa-assigned-to">مسند لـ: ${esc(names.join('، '))}</span>` : ''}
@@ -294,12 +300,22 @@ function buildOpaChecklistDom() {
 onEl('opa-employee', 'change', renderOpaChecklist);
 onEl('opa-search', 'input', buildOpaChecklistDom);
 
+// نستخدم تفويض حدث (event delegation) على الحاوية الثابتة بدل مستمع على كل خانة اختيار على
+// حدة، عشان يستمر يشتغل حتى بعد ما buildOpaChecklistDom يعيد بناء محتوى القائمة بالكامل
+// (مثلًا لما يبحث المدير) - ويحدّث نسخة العمل opaPendingChecked فورًا مع كل تحديد/إلغاء تحديد
+onEl('opa-checklist', 'change', (e) => {
+  const cb = e.target.closest('input[type=checkbox][data-program-id]');
+  if (!cb) return;
+  if (cb.checked) opaPendingChecked.add(cb.dataset.programId);
+  else opaPendingChecked.delete(cb.dataset.programId);
+});
+
 onEl('opa-save', 'click', async () => {
   const sel = document.getElementById('opa-employee');
   const msgEl = document.getElementById('opa-save-msg');
   if (!sel || !sel.value) return;
   const profileId = sel.value;
-  const checked = new Set(Array.from(document.querySelectorAll('#opa-checklist input[type=checkbox]:checked')).map(cb => cb.dataset.programId));
+  const checked = opaPendingChecked;
   const toAdd = Array.from(checked).filter(id => !opaCurrentAssignments.has(id));
   const toRemove = Array.from(opaCurrentAssignments).filter(id => !checked.has(id));
 
@@ -309,7 +325,8 @@ onEl('opa-save', 'click', async () => {
   for (const programId of toRemove) {
     await sb.from('program_assignments').delete().eq('program_id', programId).eq('profile_id', profileId);
   }
-  opaCurrentAssignments = checked;
+  opaCurrentAssignments = new Set(checked);
+  opaPendingChecked = new Set(checked);
   await refreshOpaAssignedNames();
   buildOpaChecklistDom();
   if (msgEl) { msgEl.style.display = 'inline'; setTimeout(() => { msgEl.style.display = 'none'; }, 2000); }
