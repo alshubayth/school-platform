@@ -33,15 +33,20 @@ export async function loadScheduleModule() {
   await loadExamCoverageCard();
 }
 
-/* ===== المادة المقطوعة للاختبارات الفترية (نطاق صفحات لكل مادة، مرة وحدة لكل المدرسة) ===== */
+/* ===== جدول الاختبارات الفترية (تاريخ + نطاق صفحات لكل مادة) - مستقل لكل مرحلة (scGrade) =====
+ * كل مرحلة (أول/ثاني/ثالث متوسط) لها جدول حصص مختلف، فتواريخ اختباراتها الفترية تختلف هي
+ * الثانية - لذا الجدول هنا مرتبط بالمرحلة المختارة بتبويبات "sc-grade-tabs" فوق، بدل ما يكون
+ * مشترك لكل المدرسة. */
 async function loadExamCoverageCard() {
+  const titleEl = document.getElementById('sc-coverage-title');
   const listEl = document.getElementById('sc-coverage-list');
   const statusEl = document.getElementById('sc-coverage-save-status');
   statusEl.textContent = '';
+  titleEl.textContent = `جدول الاختبارات الفترية - ${gradeLabels[scGrade]}`;
   listEl.innerHTML = '<div class="placeholder" style="padding:14px;"><p>جارٍ التحميل...</p></div>';
 
   const { data: existing } = await readScopedBySchool(scoped => {
-    let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes');
+    let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes').eq('grade_level', scGrade);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
@@ -89,6 +94,7 @@ document.getElementById('sc-coverage-save-btn').addEventListener('click', async 
     const notes = tr.querySelector('.ec-notes').value.trim();
     return {
       subject_name: tr.dataset.subject,
+      grade_level: scGrade,
       exam_date: dateVal || null,
       from_page: fromVal ? parseInt(fromVal) : null,
       to_page: toVal ? parseInt(toVal) : null,
@@ -98,7 +104,7 @@ document.getElementById('sc-coverage-save-btn').addEventListener('click', async 
   });
 
   const { error } = await writeWithSchool(extra =>
-    sb.from('subject_exam_coverage').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'school_id,subject_name' })
+    sb.from('subject_exam_coverage').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'school_id,subject_name,grade_level' })
   );
   if (error) { statusEl.textContent = 'تعذر الحفظ: ' + error.message; statusEl.style.color = 'var(--danger)'; return; }
 
@@ -138,6 +144,7 @@ function renderGradeTabs() {
       scSection = null;
       renderGradeTabs();
       refreshSectionOptions();
+      loadExamCoverageCard();
     });
     wrap.appendChild(btn);
   });
