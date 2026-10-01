@@ -189,6 +189,19 @@
   .coverage-row .subj{ font-weight:700; color:var(--ink); flex:1; min-width:0; }
   .coverage-row .range{ font-weight:700; color:var(--meadow); white-space:nowrap; flex-shrink:0; }
   .coverage-row .note{ font-size:11px; color:var(--slate); width:100%; margin-top:2px; }
+
+  /* ---------- جدول الاختبارات الفترية (عرض داخل الصفحة - ألوان خفيفة ومرتبة) ---------- */
+  .coverage-table-wrap{ border-radius:16px; overflow:hidden; border:1px solid #EDEBF4; }
+  .coverage-table{ width:100%; border-collapse:collapse; }
+  .coverage-table th{ background:var(--sand); color:var(--slate); font-size:11px; font-weight:800; padding:10px 8px; text-align:center; border-bottom:1.5px solid #EDEBF4; }
+  .coverage-table th.al-right, .coverage-table td.al-right{ text-align:right; }
+  .coverage-table td{ padding:10px 8px; text-align:center; font-size:12.5px; border-bottom:1px solid #F3F1E9; vertical-align:middle; }
+  .coverage-table tbody tr:last-child td{ border-bottom:none; }
+  .coverage-table tbody tr:nth-child(even) td{ background:#FBFAFC; }
+  .coverage-table td.subj-cell{ font-weight:800; color:var(--ink); }
+  .coverage-table td.notes-cell{ color:var(--slate); font-size:11px; }
+  .day-badge{ display:inline-block; padding:4px 11px; border-radius:20px; font-size:11px; font-weight:800; white-space:nowrap; }
+  .pages-pill{ display:inline-block; padding:4px 10px; border-radius:20px; background:var(--sand); color:var(--ink); font-size:11.5px; font-weight:700; white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -779,6 +792,19 @@ function examPagesLabel(r) {
   if (!r.from_page && !r.to_page) return '';
   return `${r.from_page ? 'من ص ' + r.from_page : ''}${(r.from_page && r.to_page) ? ' — ' : ''}${r.to_page ? 'إلى ص ' + r.to_page : ''}`;
 }
+// لون ثابت لكل يوم (مو عشوائي) عشان يبقى الجدول مرتّب ومتّسق بين كل الفترات
+const DAY_BADGE_COLORS = {
+  'الأحد': { bg: 'var(--coral-light)', fg: 'var(--coral)' },
+  'الاثنين': { bg: 'var(--gold-light)', fg: 'var(--gold)' },
+  'الثلاثاء': { bg: 'var(--teal-light)', fg: 'var(--teal)' },
+  'الأربعاء': { bg: 'var(--meadow-light)', fg: 'var(--meadow)' },
+  'الخميس': { bg: 'var(--violet-light)', fg: 'var(--violet)' },
+};
+function dayBadgeHtml(dayName) {
+  if (!dayName) return '-';
+  const c = DAY_BADGE_COLORS[dayName] || { bg: 'var(--sand)', fg: 'var(--slate)' };
+  return `<span class="day-badge" style="background:${c.bg}; color:${c.fg};">${esc(dayName)}</span>`;
+}
 
 let examCoverageLoaded = false;
 let examCoverageRows = [];
@@ -803,27 +829,31 @@ async function loadExamCoverageCard() {
   examCoverageRows = rows;
 
   listEl.innerHTML = `
-    <table class="schedule-table" style="min-width:420px;">
-      <thead>
-        <tr>
-          <th style="text-align:right;">المادة</th>
-          <th>التاريخ</th>
-          <th>اليوم</th>
-          <th style="text-align:right;">المادة المقطوعة</th>
-          <th style="text-align:right;">ملاحظات</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rows.map(r => `
-          <tr>
-            <td style="text-align:right; font-weight:700;">${esc(r.subject_name)}</td>
-            <td style="white-space:nowrap;">${esc(examDateLabel(r.exam_date)) || '-'}</td>
-            <td style="white-space:nowrap;">${esc(examDayName(r.exam_date)) || '-'}</td>
-            <td style="text-align:right;">${esc(examPagesLabel(r)) || '-'}</td>
-            <td style="text-align:right; font-size:11px; color:var(--slate);">${esc(r.notes || '') || '-'}</td>
-          </tr>`).join('')}
-      </tbody>
-    </table>`;
+    <div class="coverage-table-wrap">
+      <div style="overflow-x:auto;">
+        <table class="coverage-table" style="min-width:460px;">
+          <thead>
+            <tr>
+              <th class="al-right">المادة</th>
+              <th>التاريخ</th>
+              <th>اليوم</th>
+              <th class="al-right">المادة المقطوعة</th>
+              <th class="al-right">ملاحظات</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td class="al-right subj-cell">${esc(r.subject_name)}</td>
+                <td style="white-space:nowrap;">${esc(examDateLabel(r.exam_date)) || '-'}</td>
+                <td>${dayBadgeHtml(examDayName(r.exam_date))}</td>
+                <td class="al-right">${examPagesLabel(r) ? `<span class="pages-pill">${esc(examPagesLabel(r))}</span>` : '-'}</td>
+                <td class="al-right notes-cell">${esc(r.notes || '') || '-'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
   card.classList.remove('hidden-view');
 }
 
