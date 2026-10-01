@@ -183,6 +183,12 @@
   .schedule-table .teacher-name{ font-size:9.5px; font-weight:500; color:var(--slate); margin-top:3px; }
   .schedule-table tr.today-row .period-cell{ color:var(--meadow); }
   .schedule-table tr.today-row .subj-cell:not(.empty){ border:1.5px solid var(--meadow); }
+
+  .coverage-row{ display:flex; align-items:center; gap:10px; padding:8px 2px; border-bottom:1px solid #F3F1E9; font-size:12.5px; }
+  .coverage-row:last-child{ border-bottom:none; }
+  .coverage-row .subj{ font-weight:700; color:var(--ink); flex:1; min-width:0; }
+  .coverage-row .range{ font-weight:700; color:var(--meadow); white-space:nowrap; flex-shrink:0; }
+  .coverage-row .note{ font-size:11px; color:var(--slate); width:100%; margin-top:2px; }
 </style>
 </head>
 <body>
@@ -220,6 +226,12 @@
   </div>
 
   <div id="schedule-view" class="hidden-view">
+    <div id="sch-coverage-card" class="schedule-card hidden-view" style="margin-bottom:14px;">
+      <h3 style="font-size:14px; margin-bottom:4px;">المادة المقطوعة للاختبارات الفترية</h3>
+      <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">نطاق الصفحات المحدد لكل مادة بهذه الفترة</p>
+      <div id="sch-coverage-list"></div>
+    </div>
+
     <div class="tabs" id="sch-grade-tabs">
       <button class="tab active" data-grade="first_intermediate">أول متوسط</button>
       <button class="tab" data-grade="second_intermediate">ثاني متوسط</button>
@@ -736,7 +748,39 @@ document.getElementById('bottom-nav').addEventListener('click', (e) => {
   if (view === 'schedule' && !schSection && document.getElementById('sch-section-select').options.length <= 1) {
     refreshScheduleSections();
   }
+  if (view === 'schedule' && !examCoverageLoaded) {
+    examCoverageLoaded = true;
+    loadExamCoverageCard();
+  }
 });
+
+/* ===== عرض المادة المقطوعة للاختبارات الفترية (مُدخلة من الإدارة بقسم "الجدول الدراسي") ===== */
+const EXAM_COVERAGE_ORDER = [
+  'إنجليزي', 'قرآن', 'توحيد', 'تفسير', 'حديث', 'فقه', 'الاجتماعيات', 'البدنية', 'الحياتية',
+  'الرياضيات', 'التفكير الناقد', 'الفنية', 'رقمية', 'علوم', 'لغتي',
+];
+let examCoverageLoaded = false;
+async function loadExamCoverageCard() {
+  const card = document.getElementById('sch-coverage-card');
+  const listEl = document.getElementById('sch-coverage-list');
+
+  const { data } = await runScoped(scoped => {
+    let q = sb.from('subject_exam_coverage').select('subject_name, from_page, to_page, notes');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
+  const rows = (data || []).filter(r => r.from_page || r.to_page || r.notes);
+  if (rows.length === 0) { card.classList.add('hidden-view'); return; }
+
+  rows.sort((a, b) => EXAM_COVERAGE_ORDER.indexOf(a.subject_name) - EXAM_COVERAGE_ORDER.indexOf(b.subject_name));
+  listEl.innerHTML = rows.map(r => `
+    <div class="coverage-row">
+      <span class="subj">${esc(r.subject_name)}</span>
+      ${(r.from_page || r.to_page) ? `<span class="range">${r.from_page ? 'من ص ' + r.from_page : ''}${(r.from_page && r.to_page) ? ' — ' : ''}${r.to_page ? 'إلى ص ' + r.to_page : ''}</span>` : ''}
+      ${r.notes ? `<span class="note">${esc(r.notes)}</span>` : ''}
+    </div>`).join('');
+  card.classList.remove('hidden-view');
+}
 
 document.getElementById('sch-grade-tabs').addEventListener('click', (e) => {
   const btn = e.target.closest('.tab');
