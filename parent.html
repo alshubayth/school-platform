@@ -241,7 +241,7 @@
   <div id="schedule-view" class="hidden-view">
     <div id="sch-coverage-card" class="schedule-card hidden-view" style="margin-bottom:14px;">
       <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-        <h3 style="font-size:14px; margin:0;">جدول الاختبارات الفترية</h3>
+        <h3 id="sch-coverage-title" style="font-size:14px; margin:0;">جدول الاختبارات الفترية</h3>
         <button id="sch-coverage-print-btn" class="print-btn" style="flex-shrink:0;">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
           <span>طباعة</span>
@@ -767,10 +767,7 @@ document.getElementById('bottom-nav').addEventListener('click', (e) => {
   if (view === 'schedule' && !schSection && document.getElementById('sch-section-select').options.length <= 1) {
     refreshScheduleSections();
   }
-  if (view === 'schedule' && !examCoverageLoaded) {
-    examCoverageLoaded = true;
-    loadExamCoverageCard();
-  }
+  if (view === 'schedule') loadExamCoverageCard();
 });
 
 /* ===== جدول الاختبارات الفترية (مُدخل من الإدارة بقسم "الجدول الدراسي") =====
@@ -806,14 +803,15 @@ function dayBadgeHtml(dayName) {
   return `<span class="day-badge" style="background:${c.bg}; color:${c.fg};">${esc(dayName)}</span>`;
 }
 
-let examCoverageLoaded = false;
 let examCoverageRows = [];
 async function loadExamCoverageCard() {
   const card = document.getElementById('sch-coverage-card');
   const listEl = document.getElementById('sch-coverage-list');
+  const titleEl = document.getElementById('sch-coverage-title');
+  if (titleEl) titleEl.textContent = `جدول الاختبارات الفترية - ${SCHEDULE_GRADE_LABELS[schGrade] || ''}`;
 
   const { data } = await runScoped(scoped => {
-    let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes');
+    let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes').eq('grade_level', schGrade);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
@@ -865,6 +863,7 @@ document.getElementById('sch-grade-tabs').addEventListener('click', (e) => {
   schGrade = btn.dataset.grade;
   schSection = null;
   refreshScheduleSections();
+  loadExamCoverageCard();
 });
 
 document.getElementById('sch-section-select').addEventListener('change', (e) => {
@@ -1044,7 +1043,7 @@ function buildExamCoveragePrintHtml() {
       <img src="${document.getElementById('hero-logo').src}" />
       <div class="title">
         <h1>جدول الاختبارات الفترية</h1>
-        <p>${currentSchoolName}</p>
+        <p>${currentSchoolName} — ${SCHEDULE_GRADE_LABELS[schGrade] || ''}</p>
       </div>
       <div class="date">تاريخ الطباعة<br>${printDate}</div>
     </div>
