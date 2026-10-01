@@ -41,7 +41,7 @@ async function loadExamCoverageCard() {
   listEl.innerHTML = '<div class="placeholder" style="padding:14px;"><p>جارٍ التحميل...</p></div>';
 
   const { data: existing } = await readScopedBySchool(scoped => {
-    let q = sb.from('subject_exam_coverage').select('subject_name, from_page, to_page, notes');
+    let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes');
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
@@ -50,10 +50,11 @@ async function loadExamCoverageCard() {
 
   listEl.innerHTML = `
     <div style="overflow-x:auto;">
-      <table style="width:100%; border-collapse:collapse; min-width:520px;">
+      <table style="width:100%; border-collapse:collapse; min-width:620px;">
         <thead>
           <tr>
             <th style="padding:6px 8px; text-align:right; font-size:12px; color:var(--slate);">المادة</th>
+            <th style="padding:6px 8px; text-align:center; font-size:12px; color:var(--slate); width:140px;">تاريخ الاختبار</th>
             <th style="padding:6px 8px; text-align:center; font-size:12px; color:var(--slate); width:90px;">من صفحة</th>
             <th style="padding:6px 8px; text-align:center; font-size:12px; color:var(--slate); width:90px;">إلى صفحة</th>
             <th style="padding:6px 8px; text-align:right; font-size:12px; color:var(--slate);">ملاحظات</th>
@@ -65,6 +66,7 @@ async function loadExamCoverageCard() {
             return `
             <tr data-subject="${name}">
               <td style="padding:5px 8px; font-weight:700; font-size:13px; white-space:nowrap;">${name}</td>
+              <td style="padding:5px 4px;"><input type="date" class="ec-date" value="${r.exam_date || ''}" style="margin-bottom:0; padding:7px 6px; text-align:center;" /></td>
               <td style="padding:5px 4px;"><input type="number" min="1" class="ec-from" value="${r.from_page ?? ''}" style="margin-bottom:0; padding:7px 6px; text-align:center;" /></td>
               <td style="padding:5px 4px;"><input type="number" min="1" class="ec-to" value="${r.to_page ?? ''}" style="margin-bottom:0; padding:7px 6px; text-align:center;" /></td>
               <td style="padding:5px 4px;"><input type="text" class="ec-notes" value="${(r.notes || '').replace(/"/g, '&quot;')}" placeholder="اختياري" style="margin-bottom:0; padding:7px 8px;" /></td>
@@ -81,11 +83,13 @@ document.getElementById('sc-coverage-save-btn').addEventListener('click', async 
   statusEl.style.color = 'var(--slate)';
 
   const rows = Array.from(document.querySelectorAll('#sc-coverage-list tr[data-subject]')).map(tr => {
+    const dateVal = tr.querySelector('.ec-date').value;
     const fromVal = tr.querySelector('.ec-from').value.trim();
     const toVal = tr.querySelector('.ec-to').value.trim();
     const notes = tr.querySelector('.ec-notes').value.trim();
     return {
       subject_name: tr.dataset.subject,
+      exam_date: dateVal || null,
       from_page: fromVal ? parseInt(fromVal) : null,
       to_page: toVal ? parseInt(toVal) : null,
       notes: notes || null,
