@@ -36,7 +36,35 @@ export async function loadScheduleModule() {
   renderGradeTabs();
   await refreshSectionOptions();
   await loadExamCoverageCard();
+  await loadExamCoveragePublishToggle();
 }
+
+/* ===== نشر/إخفاء جدول الاختبارات الفترية عن أولياء الأمور - خاص بكل مرحلة لحالها =====
+ * يبقى الجدول "مسودة" (غير ظاهر لولي الأمر) لحد ما الإدارة تفعّل هذا الخيار صراحة، عشان تقدر
+ * تراجع البيانات كاملة أول قبل ما تنشرها - نفس فكرة "نشر هذا الأسبوع" بالخطة الأسبوعية. */
+async function loadExamCoveragePublishToggle() {
+  const toggle = document.getElementById('sc-coverage-publish-toggle');
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_coverage_publish_settings').select('is_published').eq('grade_level', scGrade);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.maybeSingle();
+  });
+  toggle.checked = !!(data && data.is_published);
+}
+
+document.getElementById('sc-coverage-publish-toggle').addEventListener('change', async (e) => {
+  const isPublished = e.target.checked;
+  if (isPublished) {
+    await writeWithSchool(extra => sb.from('exam_coverage_publish_settings').upsert(
+      { grade_level: scGrade, is_published: true, updated_at: new Date().toISOString(), ...extra },
+      { onConflict: 'school_id,grade_level' }
+    ));
+  } else {
+    let q = sb.from('exam_coverage_publish_settings').delete().eq('grade_level', scGrade);
+    if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    await q;
+  }
+});
 
 /* ===== جدول الاختبارات الفترية (تاريخ + نطاق صفحات لكل مادة) - مستقل لكل مرحلة (scGrade) =====
  * كل مرحلة (أول/ثاني/ثالث متوسط) لها جدول حصص مختلف، فتواريخ اختباراتها الفترية تختلف هي
@@ -150,6 +178,7 @@ function renderGradeTabs() {
       renderGradeTabs();
       refreshSectionOptions();
       loadExamCoverageCard();
+      loadExamCoveragePublishToggle();
     });
     wrap.appendChild(btn);
   });
