@@ -227,8 +227,14 @@
 
   <div id="schedule-view" class="hidden-view">
     <div id="sch-coverage-card" class="schedule-card hidden-view" style="margin-bottom:14px;">
-      <h3 style="font-size:14px; margin-bottom:4px;">المادة المقطوعة للاختبارات الفترية</h3>
-      <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">نطاق الصفحات المحدد لكل مادة بهذه الفترة</p>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
+        <h3 style="font-size:14px; margin:0;">جدول الاختبارات الفترية</h3>
+        <button id="sch-coverage-print-btn" class="print-btn" style="flex-shrink:0;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+          <span>طباعة</span>
+        </button>
+      </div>
+      <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">تاريخ كل اختبار والمادة المقطوعة له</p>
       <div id="sch-coverage-list"></div>
     </div>
 
@@ -754,31 +760,70 @@ document.getElementById('bottom-nav').addEventListener('click', (e) => {
   }
 });
 
-/* ===== عرض المادة المقطوعة للاختبارات الفترية (مُدخلة من الإدارة بقسم "الجدول الدراسي") ===== */
+/* ===== جدول الاختبارات الفترية (مُدخل من الإدارة بقسم "الجدول الدراسي") =====
+ * يظهر مرتّبًا بالتاريخ (الأقرب أول)، واليوم يُحسب تلقائيًا من التاريخ - ما يُخزَّن لحاله. */
 const EXAM_COVERAGE_ORDER = [
   'إنجليزي', 'قرآن', 'توحيد', 'تفسير', 'حديث', 'فقه', 'الاجتماعيات', 'البدنية', 'الحياتية',
   'الرياضيات', 'التفكير الناقد', 'الفنية', 'رقمية', 'علوم', 'لغتي',
 ];
+const AR_DAY_NAMES = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+function examDayName(dateStr) {
+  if (!dateStr) return '';
+  return AR_DAY_NAMES[new Date(dateStr + 'T00:00:00').getDay()];
+}
+function examDateLabel(dateStr) {
+  if (!dateStr) return '';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'numeric', day: 'numeric' });
+}
+function examPagesLabel(r) {
+  if (!r.from_page && !r.to_page) return '';
+  return `${r.from_page ? 'من ص ' + r.from_page : ''}${(r.from_page && r.to_page) ? ' — ' : ''}${r.to_page ? 'إلى ص ' + r.to_page : ''}`;
+}
+
 let examCoverageLoaded = false;
+let examCoverageRows = [];
 async function loadExamCoverageCard() {
   const card = document.getElementById('sch-coverage-card');
   const listEl = document.getElementById('sch-coverage-list');
 
   const { data } = await runScoped(scoped => {
-    let q = sb.from('subject_exam_coverage').select('subject_name, from_page, to_page, notes');
+    let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes');
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
-  const rows = (data || []).filter(r => r.from_page || r.to_page || r.notes);
+  const rows = (data || []).filter(r => r.exam_date || r.from_page || r.to_page || r.notes);
   if (rows.length === 0) { card.classList.add('hidden-view'); return; }
 
-  rows.sort((a, b) => EXAM_COVERAGE_ORDER.indexOf(a.subject_name) - EXAM_COVERAGE_ORDER.indexOf(b.subject_name));
-  listEl.innerHTML = rows.map(r => `
-    <div class="coverage-row">
-      <span class="subj">${esc(r.subject_name)}</span>
-      ${(r.from_page || r.to_page) ? `<span class="range">${r.from_page ? 'من ص ' + r.from_page : ''}${(r.from_page && r.to_page) ? ' — ' : ''}${r.to_page ? 'إلى ص ' + r.to_page : ''}</span>` : ''}
-      ${r.notes ? `<span class="note">${esc(r.notes)}</span>` : ''}
-    </div>`).join('');
+  rows.sort((a, b) => {
+    if (a.exam_date && b.exam_date) return a.exam_date < b.exam_date ? -1 : (a.exam_date > b.exam_date ? 1 : 0);
+    if (a.exam_date) return -1;
+    if (b.exam_date) return 1;
+    return EXAM_COVERAGE_ORDER.indexOf(a.subject_name) - EXAM_COVERAGE_ORDER.indexOf(b.subject_name);
+  });
+  examCoverageRows = rows;
+
+  listEl.innerHTML = `
+    <table class="schedule-table" style="min-width:420px;">
+      <thead>
+        <tr>
+          <th style="text-align:right;">المادة</th>
+          <th>التاريخ</th>
+          <th>اليوم</th>
+          <th style="text-align:right;">المادة المقطوعة</th>
+          <th style="text-align:right;">ملاحظات</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `
+          <tr>
+            <td style="text-align:right; font-weight:700;">${esc(r.subject_name)}</td>
+            <td style="white-space:nowrap;">${esc(examDateLabel(r.exam_date)) || '-'}</td>
+            <td style="white-space:nowrap;">${esc(examDayName(r.exam_date)) || '-'}</td>
+            <td style="text-align:right;">${esc(examPagesLabel(r)) || '-'}</td>
+            <td style="text-align:right; font-size:11px; color:var(--slate);">${esc(r.notes || '') || '-'}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
   card.classList.remove('hidden-view');
 }
 
@@ -925,6 +970,69 @@ document.getElementById('sch-print-btn').addEventListener('click', () => {
   if (!win) return;
   win.document.write(`<html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>الجدول الدراسي</title>
     <style>${SCHEDULE_PRINT_STYLES}</style></head><body>${buildSchedulePrintHtml()}</body></html>`);
+  win.document.close();
+  const img = win.document.querySelector('.print-header img');
+  const doPrint = () => { win.focus(); win.print(); };
+  if (!img || img.complete) doPrint();
+  else { img.onload = doPrint; img.onerror = doPrint; }
+});
+
+/* ---------- طباعة جدول الاختبارات الفترية ---------- */
+const EXAM_COVERAGE_PRINT_STYLES = `
+  @page{ size: A4 portrait; margin: 12mm; }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{ font-family:'IBM Plex Sans Arabic', Arial, sans-serif; margin:0; padding:0; color:#101728; }
+  .print-header{ display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #0F2447; padding-bottom:10px; margin-bottom:14px; }
+  .print-header img{ height:52px; }
+  .print-header .title{ text-align:center; flex:1; }
+  .print-header h1{ font-size:19px; margin:0 0 4px; color:#0F2447; }
+  .print-header p{ font-size:13px; margin:0; color:#5C6478; font-weight:600; }
+  .print-header .date{ font-size:11px; color:#5C6478; text-align:left; white-space:nowrap; }
+  table{ width:100%; border-collapse:collapse; }
+  th, td{ border:1px solid #C7CBD8; padding:8px 6px; font-size:12px; }
+  th{ background:#0F2447 !important; color:#fff !important; font-size:12.5px; font-weight:700; text-align:center; }
+  td{ text-align:center; }
+  td.subj-cell{ text-align:right; font-weight:700; }
+  td.notes-cell{ text-align:right; color:#5C6478; font-size:11px; }
+  .print-footer{ margin-top:16px; font-size:10.5px; color:#8890A0; text-align:center; }
+`;
+
+function buildExamCoveragePrintHtml() {
+  const rows = examCoverageRows.map(r => `
+    <tr>
+      <td class="subj-cell">${esc(r.subject_name)}</td>
+      <td>${esc(examDateLabel(r.exam_date)) || '-'}</td>
+      <td>${esc(examDayName(r.exam_date)) || '-'}</td>
+      <td>${esc(examPagesLabel(r)) || '-'}</td>
+      <td class="notes-cell">${esc(r.notes || '') || '-'}</td>
+    </tr>`).join('');
+
+  const printDate = new Date().toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
+
+  return `
+    <div class="print-header">
+      <img src="${document.getElementById('hero-logo').src}" />
+      <div class="title">
+        <h1>جدول الاختبارات الفترية</h1>
+        <p>${currentSchoolName}</p>
+      </div>
+      <div class="date">تاريخ الطباعة<br>${printDate}</div>
+    </div>
+    <table>
+      <thead>
+        <tr><th>المادة</th><th>التاريخ</th><th>اليوم</th><th>المادة المقطوعة</th><th>ملاحظات</th></tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+    <p class="print-footer">${currentSchoolName} — نظام إدارة المدرسة</p>`;
+}
+
+document.getElementById('sch-coverage-print-btn').addEventListener('click', () => {
+  if (examCoverageRows.length === 0) return;
+  const win = window.open('', '_blank');
+  if (!win) return;
+  win.document.write(`<html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>جدول الاختبارات الفترية</title>
+    <style>${EXAM_COVERAGE_PRINT_STYLES}</style></head><body>${buildExamCoveragePrintHtml()}</body></html>`);
   win.document.close();
   const img = win.document.querySelector('.print-header img');
   const doPrint = () => { win.focus(); win.print(); };
