@@ -811,6 +811,14 @@ async function loadExamCoverageCard() {
   const titleEl = document.getElementById('sch-coverage-title');
   if (titleEl) titleEl.textContent = `جدول الاختبارات الفترية - ${SCHEDULE_GRADE_LABELS[schGrade] || ''}`;
 
+  // الجدول ما يظهر إلا لو الإدارة نشرته صراحة لهذي المرحلة (مسودة بالتعريف لحد ما يُفعَّل)
+  const { data: publishSetting } = await runScoped(scoped => {
+    let q = sb.from('exam_coverage_publish_settings').select('is_published').eq('grade_level', schGrade);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.maybeSingle();
+  });
+  if (!publishSetting || !publishSetting.is_published) { card.classList.add('hidden-view'); return; }
+
   const { data } = await runScoped(scoped => {
     let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes').eq('grade_level', schGrade);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
