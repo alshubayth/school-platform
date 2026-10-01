@@ -84,38 +84,118 @@ function refreshSubjectsForGrade() {
   refreshSubjectsForGrade();
 }
 
-/* ===== دعم أكثر من درس بنفس خطة المادة ===== */
-function addLessonRow(value = '') {
-  const container = document.getElementById('weekly-lessons-container');
-  const row = document.createElement('div');
-  row.className = 'lesson-row';
-  row.style.cssText = 'display:flex; gap:8px; align-items:flex-start; margin-bottom:10px;';
-  row.innerHTML = `
-    <textarea class="weekly-lesson-input" placeholder="الدرس" rows="2" style="flex:1; margin-bottom:0;"></textarea>
-    <button type="button" class="lesson-remove-btn text-action-btn" style="color:var(--danger) !important; white-space:nowrap;">حذف</button>`;
-  row.querySelector('.weekly-lesson-input').value = value;
-  row.querySelector('.lesson-remove-btn').addEventListener('click', () => {
-    row.remove();
-    const c = document.getElementById('weekly-lessons-container');
-    if (c.children.length === 0) addLessonRow('');
-  });
-  document.getElementById('weekly-lessons-container').appendChild(row);
+/* ===== دعم أكثر من درس بنفس خطة المادة =====
+ * ولمادة "الدراسات الإسلامية" تحديدًا: الجدول الدراسي نفسه ما يتغيّر (يبقى مادة وحدة فيه)،
+ * لكن شاشة إدخال خطة المعلم تعرض 5 أقسام مستقلة (قرآن/توحيد/تفسير/حديث/فقه) بدل حقل عام واحد،
+ * بناءً على طلب الإدارة. يُخزَّن كل قسم كسطر بادئته اسم القسم داخل نفس عمود lessons (مصفوفة نصوص)
+ * الموجود أصلًا، عشان ما نحتاج أي تعديل قاعدة بيانات - وتبقى صفحة ولي الأمر ولوحة المتابعة تعرضها
+ * عاديًا كقائمة أسطر. */
+const ISLAMIC_SECTIONS = [
+  { key: 'quran', label: 'قرآن' },
+  { key: 'tawheed', label: 'توحيد' },
+  { key: 'tafsir', label: 'تفسير' },
+  { key: 'hadith', label: 'حديث' },
+  { key: 'fiqh', label: 'فقه' },
+];
+function isIslamicSubjectName(name) { return !!name && name.includes('إسلام'); }
+function currentSubjectName() {
+  const subSelect = document.getElementById('weekly-subject');
+  const opt = subSelect && subSelect.selectedOptions[0];
+  return opt ? opt.textContent : '';
 }
 
-function renderLessonInputs(lessons) {
-  const container = document.getElementById('weekly-lessons-container');
+/* يبني واجهة إدخال الدروس (عامة أو مقسّمة لمواد الدراسات الإسلامية) داخل أي حاوية + زر إضافة،
+ * قابلة لإعادة الاستخدام بكل من نموذج الإضافة العلوي وشاشة تعديل الإدارة بالقائمة. */
+function buildLessonEditorUI({ container, addBtn, subjectName, lessons }) {
+  const islamic = isIslamicSubjectName(subjectName);
+  if (addBtn) addBtn.classList.toggle('hidden', islamic);
   container.innerHTML = '';
-  const list = (lessons && lessons.length > 0) ? lessons : [''];
-  list.forEach(val => addLessonRow(val));
+
+  function addGenericRow(value = '') {
+    const row = document.createElement('div');
+    row.className = 'lesson-row';
+    row.style.cssText = 'display:flex; gap:8px; align-items:flex-start; margin-bottom:10px;';
+    row.innerHTML = `
+      <textarea class="lesson-editor-input" placeholder="الدرس" rows="2" style="flex:1; margin-bottom:0;"></textarea>
+      <button type="button" class="lesson-remove-btn text-action-btn" style="color:var(--danger) !important; white-space:nowrap;">حذف</button>`;
+    row.querySelector('.lesson-editor-input').value = value;
+    row.querySelector('.lesson-remove-btn').addEventListener('click', () => {
+      row.remove();
+      if (container.children.length === 0) addGenericRow('');
+    });
+    container.appendChild(row);
+  }
+
+  function addIslamicRow(key, value = '') {
+    const rowsWrap = container.querySelector(`.islamic-lesson-rows[data-key="${key}"]`);
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex; gap:8px; align-items:flex-start; margin-bottom:8px;';
+    row.innerHTML = `
+      <textarea class="lesson-editor-input" data-key="${key}" placeholder="الدرس" rows="2" style="flex:1; margin-bottom:0;"></textarea>
+      <button type="button" class="lesson-remove-btn text-action-btn" style="color:var(--danger) !important; white-space:nowrap;">حذف</button>`;
+    row.querySelector('.lesson-editor-input').value = value;
+    row.querySelector('.lesson-remove-btn').addEventListener('click', () => {
+      row.remove();
+      if (rowsWrap.children.length === 0) addIslamicRow(key, '');
+    });
+    rowsWrap.appendChild(row);
+  }
+
+  if (islamic) {
+    container.innerHTML = ISLAMIC_SECTIONS.map(sec => `
+      <div class="islamic-lesson-group">
+        <label style="font-weight:700; font-size:12.5px; color:var(--ink); display:block; margin:10px 0 6px;">${sec.label}</label>
+        <div class="islamic-lesson-rows" data-key="${sec.key}"></div>
+        <span class="text-action-btn islamic-add-lesson-btn" data-key="${sec.key}" style="font-size:12px;">+ إضافة درس</span>
+      </div>`).join('');
+
+    const grouped = {};
+    ISLAMIC_SECTIONS.forEach(sec => { grouped[sec.key] = []; });
+    (lessons || []).forEach(l => {
+      const match = ISLAMIC_SECTIONS.find(sec => l.startsWith(sec.label + ': '));
+      if (match) grouped[match.key].push(l.slice(match.label.length + 2));
+      else grouped.quran.push(l); // احتياطًا لأي درس قديم بدون بادئة قسم واضحة - يُعرض تحت "قرآن" بدل ما يضيع
+    });
+    ISLAMIC_SECTIONS.forEach(sec => {
+      const vals = grouped[sec.key].length > 0 ? grouped[sec.key] : [''];
+      vals.forEach(v => addIslamicRow(sec.key, v));
+    });
+    container.querySelectorAll('.islamic-add-lesson-btn').forEach(btn => {
+      btn.addEventListener('click', () => addIslamicRow(btn.dataset.key, ''));
+    });
+  } else {
+    const list = (lessons && lessons.length > 0) ? lessons : [''];
+    list.forEach(v => addGenericRow(v));
+    if (addBtn) addBtn.onclick = () => addGenericRow('');
+  }
 }
 
-function collectLessons() {
-  return Array.from(document.querySelectorAll('.weekly-lesson-input'))
-    .map(t => t.value.trim())
-    .filter(v => v.length > 0);
+function collectLessonsFromEditor(container, subjectName) {
+  if (isIslamicSubjectName(subjectName)) {
+    const result = [];
+    ISLAMIC_SECTIONS.forEach(sec => {
+      Array.from(container.querySelectorAll(`.lesson-editor-input[data-key="${sec.key}"]`))
+        .map(t => t.value.trim()).filter(v => v.length > 0)
+        .forEach(v => result.push(`${sec.label}: ${v}`));
+    });
+    return result;
+  }
+  return Array.from(container.querySelectorAll('.lesson-editor-input'))
+    .map(t => t.value.trim()).filter(v => v.length > 0);
 }
 
-document.getElementById('weekly-add-lesson-btn').addEventListener('click', () => addLessonRow(''));
+/* المادة تغيّرت بالنموذج العلوي - لو معلم، loadFormForCurrentSelection تتكفّل بإعادة البناء (وتستدعي
+ * buildLessonEditorUI بنفسها)؛ لو إدارة (النموذج العلوي عندها "إضافة جديد" بس، بدون تحميل خطة
+ * موجودة) نعيد بناء واجهة الإدخال فاضية لتطابق نوع المادة الجديدة. */
+document.getElementById('weekly-subject').addEventListener('change', () => {
+  if (currentProfile.role === 'teacher') return;
+  buildLessonEditorUI({
+    container: document.getElementById('weekly-lessons-container'),
+    addBtn: document.getElementById('weekly-add-lesson-btn'),
+    subjectName: currentSubjectName(),
+    lessons: [''],
+  });
+});
 
 /* ===== تحديد الفصول اللي عليها الاختبار (لو المادة تُدرّس بأكثر من فصل بمعلمين مختلفين) ===== */
 const sectionsCacheByGrade = {};
@@ -169,7 +249,10 @@ async function loadFormForCurrentSelection() {
   const subjectId = document.getElementById('weekly-subject').value;
   const grade = document.getElementById('weekly-grade').value;
   const titleEl = document.getElementById('weekly-form-title');
-  if (!subjectId || !grade) { renderLessonInputs(['']); return; }
+  if (!subjectId || !grade) {
+    buildLessonEditorUI({ container: document.getElementById('weekly-lessons-container'), addBtn: document.getElementById('weekly-add-lesson-btn'), subjectName: currentSubjectName(), lessons: [''] });
+    return;
+  }
 
   const { data: existing } = await readScoped(scoped => {
     let q = sb.from('weekly_plans')
@@ -179,9 +262,13 @@ async function loadFormForCurrentSelection() {
     return q.maybeSingle();
   });
 
+  const lessonsContainer = document.getElementById('weekly-lessons-container');
+  const lessonsAddBtn = document.getElementById('weekly-add-lesson-btn');
+  const subjectName = currentSubjectName();
+
   const testWrap = document.getElementById('weekly-test-sections-wrap');
   if (existing) {
-    renderLessonInputs(existing.lessons || []);
+    buildLessonEditorUI({ container: lessonsContainer, addBtn: lessonsAddBtn, subjectName, lessons: existing.lessons || [] });
     document.getElementById('weekly-tasks').value = existing.performance_tasks || '';
     document.getElementById('weekly-homework').value = existing.homework || '';
     document.getElementById('weekly-no-homework').checked = !!existing.no_homework;
@@ -191,7 +278,7 @@ async function loadFormForCurrentSelection() {
     if (existing.has_test) await renderTestSectionsPicker(document.getElementById('weekly-test-sections-list'), grade, existing.test_sections);
     titleEl.textContent = 'تحديث خطة المادة لهذا الأسبوع';
   } else {
-    renderLessonInputs(['']);
+    buildLessonEditorUI({ container: lessonsContainer, addBtn: lessonsAddBtn, subjectName, lessons: [''] });
     document.getElementById('weekly-tasks').value = '';
     document.getElementById('weekly-homework').value = '';
     document.getElementById('weekly-no-homework').checked = false;
@@ -222,7 +309,7 @@ export async function loadWeeklyModule() {
     const subSelect = document.getElementById('weekly-subject');
     subSelect.innerHTML = '';
     subjectsCache.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; subSelect.appendChild(o); });
-    renderLessonInputs(['']);
+    buildLessonEditorUI({ container: document.getElementById('weekly-lessons-container'), addBtn: document.getElementById('weekly-add-lesson-btn'), subjectName: currentSubjectName(), lessons: [''] });
   }
 
   if (isAdminOrDeputy()) {
@@ -296,7 +383,7 @@ document.getElementById('weekly-grade').addEventListener('change', async () => {
 
 document.getElementById('weekly-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('weekly-error');
-  const lessons = collectLessons();
+  const lessons = collectLessonsFromEditor(document.getElementById('weekly-lessons-container'), currentSubjectName());
   if (lessons.length === 0) { errEl.textContent = 'اكتب درس واحد على الأقل'; errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
 
@@ -469,26 +556,13 @@ function renderPlanEditMode(card, p) {
   });
 
   const lessonsContainer = card.querySelector('.edit-lessons-container');
-  function addRow(value = '') {
-    const row = document.createElement('div');
-    row.style.cssText = 'display:flex; gap:8px; align-items:flex-start; margin-bottom:10px;';
-    row.innerHTML = `
-      <textarea class="edit-lesson-input" placeholder="الدرس" rows="2" style="flex:1; margin-bottom:0;"></textarea>
-      <button type="button" class="text-action-btn edit-lesson-remove" style="color:var(--danger) !important; white-space:nowrap;">حذف</button>`;
-    row.querySelector('.edit-lesson-input').value = value;
-    row.querySelector('.edit-lesson-remove').addEventListener('click', () => {
-      row.remove();
-      if (lessonsContainer.children.length === 0) addRow('');
-    });
-    lessonsContainer.appendChild(row);
-  }
-  lessonsList.forEach(v => addRow(v));
+  const editSubjectName = p.subjects ? p.subjects.name : '';
+  buildLessonEditorUI({ container: lessonsContainer, addBtn: card.querySelector('.edit-add-lesson-btn'), subjectName: editSubjectName, lessons: lessonsList });
 
-  card.querySelector('.edit-add-lesson-btn').addEventListener('click', () => addRow(''));
   card.querySelector('.edit-cancel-btn').addEventListener('click', () => renderPlanViewMode(card, p));
   card.querySelector('.edit-save-btn').addEventListener('click', async () => {
     const errEl = card.querySelector('.edit-error');
-    const lessons = Array.from(card.querySelectorAll('.edit-lesson-input')).map(t => t.value.trim()).filter(v => v.length > 0);
+    const lessons = collectLessonsFromEditor(lessonsContainer, editSubjectName);
     if (lessons.length === 0) { errEl.textContent = 'اكتب درس واحد على الأقل'; errEl.style.display = 'block'; return; }
 
     const editHasTest = card.querySelector('.edit-has-test').checked;
