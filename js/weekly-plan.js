@@ -86,23 +86,16 @@ function refreshSubjectsForGrade() {
 
 /* ===== دعم أكثر من درس بنفس خطة المادة =====
  * ولمادة "الدراسات الإسلامية" تحديدًا: الجدول الدراسي نفسه ما يتغيّر (يبقى مادة وحدة فيه)،
- * لكن شاشة إدخال خطة المعلم تعرض قسمين مستقلين (القرآن الكريم / التربية الإسلامية) بدل حقل عام واحد،
+ * لكن شاشة إدخال خطة المعلم تعرض 5 أقسام مستقلة (قرآن/توحيد/تفسير/حديث/فقه) بدل حقل عام واحد،
  * بناءً على طلب الإدارة. يُخزَّن كل قسم كسطر بادئته اسم القسم داخل نفس عمود lessons (مصفوفة نصوص)
  * الموجود أصلًا، عشان ما نحتاج أي تعديل قاعدة بيانات - وتبقى صفحة ولي الأمر ولوحة المتابعة تعرضها
  * عاديًا كقائمة أسطر. */
 const ISLAMIC_SECTIONS = [
-  { key: 'quran', label: 'القرآن الكريم' },
-  { key: 'islamic', label: 'التربية الإسلامية' },
-];
-/* الأقسام القديمة (قبل الدمج لقسمين) - عشان الخطط المحفوظة سابقًا تنفتح بالقسم الصحيح:
- * "قرآن" ← القرآن الكريم، والباقي (توحيد/تفسير/حديث/فقه) ← التربية الإسلامية مع إبقاء اسم القسم
- * القديم داخل نص الدرس حتى ما تضيع المعلومة. */
-const LEGACY_ISLAMIC_PREFIXES = [
-  { label: 'قرآن', key: 'quran', keepLabel: false },
-  { label: 'توحيد', key: 'islamic', keepLabel: true },
-  { label: 'تفسير', key: 'islamic', keepLabel: true },
-  { label: 'حديث', key: 'islamic', keepLabel: true },
-  { label: 'فقه', key: 'islamic', keepLabel: true },
+  { key: 'quran', label: 'قرآن' },
+  { key: 'tawheed', label: 'توحيد' },
+  { key: 'tafsir', label: 'تفسير' },
+  { key: 'hadith', label: 'حديث' },
+  { key: 'fiqh', label: 'فقه' },
 ];
 function isIslamicSubjectName(name) { return !!name && name.includes('إسلام'); }
 function currentSubjectName() {
@@ -160,10 +153,8 @@ function buildLessonEditorUI({ container, addBtn, subjectName, lessons }) {
     ISLAMIC_SECTIONS.forEach(sec => { grouped[sec.key] = []; });
     (lessons || []).forEach(l => {
       const match = ISLAMIC_SECTIONS.find(sec => l.startsWith(sec.label + ': '));
-      if (match) { grouped[match.key].push(l.slice(match.label.length + 2)); return; }
-      const legacy = LEGACY_ISLAMIC_PREFIXES.find(p => l.startsWith(p.label + ': '));
-      if (legacy) { grouped[legacy.key].push(legacy.keepLabel ? l : l.slice(legacy.label.length + 2)); return; }
-      grouped.islamic.push(l); // احتياطًا لأي درس قديم بدون بادئة قسم واضحة - يُعرض تحت "التربية الإسلامية" بدل ما يضيع
+      if (match) grouped[match.key].push(l.slice(match.label.length + 2));
+      else grouped.quran.push(l); // احتياطًا لأي درس قديم بدون بادئة قسم واضحة - يُعرض تحت "قرآن" بدل ما يضيع
     });
     ISLAMIC_SECTIONS.forEach(sec => {
       const vals = grouped[sec.key].length > 0 ? grouped[sec.key] : [''];
@@ -265,7 +256,7 @@ async function loadFormForCurrentSelection() {
 
   const { data: existing } = await readScoped(scoped => {
     let q = sb.from('weekly_plans')
-      .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections')
+      .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections, test_note')
       .eq('subject_id', subjectId).eq('grade_level', grade).eq('week_number', currentWeek);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q.maybeSingle();
@@ -284,6 +275,7 @@ async function loadFormForCurrentSelection() {
     toggleNoHomeworkUI(!!existing.no_homework);
     document.getElementById('weekly-has-test').checked = !!existing.has_test;
     testWrap.classList.toggle('hidden', !existing.has_test);
+    document.getElementById('weekly-test-note').value = existing.test_note || '';
     if (existing.has_test) await renderTestSectionsPicker(document.getElementById('weekly-test-sections-list'), grade, existing.test_sections);
     titleEl.textContent = 'تحديث خطة المادة لهذا الأسبوع';
   } else {
@@ -294,6 +286,7 @@ async function loadFormForCurrentSelection() {
     toggleNoHomeworkUI(false);
     document.getElementById('weekly-has-test').checked = false;
     testWrap.classList.add('hidden');
+    document.getElementById('weekly-test-note').value = '';
     titleEl.textContent = 'إضافة خطة المادة لهذا الأسبوع';
   }
 }
@@ -409,6 +402,7 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
     no_homework: noHomework,
     has_test: hasTest,
     test_sections: hasTest ? collectTestSections(document.getElementById('weekly-test-sections-list')) : null,
+    test_note: hasTest ? document.getElementById('weekly-test-note').value.trim() : '',
     created_by: userData.user.id,
   };
 
@@ -435,6 +429,7 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
   toggleNoHomeworkUI(false);
   document.getElementById('weekly-has-test').checked = false;
   document.getElementById('weekly-test-sections-wrap').classList.add('hidden');
+  document.getElementById('weekly-test-note').value = '';
   await loadFormForCurrentSelection();
   await refreshWeeklyList();
 
@@ -454,7 +449,7 @@ async function refreshWeeklyList() {
   const grade = document.getElementById('weekly-grade').value;
   const { data: plans } = await readScoped(scoped => {
     let q = sb.from('weekly_plans')
-      .select('id, grade_level, lessons, performance_tasks, homework, no_homework, has_test, test_sections, subjects(name)')
+      .select('id, grade_level, lessons, performance_tasks, homework, no_homework, has_test, test_sections, test_note, subjects(name)')
       .eq('grade_level', grade).eq('week_number', currentWeek);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
@@ -484,7 +479,7 @@ async function refreshWeeklyList() {
 
 function renderPlanViewMode(row, p) {
   const testTag = p.has_test
-    ? `<span class="wp-tag wp-tag-test">اختبار</span><div class="wp-topic-text">${esc(formatTestSections(p.test_sections))}</div>`
+    ? `<span class="wp-tag wp-tag-test">اختبار</span><div class="wp-topic-text">${esc(formatTestSections(p.test_sections))}</div>${p.test_note ? `<div class="wp-topic-text" style="color:var(--slate);">${esc(p.test_note)}</div>` : ''}`
     : '';
   const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [];
   const lessonsHtml = lessonsList.length > 1
@@ -544,6 +539,7 @@ function renderPlanEditMode(card, p) {
     <div class="edit-test-sections-wrap ${p.has_test ? '' : 'hidden'}" style="background:var(--sand); border-radius:10px; padding:10px 12px; margin-bottom:14px;">
       <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول اللي عليها الاختبار. اتركها كلها فاضية = الاختبار على كل الفصول.</p>
       <div class="edit-test-sections-list" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
+      <textarea class="edit-test-note" placeholder="ملاحظة عن الاختبار (مثال: من صفحة ١٠ إلى ١٥ في الكتاب، أو من ورقة العمل المرفقة)" rows="2" style="margin:10px 0 0;">${p.test_note || ''}</textarea>
     </div>
     <div class="error-msg edit-error"></div>
     <button class="btn-primary edit-save-btn" style="width:auto; padding:10px 18px;">حفظ التعديل</button>
@@ -583,6 +579,7 @@ function renderPlanEditMode(card, p) {
       no_homework: editNoHomework,
       has_test: editHasTest,
       test_sections: editHasTest ? collectTestSections(testList) : null,
+      test_note: editHasTest ? card.querySelector('.edit-test-note').value.trim() : '',
     };
     const { error } = await sb.from('weekly_plans').update(payload).eq('id', p.id);
     if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
