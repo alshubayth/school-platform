@@ -86,16 +86,23 @@ function refreshSubjectsForGrade() {
 
 /* ===== دعم أكثر من درس بنفس خطة المادة =====
  * ولمادة "الدراسات الإسلامية" تحديدًا: الجدول الدراسي نفسه ما يتغيّر (يبقى مادة وحدة فيه)،
- * لكن شاشة إدخال خطة المعلم تعرض 5 أقسام مستقلة (قرآن/توحيد/تفسير/حديث/فقه) بدل حقل عام واحد،
+ * لكن شاشة إدخال خطة المعلم تعرض قسمين مستقلين (القرآن الكريم / التربية الإسلامية) بدل حقل عام واحد،
  * بناءً على طلب الإدارة. يُخزَّن كل قسم كسطر بادئته اسم القسم داخل نفس عمود lessons (مصفوفة نصوص)
  * الموجود أصلًا، عشان ما نحتاج أي تعديل قاعدة بيانات - وتبقى صفحة ولي الأمر ولوحة المتابعة تعرضها
  * عاديًا كقائمة أسطر. */
 const ISLAMIC_SECTIONS = [
-  { key: 'quran', label: 'قرآن' },
-  { key: 'tawheed', label: 'توحيد' },
-  { key: 'tafsir', label: 'تفسير' },
-  { key: 'hadith', label: 'حديث' },
-  { key: 'fiqh', label: 'فقه' },
+  { key: 'quran', label: 'القرآن الكريم' },
+  { key: 'islamic', label: 'التربية الإسلامية' },
+];
+/* الأقسام القديمة (قبل الدمج لقسمين) - عشان الخطط المحفوظة سابقًا تنفتح بالقسم الصحيح:
+ * "قرآن" ← القرآن الكريم، والباقي (توحيد/تفسير/حديث/فقه) ← التربية الإسلامية مع إبقاء اسم القسم
+ * القديم داخل نص الدرس حتى ما تضيع المعلومة. */
+const LEGACY_ISLAMIC_PREFIXES = [
+  { label: 'قرآن', key: 'quran', keepLabel: false },
+  { label: 'توحيد', key: 'islamic', keepLabel: true },
+  { label: 'تفسير', key: 'islamic', keepLabel: true },
+  { label: 'حديث', key: 'islamic', keepLabel: true },
+  { label: 'فقه', key: 'islamic', keepLabel: true },
 ];
 function isIslamicSubjectName(name) { return !!name && name.includes('إسلام'); }
 function currentSubjectName() {
@@ -153,8 +160,10 @@ function buildLessonEditorUI({ container, addBtn, subjectName, lessons }) {
     ISLAMIC_SECTIONS.forEach(sec => { grouped[sec.key] = []; });
     (lessons || []).forEach(l => {
       const match = ISLAMIC_SECTIONS.find(sec => l.startsWith(sec.label + ': '));
-      if (match) grouped[match.key].push(l.slice(match.label.length + 2));
-      else grouped.quran.push(l); // احتياطًا لأي درس قديم بدون بادئة قسم واضحة - يُعرض تحت "قرآن" بدل ما يضيع
+      if (match) { grouped[match.key].push(l.slice(match.label.length + 2)); return; }
+      const legacy = LEGACY_ISLAMIC_PREFIXES.find(p => l.startsWith(p.label + ': '));
+      if (legacy) { grouped[legacy.key].push(legacy.keepLabel ? l : l.slice(legacy.label.length + 2)); return; }
+      grouped.islamic.push(l); // احتياطًا لأي درس قديم بدون بادئة قسم واضحة - يُعرض تحت "التربية الإسلامية" بدل ما يضيع
     });
     ISLAMIC_SECTIONS.forEach(sec => {
       const vals = grouped[sec.key].length > 0 ? grouped[sec.key] : [''];
