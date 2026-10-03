@@ -200,6 +200,50 @@
   .coverage-table tbody tr:nth-child(even) td{ background:#FBFAFC; }
   .coverage-table td.subj-cell{ font-weight:800; color:var(--ink); }
   .coverage-table td.notes-cell{ color:var(--slate); font-size:11px; }
+
+  /* ===== زر عائم: جدول الاختبارات الفترية (متوهج بظل أحمر) =====
+   * يظهر فقط لو فيه مرحلة واحدة على الأقل نشرت الإدارة جدولها. */
+  .exam-fab{
+    position:fixed; z-index:25; bottom:calc(86px + env(safe-area-inset-bottom));
+    left:max(14px, calc(50% - 410px + 14px));
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    background:transparent; padding:0; cursor:pointer; -webkit-tap-highlight-color:transparent;
+  }
+  .exam-fab.hidden-view{ display:none; }
+  .exam-fab .fab-circle{
+    width:58px; height:58px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(145deg, #E2554C, var(--coral)); color:#fff;
+    box-shadow:0 0 0 0 rgba(224,69,61,0.55), 0 8px 22px rgba(192,69,61,0.45);
+    animation:examFabGlow 2.2s ease-out infinite; transition:transform .15s;
+  }
+  .exam-fab:active .fab-circle{ transform:scale(0.92); }
+  .exam-fab .fab-label{
+    background:#fff; color:var(--coral); font-family:'Tajawal'; font-weight:800; font-size:11px; line-height:1.25;
+    padding:4px 9px; border-radius:10px; text-align:center; max-width:104px;
+    box-shadow:0 4px 14px rgba(192,69,61,0.22); border:1px solid #F6D3D0;
+  }
+  @keyframes examFabGlow{
+    0%  { box-shadow:0 0 0 0 rgba(224,69,61,0.55), 0 8px 22px rgba(192,69,61,0.45); }
+    70% { box-shadow:0 0 0 16px rgba(224,69,61,0),  0 8px 30px rgba(192,69,61,0.65); }
+    100%{ box-shadow:0 0 0 0 rgba(224,69,61,0),    0 8px 22px rgba(192,69,61,0.45); }
+  }
+  @media (prefers-reduced-motion: reduce){ .exam-fab .fab-circle{ animation:none; box-shadow:0 0 18px 4px rgba(224,69,61,0.5); } }
+
+  /* اختيار المرحلة داخل نافذة جدول الاختبارات */
+  .exam-grade-pick{ display:flex; flex-direction:column; gap:10px; }
+  .exam-grade-btn{
+    display:flex; align-items:center; justify-content:space-between; gap:10px; width:100%;
+    background:#fff; border-radius:14px; padding:15px 16px; font-size:14px; font-weight:800; color:var(--ink);
+    box-shadow:0 4px 14px rgba(16,23,40,0.06); border:1.5px solid transparent; text-align:right;
+  }
+  .exam-grade-btn:active{ transform:scale(0.98); }
+  .exam-grade-btn:not(:disabled):hover{ border-color:#F6D3D0; }
+  .exam-grade-btn .go{ color:var(--coral); flex-shrink:0; }
+  .exam-grade-btn:disabled{ opacity:0.5; cursor:not-allowed; }
+  .exam-grade-btn .soon{ font-size:11px; font-weight:700; color:var(--slate); }
+  .exam-sheet-tools{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .exam-back-btn{ background:#fff; color:var(--ink); font-size:12.5px; font-weight:700; padding:9px 14px; border-radius:12px; box-shadow:0 4px 14px rgba(16,23,40,0.06); }
+  #exam-sheet .print-btn{ padding:9px 16px; }
   .day-badge{ display:inline-block; padding:4px 11px; border-radius:20px; font-size:11px; font-weight:800; white-space:nowrap; }
   .pages-pill{ display:inline-block; padding:4px 10px; border-radius:20px; background:var(--sand); color:var(--ink); font-size:11.5px; font-weight:700; white-space:nowrap; }
 </style>
@@ -245,17 +289,6 @@
       <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
     </div>
 
-    <div id="sch-coverage-card" class="schedule-card hidden-view" style="margin-bottom:14px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:4px;">
-        <h3 id="sch-coverage-title" style="font-size:14px; margin:0;">جدول الاختبارات الفترية</h3>
-        <button id="sch-coverage-print-btn" class="print-btn" style="flex-shrink:0;">
-          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
-          <span>طباعة</span>
-        </button>
-      </div>
-      <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">تاريخ كل اختبار والمادة المقطوعة له</p>
-      <div id="sch-coverage-list"></div>
-    </div>
 
     <div class="section-select-wrap" style="display:flex; gap:10px; align-items:stretch;">
       <select id="sch-section-select" style="flex:1;"><option value="">اختر الفصل</option></select>
@@ -284,6 +317,24 @@
     <span>تواصل</span>
   </button>
 </nav>
+
+<button class="exam-fab hidden-view" id="exam-fab" type="button" aria-label="جدول الاختبارات الفترية">
+  <span class="fab-circle">
+    <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M3 9h18M3 15h18M9 9v12M15 9v12"/></svg>
+  </span>
+  <span class="fab-label">جدول الاختبارات الفترية</span>
+</button>
+
+<div class="contact-sheet" id="exam-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3 id="exam-sheet-title">جدول الاختبارات الفترية</h3>
+    <button class="sheet-close" id="exam-sheet-close" aria-label="إغلاق">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body" id="exam-sheet-body"></div>
+</div>
 
 <div class="sheet-overlay" id="sheet-overlay"></div>
 <div class="contact-sheet" id="contact-sheet">
@@ -359,8 +410,8 @@ function openContactSheet() { sheetOverlay.classList.add('open'); contactSheet.c
 function closeContactSheet() { sheetOverlay.classList.remove('open'); contactSheet.classList.remove('open'); document.body.style.overflow = ''; }
 document.getElementById('bn-contact').addEventListener('click', openContactSheet);
 document.getElementById('sheet-close').addEventListener('click', closeContactSheet);
-sheetOverlay.addEventListener('click', closeContactSheet);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeContactSheet(); });
+sheetOverlay.addEventListener('click', () => { closeContactSheet(); closeExamSheet(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContactSheet(); closeExamSheet(); } });
 
 // وميض قصير يلفت الانتباه لعنصر معيّن بعد تمرير الصفحة له (اختصارات الاختبارات/الواجبات)
 function scrollToAndFlash(el) {
@@ -678,6 +729,7 @@ async function bootParentPage() {
     document.getElementById('bottom-nav').classList.add('hidden-view');
     return;
   }
+  refreshExamFab(); // مستقل: ما ينتظر تحميل الخطة، ولو تعثّر شي ثاني يبقى الزر شغال
   await loadPublishedWeeks();
   await loadPlans();
   await loadContactList();
@@ -767,7 +819,6 @@ document.getElementById('bottom-nav').addEventListener('click', (e) => {
   if (view === 'schedule' && !schSection && document.getElementById('sch-section-select').options.length <= 1) {
     refreshScheduleSections();
   }
-  if (view === 'schedule') loadExamCoverageCard();
 });
 
 /* ===== جدول الاختبارات الفترية (مُدخل من الإدارة بقسم "الجدول الدراسي") =====
@@ -805,28 +856,75 @@ function dayBadgeHtml(dayName) {
 }
 
 let examCoverageRows = [];
-async function loadExamCoverageCard() {
-  const card = document.getElementById('sch-coverage-card');
-  const listEl = document.getElementById('sch-coverage-list');
-  const titleEl = document.getElementById('sch-coverage-title');
-  if (titleEl) titleEl.textContent = `جدول الاختبارات الفترية - ${SCHEDULE_GRADE_LABELS[schGrade] || ''}`;
+let examGrade = null;           // المرحلة المختارة داخل نافذة جدول الاختبارات (مستقلة عن تبويب الجدول الدراسي)
+let examPublishedGrades = [];   // المراحل اللي نشرت الإدارة جدولها
+const EXAM_GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+const examSheet = document.getElementById('exam-sheet');
+const examFab = document.getElementById('exam-fab');
 
-  // الجدول ما يظهر إلا لو الإدارة نشرته صراحة لهذي المرحلة (مسودة بالتعريف لحد ما يُفعَّل)
-  const { data: publishSetting } = await runScoped(scoped => {
-    let q = sb.from('exam_coverage_publish_settings').select('is_published').eq('grade_level', schGrade);
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q.maybeSingle();
-  });
-  if (!publishSetting || !publishSetting.is_published) { card.classList.add('hidden-view'); return; }
+function openExamSheet() {
+  sheetOverlay.classList.add('open'); examSheet.classList.add('open'); document.body.style.overflow = 'hidden';
+  if (examPublishedGrades.length === 1) loadExamCoverage(examPublishedGrades[0]);
+  else renderExamGradePicker();
+}
+function closeExamSheet() {
+  if (!examSheet.classList.contains('open')) return;
+  sheetOverlay.classList.remove('open'); examSheet.classList.remove('open'); document.body.style.overflow = '';
+}
+examFab.addEventListener('click', openExamSheet);
+document.getElementById('exam-sheet-close').addEventListener('click', closeExamSheet);
 
+/* الزر العائم يظهر فقط لو فيه مرحلة واحدة على الأقل منشور جدولها */
+async function refreshExamFab() {
   const { data } = await runScoped(scoped => {
-    let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes').eq('grade_level', schGrade);
+    let q = sb.from('exam_coverage_publish_settings').select('grade_level, is_published').eq('is_published', true);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
-  const rows = (data || []).filter(r => r.exam_date || r.from_page || r.to_page || r.notes);
-  if (rows.length === 0) { card.classList.add('hidden-view'); return; }
+  examPublishedGrades = EXAM_GRADES.filter(g => (data || []).some(r => r.grade_level === g && r.is_published));
+  examFab.classList.toggle('hidden-view', examPublishedGrades.length === 0);
+}
 
+function renderExamGradePicker() {
+  examGrade = null;
+  examCoverageRows = [];
+  document.getElementById('exam-sheet-title').textContent = 'جدول الاختبارات الفترية';
+  const arrow = '<svg class="go" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>';
+  document.getElementById('exam-sheet-body').innerHTML = `
+    <p style="font-size:12.5px; color:var(--slate); margin:0 0 2px; font-weight:600;">اختر المرحلة لعرض جدول اختباراتها:</p>
+    <div class="exam-grade-pick">
+      ${EXAM_GRADES.map(g => {
+        const on = examPublishedGrades.includes(g);
+        return `<button class="exam-grade-btn" data-grade="${g}" ${on ? '' : 'disabled'}>
+          <span>${SCHEDULE_GRADE_LABELS[g]}</span>
+          ${on ? arrow : '<span class="soon">لم يُنشر بعد</span>'}
+        </button>`;
+      }).join('')}
+    </div>`;
+}
+
+document.getElementById('exam-sheet-body').addEventListener('click', (e) => {
+  const gradeBtn = e.target.closest('.exam-grade-btn');
+  if (gradeBtn && !gradeBtn.disabled) { loadExamCoverage(gradeBtn.dataset.grade); return; }
+  if (e.target.closest('#exam-back-btn')) { renderExamGradePicker(); return; }
+  if (e.target.closest('#exam-print-btn')) printExamCoverage();
+});
+
+async function loadExamCoverage(grade) {
+  examGrade = grade;
+  examCoverageRows = [];
+  const body = document.getElementById('exam-sheet-body');
+  document.getElementById('exam-sheet-title').textContent = `جدول الاختبارات الفترية - ${SCHEDULE_GRADE_LABELS[grade] || ''}`;
+  body.innerHTML = '<div style="text-align:center; padding:30px 10px; color:var(--slate); font-size:12.5px;">جارٍ التحميل...</div>';
+
+  const { data } = await runScoped(scoped => {
+    let q = sb.from('subject_exam_coverage').select('subject_name, exam_date, from_page, to_page, notes').eq('grade_level', grade);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
+  if (examGrade !== grade) return; // المستخدم رجع أو غيّر المرحلة أثناء التحميل
+
+  const rows = (data || []).filter(r => r.exam_date || r.from_page || r.to_page || r.notes);
   rows.sort((a, b) => {
     if (a.exam_date && b.exam_date) return a.exam_date < b.exam_date ? -1 : (a.exam_date > b.exam_date ? 1 : 0);
     if (a.exam_date) return -1;
@@ -835,8 +933,22 @@ async function loadExamCoverageCard() {
   });
   examCoverageRows = rows;
 
-  listEl.innerHTML = `
-    <div class="coverage-table-wrap">
+  const backBtn = examPublishedGrades.length > 1
+    ? '<button class="exam-back-btn" id="exam-back-btn" type="button">→ تغيير المرحلة</button>'
+    : '<span></span>';
+  const printBtn = rows.length ? `<button id="exam-print-btn" class="print-btn" type="button">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+      <span>طباعة</span></button>` : '';
+
+  if (rows.length === 0) {
+    body.innerHTML = `<div class="exam-sheet-tools">${backBtn}</div>
+      <div style="text-align:center; padding:30px 10px; color:var(--slate); font-size:12.5px; background:#fff; border-radius:14px;">لم تُضف مواد لجدول هذه المرحلة بعد.</div>`;
+    return;
+  }
+
+  body.innerHTML = `
+    <div class="exam-sheet-tools">${backBtn}${printBtn}</div>
+    <div class="coverage-table-wrap" style="background:#fff;">
       <div style="overflow-x:auto;">
         <table class="coverage-table" style="min-width:460px;">
           <thead>
@@ -861,7 +973,6 @@ async function loadExamCoverageCard() {
         </table>
       </div>
     </div>`;
-  card.classList.remove('hidden-view');
 }
 
 document.getElementById('sch-grade-tabs').addEventListener('click', (e) => {
@@ -872,7 +983,6 @@ document.getElementById('sch-grade-tabs').addEventListener('click', (e) => {
   schGrade = btn.dataset.grade;
   schSection = null;
   refreshScheduleSections();
-  loadExamCoverageCard();
 });
 
 document.getElementById('sch-section-select').addEventListener('change', (e) => {
@@ -1052,7 +1162,7 @@ function buildExamCoveragePrintHtml() {
       <img src="${document.getElementById('hero-logo').src}" />
       <div class="title">
         <h1>جدول الاختبارات الفترية</h1>
-        <p>${currentSchoolName} — ${SCHEDULE_GRADE_LABELS[schGrade] || ''}</p>
+        <p>${currentSchoolName} — ${SCHEDULE_GRADE_LABELS[examGrade] || ''}</p>
       </div>
       <div class="date">تاريخ الطباعة<br>${printDate}</div>
     </div>
@@ -1065,7 +1175,7 @@ function buildExamCoveragePrintHtml() {
     <p class="print-footer">${currentSchoolName} — نظام إدارة المدرسة</p>`;
 }
 
-document.getElementById('sch-coverage-print-btn').addEventListener('click', () => {
+function printExamCoverage() {
   if (examCoverageRows.length === 0) return;
   const win = window.open('', '_blank');
   if (!win) return;
@@ -1076,7 +1186,7 @@ document.getElementById('sch-coverage-print-btn').addEventListener('click', () =
   const doPrint = () => { win.focus(); win.print(); };
   if (!img || img.complete) doPrint();
   else { img.onload = doPrint; img.onerror = doPrint; }
-});
+}
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
