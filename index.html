@@ -1028,7 +1028,8 @@
                 <div class="form-row">
                   <label style="font-size:12.5px; font-weight:700; display:block;">حجم الورقة
                     <select id="as-size" style="margin-top:4px;">
-                      <option value="A4" selected>A4</option>
+                      <option value="A4" selected>A4 (طالب بالصفحة)</option>
+                      <option value="A4L2">A4 بالعرض (طالبين بالصفحة - تُقص)</option>
                       <option value="A5">A5</option>
                     </select>
                   </label>
@@ -1046,9 +1047,24 @@
                   إضافة باركود باسم الطالب (ورقة خاصة لكل طالب)
                 </label>
                 <div id="as-barcode-opts" class="hidden" style="background:var(--sand); border-radius:10px; padding:4px 12px 12px; margin-top:-6px;">
-                  <p style="font-size:11.5px; color:var(--slate); margin:6px 0 8px;">يُطبع لكل طالب ورقة فيها اسمه وصفه وفصله، وباركود (Code 128) برقم هويته يقرأه Remark. الطلاب من القائمة المستوردة بقسم الاختبارات.</p>
-                  <select id="as-grade" style="margin-bottom:8px;"></select>
-                  <div id="as-sections" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
+                  <p style="font-size:11.5px; color:var(--slate); margin:6px 0 8px;">يُطبع لكل طالب ورقة فيها اسمه وصفه وفصله، وباركود (Code 128) برقم هويته يقرأه Remark. الترتيب: أول ١، أول ٢ ... ثم ثاني ١ ... وداخل الفصل أبجديًا.</p>
+                  <div class="form-row" style="margin-bottom:0;">
+                    <label style="font-size:12.5px; font-weight:700; display:block;">الطلاب
+                      <select id="as-scope" style="margin-top:4px;">
+                        <option value="class" selected>فصل محدد</option>
+                        <option value="grade">مرحلة كاملة</option>
+                        <option value="school">المدرسة كاملة</option>
+                      </select>
+                    </label>
+                    <label id="as-grade-wrap" style="font-size:12.5px; font-weight:700; display:block;">المرحلة
+                      <select id="as-grade" style="margin-top:4px;"></select>
+                    </label>
+                    <label id="as-section-wrap" style="font-size:12.5px; font-weight:700; display:block;">الفصل
+                      <select id="as-section" style="margin-top:4px;"></select>
+                    </label>
+                  </div>
+                  <div id="as-scope-count" style="font-size:12px; color:var(--slate); font-weight:700;"></div>
+                  <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">ورقة A4 بالعرض: بعد القص، حط رزمة الأنصاف اليسرى تحت رزمة الأنصاف اليمنى، وتصير الأوراق مرتبة بالتسلسل.</p>
                 </div>
 
                 <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
@@ -1064,6 +1080,7 @@
                     <li>عرّف منطقة الباركود (Barcode Region) نوع Code 128 على المربع اللي فوق، وسمّها <b>StudentID</b> عشان ملف النتائج يرتبط تلقائيًا بتقارير المنصة.</li>
                     <li>عرّف منطقة الإجابات (OMR) لكل عمود أسئلة، والاتجاه: من اليمين لليسار للعربي ومن اليسار لليمين للإنجليزي.</li>
                     <li>احفظ القالب باسم الإعدادات المكتوبة أسفل الورقة (مثال: A4 · 20 سؤال · 4 خيارات) واستخدمه لكل الأوراق بنفس الإعدادات.</li>
+                    <li>ورقة "A4 بالعرض" كل نصف فيها نسخة مطابقة لورقة A5، فبعد القص تستخدم نفس قالب A5.</li>
                     <li>لو غيّرت عدد الأسئلة أو الخيارات أو الحجم، تتغيّر مواقع الفقاعات ويحتاج قالب جديد.</li>
                     <li>اطبع دايمًا بالحجم الفعلي (100%) بدون "ملاءمة للصفحة".</li>
                   </ol>
