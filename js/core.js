@@ -647,7 +647,7 @@ export async function openTile(key, title, sub = null) {
   } else if (key === 'tracking') {
     document.getElementById('exam-tracking-module').classList.remove('hidden');
     const { loadExamTrackingTile } = await import('./exam-tracking.js');
-    loadExamTrackingTile();
+    loadExamTrackingTile(sub);
   } else if (key === 'exam-reports') {
     document.getElementById('exam-reports-module').classList.remove('hidden');
     const { loadExamReportsModule } = await import('./exam-reports.js');
