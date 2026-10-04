@@ -651,7 +651,7 @@ export async function openTile(key, title, sub = null) {
   } else if (key === 'exam-reports') {
     document.getElementById('exam-reports-module').classList.remove('hidden');
     const { loadExamReportsModule } = await import('./exam-reports.js');
-    loadExamReportsModule();
+    loadExamReportsModule(sub);
   } else if (key === 'schedule') {
     document.getElementById('schedule-module').classList.remove('hidden');
     const [{ loadScheduleModule }] = await Promise.all([import('./schedule.js'), import('./schedule-pdf.js')]);

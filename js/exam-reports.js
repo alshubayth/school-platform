@@ -1,4 +1,4 @@
-import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
 import { initAnswerSheetCard, fetchSavedKeys } from './answer-sheet.js';
 
@@ -303,15 +303,44 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
 let parsedData = null; // { itemCount, choiceCounts, students, detectedKeyRaw, detected }
 let currentReport = null; // آخر تقرير محفوظ تم فتحه بشاشة التفاصيل
 
-export async function loadExamReportsModule() {
+export async function loadExamReportsModule(sub = null) {
   document.getElementById('er-detail-view').classList.add('hidden');
   document.getElementById('er-list-view').classList.remove('hidden');
   document.getElementById('er-preview-card').classList.add('hidden');
+  document.getElementById('er-upload-card').classList.add('hidden');
   document.getElementById('er-file').value = '';
   parsedData = null;
   initAnswerSheetCard();
+  if (sub === 'sheet') { setMode('sheet', false); loadSavedList(); return; }
+  setMode('reports', false);
   await loadSavedList();
+  if (sub && sub !== 'reports') openReport(sub);
 }
+
+/* ---------- وضعين: التقارير / ورقة الإجابة والمفتاح ---------- */
+function setMode(mode, route = true) {
+  document.querySelectorAll('#er-mode-tabs button').forEach(b => {
+    const on = b.dataset.mode === mode;
+    b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false');
+  });
+  document.getElementById('er-mode-reports').classList.toggle('hidden', mode !== 'reports');
+  document.getElementById('er-mode-sheet').classList.toggle('hidden', mode !== 'sheet');
+  if (mode === 'sheet' && document.getElementById('as-body').classList.contains('hidden')) document.getElementById('as-toggle-btn').click();
+  if (route) setSubRoute(mode === 'sheet' ? 'sheet' : null, true);
+}
+function openUpload(open = true) {
+  const card = document.getElementById('er-upload-card');
+  card.classList.toggle('hidden', !open);
+  document.getElementById('er-upload-toggle').textContent = open ? 'إلغاء' : '+ رفع نتائج اختبار';
+  document.getElementById('er-upload-toggle').classList.toggle('btn-secondary', open);
+  if (open) card.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+document.querySelectorAll('#er-mode-tabs button').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+document.getElementById('er-upload-toggle').addEventListener('click', () => openUpload(document.getElementById('er-upload-card').classList.contains('hidden')));
+document.querySelectorAll('.er-flow-step').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.mode === 'upload') { setMode('reports'); openUpload(true); }
+  else setMode('sheet');
+}));
 
 document.getElementById('er-analyze-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('er-analyze-error');
@@ -480,6 +509,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   parsedData = null;
   document.getElementById('er-preview-card').classList.add('hidden');
   document.getElementById('er-file').value = '';
+  openUpload(false);
   await loadSavedList();
 });
 
@@ -493,7 +523,7 @@ async function loadSavedList() {
   });
   if (error) { listEl.innerHTML = '<p style="color:var(--danger); font-size:12.5px;">تعذر تحميل التقارير</p>'; return; }
   if (!data || data.length === 0) {
-    listEl.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه تقارير محفوظة بعد</p></div>';
+    listEl.innerHTML = '<div class="ex-empty"><b>ما فيه تقارير محفوظة بعد</b><span>صحّح أوراق الطلاب في Remark، ثم اضغط «+ رفع نتائج اختبار» وارفع ملف الإكسل.</span></div>';
     return;
   }
   const colors = [
@@ -504,18 +534,25 @@ async function loadSavedList() {
   ];
   const examIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:26px; height:26px;"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`;
 
-  listEl.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(150px,1fr)); gap:14px;">
+  const gradeName = g => gradeLabels[g] || g || '';
+  const dateTxt = d => { try { return new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
+  listEl.innerHTML = `<div class="er-report-grid">
     ${data.map((r, i) => {
       const c = colors[i % colors.length];
+      const meta = [r.subject_name, gradeName(r.grade_level), r.semester].filter(Boolean).map(esc).join(' · ');
       return `
-      <div data-id="${r.id}" title="${esc(r.title)}" style="position:relative; background:#fff; border:1px solid var(--border); border-radius:14px; padding:20px 12px 14px; text-align:center; cursor:pointer; transition:0.15s; box-shadow:var(--shadow-sm);" onmouseover="this.style.boxShadow='var(--shadow-md)'; this.style.transform='translateY(-2px)';" onmouseout="this.style.boxShadow='var(--shadow-sm)'; this.style.transform='none';">
-        <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف" style="position:absolute; top:6px; left:6px; border:none; background:none; color:var(--danger); cursor:pointer; font-size:13px; padding:3px 6px; line-height:1; border-radius:6px;">✕</button>
-        <div style="width:50px; height:50px; border-radius:13px; background:${c.bg}; color:${c.fg}; display:flex; align-items:center; justify-content:center; margin:0 auto 10px;">${examIconSvg}</div>
-        <div style="font-size:12.5px; font-weight:700; color:var(--ink); overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.4; min-height:34px;">${esc(r.title)}</div>
-        <div style="font-size:10.5px; color:var(--slate); margin-top:6px;">${esc(r.grade_level || '-')} — ${r.students_count} طالب</div>
+      <div data-id="${r.id}" class="er-report-card" tabindex="0" role="button" title="${esc(r.title)}">
+        <span class="erc-ic" style="background:${c.bg}; color:${c.fg};">${examIconSvg}</span>
+        <span class="erc-main">
+          <b>${esc(r.title)}</b>
+          <span>${meta || '&nbsp;'}</span>
+          <span class="erc-chips">${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}</span>
+        </span>
+        <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>
       </div>`;
     }).join('')}
   </div>`;
+  listEl.querySelectorAll('.er-report-card').forEach(card => card.addEventListener('keydown', (e) => { if (e.key === 'Enter') openReport(card.dataset.id); }));
 
   listEl.querySelectorAll('[data-id]').forEach(card => {
     card.addEventListener('click', (e) => {
@@ -537,6 +574,8 @@ async function openReport(id) {
   const { data, error } = await sb.from('exam_reports').select('*').eq('id', id).single();
   if (error || !data) { alert('تعذر فتح التقرير'); return; }
   currentReport = data;
+  setSubRoute(id);
+  window.scrollTo(0, 0);
   document.getElementById('er-list-view').classList.add('hidden');
   document.getElementById('er-detail-view').classList.remove('hidden');
   document.getElementById('er-detail-title').textContent = data.title;
@@ -702,6 +741,7 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
 document.getElementById('er-back-to-list').addEventListener('click', () => {
   document.getElementById('er-detail-view').classList.add('hidden');
   document.getElementById('er-list-view').classList.remove('hidden');
+  setSubRoute(null);
 });
 
 const ER_TABS = ['dist', 'hist', 'items', 'summary', 'itemstats', 'analysis'];

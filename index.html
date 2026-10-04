@@ -1108,7 +1108,22 @@
 
       <!-- ===== قائمة التقارير المحفوظة + رفع تقرير جديد ===== -->
       <div id="er-list-view">
-        <div class="form-card bud-section-card" style="background:var(--sand);">
+        <div class="er-flow" aria-label="طريقة العمل">
+          <button type="button" class="er-flow-step" data-mode="sheet" style="--fc:#0E93A8;"><span class="efs-n">1</span><span class="efs-t"><b>صمّم ورقة الإجابة واحفظ المفتاح</b><span>عدد الأسئلة والخيارات، وباركود الطالب</span></span></button>
+          <button type="button" class="er-flow-step" data-mode="sheet" style="--fc:#6249A6;"><span class="efs-n">2</span><span class="efs-t"><b>اطبع وصحّح في Remark</b><span>الأوراق تُقرأ بالماسح وتطلع ملف إكسل</span></span></button>
+          <button type="button" class="er-flow-step" data-mode="upload" style="--fc:#E07A34;"><span class="efs-n">3</span><span class="efs-t"><b>ارفع ملف الإكسل</b><span>المفتاح المحفوظ يتطبق تلقائيًا ويطلع التقرير</span></span></button>
+        </div>
+        <div class="seg-tabs" id="er-mode-tabs" role="tablist">
+          <button type="button" role="tab" data-mode="reports" class="active">التقارير</button>
+          <button type="button" role="tab" data-mode="sheet">ورقة الإجابة والمفتاح</button>
+        </div>
+
+        <div id="er-mode-reports">
+          <div class="er-reports-head">
+            <h4>التقارير المحفوظة</h4>
+            <button type="button" class="btn-primary" id="er-upload-toggle" style="width:auto; padding:10px 16px;">+ رفع نتائج اختبار</button>
+          </div>
+        <div class="form-card bud-section-card hidden" id="er-upload-card">
           <div class="bud-section-head">
             <div class="bud-section-icon" style="background:var(--purple-light); color:var(--purple);">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/></svg>
@@ -1159,8 +1174,12 @@
           </div>
         </div>
 
+          <div id="er-saved-list"><div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div></div>
+        </div>
+
+        <div id="er-mode-sheet" class="hidden">
         <!-- ===== تصميم ورقة إجابة للتصحيح الآلي (Remark Office OMR) ===== -->
-        <div class="form-card bud-section-card" id="as-card" style="margin-top:16px;">
+        <div class="form-card bud-section-card" id="as-card">
           <div class="bud-section-head" style="justify-content:space-between;">
             <div style="display:flex; align-items:center; gap:12px;">
               <div class="bud-section-icon" style="background:var(--teal-light); color:var(--teal);">
@@ -1298,8 +1317,7 @@
           </div>
         </div>
 
-        <h4 style="margin:22px 0 12px; font-size:14px;">التقارير المحفوظة</h4>
-        <div id="er-saved-list"><div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div></div>
+        </div>
       </div>
 
       <!-- ===== تفاصيل تقرير محدد (٦ تقارير بتبويبات) ===== -->

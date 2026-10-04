@@ -1100,3 +1100,33 @@
   .ex-step-btn:nth-child(5) .esb-num{ background:#E7F5EC; color:#1F6A3C; }
   .ex-step-btn.done .esb-num{ background:var(--status-good); color:#fff; }
   .ex-step-btn.cur .esb-num{ background:var(--meadow-dark); color:#fff; }
+
+  /* ===== تقارير الاختبارات: طريقة العمل + وضعين + بطاقات التقارير ===== */
+  #exam-reports-module.panel{ background:transparent; border:0; box-shadow:none; padding:0; }
+  .er-flow{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; margin-bottom:16px; }
+  .er-flow-step{ display:flex; align-items:center; gap:12px; padding:14px; background:#fff; border:1px solid var(--border); border-top:4px solid var(--fc); border-radius:14px; text-align:right; color:var(--ink); box-shadow:0 1px 3px rgba(21,34,56,0.06); }
+  .er-flow-step:hover{ box-shadow:0 8px 22px rgba(21,34,56,0.08); }
+  .efs-n{ width:34px; height:34px; border-radius:50%; background:var(--fc); color:#fff; display:flex; align-items:center; justify-content:center; font-family:'Tajawal'; font-weight:900; font-size:16px; flex-shrink:0; }
+  .efs-t{ display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .efs-t b{ font-size:14px; color:var(--meadow-dark); }
+  .efs-t span{ font-size:12px; color:var(--slate); }
+  .seg-tabs{ display:inline-flex; gap:4px; background:var(--sand); border-radius:99px; padding:4px; margin-bottom:16px; }
+  .seg-tabs button{ background:transparent; border:0; border-radius:99px; padding:9px 18px; font-size:14px; font-weight:600; color:var(--slate); }
+  .seg-tabs button.active{ background:#fff; color:var(--meadow-dark); box-shadow:0 1px 4px rgba(21,34,56,0.12); }
+  .er-reports-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+  .er-reports-head h4{ font-size:18px; font-weight:800; color:var(--meadow-dark); }
+  #er-upload-card{ margin-bottom:16px; border-top:4px solid #E07A34; }
+  #er-mode-sheet #as-toggle-btn{ display:none; }
+  .er-report-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; }
+  .er-report-card{ position:relative; display:flex; align-items:flex-start; gap:12px; background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px; cursor:pointer; box-shadow:0 1px 3px rgba(21,34,56,0.06); transition:box-shadow 0.15s, transform 0.15s; }
+  .er-report-card:hover{ box-shadow:0 10px 26px rgba(21,34,56,0.09); transform:translateY(-1px); }
+  .er-report-card:focus-visible{ outline:2px solid var(--teal); outline-offset:2px; }
+  .erc-ic{ width:48px; height:48px; border-radius:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .erc-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:3px; }
+  .erc-main b{ font-size:15px; color:var(--meadow-dark); line-height:1.45; padding-inline-end:20px; }
+  .erc-main > span{ font-size:12.5px; color:var(--slate); }
+  .erc-chips{ display:flex; flex-wrap:wrap; gap:5px; margin-top:4px; }
+  .erc-chips i{ font-style:normal; font-size:11.5px; background:var(--sand); color:#4A5568; border-radius:99px; padding:2px 9px; }
+  .er-report-card .er-delete-btn{ position:absolute; top:10px; left:10px; border:0; background:none; color:var(--danger); font-size:13px; padding:4px 7px; border-radius:7px; opacity:0.55; }
+  .er-report-card .er-delete-btn:hover{ opacity:1; background:var(--danger-light); }
+  @media (max-width: 899px){ .er-flow{ grid-template-columns:1fr; } .seg-tabs{ display:flex; } .seg-tabs button{ flex:1; padding:9px 10px; } }
