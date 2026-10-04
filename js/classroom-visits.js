@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+import { sb, currentUserId, currentProfile, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, academicCalendar } from './core.js';
 import { DAYS, PERIODS } from './schedule.js';
 import { VOUCHER_LOGO_DATA_URI } from './budget.js';
 import { loadJSZip } from './lib-loader.js';
@@ -271,99 +271,208 @@ async function renderView() {
   }
 }
 
-/* ================= قائمة الزيارات ================= */
-async function renderList(container) {
-  container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
+/* ================= قائمة الزيارات: مجمّعة حسب المعلم ================= */
+let cvFilter = 'all';     // all | draft | unvisited
+let cvSearch = '';
+let cvOpenTeachers = new Set();
 
-  const { data, error } = await readScopedBySchool(scoped => {
-    let query = sb.from('classroom_visits').select('*, profiles!classroom_visits_visitor_id_fkey(full_name)');
-    if (scoped && currentSchoolId) query = query.eq('school_id', currentSchoolId);
-    return query.order('visit_date', { ascending: false }).order('created_at', { ascending: false });
+// ملخص تقديرات زيارة: كم مؤشر مميز / حقق الهدف / فرصة تحسين
+function visitTiers(v) {
+  const t = { star: 0, ok: 0, imp: 0 };
+  Object.entries(v.ratings || {}).forEach(([num, val]) => {
+    if (!INDICATORS[num]) return;
+    const tier = tierForOption(num, val);
+    if (!tier) return;
+    if (tier.label === 'مميز') t.star++; else if (tier.label === 'حقق الهدف') t.ok++; else t.imp++;
   });
+  return t;
+}
+function daysAgo(iso) {
+  if (!iso) return '';
+  const d = Math.round((new Date(todayIso() + 'T00:00:00') - new Date(iso + 'T00:00:00')) / 86400000);
+  return d <= 0 ? 'اليوم' : d === 1 ? 'أمس' : d === 2 ? 'قبل يومين' : d <= 10 ? `قبل ${d} أيام` : `قبل ${d} يوم`;
+}
+function visitStatus(v) {
+  if (!v.published) return { cls: 'draft', label: 'مسودة' };
+  if (v.teacher_seen_at) return { cls: 'seen', label: 'اطّلع عليها المعلم' };
+  return { cls: 'pub', label: 'منشورة للمعلم' };
+}
+
+async function renderList(container) {
+  container.innerHTML = '<div class="tr-loading">جارٍ التحميل...</div>';
+  const staff = isAdminOrDeputyHere();
+  const [{ data, error }] = await Promise.all([
+    readScopedBySchool(scoped => {
+      let query = sb.from('classroom_visits').select('*, profiles!classroom_visits_visitor_id_fkey(full_name)');
+      if (scoped && currentSchoolId) query = query.eq('school_id', currentSchoolId);
+      return query.order('visit_date', { ascending: false }).order('created_at', { ascending: false });
+    }),
+    staff && !cvTeachers.length ? loadTeachersList() : Promise.resolve(),
+  ]);
   const visits = data || [];
 
+  // المعلم: نسجّل إنه اطّلع على زياراته المنشورة (لو عمود teacher_seen_at موجود)
+  if (!staff) {
+    const unseen = visits.filter(v => v.published && v.teacher_profile_id === currentUserId && 'teacher_seen_at' in v && !v.teacher_seen_at);
+    if (unseen.length && typeof sb.rpc === 'function') sb.rpc('mark_visits_seen', { visit_ids: unseen.map(v => v.id) }).then(() => {}, () => {});
+  }
+
+  if (error) { container.innerHTML = `<div class="error-msg" style="display:block;">تعذر تحميل الزيارات: ${esc(error.message)}</div>`; return; }
+
+  const teachers = groupVisitsByTeacher(visits);
+  teachers.forEach(t => {
+    t.visits.sort((a, b) => (b.visit_date || '').localeCompare(a.visit_date || ''));
+    t.last = t.visits[0] ? t.visits[0].visit_date : null;
+    t.tiers = t.visits.reduce((acc, v) => { const x = visitTiers(v); acc.star += x.star; acc.ok += x.ok; acc.imp += x.imp; return acc; }, { star: 0, ok: 0, imp: 0 });
+    t.drafts = t.visits.filter(v => !v.published).length;
+    t.subjects = [...new Set(t.visits.map(v => v.subject_name).filter(Boolean))];
+  });
+  // المعلمين اللي ما انزاروا من بداية العام الدراسي
+  const yearStart = academicCalendar.start || '0000-00-00';
+  const yearVisits = visits.filter(v => (v.visit_date || '') >= yearStart);
+  const visitedIds = new Set(yearVisits.map(v => v.teacher_profile_id).filter(Boolean));
+  const visitedNames = new Set(yearVisits.map(v => normalizeArName(v.teacher_name)).filter(Boolean));
+  const unvisited = staff ? cvTeachers.filter(t => !visitedIds.has(t.id) && !visitedNames.has(normalizeArName(t.full_name))) : [];
+  const monthStart = todayIso().slice(0, 8) + '01';
+  const thisMonth = visits.filter(v => (v.visit_date || '') >= monthStart).length;
+  const draftsAll = visits.filter(v => !v.published).length;
+
   let html = '';
-  if (isAdminOrDeputyHere()) {
-    html += `<div style="margin-bottom:16px;"><button class="btn-primary" id="cv-new-btn" style="width:auto; padding:11px 22px;">+ زيارة صفية جديدة</button></div>`;
-  }
-
-  if (!error && visits.length > 0) {
-    const teachers = groupVisitsByTeacher(visits);
+  if (staff) {
+    const totalT = cvTeachers.length;
+    const visitedT = totalT ? totalT - unvisited.length : teachers.length;
     html += `
-      <div class="form-card" style="padding:14px 16px; margin-bottom:16px;">
-        <div style="font-weight:800; font-size:13.5px; color:var(--navy); margin-bottom:10px;">تحميل تقارير الزيارات (PDF)</div>
-        <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
-          <button class="btn-primary" id="cv-dl-all-btn" style="width:auto; padding:10px 18px;">تحميل الكل</button>
-          <span style="color:var(--slate); font-size:12.5px;">أو لمعلم محدد:</span>
-          <select id="cv-dl-teacher" style="width:auto; min-width:200px; margin-bottom:0;">
-            <option value="">اختر المعلم</option>
-            ${teachers.map(t => `<option value="${esc(t.key)}">${esc(t.name)} (${t.visits.length})</option>`).join('')}
-          </select>
-          <button class="btn-secondary" id="cv-dl-teacher-btn" style="width:auto; padding:10px 16px;" disabled>تحميل</button>
+      <div class="cv-toolbar">
+        <button class="btn-primary" id="cv-new-btn" style="width:auto; padding:11px 20px;">+ زيارة صفية جديدة</button>
+        <div class="cv-tools">
+          ${visits.length ? `<button class="btn-secondary" id="cv-dl-all-btn" style="width:auto; padding:10px 14px;">تحميل الكل (PDF)</button>` : ''}
         </div>
-        <div id="cv-dl-status" style="font-size:12.5px; color:var(--slate); margin-top:8px;"></div>
-        <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">كل معلم له ملف PDF باسمه يضم كل زياراته. "تحميل الكل" ينزّل ملف مضغوط (ZIP) فيه ملفات كل المعلمين.</p>
+      </div>
+      <div id="cv-dl-status" class="cv-dl-status"></div>
+      <div class="kpi-grid">
+        <div class="kpi"><span class="k-label">زيارات هذا الشهر</span><span class="k-value">${thisMonth}</span><span class="k-note">${visits.length} زيارة من بداية العام</span></div>
+        <div class="kpi"><span class="k-label">المعلمين اللي انزاروا</span><span class="k-value">${visitedT}${totalT ? ` / ${totalT}` : ''}</span>${totalT ? `<div class="k-bar"><div style="width:${Math.round(visitedT / totalT * 100)}%;"></div></div>` : ''}<span class="k-note">من بداية العام الدراسي</span></div>
+        <div class="kpi"><span class="k-label">ما انزاروا بعد</span><span class="k-value"${unvisited.length ? ' style="color:#A4501A;"' : ''}>${unvisited.length}</span><span class="k-note">${unvisited.length ? 'اضغط «ما انزاروا» تحت' : 'كل المعلمين انزاروا'}</span></div>
+        <div class="kpi"><span class="k-label">مسودات غير منشورة</span><span class="k-value"${draftsAll ? ' style="color:#7A5410;"' : ''}>${draftsAll}</span><span class="k-note">ما يشوفها المعلم لين تنشرها</span></div>
+      </div>
+      <div class="tr-toolbar">
+        <div class="seg-tabs" id="cv-filter">
+          <button type="button" data-f="all">كل المعلمين <span class="tr-cnt">${teachers.length || ''}</span></button>
+          <button type="button" data-f="draft">فيها مسودات <span class="tr-cnt">${teachers.filter(t => t.drafts).length || ''}</span></button>
+          <button type="button" data-f="unvisited">ما انزاروا <span class="tr-cnt">${unvisited.length || ''}</span></button>
+        </div>
+        <input type="search" id="cv-search" class="cv-search" placeholder="ابحث باسم المعلم" value="${esc(cvSearch)}" />
       </div>`;
-  }
-
-  if (error) {
-    html += `<div class="error-msg">تعذر تحميل الزيارات: ${error.message}</div>`;
-  } else if (visits.length === 0) {
-    html += `<div class="placeholder" style="padding:30px;"><p>لا توجد زيارات مسجلة بعد</p></div>`;
   } else {
-    html += '<div style="display:flex; flex-direction:column; gap:12px;">';
-    visits.forEach(v => {
-      const dayLabel = (DAYS.find(d => d.key === v.day_of_week) || {}).label || v.day_of_week;
-      const visitorRoleLabel = v.visitor_role === 'admin' ? 'مدير' : 'وكيل';
-      const visitorName = v.profiles?.full_name || null;
-      const visitorTag = visitorName ? `${esc(visitorName)} — ${visitorRoleLabel}` : visitorRoleLabel;
-      html += `
-        <div class="form-card" style="padding:16px 18px;">
-          <div style="display:flex; justify-content:space-between; flex-wrap:wrap; gap:10px; align-items:center;">
-            <div>
-              <div style="font-weight:800; font-size:15px; color:var(--navy);">${esc(v.teacher_name)} — ${esc(v.subject_name)}</div>
-              <div style="font-size:12.5px; color:var(--slate); margin-top:4px;">
-                ${gradeLabels[v.grade_level] || v.grade_level} / الفصل ${v.class_section} — ${dayLabel} — الحصة ${v.period_number} — ${fmtDate(v.visit_date)}
-              </div>
-              <div style="font-size:12px; color:var(--gold); margin-top:4px; font-weight:700;">زار: ${visitorTag}</div>
-            </div>
-            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              <span class="badge ${v.published ? 'badge-green' : 'badge-gold'}" style="padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700; ${v.published ? 'background:#e4f5ea; color:#1f8a4c;' : 'background:#fdf2df; color:#9a6b1e;'}">${v.published ? 'منشورة للمعلم' : 'غير منشورة'}</span>
-              <button class="btn-secondary cv-print-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">طباعة</button>
-              <button class="btn-secondary cv-dl-one-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">تحميل PDF</button>
-              ${canEditVisit(v) ? `<button class="btn-secondary cv-edit-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">تعديل</button>` : ''}
-              ${isAdminOrDeputyHere() ? `<button class="btn-secondary cv-publish-btn" data-id="${v.id}" data-current="${v.published}" style="width:auto; padding:8px 14px; font-size:12.5px;">${v.published ? 'إلغاء النشر' : 'نشر للمعلم'}</button>` : ''}
-              ${canEditVisit(v) ? `<button class="btn-secondary cv-delete-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px; color:var(--danger);">حذف</button>` : ''}
-            </div>
-          </div>
-        </div>`;
-    });
-    html += '</div>';
+    html += `<div class="cv-toolbar"><h3 class="cv-mine-title">زياراتي الصفية</h3><div id="cv-dl-status" class="cv-dl-status"></div></div>`;
   }
-
+  html += '<div id="cv-board" class="cv-board"></div>';
   container.innerHTML = html;
 
-  const newBtn = document.getElementById('cv-new-btn');
-  if (newBtn) newBtn.addEventListener('click', () => { cvEditingVisit = null; cvView = 'form'; renderView(); });
+  const board = document.getElementById('cv-board');
+  const visitRow = (v) => {
+    const st = visitStatus(v);
+    const tiers = visitTiers(v);
+    const dayLabel = (DAYS.find(d => d.key === v.day_of_week) || {}).label || v.day_of_week || '';
+    const visitorRoleLabel = v.visitor_role === 'admin' ? 'المدير' : 'الوكيل';
+    const visitorName = v.profiles?.full_name || null;
+    return `<div class="cv-visit" data-id="${v.id}">
+      <div class="cvv-main">
+        <b>${fmtDate(v.visit_date)} · ${esc(v.subject_name || '')}</b>
+        <span>${esc(gradeLabels[v.grade_level] || v.grade_level || '')}${v.class_section ? ' / فصل ' + esc(v.class_section) : ''}${dayLabel ? ' · ' + esc(dayLabel) : ''}${v.period_number ? ' · الحصة ' + esc(v.period_number) : ''} · زار: ${esc(visitorName || visitorRoleLabel)}</span>
+      </div>
+      <span class="cvv-tiers" title="مميز / حقق الهدف / فرصة تحسين"><i class="t-star">⭐ ${tiers.star}</i><i class="t-ok">✓ ${tiers.ok}</i><i class="t-imp">➔ ${tiers.imp}</i></span>
+      <span class="cv-st ${st.cls}">${st.label}</span>
+      <div class="cvv-actions">
+        ${canEditVisit(v) ? `<button type="button" class="btn-secondary cv-edit-btn" data-id="${v.id}">تعديل</button>` : `<button type="button" class="btn-secondary cv-print-btn" data-id="${v.id}">عرض</button>`}
+        <div class="row-menu">
+          <button type="button" class="row-menu-btn" aria-label="خيارات أكثر" aria-haspopup="true">⋯</button>
+          <div class="row-menu-pop hidden">
+            <button type="button" class="cv-print-btn" data-id="${v.id}">طباعة</button>
+            <button type="button" class="cv-dl-one-btn" data-id="${v.id}">تحميل PDF</button>
+            ${staff ? `<button type="button" class="cv-publish-btn" data-id="${v.id}" data-current="${v.published}">${v.published ? 'إلغاء النشر' : 'نشر للمعلم'}</button>` : ''}
+            ${canEditVisit(v) ? `<button type="button" class="cv-delete-btn danger" data-id="${v.id}">حذف</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  };
 
-  container.querySelectorAll('.cv-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+  const renderBoard = () => {
+    document.querySelectorAll('#cv-filter button').forEach(b => b.classList.toggle('active', b.dataset.f === cvFilter));
+    const q = cvSearch.trim();
+    const match = name => !q || normalizeArName(name).includes(normalizeArName(q));
+    if (!staff) {
+      board.innerHTML = visits.length ? `<div class="cv-teacher open"><div class="cvt-visits">${visits.map(visitRow).join('')}</div></div>`
+        : '<div class="ex-empty"><b>ما فيه زيارات منشورة لك بعد</b><span>تظهر هنا الزيارة بعد ما ينشرها المدير أو الوكيل.</span></div>';
+      wireRows();
+      return;
+    }
+    if (cvFilter === 'unvisited') {
+      const list = unvisited.filter(t => match(t.full_name));
+      board.innerHTML = list.length ? `<div class="cv-unvisited">${list.map(t => `<div class="cvu-card"><span class="cvt-av">${esc(initialsOf(t.full_name))}</span><b>${esc(t.full_name)}</b><span>ما انزار من بداية العام</span></div>`).join('')}</div>`
+        : `<div class="ex-empty"><b>${unvisited.length ? 'ما فيه نتائج' : 'كل المعلمين انزاروا من بداية العام'}</b></div>`;
+      return;
+    }
+    let list = teachers.filter(t => match(t.name));
+    if (cvFilter === 'draft') list = list.filter(t => t.drafts);
+    if (!list.length) {
+      board.innerHTML = `<div class="ex-empty"><b>${visits.length ? 'ما فيه نتائج' : 'ما فيه زيارات مسجلة بعد'}</b>${visits.length ? '' : '<span>اضغط «+ زيارة صفية جديدة» وسجّل أول زيارة.</span>'}</div>`;
+      return;
+    }
+    board.innerHTML = list.map(t => {
+      const open = cvOpenTeachers.has(t.key);
+      return `<div class="cv-teacher ${open ? 'open' : ''}" data-key="${esc(t.key)}">
+        <button type="button" class="cvt-head">
+          <span class="cvt-av">${esc(initialsOf(t.name))}</span>
+          <span class="cvt-main"><b>${esc(t.name)}</b><span>${esc(t.subjects.join('، '))}${t.last ? ` · آخر زيارة ${daysAgo(t.last)}` : ''}</span></span>
+          <span class="cvt-tiers"><i class="t-star">⭐ ${t.tiers.star}</i><i class="t-ok">✓ ${t.tiers.ok}</i><i class="t-imp">➔ ${t.tiers.imp}</i></span>
+          ${t.drafts ? `<span class="cv-st draft">${t.drafts} مسودة</span>` : ''}
+          <span class="cvt-count">${t.visits.length}<small>${t.visits.length === 1 ? 'زيارة' : t.visits.length === 2 ? 'زيارتين' : 'زيارات'}</small></span>
+          <svg class="cvt-chev" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="cvt-body">
+          <div class="cvt-visits">${t.visits.map(visitRow).join('')}</div>
+          <div class="cvt-foot"><button type="button" class="text-action-btn cv-dl-teacher" data-key="${esc(t.key)}">تحميل كل زياراته (PDF)</button></div>
+        </div>
+      </div>`;
+    }).join('');
+    board.querySelectorAll('.cvt-head').forEach(h => h.addEventListener('click', () => {
+      const card = h.closest('.cv-teacher'); const key = card.dataset.key;
+      card.classList.toggle('open');
+      if (card.classList.contains('open')) cvOpenTeachers.add(key); else cvOpenTeachers.delete(key);
+    }));
+    board.querySelectorAll('.cv-dl-teacher').forEach(btn => btn.addEventListener('click', async () => {
+      const t = teachers.find(x => x.key === btn.dataset.key);
+      if (!t) return;
+      await runPdfJob(async (status) => {
+        status(`جارٍ تجهيز تقارير ${t.name}...`);
+        const ordered = [...t.visits].sort((a, b) => (a.visit_date || '').localeCompare(b.visit_date || ''));
+        const blob = await visitsToPdfBlob(ordered, (i, n) => status(`جارٍ تجهيز تقارير ${t.name} (${i} من ${n})...`));
+        saveBlob(blob, pdfFileName(t.name));
+      });
+    }));
+    wireRows();
+  };
+
+  function wireRows() {
+    board.querySelectorAll('.row-menu-btn').forEach(btn => btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const pop = btn.nextElementSibling;
+      const willOpen = pop.classList.contains('hidden');
+      document.querySelectorAll('.row-menu-pop').forEach(p => p.classList.add('hidden'));
+      if (willOpen) pop.classList.remove('hidden');
+    }));
+    board.querySelectorAll('.cv-edit-btn').forEach(btn => btn.addEventListener('click', () => {
       const v = visits.find(x => x.id === btn.dataset.id);
       if (!v) return;
-      cvEditingVisit = v;
-      cvView = 'form';
-      renderView();
-    });
-  });
-
-  container.querySelectorAll('.cv-print-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+      cvEditingVisit = v; cvView = 'form'; renderView();
+    }));
+    board.querySelectorAll('.cv-print-btn').forEach(btn => btn.addEventListener('click', () => {
       const v = visits.find(x => x.id === btn.dataset.id);
       if (v) printVisitReport(v);
-    });
-  });
-  container.querySelectorAll('.cv-dl-one-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    }));
+    board.querySelectorAll('.cv-dl-one-btn').forEach(btn => btn.addEventListener('click', async () => {
       const v = visits.find(x => x.id === btn.dataset.id);
       if (!v) return;
       await runPdfJob(async (status) => {
@@ -371,65 +480,57 @@ async function renderList(container) {
         const blob = await visitsToPdfBlob([v]);
         saveBlob(blob, pdfFileName(v.teacher_name));
       });
-    });
-  });
-
-  const dlTeacherSel = document.getElementById('cv-dl-teacher');
-  const dlTeacherBtn = document.getElementById('cv-dl-teacher-btn');
-  if (dlTeacherSel) {
-    dlTeacherSel.addEventListener('change', () => { dlTeacherBtn.disabled = !dlTeacherSel.value; });
-    dlTeacherBtn.addEventListener('click', async () => {
-      const t = groupVisitsByTeacher(visits).find(x => x.key === dlTeacherSel.value);
-      if (!t) return;
-      await runPdfJob(async (status) => {
-        status(`جارٍ تجهيز تقارير ${t.name}...`);
-        const blob = await visitsToPdfBlob(t.visits, (i, n) => status(`جارٍ تجهيز تقارير ${t.name} (${i} من ${n})...`));
-        saveBlob(blob, pdfFileName(t.name));
-      });
-    });
-    document.getElementById('cv-dl-all-btn').addEventListener('click', async () => {
-      const teachers = groupVisitsByTeacher(visits);
-      await runPdfJob(async (status) => {
-        if (teachers.length === 1) {
-          status('جارٍ تجهيز الملف...');
-          const blob = await visitsToPdfBlob(teachers[0].visits);
-          saveBlob(blob, pdfFileName(teachers[0].name));
-          return;
-        }
-        await loadJSZip();
-        const zip = new window.JSZip();
-        const usedNames = new Set();
-        for (let i = 0; i < teachers.length; i++) {
-          const t = teachers[i];
-          status(`جارٍ تجهيز ملف ${i + 1} من ${teachers.length}: ${t.name}...`);
-          const blob = await visitsToPdfBlob(t.visits);
-          let name = pdfFileName(t.name);
-          for (let n = 2; usedNames.has(name); n++) name = pdfFileName(`${t.name} (${n})`);
-          usedNames.add(name);
-          zip.file(name, blob);
-        }
-        status('جارٍ ضغط الملفات...');
-        const zipBlob = await zip.generateAsync({ type: 'blob' });
-        saveBlob(zipBlob, `تقارير الزيارات الصفية - ${todayIso()}.zip`);
-      });
-    });
-  }
-
-  container.querySelectorAll('.cv-publish-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    }));
+    board.querySelectorAll('.cv-publish-btn').forEach(btn => btn.addEventListener('click', async () => {
       const current = btn.dataset.current === 'true';
       await sb.from('classroom_visits').update({ published: !current, updated_at: new Date().toISOString() }).eq('id', btn.dataset.id);
       renderView();
-    });
-  });
-  container.querySelectorAll('.cv-delete-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    }));
+    board.querySelectorAll('.cv-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
       if (!confirm('تأكيد حذف هذي الزيارة نهائيًا؟')) return;
       await sb.from('classroom_visits').delete().eq('id', btn.dataset.id);
       renderView();
+    }));
+  }
+
+  renderBoard();
+  document.querySelectorAll('#cv-filter button').forEach(b => b.addEventListener('click', () => { cvFilter = b.dataset.f; renderBoard(); }));
+  const search = document.getElementById('cv-search');
+  if (search) search.addEventListener('input', () => { cvSearch = search.value; renderBoard(); });
+
+  const newBtn = document.getElementById('cv-new-btn');
+  if (newBtn) newBtn.addEventListener('click', () => { cvEditingVisit = null; cvView = 'form'; renderView(); });
+
+  const allBtn = document.getElementById('cv-dl-all-btn');
+  if (allBtn) allBtn.addEventListener('click', async () => {
+    await runPdfJob(async (status) => {
+      if (teachers.length === 1) {
+        status('جارٍ تجهيز الملف...');
+        const blob = await visitsToPdfBlob(groupVisitsByTeacher(visits)[0].visits);
+        saveBlob(blob, pdfFileName(teachers[0].name));
+        return;
+      }
+      const grouped = groupVisitsByTeacher(visits);
+      await loadJSZip();
+      const zip = new window.JSZip();
+      const usedNames = new Set();
+      for (let i = 0; i < grouped.length; i++) {
+        const t = grouped[i];
+        status(`جارٍ تجهيز ملف ${i + 1} من ${grouped.length}: ${t.name}...`);
+        const blob = await visitsToPdfBlob(t.visits);
+        let name = pdfFileName(t.name);
+        for (let n = 2; usedNames.has(name); n++) name = pdfFileName(`${t.name} (${n})`);
+        usedNames.add(name);
+        zip.file(name, blob);
+      }
+      status('جارٍ ضغط الملفات...');
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      saveBlob(zipBlob, `تقارير الزيارات الصفية - ${todayIso()}.zip`);
     });
   });
 }
+function initialsOf(name) { const p = String(name || '').trim().split(/\s+/); return (p[0] || '').charAt(0) + (p[1] ? ' ' + p[1].charAt(0) : ''); }
+document.addEventListener('click', (e) => { if (!e.target.closest('.row-menu')) document.querySelectorAll('.row-menu-pop').forEach(p => p.classList.add('hidden')); });
 
 /* ================= نموذج زيارة جديدة / تعديل زيارة ================= */
 async function renderForm(container, existing) {
