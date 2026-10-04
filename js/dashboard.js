@@ -318,7 +318,7 @@ export function renderWorkspacePage(groupKey, view) {
 
 /* ترحيب + اختصارات سريعة حسب الدور */
 const QUICK_ACTIONS = {
-  admin: [['visits', 'زيارة صفية'], ['substitutes', 'بدلاء اليوم'], ['weekly-tracking', 'متابعة الخطط'], ['exams', 'الاختبارات واللجان'], ['exam-reports', 'تقارير الاختبارات']],
+  admin: [['visits', 'زيارة صفية'], ['substitutes', 'جدول اليوم'], ['weekly-tracking', 'متابعة الخطط'], ['exams', 'الاختبارات واللجان'], ['exam-reports', 'تقارير الاختبارات']],
   // المعلم: "خطتي الأسبوعية" و"بدلاء اليوم" موجودة أصلًا كأزرار بكرت «يومك» - ما نكررها هنا
   teacher: [['duty', 'مناوبتي'], ['visits', 'زياراتي الصفية'], ['tracking', 'متابعة الاختبارات']],
 };
@@ -617,7 +617,7 @@ async function renderTeacherDashboard(container) {
       <section class="home-card" style="flex:2 1 300px;"><h3>مهامي</h3><div id="dash-attention-list" style="display:flex; flex-direction:column; gap:8px;"></div></section>
     </div>`;
   const heroActions = document.getElementById('day-hero-actions');
-  [['weekly', 'خطتي الأسبوعية', ''], ['substitutes', 'بدلاء اليوم', 'alt']].forEach(([key, label, cls]) => {
+  [['weekly', 'خطتي الأسبوعية', ''], ['substitutes', 'جدول اليوم', 'alt']].forEach(([key, label, cls]) => {
     const t = tiles.find(x => x.key === key);
     if (!t || !isTileAllowed(t)) return;
     const b = document.createElement('button');
