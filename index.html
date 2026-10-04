@@ -780,25 +780,27 @@
     <div id="exams-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-9">→ رجوع للرئيسية</span>
 
-      <div class="form-card">
-        <h4 id="exam-import-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ استيراد بيانات الطلاب (ملف إكسل)</span>
-          <svg id="exam-import-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <div id="exam-import-body" class="hidden" style="margin-top:14px;">
-          <input type="file" id="exam-import-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
-          <button class="btn-primary" id="exam-import-btn" style="width:auto; padding:11px 20px;">استيراد الملف</button>
-          <div class="error-msg" id="exam-import-error"></div>
+      <!-- ===== المستوى الأول: بيانات الطلاب + قائمة الفترات ===== -->
+      <div id="exam-list-view">
+        <div class="ex-students-strip">
+          <div class="ess-main">
+            <b>بيانات الطلاب</b>
+            <div id="exam-student-stats" class="ess-stats"></div>
+          </div>
+          <button type="button" class="btn-secondary" id="exam-import-toggle" style="width:auto; padding:9px 14px;"><span>تحديث من ملف نور (إكسل)</span><svg id="exam-import-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
+          <div id="exam-import-body" class="hidden ess-import">
+            <input type="file" id="exam-import-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
+            <button class="btn-primary" id="exam-import-btn" style="width:auto; padding:11px 20px;">استيراد الملف</button>
+            <div class="error-msg" id="exam-import-error"></div>
+          </div>
         </div>
-        <div id="exam-student-stats" style="display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin-top:14px;"></div>
-      </div>
 
-      <div class="form-card">
-        <h4 id="exam-period-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ إضافة فترة اختبار جديدة</span>
-          <svg id="exam-period-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-        </h4>
-        <div id="exam-period-body" class="hidden" style="margin-top:14px;">
+        <div class="ex-list-head">
+          <h3>فترات الاختبار</h3>
+          <button type="button" class="btn-primary" id="exam-period-toggle" style="width:auto; padding:10px 16px;"><span>+ فترة جديدة</span><svg id="exam-period-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none;"><path d="M6 9l6 6 6-6"/></svg></button>
+        </div>
+        <div id="exam-period-body" class="hidden form-card ex-new-period">
+          <h4 style="margin:0 0 12px;">فترة اختبار جديدة</h4>
           <input type="text" id="exam-period-name" placeholder="اسم الفترة (مثال: اختبارات نهاية الفصل الثاني)" />
           <div class="form-row">
             <div>
@@ -839,66 +841,93 @@
           <div class="error-msg" id="exam-period-error"></div>
           <button class="btn-primary" id="exam-period-add" style="width:auto; padding:11px 20px;">إنشاء الفترة</button>
         </div>
+        <div id="exam-periods-list" class="ex-period-grid"></div>
       </div>
 
-      <div class="form-card">
-        <h4>فترات الاختبار</h4>
-        <div id="exam-periods-list"></div>
-      </div>
-
+      <!-- ===== المستوى الثاني: داخل الفترة - خطوات مرقمة ===== -->
       <div id="exam-period-detail" class="hidden">
-        <div class="form-card">
-          <h4 id="exam-detail-title"></h4>
-          <div class="form-row">
-            <input type="text" id="exam-special-search" placeholder="ابحث بالاسم أو رقم الهوية لإضافته للجنة الخاصة" />
-            <button id="exam-special-search-btn" style="width:auto; padding:11px 20px;">بحث</button>
-          </div>
-          <div id="exam-special-search-results" style="margin-bottom:12px;"></div>
-          <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">طلاب اللجنة الخاصة الحاليين:</p>
-          <div id="exam-special-list"></div>
-          <button class="btn-primary" id="exam-conditions-print-btn" style="width:auto; padding:10px 18px; margin-top:10px; background:#7A4FC7; color:#fff;">طباعة كشف الحالات</button>
-          <button class="btn-primary" id="exam-generate-btn" style="width:auto; padding:11px 20px; margin-top:16px;">توليد التوزيع والترقيم</button>
-          <button class="btn-primary" id="exam-print-all-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#E8763A; color:#fff;">طباعة كشوف المناداة</button>
-          <button class="btn-primary" id="exam-class-sheets-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#1E5B3A; color:#fff;">كشوف الفصول (القاعات)</button>
-          <button class="btn-primary" id="exam-roster-print-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#2C5F8A; color:#fff;">طباعة كشاف اللجان</button>
-          <button class="btn-primary" id="exam-labels-print-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#5A3E9E; color:#fff;">طباعة ملصقات الطلاب</button>
-          <button class="btn-primary" id="exam-labels-print-bygrade-btn" style="width:auto; padding:11px 20px; margin-top:16px; margin-right:8px; background:#8A5FD1; color:#fff;">طباعة الملصقات مفردة (حسب المرحلة)</button>
-          <div class="error-msg" id="exam-generate-error"></div>
-        </div>
-
-        <div class="form-card">
-          <h4 id="exam-locations-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-            <span>+ مقرات اللجان</span>
-            <svg id="exam-locations-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-          </h4>
-          <div id="exam-locations-body" class="hidden" style="margin-top:14px;">
-            <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">حدد الفصل/القاعة لكل لجنة — تُستخدم لاحقًا بالرسائل وبعض الكشوف</p>
-            <div id="exam-locations-list"></div>
-            <button class="btn-primary" id="exam-locations-save" style="width:auto; padding:11px 20px; margin-top:10px;">حفظ المقرات</button>
-            <div class="error-msg" id="exam-locations-error"></div>
-            <div id="exam-locations-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-top:10px;">تم حفظ المقرات بنجاح.</div>
+        <div class="ex-period-head">
+          <button type="button" class="text-action-btn ex-back" id="exam-back-to-list">→ كل الفترات</button>
+          <div class="ex-period-title">
+            <h3 id="exam-detail-title"></h3>
+            <div id="exam-detail-meta" class="ex-period-meta"></div>
           </div>
         </div>
+        <nav class="ex-steps" id="exam-steps" aria-label="خطوات الفترة"></nav>
 
-        <div class="form-card">
-          <h4 id="exam-messages-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-            <span>+ إعداد رسائل أولياء الأمور</span>
-            <svg id="exam-messages-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
-          </h4>
-          <div id="exam-messages-body" class="hidden" style="margin-top:14px;">
-            <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">اسحب أي متغير للصندوق (أو اضغط عليه) وبينحط بمكان المؤشر، وبيتم استبداله تلقائيًا لكل طالب:</p>
-            <div id="exam-var-chips" style="display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px;">
-              <span class="exam-var-chip" draggable="true" data-var="#الاسم_الاول">#الاسم_الاول</span>
-              <span class="exam-var-chip" draggable="true" data-var="#اللجنة">#اللجنة</span>
-              <span class="exam-var-chip" draggable="true" data-var="#الصف">#الصف</span>
-              <span class="exam-var-chip" draggable="true" data-var="#رقم_الجلوس">#رقم_الجلوس</span>
-              <span class="exam-var-chip" draggable="true" data-var="#المقر">#المقر</span>
+        <section class="ex-step" data-step="1">
+          <div class="ex-step-head"><h4>الإعداد</h4><p>بيانات الفترة، وبداية أرقام الجلوس، ومقر كل لجنة.</p></div>
+          <div class="form-card">
+            <h5 class="ex-sub">بيانات الفترة</h5>
+            <div class="ex-edit-grid">
+              <label>اسم الفترة<input type="text" id="exam-edit-name" /></label>
+              <label>العام الهجري<input type="text" id="exam-edit-year" /></label>
+              <label>الفصل الدراسي<select id="exam-edit-semester"><option value="الفصل الأول">الفصل الأول</option><option value="الفصل الثاني">الفصل الثاني</option><option value="الفصل الثالث">الفصل الثالث</option></select></label>
+              <label>عدد اللجان<input type="number" min="1" id="exam-edit-committees" /></label>
+              <label>بداية أرقام أول متوسط<input type="number" min="1" id="exam-edit-seat-first" /></label>
+              <label>بداية أرقام ثاني متوسط<input type="number" min="1" id="exam-edit-seat-second" /></label>
+              <label>بداية أرقام ثالث متوسط<input type="number" min="1" id="exam-edit-seat-third" /></label>
+              <label>بداية أرقام اللجنة الخاصة<input type="number" min="1" id="exam-edit-seat-special" /></label>
             </div>
-            <textarea id="exam-message-template" rows="5" placeholder="مثال: عزيزي ولي أمر الطالب #الاسم_الاول، لجنة اختبار ابنكم هي #اللجنة بمقر #المقر، رقم الجلوس #رقم_الجلوس، الصف #الصف."></textarea>
-            <button class="btn-primary" id="exam-messages-export-btn" style="width:auto; padding:11px 20px;">تصدير الرسائل (إكسل)</button>
-            <div class="error-msg" id="exam-messages-error"></div>
+            <div id="exam-edit-warn" class="ex-warn hidden">غيّرت عدد اللجان أو أرقام الجلوس بعد التوليد، فلازم تعيد توليد التوزيع (الخطوة 3) عشان يتطبق التعديل.</div>
+            <div class="error-msg" id="exam-edit-error"></div>
+            <button class="btn-primary" id="exam-edit-save" style="width:auto; padding:10px 18px;">حفظ بيانات الفترة</button>
+            <span id="exam-edit-ok" class="ex-ok hidden">تم الحفظ</span>
           </div>
-        </div>
+          <div class="form-card">
+            <h5 class="ex-sub" id="exam-locations-toggle">مقرات اللجان <span id="exam-locations-count" class="ex-pill"></span><svg id="exam-locations-chevron" width="0" height="0" style="display:none"></svg></h5>
+            <div id="exam-locations-body">
+              <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">حدد الفصل أو القاعة لكل لجنة. يظهر المقر في رسائل أولياء الأمور وفي بعض الكشوف.</p>
+              <div id="exam-locations-list" class="ex-loc-grid"></div>
+              <button class="btn-primary" id="exam-locations-save" style="width:auto; padding:10px 18px; margin-top:10px;">حفظ المقرات</button>
+              <div class="error-msg" id="exam-locations-error"></div>
+              <div id="exam-locations-success" style="display:none; color:var(--green); background:var(--green-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-top:10px;">تم حفظ المقرات بنجاح.</div>
+            </div>
+          </div>
+          <div class="ex-step-nav"><button type="button" class="btn-primary ex-next" data-go="2">التالي: اللجنة الخاصة ←</button></div>
+        </section>
+
+        <section class="ex-step" data-step="2">
+          <div class="ex-step-head"><h4>اللجنة الخاصة</h4><p>الطلاب اللي يختبرون في لجنة مستقلة (ظروف صحية أو غيرها). خطوة اختيارية.</p></div>
+          <div class="form-card">
+            <div class="form-row">
+              <input type="text" id="exam-special-search" placeholder="ابحث بالاسم أو رقم الهوية لإضافته للجنة الخاصة" />
+              <button id="exam-special-search-btn" class="btn-secondary" style="width:auto; padding:11px 20px;">بحث</button>
+            </div>
+            <div id="exam-special-search-results" style="margin-bottom:12px;"></div>
+            <h5 class="ex-sub">طلاب اللجنة الخاصة</h5>
+            <div id="exam-special-list"></div>
+          </div>
+          <div class="ex-step-nav"><button type="button" class="btn-secondary ex-next" data-go="1" style="width:auto;">→ السابق</button><button type="button" class="btn-primary ex-next" data-go="3">التالي: التوزيع ←</button></div>
+        </section>
+
+        <section class="ex-step" data-step="3">
+          <div class="ex-step-head"><h4>التوزيع والترقيم</h4><p>يوزّع الطلاب على اللجان بالتساوي لكل مرحلة (مرتبين أبجديًا) ويعطي كل طالب رقم جلوس.</p></div>
+          <div class="form-card ex-generate-card">
+            <div id="exam-generate-state" class="ex-gen-state"></div>
+            <button class="btn-primary" id="exam-generate-btn" style="width:auto; padding:11px 20px;">توليد التوزيع والترقيم</button>
+            <div class="error-msg" id="exam-generate-error"></div>
+          </div>
+          <div id="exam-results"></div>
+          <div class="ex-step-nav"><button type="button" class="btn-secondary ex-next" data-go="2" style="width:auto;">→ السابق</button><button type="button" class="btn-primary ex-next" data-go="4">التالي: الطباعة ←</button></div>
+        </section>
+
+        <section class="ex-step" data-step="4">
+          <div class="ex-step-head"><h4>الطباعة</h4><p>كل مطبوعات الفترة في مكان واحد. تحتاج توليد التوزيع أول.</p></div>
+          <div id="exam-print-gate" class="ex-warn hidden">ما تم توليد التوزيع لهذي الفترة بعد. ولّده من الخطوة 3 قبل الطباعة.</div>
+          <h5 class="ex-sub">الكشوف</h5>
+          <div class="ex-print-grid">
+            <button type="button" class="ex-print-tile" id="exam-print-all-btn"><span class="ept-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></span><span class="ept-main"><b>كشوف المناداة</b><span>كشف لكل لجنة بأسماء طلابها وأرقام جلوسهم</span></span></button>
+            <button type="button" class="ex-print-tile" id="exam-roster-print-btn"><span class="ept-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span><span class="ept-main"><b>كشاف اللجان</b><span>جدول اللجان ومقراتها وعدد الطلاب من كل مرحلة</span></span></button>
+            <button type="button" class="ex-print-tile" id="exam-class-sheets-btn"><span class="ept-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21V5a2 2 0 012-2h12a2 2 0 012 2v16"/><path d="M2 21h20"/><path d="M15 12h.01"/></svg></span><span class="ept-main"><b>كشوف الفصول (القاعات)</b><span>لكل فصل: طلابه ولجانهم وأرقام جلوسهم</span></span></button>
+            <button type="button" class="ex-print-tile" id="exam-conditions-print-btn"><span class="ept-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M12 9v6"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg></span><span class="ept-main"><b>كشف الحالات</b><span>طلاب اللجنة الخاصة وحالاتهم</span></span></button>
+          </div>
+          <h5 class="ex-sub">الملصقات</h5>
+          <div class="ex-print-grid">
+            <button type="button" class="ex-print-tile" id="exam-labels-print-btn"><span class="ept-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z"/><path d="M7.5 7.5h.01"/></svg></span><span class="ept-main"><b>ملصقات الطلاب</b><span>ملصق لكل طالب مرتبة حسب اللجنة (GS-1114)</span></span></button>
+            <button type="button" class="ex-print-tile" id="exam-labels-print-bygrade-btn"><span class="ept-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.6 13.4l-7.2 7.2a2 2 0 01-2.8 0L3 13V3h10l7.6 7.6a2 2 0 010 2.8z"/><path d="M7.5 7.5h.01"/></svg></span><span class="ept-main"><b>ملصقات مفردة حسب المرحلة</b><span>كل مرحلة تبدأ بصفحة مستقلة</span></span></button>
+          </div>
+          <h5 class="ex-sub">النموذج المعتمد</h5>
           <!-- ===== الطباعة على النموذج المعتمد (أوراق الاختبارات النهائية المطبوعة مسبقًا) ===== -->
           <div class="form-card bud-section-card" id="ov-card" >
             <div class="bud-section-head" style="justify-content:space-between;">
@@ -996,7 +1025,29 @@
               </div>
             </div>
           </div>
-        <div id="exam-results"></div>
+          <div class="ex-step-nav"><button type="button" class="btn-secondary ex-next" data-go="3" style="width:auto;">→ السابق</button><button type="button" class="btn-primary ex-next" data-go="5">التالي: الرسائل ←</button></div>
+        </section>
+
+        <section class="ex-step" data-step="5">
+          <div class="ex-step-head"><h4>رسائل أولياء الأمور</h4><p>اكتب نص الرسالة مرة وحدة، ويتعبّى لكل طالب بلجنته ورقم جلوسه، ثم صدّرها إكسل للإرسال.</p></div>
+          <div class="form-card">
+            <span id="exam-messages-toggle" hidden></span><span id="exam-messages-chevron" hidden></span>
+            <div id="exam-messages-body">
+            <p style="font-size:12.5px; color:var(--slate); margin:0 0 8px;">اسحب أي متغير للصندوق (أو اضغط عليه) وبينحط بمكان المؤشر، وبيتم استبداله تلقائيًا لكل طالب:</p>
+            <div id="exam-var-chips" style="display:flex; flex-wrap:wrap; gap:8px; margin:0 0 12px;">
+              <span class="exam-var-chip" draggable="true" data-var="#الاسم_الاول">#الاسم_الاول</span>
+              <span class="exam-var-chip" draggable="true" data-var="#اللجنة">#اللجنة</span>
+              <span class="exam-var-chip" draggable="true" data-var="#الصف">#الصف</span>
+              <span class="exam-var-chip" draggable="true" data-var="#رقم_الجلوس">#رقم_الجلوس</span>
+              <span class="exam-var-chip" draggable="true" data-var="#المقر">#المقر</span>
+            </div>
+            <textarea id="exam-message-template" rows="5" placeholder="مثال: عزيزي ولي أمر الطالب #الاسم_الاول، لجنة اختبار ابنكم هي #اللجنة بمقر #المقر، رقم الجلوس #رقم_الجلوس، الصف #الصف."></textarea>
+            <button class="btn-primary" id="exam-messages-export-btn" style="width:auto; padding:11px 20px;">تصدير الرسائل (إكسل)</button>
+            <div class="error-msg" id="exam-messages-error"></div>
+            </div>
+          </div>
+          <div class="ex-step-nav"><button type="button" class="btn-secondary ex-next" data-go="4" style="width:auto;">→ السابق</button><button type="button" class="btn-secondary" id="exam-finish-btn" style="width:auto;">رجوع لكل الفترات</button></div>
+        </section>
       </div>
     </div>
 

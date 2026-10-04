@@ -504,16 +504,30 @@ function pushRoute(key) {
 }
 function routeFromHash(initial = false) {
   const key = routeKeyFromHash();
-  const t = tiles.find(x => x.key === key);
   const wsKey = key.startsWith('ws/') ? key.slice(3) : null;
+  // مسار فرعي داخل قسم: #/exams/<id> ← القسم exams مع sub=<id>
+  const [base, ...rest] = wsKey ? [key] : key.split('/');
+  const sub = rest.join('/') || null;
+  const t = wsKey ? null : tiles.find(x => x.key === base);
   const wsOk = wsKey && groupTilesFor(wsKey).length > 0;
   routingFromHistory = true;
   try {
-    if (t && isTileAllowed(t)) openTile(key, tileTitle(t));
+    if (t && isTileAllowed(t)) openTile(base, tileTitle(t), sub);
     else if (wsOk) openWorkspace(wsKey);
     else if (!initial || key !== 'home') { if (key !== 'home') history.replaceState({ key: 'home' }, '', '#/'); if (!initial) backToTiles(); }
   } finally { routingFromHistory = false; }
   if (!(t && isTileAllowed(t)) && !wsOk) { activeRouteKey = 'home'; setActiveNavByKey('home'); }
+}
+// الأقسام تستخدمها لتحديث المسار الفرعي (مثلاً فتح فترة اختبار) بدون إعادة فتح القسم
+export function setSubRoute(sub, replace = false) {
+  if (routingFromHistory) return;
+  const base = String(activeRouteKey || 'home').split('/')[0];
+  if (base === 'home' || base === 'ws') return;
+  const key = sub ? base + '/' + sub : base;
+  activeRouteKey = key;
+  const h = '#/' + key;
+  if (location.hash === h) return;
+  if (replace) history.replaceState({ key }, '', h); else history.pushState({ key }, '', h);
 }
 window.addEventListener('popstate', () => { if (currentProfile && !document.getElementById('dashboard-screen').classList.contains('hidden')) routeFromHash(false); });
 
@@ -590,10 +604,10 @@ function renderModuleHeader(key) {
   header.classList.remove('hidden');
 }
 
-export async function openTile(key, title) {
+export async function openTile(key, title, sub = null) {
   hideAllModules();
   renderModuleHeader(key);
-  pushRoute(key);
+  pushRoute(sub ? key + '/' + sub : key);
   setActiveNavByKey(key);
   const tt = tiles.find(x => x.key === key);
   document.title = `${tt ? tileTitle(tt) : (title || 'القسم')} · منصة المدرسة`;
@@ -629,7 +643,7 @@ export async function openTile(key, title) {
   } else if (key === 'exams') {
     document.getElementById('exams-module').classList.remove('hidden');
     const { loadExamsModule } = await import('./exams.js');
-    loadExamsModule();
+    loadExamsModule(sub);
   } else if (key === 'tracking') {
     document.getElementById('exam-tracking-module').classList.remove('hidden');
     const { loadExamTrackingTile } = await import('./exam-tracking.js');

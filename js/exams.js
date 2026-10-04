@@ -1,4 +1,4 @@
-import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute } from './core.js';
 import { initOverlayCard, setOverlayPeriod } from './overlay-print.js';
 import { loadXLSX } from './lib-loader.js';
 
@@ -6,9 +6,13 @@ import { loadXLSX } from './lib-loader.js';
 const SCHOOL_LOGO = new URL('logo-rc.png', window.location.href).href;
 
 setupCollapsible('exam-import-toggle', 'exam-import-body', 'exam-import-chevron');
-setupCollapsible('exam-period-toggle', 'exam-period-body', 'exam-period-chevron');
-setupCollapsible('exam-locations-toggle', 'exam-locations-body', 'exam-locations-chevron');
-setupCollapsible('exam-messages-toggle', 'exam-messages-body', 'exam-messages-chevron');
+document.getElementById('exam-period-toggle').addEventListener('click', () => {
+  const body = document.getElementById('exam-period-body');
+  const open = body.classList.toggle('hidden') === false;
+  document.querySelector('#exam-period-toggle span').textContent = open ? 'إلغاء' : '+ فترة جديدة';
+  document.getElementById('exam-period-toggle').classList.toggle('btn-secondary', open);
+  if (open) document.getElementById('exam-period-name').focus();
+});
 
 /* إدراج المتغيرات بالسحب أو بالضغط */
 function insertAtCursor(textarea, text) {
@@ -43,13 +47,29 @@ messageTemplateEl.addEventListener('drop', (e) => {
 let currentPeriodId = null;
 let currentPeriodRow = null;
 
-export async function loadExamsModule() {
+export async function loadExamsModule(sub = null) {
   initOverlayCard();
-  await refreshStudentStats();
-  await refreshPeriodsList();
+  showListView(true);
+  await Promise.all([refreshStudentStats(), refreshPeriodsList()]);
+  if (sub) {
+    const p = periodsCache.find(x => String(x.id) === String(sub));
+    if (p) { selectPeriod(p); return; }
+    setSubRoute(null, true);
+  }
+}
+
+function showListView(resetRoute = false) {
+  document.getElementById('exam-list-view').classList.remove('hidden');
   document.getElementById('exam-period-detail').classList.add('hidden');
   currentPeriodId = null;
+  currentPeriodRow = null;
+  if (resetRoute) return;
+  setSubRoute(null);
+  window.scrollTo(0, 0);
 }
+async function backToList() { showListView(); await refreshPeriodsList(); }
+document.getElementById('exam-back-to-list').addEventListener('click', backToList);
+document.getElementById('exam-finish-btn').addEventListener('click', backToList);
 
 /* ---------- استيراد الطلاب ---------- */
 async function refreshStudentStats() {
@@ -62,8 +82,8 @@ async function refreshStudentStats() {
   const counts = { first_intermediate: 0, second_intermediate: 0, third_intermediate: 0 };
   (data || []).forEach(s => { if (counts[s.grade_level] !== undefined) counts[s.grade_level]++; });
   const container = document.getElementById('exam-student-stats');
-  container.innerHTML = grades.map(g => `
-    <div class="stat-card"><div class="label">${gradeLabels[g]}</div><div class="value">${counts[g]}</div></div>`).join('');
+  const total = counts.first_intermediate + counts.second_intermediate + counts.third_intermediate;
+  container.innerHTML = `<span class="ess-total">${total} طالب</span>` + grades.map(g => `<span class="ess-chip">${gradeLabels[g]} <b>${counts[g]}</b></span>`).join('');
 }
 
 function normalizeGrade(raw) {
@@ -189,8 +209,43 @@ document.getElementById('exam-period-add').addEventListener('click', async () =>
   document.getElementById('exam-period-name').value = '';
   document.getElementById('exam-academic-year').value = '';
   document.getElementById('exam-committee-count').value = '';
+  document.getElementById('exam-period-toggle').click();
   await refreshPeriodsList();
 });
+
+let periodsCache = [];
+let progressByPeriod = new Map(); // period_id -> { located, special, students }
+
+const STEP_TITLES = ['الإعداد', 'اللجنة الخاصة', 'التوزيع', 'الطباعة', 'الرسائل'];
+// الخطوة الحالية للفترة: 1 لو المقرات ناقصة، 3 لو ما تولّد التوزيع، 4 بعد التوليد
+function periodStage(p) {
+  const pr = progressByPeriod.get(p.id) || {};
+  if (p.generated_at) return 4;
+  if ((pr.located || 0) < (p.committee_count || 0)) return 1;
+  return 3;
+}
+function escHtml(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function fmtDate(iso) { try { return new Date(iso).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' }); } catch { return ''; } }
+
+async function loadPeriodProgress(ids) {
+  progressByPeriod = new Map();
+  if (!ids.length) return;
+  const [{ data: locs }, { data: specials }] = await Promise.all([
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_committee_locations').select('period_id, committee_number, location').in('period_id', ids);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('exam_special_members').select('period_id').in('period_id', ids);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+  ]);
+  ids.forEach(id => progressByPeriod.set(id, { located: 0, special: 0 }));
+  (locs || []).forEach(l => { const e = progressByPeriod.get(l.period_id); if (e && String(l.location || '').trim()) e.located++; });
+  (specials || []).forEach(m => { const e = progressByPeriod.get(m.period_id); if (e) e.special++; });
+}
 
 async function refreshPeriodsList() {
   const { data } = await readScopedBySchool(scoped => {
@@ -198,43 +253,151 @@ async function refreshPeriodsList() {
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q.order('created_at', { ascending: false });
   });
+  periodsCache = data || [];
+  await loadPeriodProgress(periodsCache.map(p => p.id));
   const list = document.getElementById('exam-periods-list');
   list.innerHTML = '';
-  if (!data || data.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>لا توجد فترات اختبار بعد</p></div>';
+  if (!periodsCache.length) {
+    list.innerHTML = '<div class="ex-empty"><b>ما فيه فترات اختبار بعد</b><span>اضغط «+ فترة جديدة» وحدد عدد اللجان وبداية أرقام الجلوس.</span></div>';
     return;
   }
-  data.forEach(p => {
-    const row = document.createElement('div');
-    row.className = 'emp-row';
-    row.innerHTML = `
-      <div class="info"><div class="name">${p.name}</div>
-      <div class="title">${p.committee_count} لجنة ${p.generated_at ? '· تم التوليد' : '· لم يُولَّد بعد'}</div></div>
-      <button class="manage-btn text-action-btn">إدارة</button>
-      <button class="delete-period-btn text-action-btn" style="color:var(--danger) !important;">حذف</button>`;
-    row.querySelector('.manage-btn').addEventListener('click', () => selectPeriod(p));
-    row.querySelector('.delete-period-btn').addEventListener('click', async () => {
+  periodsCache.forEach(p => {
+    const stage = periodStage(p);
+    const pr = progressByPeriod.get(p.id) || {};
+    const card = document.createElement('div');
+    card.className = 'ex-period-card';
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    const meta = [p.academic_year, p.semester, `${p.committee_count} ${p.committee_count >= 3 && p.committee_count <= 10 ? 'لجان' : 'لجنة'}`].filter(Boolean).map(escHtml).join(' · ');
+    const stageText = p.generated_at ? `تم التوليد ${fmtDate(p.generated_at)} · جاهزة للطباعة` : stage === 1 ? `الخطوة 1 من 5 · مقرات اللجان ${pr.located || 0} من ${p.committee_count}` : 'الخطوة 3 من 5 · بانتظار توليد التوزيع';
+    card.innerHTML = `
+      <div class="epc-top">
+        <div class="epc-titles"><b>${escHtml(p.name)}</b><span>${meta}</span></div>
+        <button type="button" class="text-action-btn epc-del" style="color:var(--danger) !important;">حذف</button>
+      </div>
+      <div class="epc-bar">${[1, 2, 3, 4, 5].map(i => `<i class="${i < stage || (p.generated_at && i <= 3) ? 'on' : i === stage ? 'cur' : ''}"></i>`).join('')}</div>
+      <div class="epc-stage ${p.generated_at ? 'ok' : ''}">${stageText}${pr.special ? ` · اللجنة الخاصة: ${pr.special}` : ''}</div>`;
+    const open = () => selectPeriod(p);
+    card.addEventListener('click', (e) => { if (!e.target.closest('.epc-del')) open(); });
+    card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    card.querySelector('.epc-del').addEventListener('click', async () => {
       if (!confirm(`متأكد تبي تحذف فترة "${p.name}"؟ هذا يحذف كل التوزيع المرتبط فيها.`)) return;
       await sb.from('exam_periods').delete().eq('id', p.id);
-      if (currentPeriodId === p.id) document.getElementById('exam-period-detail').classList.add('hidden');
       await refreshPeriodsList();
     });
-    list.appendChild(row);
+    list.appendChild(card);
   });
 }
 
+let currentStep = 1;
 async function selectPeriod(period) {
   currentPeriodId = period.id;
   currentPeriodRow = period;
+  document.getElementById('exam-list-view').classList.add('hidden');
   document.getElementById('exam-period-detail').classList.remove('hidden');
-  document.getElementById('exam-detail-title').textContent = 'إدارة فترة: ' + period.name;
+  document.getElementById('exam-detail-title').textContent = period.name;
+  renderPeriodMeta();
+  fillEditForm();
   document.getElementById('exam-special-search').value = '';
   document.getElementById('exam-special-search-results').innerHTML = '';
-  await refreshSpecialList();
-  await refreshResults();
-  await refreshCommitteeLocations();
+  setSubRoute(period.id);
+  window.scrollTo(0, 0);
+  if (!progressByPeriod.has(period.id)) await loadPeriodProgress([period.id]);
+  goStep(periodStage(period));
+  await Promise.all([refreshSpecialList(), refreshResults(), refreshCommitteeLocations()]);
   setOverlayPeriod(period.id); // بطاقة "الطباعة على النموذج المعتمد" تستخدم لجان وأرقام جلوس هذي الفترة
 }
+
+function renderPeriodMeta() {
+  const p = currentPeriodRow;
+  if (!p) return;
+  document.getElementById('exam-detail-meta').textContent = [p.academic_year, p.semester, `${p.committee_count} ${p.committee_count >= 3 && p.committee_count <= 10 ? 'لجان' : 'لجنة'}`].filter(Boolean).join(' · ');
+}
+
+/* شريط الخطوات: كل خطوة توضح حالتها (مكتملة / الحالية / اختيارية) */
+function renderSteps() {
+  const p = currentPeriodRow;
+  if (!p) return;
+  const pr = progressByPeriod.get(p.id) || { located: 0, special: 0 };
+  const states = [
+    { done: pr.located >= p.committee_count, note: `${pr.located} من ${p.committee_count} مقر` },
+    { done: pr.special > 0, note: pr.special ? `${pr.special} طالب` : 'اختيارية' },
+    { done: !!p.generated_at, note: p.generated_at ? 'تم التوليد' : 'لم يُولَّد' },
+    { done: false, note: p.generated_at ? 'جاهزة' : 'بعد التوليد' },
+    { done: false, note: 'إكسل' },
+  ];
+  const nav = document.getElementById('exam-steps');
+  nav.innerHTML = STEP_TITLES.map((t, i) => {
+    const n = i + 1, st = states[i];
+    return `<button type="button" class="ex-step-btn ${n === currentStep ? 'cur' : ''} ${st.done ? 'done' : ''}" data-step="${n}" ${n === currentStep ? 'aria-current="step"' : ''}>
+      <span class="esb-num">${st.done ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>' : n}</span>
+      <span class="esb-txt"><b>${t}</b><span>${st.note}</span></span></button>`;
+  }).join('');
+  nav.querySelectorAll('.ex-step-btn').forEach(b => b.addEventListener('click', () => goStep(+b.dataset.step)));
+  const cnt = document.getElementById('exam-locations-count');
+  if (cnt) { cnt.textContent = `${pr.located} من ${p.committee_count}`; cnt.classList.toggle('ok', pr.located >= p.committee_count); }
+  // بوابة الطباعة: الكشوف والملصقات تحتاج توزيع مولّد
+  const gen = !!p.generated_at;
+  document.getElementById('exam-print-gate').classList.toggle('hidden', gen);
+  document.querySelectorAll('#exam-period-detail .ex-print-tile').forEach(b => { b.disabled = !gen; });
+  const st = document.getElementById('exam-generate-state');
+  if (st) st.innerHTML = gen
+    ? `<span class="ex-dot ok"></span><span>تم التوليد ${fmtDate(p.generated_at)}. إعادة التوليد تعيد ترقيم الكل من الصفر.</span>`
+    : `<span class="ex-dot"></span><span>ما تم التوليد بعد. تأكد من اللجنة الخاصة قبل التوليد.</span>`;
+  document.getElementById('exam-generate-btn').textContent = gen ? 'إعادة توليد التوزيع' : 'توليد التوزيع والترقيم';
+}
+
+function goStep(n) {
+  currentStep = Math.max(1, Math.min(5, n));
+  document.querySelectorAll('#exam-period-detail .ex-step').forEach(sec => sec.classList.toggle('hidden', +sec.dataset.step !== currentStep));
+  renderSteps();
+  const nav = document.getElementById('exam-steps'), cur = nav.querySelector('.ex-step-btn.cur');
+  if (cur && nav.scrollWidth > nav.clientWidth) nav.scrollLeft = cur.offsetLeft - (nav.clientWidth - cur.offsetWidth) / 2;
+}
+document.querySelectorAll('#exam-period-detail .ex-next').forEach(b => b.addEventListener('click', () => {
+  goStep(+b.dataset.go);
+  document.getElementById('exam-steps').scrollIntoView({ block: 'start', behavior: 'smooth' });
+}));
+
+/* ---------- تعديل بيانات الفترة ---------- */
+const EDIT_FIELDS = [
+  ['exam-edit-name', 'name', 'text'], ['exam-edit-year', 'academic_year', 'text'], ['exam-edit-semester', 'semester', 'text'],
+  ['exam-edit-committees', 'committee_count', 'num'], ['exam-edit-seat-first', 'seat_start_first', 'num'],
+  ['exam-edit-seat-second', 'seat_start_second', 'num'], ['exam-edit-seat-third', 'seat_start_third', 'num'],
+  ['exam-edit-seat-special', 'special_seat_start', 'num'],
+];
+function fillEditForm() {
+  const p = currentPeriodRow;
+  const sem = document.getElementById('exam-edit-semester');
+  if (p.semester && ![...sem.options].some(o => o.value === p.semester)) sem.add(new Option(p.semester, p.semester));
+  EDIT_FIELDS.forEach(([id, col]) => { document.getElementById(id).value = p[col] == null ? '' : p[col]; });
+  document.getElementById('exam-edit-warn').classList.add('hidden');
+  document.getElementById('exam-edit-error').style.display = 'none';
+  document.getElementById('exam-edit-ok').classList.add('hidden');
+}
+document.getElementById('exam-edit-save').addEventListener('click', async () => {
+  const p = currentPeriodRow;
+  const errEl = document.getElementById('exam-edit-error');
+  errEl.style.display = 'none';
+  if (!p) return;
+  const upd = {};
+  EDIT_FIELDS.forEach(([id, col, kind]) => {
+    const raw = document.getElementById(id).value.trim();
+    upd[col] = kind === 'num' ? (parseInt(raw) || null) : (raw || null);
+  });
+  if (!upd.name || !upd.committee_count || upd.committee_count < 1) { errEl.textContent = 'اسم الفترة وعدد اللجان مطلوبة'; errEl.style.display = 'block'; return; }
+  ['seat_start_first', 'seat_start_second', 'seat_start_third', 'special_seat_start'].forEach(k => { if (!upd[k]) upd[k] = 1; });
+  const structural = ['committee_count', 'seat_start_first', 'seat_start_second', 'seat_start_third', 'special_seat_start'].some(k => Number(upd[k]) !== Number(p[k]));
+  const { error } = await sb.from('exam_periods').update(upd).eq('id', p.id);
+  if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
+  Object.assign(p, upd);
+  document.getElementById('exam-detail-title').textContent = p.name;
+  renderPeriodMeta();
+  document.getElementById('exam-edit-warn').classList.toggle('hidden', !(structural && p.generated_at));
+  const ok = document.getElementById('exam-edit-ok');
+  ok.classList.remove('hidden'); setTimeout(() => ok.classList.add('hidden'), 1800);
+  await refreshCommitteeLocations();
+});
 
 /* ---------- مقرات اللجان ---------- */
 async function refreshCommitteeLocations() {
@@ -251,14 +414,15 @@ async function refreshCommitteeLocations() {
   (data || []).forEach(row => { existing[row.committee_number] = row.location || ''; });
 
   for (let i = 1; i <= currentPeriodRow.committee_count; i++) {
-    const row = document.createElement('div');
-    row.className = 'form-row';
-    row.style.alignItems = 'center';
-    row.innerHTML = `
-      <label style="min-width:90px; font-size:13.5px; color:var(--ink); font-weight:600;">لجنة رقم ${i}</label>
-      <input type="text" class="exam-location-input" data-committee="${i}" placeholder="مثال: الفصل 101" value="${existing[i] || ''}" />`;
+    const row = document.createElement('label');
+    row.className = 'ex-loc';
+    row.innerHTML = `<span>لجنة ${i}</span><input type="text" class="exam-location-input" data-committee="${i}" placeholder="مثال: الفصل 101" value="${escHtml(existing[i] || '')}" />`;
     container.appendChild(row);
   }
+  const pr = progressByPeriod.get(currentPeriodId) || { located: 0, special: 0 };
+  pr.located = Object.entries(existing).filter(([n, v]) => +n <= currentPeriodRow.committee_count && String(v).trim()).length;
+  progressByPeriod.set(currentPeriodId, pr);
+  renderSteps();
 }
 
 document.getElementById('exam-locations-save').addEventListener('click', async () => {
@@ -277,16 +441,8 @@ document.getElementById('exam-locations-save').addEventListener('click', async (
   const { error } = await writeWithSchool(extra => sb.from('exam_committee_locations').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'period_id,committee_number' }));
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
   successEl.style.display = 'block';
-
-  setTimeout(() => {
-    const body = document.getElementById('exam-locations-body');
-    const chevron = document.getElementById('exam-locations-chevron');
-    const toggle = document.getElementById('exam-locations-toggle');
-    body.classList.add('hidden');
-    chevron.style.transform = 'rotate(0deg)';
-    const label = toggle.querySelector('span');
-    label.textContent = label.textContent.replace(/^[+−]/, '+');
-  }, 900);
+  setTimeout(() => { successEl.style.display = 'none'; }, 2000);
+  await refreshCommitteeLocations();
 });
 
 /* ---------- اللجنة الخاصة ---------- */
@@ -335,6 +491,10 @@ async function refreshSpecialList() {
   });
   const list = document.getElementById('exam-special-list');
   list.innerHTML = '';
+  const pr = progressByPeriod.get(currentPeriodId) || { located: 0, special: 0 };
+  pr.special = (data || []).length;
+  progressByPeriod.set(currentPeriodId, pr);
+  renderSteps();
   if (!data || data.length === 0) {
     list.innerHTML = '<div class="placeholder" style="padding:14px;"><p>ما فيه طلاب باللجنة الخاصة بعد</p></div>';
     return;
@@ -443,8 +603,9 @@ document.getElementById('exam-generate-btn').addEventListener('click', async () 
 
   await sb.from('exam_periods').update({ generated_at: new Date().toISOString() }).eq('id', currentPeriodId);
   currentPeriodRow.generated_at = new Date().toISOString();
+  document.getElementById('exam-edit-warn').classList.add('hidden');
+  renderSteps();
   await refreshResults();
-  await refreshPeriodsList();
 });
 
 /* ---------- عرض النتائج ---------- */
@@ -462,9 +623,26 @@ async function refreshResults() {
   });
 
   if (!data || data.length === 0) {
-    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما تم توليد أي توزيع لهذه الفترة بعد</p></div>';
+    container.innerHTML = '';
     return;
   }
+  const { data: locs } = await readScopedBySchool(scoped => {
+    let q = sb.from('exam_committee_locations').select('committee_number, location').eq('period_id', currentPeriodId);
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
+  resultLocations = new Map((locs || []).map(l => [l.committee_number, l.location]));
+  container.className = 'ex-results-grid';
+  const head = document.createElement('div');
+  head.className = 'ex-results-head';
+  head.innerHTML = `<h5 class="ex-sub" style="margin:0;">نتيجة التوزيع <span class="ex-pill">${data.length} طالب</span></h5><button type="button" class="text-action-btn" id="exam-expand-all">عرض كل الأسماء</button>`;
+  container.appendChild(head);
+  head.querySelector('#exam-expand-all').addEventListener('click', (e) => {
+    const cards = container.querySelectorAll('.ex-com-card');
+    const anyClosed = [...cards].some(c => !c.classList.contains('open'));
+    cards.forEach(c => c.classList.toggle('open', anyClosed));
+    e.target.textContent = anyClosed ? 'إخفاء الأسماء' : 'عرض كل الأسماء';
+  });
 
   const committees = new Map();
   const special = [];
@@ -483,36 +661,32 @@ async function refreshResults() {
   }
 }
 
+let resultLocations = new Map();
 function buildCommitteeCard(title, rows) {
   const card = document.createElement('div');
-  card.className = 'form-card';
+  card.className = 'ex-com-card';
+  const num = (title.match(/\d+/) || [])[0];
+  const loc = num ? resultLocations.get(+num) : null;
+  const byGrade = { first_intermediate: 0, second_intermediate: 0, third_intermediate: 0 };
+  rows.forEach(r => { const g = r.students && r.students.grade_level; if (byGrade[g] != null) byGrade[g]++; });
+  const seats = rows.map(r => r.seat_number).filter(n => n != null);
   const tableRows = rows.map((r, i) => `
-    <tr>
-      <td style="padding:6px 8px; border-bottom:1px solid #ECEAE1;">${i + 1}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #ECEAE1;">${r.students ? r.students.national_id : ''}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #ECEAE1;">${r.students ? r.students.full_name : ''}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #ECEAE1;">${r.students ? (gradeLabels[r.students.grade_level] || '') : ''}</td>
-      <td style="padding:6px 8px; border-bottom:1px solid #ECEAE1;">${r.seat_number}</td>
-    </tr>`).join('');
-
+    <tr><td>${i + 1}</td><td>${r.students ? escHtml(r.students.full_name) : ''}</td><td>${r.students ? (gradeLabels[r.students.grade_level] || '') : ''}</td><td dir="ltr">${r.students ? escHtml(r.students.national_id) : ''}</td><td><b>${r.seat_number ?? ''}</b></td></tr>`).join('');
   card.innerHTML = `
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-      <h4 style="margin:0;">${title} <span style="font-size:12px; color:var(--slate); font-weight:400;">(${rows.length} طالب)</span></h4>
-      <button class="print-btn text-action-btn">طباعة</button>
+    <div class="ecc-head">
+      <div class="ecc-title"><b>${escHtml(title)}</b><span>${loc ? escHtml(loc) : (num ? '<i style="color:var(--status-warn); font-style:normal;">بدون مقر</i>' : '')}</span></div>
+      <span class="ecc-count">${rows.length}</span>
     </div>
-    <div style="overflow-x:auto;">
-      <table style="width:100%; border-collapse:collapse; font-size:13px;">
-        <thead><tr style="background:var(--sand);">
-          <th style="padding:6px 8px; text-align:right;">م</th>
-          <th style="padding:6px 8px; text-align:right;">رقم الهوية</th>
-          <th style="padding:6px 8px; text-align:right;">اسم الطالب</th>
-          <th style="padding:6px 8px; text-align:right;">الصف</th>
-          <th style="padding:6px 8px; text-align:right;">رقم الجلوس</th>
-        </tr></thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-    </div>`;
-
+    <div class="ecc-grades">
+      <span>أول ${byGrade.first_intermediate}</span><span>ثاني ${byGrade.second_intermediate}</span><span>ثالث ${byGrade.third_intermediate}</span>
+      ${seats.length ? `<span class="ecc-seats" dir="ltr">${Math.min(...seats)}–${Math.max(...seats)}</span>` : ''}
+    </div>
+    <div class="ecc-actions">
+      <button type="button" class="text-action-btn ecc-toggle">الأسماء</button>
+      <button type="button" class="text-action-btn print-btn">طباعة</button>
+    </div>
+    <div class="ecc-table"><table><thead><tr><th>م</th><th>اسم الطالب</th><th>الصف</th><th>الهوية</th><th>الجلوس</th></tr></thead><tbody>${tableRows}</tbody></table></div>`;
+  card.querySelector('.ecc-toggle').addEventListener('click', () => card.classList.toggle('open'));
   card.querySelector('.print-btn').addEventListener('click', () => printCommittee(title, rows));
   return card;
 }
