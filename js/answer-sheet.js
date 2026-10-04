@@ -29,6 +29,8 @@ const SHEET = {
     answersTop: 70, answersBottom: 281, colHeadH: 5.5,
     minRowH: 7, maxRowH: 9.5, pitch: 7, bubble: 5.2, numW: 9, colPad: 2, colGap: 5,
     letterSize: 7, numSize: 9.5, footerSize: 7.5,
+    // وضع "مع أسئلة مقالية": اختيار متعدد ٣ أعمدة × ١٠ فوق، والباقي للمقالي
+    compactRowH: 7.4, essayGap: 5, essayTitleH: 7, essayStripH: 8.5, essayLineGap: 8, essayMinH: 30, essayBoxGap: 3,
   },
   A5: {
     w: 148, h: 210, side: 9, mark: 5, markInset: 5,
@@ -39,8 +41,11 @@ const SHEET = {
     answersTop: 55, answersBottom: 196, colHeadH: 4.5,
     minRowH: 6.2, maxRowH: 8.5, pitch: 6.2, bubble: 4.6, numW: 7.5, colPad: 1.5, colGap: 3.5,
     letterSize: 6, numSize: 8, footerSize: 6.5,
+    compactRowH: 6.3, essayGap: 3.5, essayTitleH: 5.5, essayStripH: 7, essayLineGap: 6.5, essayMinH: 22, essayBoxGap: 2,
   },
 };
+const ESSAY_MAX_SCORE = 10;
+const COMPACT_ROWS = 10, COMPACT_MAX_COLS = 3;
 // حجم الصفحة المطبوعة + أي قالب ورقة طالب تحتويه
 export const PAGE = {
   A4: { w: 210, h: 297, sheet: 'A4', perPage: 1, pdfFormat: 'a4', orientation: 'portrait', label: 'A4' },
@@ -48,28 +53,56 @@ export const PAGE = {
   A4L2: { w: 297, h: 210, sheet: 'A5', perPage: 2, pdfFormat: 'a4', orientation: 'landscape', label: 'A4 بالعرض (طالبين)' },
 };
 
-/* ---------- حساب توزيع الأسئلة على الأعمدة ---------- */
-export function computeLayout({ size, questions, choices }) {
+/* ---------- حساب توزيع الأسئلة على الأعمدة ----------
+ * بدون مقالي: الأعمدة تعبّي طول الورقة (حد ٢٠ سؤال للعمود).
+ * مع مقالي: الاختيار من متعدد ثابت بأعمدة ١٠ أسئلة (حد ٣ أعمدة) أعلى الورقة، وتحته منطقة المقالي
+ * مقسومة بالتساوي على الأسئلة المقالية. */
+export function computeLayout({ size, questions, choices, essays = [] }) {
   const P = SHEET[PAGE[size].sheet];
   const availW = P.w - 2 * P.side;
-  const availH = P.answersBottom - P.answersTop - P.colHeadH;
   const colW = P.numW + choices * P.pitch + 2 * P.colPad;
-  const maxCols = Math.max(1, Math.floor((availW + P.colGap) / (colW + P.colGap)));
+  const maxColsW = Math.max(1, Math.floor((availW + P.colGap) / (colW + P.colGap)));
+  const spread = (cols) => {
+    const gap = cols > 1 ? Math.min(P.colGap * 3, (availW - cols * colW) / (cols - 1)) : 0;
+    const blockW = cols * colW + (cols - 1) * gap;
+    return { gap, offset: (availW - blockW) / 2 };
+  };
+
+  if (essays.length) {
+    const maxCols = Math.min(COMPACT_MAX_COLS, maxColsW);
+    const maxQuestions = maxCols * COMPACT_ROWS;
+    if (questions > maxQuestions) return { ok: false, maxQuestions, error: `مع الأسئلة المقالية: أقصى الاختيار من متعدد ${maxQuestions} سؤال (${maxCols} أعمدة × ${COMPACT_ROWS})` };
+    const bad = essays.find(m => !(m >= 1 && m <= ESSAY_MAX_SCORE));
+    if (bad !== undefined) return { ok: false, maxQuestions, error: `درجة السؤال المقالي لازم تكون من 1 إلى ${ESSAY_MAX_SCORE}` };
+    const cols = questions ? Math.ceil(questions / COMPACT_ROWS) : 0;
+    const rows = questions ? Math.min(COMPACT_ROWS, questions) : 0;
+    const rowH = P.compactRowH;
+    const mcqBottom = questions ? P.answersTop + P.colHeadH + rows * rowH + 1 : P.answersTop - P.essayGap;
+    const essayTop = mcqBottom + P.essayGap;
+    const boxesTop = essayTop + P.essayTitleH;
+    const essayBoxH = (P.answersBottom - boxesTop - (essays.length - 1) * P.essayBoxGap) / essays.length;
+    if (essayBoxH < P.essayMinH) {
+      const fit = Math.floor((P.answersBottom - boxesTop + P.essayBoxGap) / (P.essayMinH + P.essayBoxGap));
+      return { ok: false, maxQuestions, error: `المساحة تكفي ${Math.max(0, fit)} أسئلة مقالية فقط بهذا الحجم وعدد الاختيار من متعدد` };
+    }
+    // عرض شريط الدرجات: "الدرجة" + فقاعات 0..max
+    const maxScore = Math.max(...essays);
+    if ((maxScore + 1) * P.pitch + 45 > availW) return { ok: false, maxQuestions, error: 'الدرجة القصوى للسؤال المقالي كبيرة على عرض هذي الورقة' };
+    return { ok: true, P, mode: 'essay', cols, rows, rowH, colW, ...spread(cols || 1), maxQuestions, essayTop, boxesTop, essayBoxH };
+  }
+
+  const availH = P.answersBottom - P.answersTop - P.colHeadH;
   const maxRows = Math.floor(availH / P.minRowH);
-  const maxQuestions = maxCols * maxRows;
+  const maxQuestions = maxColsW * maxRows;
   if (questions > maxQuestions) {
     return { ok: false, maxQuestions, error: `أقصى عدد أسئلة لهذا الحجم بـ${choices} خيارات هو ${maxQuestions} سؤال` };
   }
   // أعمدة بحد أقصى ٢٠ سؤال (أوضح للطالب)، موزعة بالتساوي، والمسافة بين الأسطر تتمدد لتعبّي الطول المتاح
-  let cols = Math.min(maxCols, Math.max(1, Math.ceil(questions / Math.min(maxRows, 20))));
+  let cols = Math.min(maxColsW, Math.max(1, Math.ceil(questions / Math.min(maxRows, 20))));
   const rows = Math.ceil(questions / cols);
   cols = Math.ceil(questions / rows);
   const rowH = Math.min(P.maxRowH, availH / rows);
-  // المسافة بين الأعمدة تتوسع (لحد ٣ أضعاف) لما تكون الأعمدة قليلة، عشان الورقة تطلع متوازنة
-  const gap = cols > 1 ? Math.min(P.colGap * 3, (availW - cols * colW) / (cols - 1)) : 0;
-  const blockW = cols * colW + (cols - 1) * gap;
-  const offset = (availW - blockW) / 2;
-  return { ok: true, P, cols, rows, rowH, colW, gap, offset, maxQuestions };
+  return { ok: true, P, mode: 'normal', cols, rows, rowH, colW, ...spread(cols), maxQuestions };
 }
 
 /* ---------- Code 128 ---------- */
@@ -154,6 +187,11 @@ export const SHEET_STYLES = `
   .as-colhead { position:absolute; background:#e9e9e9; border-bottom:0.25mm solid #000; }
   .as-colhead span { position:absolute; top:0; bottom:0; display:flex; align-items:center; justify-content:center; font-weight:700; }
   .as-sep5 { position:absolute; height:0; border-top:0.2mm solid #bdbdbd; }
+  .as-essay-title { position:absolute; display:flex; align-items:center; font-weight:700; border-bottom:0.3mm solid #000; }
+  .as-essay-box { position:absolute; border:0.3mm solid #000; border-radius:1.5mm; overflow:hidden; }
+  .as-essay-strip { position:absolute; background:#e9e9e9; border-bottom:0.25mm solid #000; }
+  .as-essay-strip .q { position:absolute; top:0; bottom:0; display:flex; align-items:center; font-weight:700; white-space:nowrap; }
+  .as-essay-line { position:absolute; height:0; border-top:0.2mm dotted #9a9a9a; }
   .as-cut { position:absolute; top:0; bottom:0; width:0; border-left:0.3mm dashed #888; }
   .as-cut span { position:absolute; left:-2.2mm; font-size:9pt; color:#666; }
 `;
@@ -161,7 +199,8 @@ export const SHEET_STYLES = `
 /* يرسم ورقة طالب واحدة (بأبعاد قالب SHEET) مزاحة أفقيًا بـ ox داخل الصفحة. student اختياري */
 function buildSheetBody(opts, student, logoSrc, ox) {
   const { size, questions, choices, lang, title, subject } = opts;
-  const L = computeLayout({ size, questions, choices });
+  const essays = opts.essays || [];
+  const L = computeLayout({ size, questions, choices, essays });
   if (!L.ok) throw new Error(L.error);
   const P = L.P;
   const rtl = lang !== 'en';
@@ -207,7 +246,7 @@ function buildSheetBody(opts, student, logoSrc, ox) {
     const y = P.infoTop + ri * P.infoRowH;
     row.forEach(([label, value, frac]) => {
       const w = innerW * frac;
-      h += `<div class="as-cell lbl" style="left:${mm(X(P.side + off, P.infoLabelW))}; top:${mm(y)}; width:${mm(P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${P.infoSize}pt;">${label}</div>`;
+      h += `<div class="as-cell lbl" dir="${rtl ? 'rtl' : 'ltr'}" style="left:${mm(X(P.side + off, P.infoLabelW))}; top:${mm(y)}; width:${mm(P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${P.infoSize}pt;">${label}</div>`;
       h += `<div class="as-cell val" style="left:${mm(X(P.side + off + P.infoLabelW, w - P.infoLabelW))}; top:${mm(y)}; width:${mm(w - P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${P.infoSize}pt; direction:${rtl ? 'rtl' : 'ltr'};">${escHtml(value || '')}</div>`;
       off += w;
     });
@@ -229,7 +268,7 @@ function buildSheetBody(opts, student, logoSrc, ox) {
   // شبكة الإجابات: كل عمود داخل إطار، فوقه شريط حروف الخيارات، وخط خفيف كل ٥ أسئلة
   const gridTop = P.answersTop;
   const rowsTop = gridTop + P.colHeadH;
-  for (let c = 0; c < L.cols; c++) {
+  for (let c = 0; c < (questions ? L.cols : 0); c++) {
     const colStart = L.offset + c * (L.colW + L.gap);
     const rowsInCol = Math.min(L.rows, questions - c * L.rows);
     if (rowsInCol <= 0) break;
@@ -255,8 +294,40 @@ function buildSheetBody(opts, student, logoSrc, ox) {
     }
   }
 
+  // الأسئلة المقالية: صندوق لكل سؤال - شريط علوي للمعلم فيه فقاعات الدرجة (0..الدرجة القصوى)
+  // يظللها المعلم بعد التصحيح فيقرأها Remark، وتحته أسطر منقطة لكتابة الطالب
+  if (essays.length) {
+    h += `<div class="as-essay-title" style="left:${mm(ox + P.side)}; top:${mm(L.essayTop)}; width:${mm(innerW)}; height:${mm(P.essayTitleH - 1.5)}; font-size:${P.infoSize}pt; justify-content:space-between;" dir="${rtl ? 'rtl' : 'ltr'}">
+      <span>${rtl ? 'الأسئلة المقالية' : 'Written questions'}</span>
+      <span style="font-weight:400; font-size:${P.instrSize}pt; color:#444;">${rtl ? 'المعلم يظلّل درجة كل سؤال بعد التصحيح' : 'Teacher shades the score after marking'}</span></div>`;
+    essays.forEach((maxScore, k) => {
+      const top = L.boxesTop + k * (L.essayBoxH + P.essayBoxGap);
+      h += `<div class="as-essay-box" style="left:${mm(ox + P.side)}; top:${mm(top)}; width:${mm(innerW)}; height:${mm(L.essayBoxH)};"></div>`;
+      h += `<div class="as-essay-strip" style="left:${mm(ox + P.side + 0.3)}; top:${mm(top + 0.3)}; width:${mm(innerW - 0.6)}; height:${mm(P.essayStripH - 0.3)};"></div>`;
+      const qLabel = rtl ? `السؤال ${k + 1}&nbsp;<span style="font-weight:400; margin-inline-start:1mm;">(من ${maxScore})</span>` : `Question ${k + 1}&nbsp;<span style="font-weight:400; margin-inline-start:1mm;">(/${maxScore})</span>`;
+      const qW = 34;
+      h += `<div class="as-essay-strip" dir="${rtl ? 'rtl' : 'ltr'}" style="background:none; border:0; left:${mm(X(P.side + 2.5, qW))}; top:${mm(top)}; width:${mm(qW)}; height:${mm(P.essayStripH)};"><span class="q" style="${rtl ? 'right' : 'left'}:0; font-size:${P.infoSize}pt;">${qLabel}</span></div>`;
+      // فقاعات الدرجة تبدأ من نهاية السطر (يسار للعربي) بترتيب 0..max من جهة بداية القراءة
+      const n = maxScore + 1;
+      const scoresW = n * P.pitch;
+      const lblW = 22;
+      const startOff = innerW - scoresW - 2;
+      h += `<div class="as-essay-strip" dir="${rtl ? 'rtl' : 'ltr'}" style="background:none; border:0; left:${mm(X(P.side + startOff - lblW, lblW))}; top:${mm(top)}; width:${mm(lblW)}; height:${mm(P.essayStripH)};"><span class="q" style="${rtl ? 'left' : 'right'}:1mm; font-size:${P.instrSize}pt;">${rtl ? 'الدرجة (للمعلم):' : 'Score (teacher):'}</span></div>`;
+      const yMid = top + P.essayStripH / 2;
+      for (let v = 0; v <= maxScore; v++) {
+        const bx = P.side + startOff + v * P.pitch + (P.pitch - P.bubble) / 2;
+        h += `<div class="as-bubble" style="left:${mm(X(bx, P.bubble))}; top:${mm(yMid - P.bubble / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize}pt; background:#fff;">${v}</div>`;
+      }
+      for (let y = top + P.essayStripH + P.essayLineGap; y < top + L.essayBoxH - 2; y += P.essayLineGap) {
+        h += `<div class="as-essay-line" style="left:${mm(ox + P.side + 3)}; top:${mm(y)}; width:${mm(innerW - 6)};"></div>`;
+      }
+    });
+  }
+
   // تذييل: إعدادات القالب (عشان تعرف أي قالب Remark يقرأ هذي الورقة)
-  const cfgParts = [PAGE[size].sheet, `${questions} ${rtl ? 'سؤال' : 'Q'}`, `${choices} ${rtl ? 'خيارات' : 'choices'}`, rtl ? 'عربي' : 'EN'];
+  const cfgParts = [PAGE[size].sheet, `${questions} ${rtl ? 'سؤال' : 'Q'}`, `${choices} ${rtl ? 'خيارات' : 'choices'}`];
+  if (essays.length) cfgParts.push(`${rtl ? 'مقالي' : 'Written'}: ${essays.join(rtl ? '،' : ',')}`);
+  cfgParts.push(rtl ? 'عربي' : 'EN');
   const cfg = cfgParts.map(t => `<bdi>${escHtml(t)}</bdi>`).join(' · ');
   h += `<div class="as-abs" dir="${rtl ? 'rtl' : 'ltr'}" style="left:${mm(ox + P.side + P.mark)}; width:${mm(innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.5)}; text-align:center; font-size:${P.footerSize}pt; color:#555;">${cfg}</div>`;
   return h;
@@ -300,14 +371,37 @@ function readOptions() {
     title: $('as-title').value.trim(),
     subject: $('as-subject').value.trim(),
     withBarcode: $('as-barcode').checked,
+    essays: readEssays(),
   };
+}
+
+function readEssays() {
+  const n = Math.max(0, Math.min(8, parseInt($('as-essay-count').value, 10) || 0));
+  return [...document.querySelectorAll('#as-essay-scores .as-essay-max')].slice(0, n).map(el => parseInt(el.value, 10) || 0);
+}
+
+// يرسم خانة "الدرجة القصوى" لكل سؤال مقالي (ويحافظ على القيم المدخلة سابقًا)
+let essayInputsCount = -1;
+function renderEssayInputs() {
+  const n = Math.max(0, Math.min(8, parseInt($('as-essay-count').value, 10) || 0));
+  if (n === essayInputsCount) return; // نفس العدد - لا نعيد البناء (عشان ما يضيع التركيز من الخانة)
+  essayInputsCount = n;
+  const wrap = $('as-essay-scores');
+  const prev = [...wrap.querySelectorAll('.as-essay-max')].map(el => el.value);
+  wrap.innerHTML = Array.from({ length: n }, (_, i) => `
+    <label style="font-size:12px; font-weight:700; display:flex; flex-direction:column; align-items:center; gap:3px;">س${i + 1}
+      <input type="number" class="as-essay-max" min="1" max="${ESSAY_MAX_SCORE}" value="${prev[i] || prev[prev.length - 1] || 5}" style="width:64px; margin:0; text-align:center; padding:7px 4px;" />
+    </label>`).join('');
+  $('as-essay-scores-wrap').classList.toggle('hidden', n === 0);
 }
 
 function updateLimitHint() {
   const o = readOptions();
-  const L = computeLayout({ size: o.size, questions: Math.max(1, o.questions), choices: o.choices });
+  const L = computeLayout({ size: o.size, questions: Math.max(o.essays.length ? 0 : 1, o.questions), choices: o.choices, essays: o.essays });
   const hint = $('as-limit-hint');
-  hint.textContent = `أقصى عدد للأسئلة بهذي الإعدادات: ${L.maxQuestions}`;
+  hint.textContent = o.essays.length
+    ? `مع الأسئلة المقالية: الاختيار من متعدد بأعمدة ١٠ أسئلة، أقصاه ${L.maxQuestions} سؤال`
+    : `أقصى عدد للأسئلة بهذي الإعدادات: ${L.maxQuestions}`;
   hint.style.color = o.questions > L.maxQuestions ? 'var(--danger)' : 'var(--slate)';
 }
 
@@ -380,8 +474,8 @@ function paginate(students, perPage) {
 
 function buildAllPages() {
   const o = readOptions();
-  if (!o.questions || o.questions < 1) throw new Error('حدد عدد الأسئلة');
-  const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices });
+  if ((!o.questions || o.questions < 1) && !o.essays.length) throw new Error('حدد عدد الأسئلة');
+  const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices, essays: o.essays });
   if (!L.ok) throw new Error(L.error);
   const pg = PAGE[o.size];
   if (o.withBarcode) {
@@ -404,7 +498,7 @@ function setStatus(msg, isErr = false) {
 function renderPreview() {
   try {
     const o = readOptions();
-    if (!o.questions) { $('as-preview').innerHTML = ''; return; }
+    if (!o.questions && !o.essays.length) { $('as-preview').innerHTML = ''; return; }
     const pg = PAGE[o.size];
     let studs = [];
     if (o.withBarcode) {
@@ -537,6 +631,10 @@ export function initAnswerSheetCard() {
     $(id).addEventListener('input', refresh);
     $(id).addEventListener('change', refresh);
   });
+  const onEssayCount = () => { renderEssayInputs(); refresh(); };
+  $('as-essay-count').addEventListener('input', onEssayCount);
+  $('as-essay-count').addEventListener('change', onEssayCount);
+  $('as-essay-scores').addEventListener('input', refresh);
   $('as-barcode').addEventListener('change', async () => {
     const on = $('as-barcode').checked;
     $('as-barcode-opts').classList.toggle('hidden', !on);
