@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle } from './core.js';
 
 /* ===== قراءة weekly_plans مقيّدة بمدرسة الحساب (نفس منطق js/weekly-plan.js) ===== */
 async function readWeeklyPlansScoped(weekNumber) {
@@ -80,9 +80,7 @@ async function renderMyWeeklyScheduleGrid() {
       </table>
     </div>`;
 
-  wrap.innerHTML = `
-    <p style="font-family:'Tajawal'; font-weight:700; font-size:13px; margin:0 0 8px;">جدولك الدراسي الأسبوعي</p>
-    ${gridHtml}`;
+  wrap.innerHTML = `<div class="home-card" style="margin-top:16px;"><h3>جدولك الدراسي الأسبوعي</h3>${gridHtml}</div>`;
 }
 
 // جدول اليوم الخاص بالمعلم كما يظهر بصفحته الرئيسية: يقارن جدوله الأصلي بأي تغييرات
@@ -163,41 +161,59 @@ async function renderMyScheduleWidget(container, dayKey, dateStr) {
   const wrap = document.getElementById('dash-my-schedule');
   if (!wrap) return;
   const bodyHtml = lines.length === 0
-    ? '<div class="placeholder" style="padding:16px;"><p>ما عندك حصص اليوم</p></div>'
-    : lines.map(l => `<div style="padding:10px 12px; border-radius:8px; margin-bottom:6px; font-size:13px; ${l.highlighted ? 'background:#FDEDEC; color:var(--danger); font-weight:600;' : 'background:#fff; border:1px solid #ECEAE1; color:var(--ink);'}">${l.html}</div>`).join('');
-  wrap.innerHTML = `<p style="font-family:'Tajawal'; font-weight:700; font-size:14px; margin:0 0 10px;">جدولك اليوم</p>${bodyHtml}`;
+    ? '<div style="font-size:13.5px; color:var(--slate);">ما عندك حصص اليوم</div>'
+    : lines.map(l => `<div style="padding:10px 12px; border-radius:10px; font-size:13.5px; ${l.highlighted ? 'background:#FDEDEC; color:#9B2F28; font-weight:600;' : 'background:var(--sand); color:var(--ink);'}">${l.html}</div>`).join('');
+  wrap.innerHTML = `<div class="home-card"><h3>جدولك اليوم</h3>${bodyHtml}</div>`;
+  const hero = document.getElementById('day-hero-count');
+  if (hero) {
+    const n = lines.length;
+    hero.textContent = n ? `عندك ${n} ${n === 1 ? 'حصة' : n === 2 ? 'حصتين' : n <= 10 ? 'حصص' : 'حصة'} اليوم` : 'ما عندك حصص اليوم';
+  }
 }
 
+/* بطاقات مساحات العمل أسفل الرئيسية: كل مساحة بأقسامها المسموحة للمستخدم */
+const WS_COLORS = { students: ['#E3F4F7', '#0B6E7E'], teachers: ['#EFEBFB', '#5A3E9E'], exams: ['#FDEFE3', '#A4501A'], admin: ['#EAF1FC', '#2455A4'] };
 function renderSectionTilesGrid() {
   const grid = document.getElementById('dash-sections-grid');
   if (!grid) return;
-  grid.innerHTML = '';
-  GROUPS.forEach(g => {
-    const groupTiles = tiles.filter(t => t.group === g.key && isTileAllowed(t));
-    if (!groupTiles.length) return;
+  grid.innerHTML = GROUPS.map(g => {
+    const list = groupTilesFor(g.key);
+    if (!list.length) return '';
+    const [bg, fg] = WS_COLORS[g.key] || ['var(--sand)', 'var(--ink)'];
+    return `<div class="ws-card">
+      <div class="ws-head"><span class="ws-ic" style="background:${bg}; color:${fg};">${g.icon}</span>${g.title}</div>
+      <div class="ws-links">${list.map(t => `<a href="#/${t.key}" data-key="${t.key}">${esc(tileTitle(t))}</a>`).join('')}</div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('a[data-key]').forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    const t = tiles.find(x => x.key === a.dataset.key);
+    openTile(a.dataset.key, t ? tileTitle(t) : '');
+  }));
+}
 
-    const heading = document.createElement('p');
-    heading.className = 'tiles-group-label';
-    heading.textContent = g.title;
-    grid.appendChild(heading);
-
-    const row = document.createElement('div');
-    row.className = 'tiles';
-    groupTiles.forEach(t => {
-      const title = t.key === 'budget' ? budgetTileTitle() : t.title;
-      const desc = t.key === 'budget' ? budgetTileDesc() : t.desc;
-      const div = document.createElement('div');
-      div.className = 'tile';
-      div.innerHTML = `
-        <div class="ic-diamond ${t.color}" style="margin-bottom:14px;">${t.icon}</div>
-        <h3>${title}</h3>
-        <p>${desc}</p>
-        <span class="arrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg></span>`;
-      div.addEventListener('click', () => openTile(t.key, title));
-      row.appendChild(div);
-    });
-    grid.appendChild(row);
-  });
+/* ترحيب + اختصارات سريعة حسب الدور */
+const QUICK_ACTIONS = {
+  admin: [['visits', 'زيارة صفية'], ['substitutes', 'بدلاء اليوم'], ['weekly-tracking', 'متابعة الخطط'], ['exams', 'الاختبارات واللجان'], ['exam-reports', 'تقارير الاختبارات']],
+  // المعلم: "خطتي الأسبوعية" و"بدلاء اليوم" موجودة أصلًا كأزرار بكرت «يومك» - ما نكررها هنا
+  teacher: [['duty', 'مناوبتي'], ['visits', 'زياراتي الصفية'], ['tracking', 'متابعة الاختبارات']],
+};
+function renderHomeHeader() {
+  const now = new Date();
+  const first = String(currentProfile.full_name || '').trim().split(/\s+/)[0] || '';
+  const g = document.getElementById('home-greeting');
+  if (g) g.textContent = `${now.getHours() < 12 ? 'صباح الخير' : 'مساء الخير'}${first ? '، ' + first : ''}`;
+  const sub = document.getElementById('home-sub');
+  if (sub) sub.textContent = now.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const q = document.getElementById('home-quick');
+  if (!q) return;
+  const role = currentProfile.role === 'deputy' ? 'admin' : currentProfile.role;
+  const list = (QUICK_ACTIONS[role] || []).map(([key, label]) => ({ t: tiles.find(x => x.key === key), label })).filter(x => x.t && isTileAllowed(x.t));
+  q.innerHTML = list.map(x => `<button type="button" class="quick-chip" data-key="${x.t.key}">${x.t.icon}${esc(x.label)}</button>`).join('');
+  q.querySelectorAll('.quick-chip').forEach(b => b.addEventListener('click', () => {
+    const t = tiles.find(x => x.key === b.dataset.key);
+    openTile(b.dataset.key, t ? tileTitle(t) : '');
+  }));
 }
 
 function todayInfo() {
@@ -216,31 +232,30 @@ function thisWeekSunday() {
   return sunday.toISOString().slice(0, 10);
 }
 
-function statCard(label, value, color) {
-  return `<div style="background:#fff; border:1px solid #ECEAE1; border-radius:12px; padding:14px;">
-    <p style="font-size:11.5px; color:var(--slate); margin:0 0 4px;">${label}</p>
-    <p style="font-family:'Tajawal'; font-weight:800; font-size:22px; color:${color || 'var(--ink)'}; margin:0;">${value}</p>
-  </div>`;
+function kpi(label, value, note = '', barPct = null, color = '') {
+  return `<div class="kpi"><span class="k-label">${label}</span><span class="k-value"${color ? ` style="color:${color};"` : ''}>${value}</span>${barPct != null ? `<div class="k-bar"><div style="width:${Math.max(0, Math.min(100, barPct))}%;"></div></div>` : ''}${note ? `<span class="k-note">${note}</span>` : ''}</div>`;
 }
 
-function attentionItem(sectionKey, text) {
+// عنصر "يحتاج قرارك": شريط لون للأهمية + نص + زر يفتح القسم مباشرة
+const ATTN_COLORS = { high: '#C0453D', mid: '#E07A34', low: '#2455A4' };
+function attentionItem(sectionKey, text, opts = {}) {
   const t = tiles.find(x => x.key === sectionKey);
   const div = document.createElement('div');
-  div.className = 'emp-row';
-  div.style.cursor = 'pointer';
+  div.className = 'attn';
   div.innerHTML = `
-    <div class="ic-diamond ${t ? t.color : 'diamond-navy'}" style="width:34px; height:34px; border-radius:8px;">${t ? t.icon : ''}</div>
-    <div class="info" style="font-size:13px; color:var(--ink);">${text}</div>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--slate)" stroke-width="2"><path d="M15 6l-6 6 6 6"/></svg>`;
-  div.addEventListener('click', () => openTile(sectionKey));
+    <span class="bar" style="background:${ATTN_COLORS[opts.level || 'mid']};"></span>
+    <div class="txt"><b>${text}</b><span>${t ? esc(tileTitle(t)) : ''}${opts.note ? ' · ' + opts.note : ''}</span></div>
+    <button type="button" class="${opts.primary ? '' : 'ghost'}">${opts.action || 'فتح'}</button>`;
+  div.querySelector('button').addEventListener('click', () => openTile(sectionKey, t ? tileTitle(t) : ''));
   return div;
 }
 
 export async function renderDashboard() {
   const container = document.getElementById('dashboard-content');
   if (!container) return;
+  renderHomeHeader();
   renderSectionTilesGrid();
-  container.innerHTML = '<div class="placeholder" style="padding:30px;"><p>جارٍ التحميل...</p></div>';
+  container.innerHTML = '<div class="kpi-grid">' + '<div class="kpi" style="min-height:92px; background:#EEF1F6; border-color:transparent;"></div>'.repeat(4) + '</div>';
 
   if (currentProfile.role === 'admin' || currentProfile.role === 'deputy') {
     const weeklyWrap = document.getElementById('dash-weekly-schedule');
@@ -304,6 +319,7 @@ async function renderAdminDashboard(container) {
 
   const { dayKey, dateStr } = todayInfo();
   let dutyMissingCount = 0;
+  let dutyTodayTotal = 0;
   if (dayKey) {
     const [{ data: fixed }, { data: weekly }, { data: attendance }] = await Promise.all([
       readScopedBySchool(scoped => {
@@ -323,44 +339,97 @@ async function renderAdminDashboard(container) {
       }),
     ]);
     const todayEntries = [...(fixed || []), ...(weekly || [])];
+    dutyTodayTotal = todayEntries.length;
     const recordedSet = new Set((attendance || []).map(a => a.teacher_profile_id + '_' + a.duty_type_id));
     dutyMissingCount = todayEntries.filter(e => !recordedSet.has(e.teacher_profile_id + '_' + e.duty_type_id)).length;
   }
 
   const unlinkedCount = (employeesCount || 0) - (linkedCount || 0);
+  const totalDutyToday = dayKey ? dutyTodayTotal : 0;
 
   container.innerHTML = `
-    <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:22px;">
-      ${statCard('إجمالي الموظفين', employeesCount ?? 0)}
-      ${statCard('إنجاز الخطة التشغيلية', completionRate + '%', 'var(--teal)')}
-      ${statCard('بانتظار الاعتماد', pendingApprovals, pendingApprovals ? 'var(--gold)' : 'var(--ink)')}
-      ${statCard('مواد ناقصة هذا الأسبوع', missingCount, missingCount ? 'var(--danger)' : 'var(--ink)')}
+    <div class="kpi-grid">
+      ${kpi('إنجاز الخطة التشغيلية', completionRate + '%', `${approvedCompletions} من ${totalCompletions} معتمدة`, completionRate)}
+      ${kpi('بانتظار اعتمادك', pendingApprovals, 'بالخطة التشغيلية', null, pendingApprovals ? '#A4501A' : '')}
+      ${kpi('مواد ناقصة هذا الأسبوع', missingCount, 'بالخطة الأسبوعية', null, missingCount ? '#9B2F28' : '')}
+      ${kpi('الموظفين', employeesCount ?? 0, unlinkedCount > 0 ? `${unlinkedCount} بدون حساب دخول` : 'كلهم بحسابات دخول')}
     </div>
-    <p style="font-family:'Tajawal'; font-weight:700; font-size:14px; margin:0 0 10px;">يحتاج انتباهك</p>
-    <div id="dash-attention-list"></div>`;
+    <div class="home-cols">
+      <section class="home-card" style="flex:3 1 420px;"><h3>يحتاج قرارك</h3><div id="dash-attention-list" style="display:flex; flex-direction:column; gap:8px;"></div></section>
+      <section class="home-card" style="flex:2 1 300px;"><h3>اليوم في المدرسة</h3><div id="dash-today" style="display:flex; flex-direction:column; gap:2px;"><div style="font-size:13px; color:var(--slate);">جارٍ التحميل...</div></div></section>
+    </div>`;
 
   const attentionList = document.getElementById('dash-attention-list');
   let anyAttention = false;
 
-  if (missingCount > 0) {
-    anyAttention = true;
-    attentionList.appendChild(attentionItem('weekly-tracking', `${missingCount} مادة لسا ما دخّل لها المعلمون خطة هذا الأسبوع`));
-  }
   if (pendingApprovals > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('plan', `${pendingApprovals} مهام/إنجازات بالخطة التشغيلية بانتظار اعتمادك`));
+    attentionList.appendChild(attentionItem('plan', `${pendingApprovals} مهام/إنجازات بالخطة التشغيلية بانتظار اعتمادك`, { level: 'high', action: 'مراجعة', primary: true }));
   }
-  if (unlinkedCount > 0) {
+  if (missingCount > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('portal', `${unlinkedCount} موظف بدون حساب دخول مربوط`));
+    attentionList.appendChild(attentionItem('weekly-tracking', `${missingCount} مادة لسا ما دخّل لها المعلمون خطة هذا الأسبوع`, { level: 'mid', action: 'عرض الناقص' }));
   }
   if (dutyMissingCount > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('duty', `${dutyMissingCount} من مناوبي اليوم لسا ما سجّلت حضورهم`));
+    attentionList.appendChild(attentionItem('duty', `${dutyMissingCount} من مناوبي اليوم لسا ما سجّلت حضورهم`, { level: 'mid', action: 'تسجيل الحضور' }));
+  }
+  if (unlinkedCount > 0) {
+    anyAttention = true;
+    attentionList.appendChild(attentionItem('portal', `${unlinkedCount} موظف بدون حساب دخول مربوط`, { level: 'low', action: 'ربط الحسابات' }));
   }
   if (!anyAttention) {
-    attentionList.innerHTML = '<div class="placeholder" style="padding:20px;"><p>كل شي محدّث، ما فيه شي يحتاج انتباهك حاليًا 🎉</p></div>';
+    attentionList.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">كل شي محدّث، ما فيه شي يحتاج قرارك حاليًا.</div>';
   }
+  renderTodayCard(dayKey, dateStr, totalDutyToday, dutyMissingCount);
+}
+
+/* "اليوم في المدرسة": المناوبات، تغييرات الجدول، الاختبار الفتري القادم، زيارات الشهر */
+async function renderTodayCard(dayKey, dateStr, dutyTotal, dutyMissing) {
+  const box = document.getElementById('dash-today');
+  if (!box) return;
+  const monthStart = dateStr.slice(0, 8) + '01';
+  const [{ data: changes }, { data: coverage }, { data: visits }] = await Promise.all([
+    dayKey ? readScopedBySchool(scoped => {
+      let q = sb.from('daily_schedule_changes').select('id').eq('change_date', dateStr);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }) : Promise.resolve({ data: [] }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('subject_exam_coverage').select('subject_name, grade_level, exam_date').gte('exam_date', dateStr);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('classroom_visits').select('id').gte('visit_date', monthStart);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+  ]);
+  const row = (label, text, key, linkText) => {
+    const t = key ? tiles.find(x => x.key === key) : null;
+    const link = t && isTileAllowed(t) ? ` <button type="button" data-key="${key}">${linkText}</button>` : '';
+    return `<div class="today-row"><span class="t">${label}</span><span>${text}${link}</span></div>`;
+  };
+  let html = '';
+  if (!dayKey) html += row('اليوم', 'إجازة نهاية الأسبوع');
+  else {
+    html += row('المناوبات', dutyTotal ? `${dutyTotal} مناوبة اليوم${dutyMissing ? ` · ${dutyMissing} بدون تسجيل حضور` : ' · كلها مسجّلة'}` : 'ما فيه مناوبات مسجلة لليوم', 'duty', 'فتح');
+    const nChanges = (changes || []).length;
+    html += row('الجدول', nChanges ? `${nChanges} تغيير على حصص اليوم (انتظار/تبديل)` : 'ما فيه تغييرات على جدول اليوم', 'substitutes', nChanges ? 'عرض' : 'توزيع بدلاء');
+  }
+  const next = (coverage || []).filter(r => r.exam_date).sort((a, b) => a.exam_date.localeCompare(b.exam_date))[0];
+  if (next) {
+    const d = new Date(next.exam_date + 'T00:00:00');
+    const days = Math.round((d - new Date(dateStr + 'T00:00:00')) / 86400000);
+    html += row('الفترية', `${esc(next.subject_name)} · ${esc(gradeLabels[next.grade_level] || '')} · ${days === 0 ? 'اليوم' : days === 1 ? 'بكرة' : `بعد ${days} أيام`}`, 'schedule', 'الجدول');
+  }
+  html += row('الزيارات', `${(visits || []).length} زيارة صفية هذا الشهر`, 'visits', '+ زيارة');
+  box.innerHTML = html;
+  box.querySelectorAll('button[data-key]').forEach(b => b.addEventListener('click', () => {
+    const t = tiles.find(x => x.key === b.dataset.key);
+    openTile(b.dataset.key, t ? tileTitle(t) : '');
+  }));
 }
 
 async function renderTeacherDashboard(container) {
@@ -376,7 +445,25 @@ async function renderTeacherDashboard(container) {
     opPlanPendingCount = (myPending || []).length;
   }
 
-  container.innerHTML = `<div id="dash-my-schedule" style="margin-bottom:22px;"></div><div id="dash-attention-list"></div>`;
+  container.innerHTML = `
+    <div class="day-hero">
+      <span class="dh-label">يومك</span>
+      <span class="dh-big" id="day-hero-count">جدول اليوم</span>
+      <div class="dh-actions" id="day-hero-actions"></div>
+    </div>
+    <div class="home-cols">
+      <div id="dash-my-schedule" style="flex:3 1 380px; min-width:0;"></div>
+      <section class="home-card" style="flex:2 1 300px;"><h3>مهامي</h3><div id="dash-attention-list" style="display:flex; flex-direction:column; gap:8px;"></div></section>
+    </div>`;
+  const heroActions = document.getElementById('day-hero-actions');
+  [['weekly', 'خطتي الأسبوعية', ''], ['substitutes', 'بدلاء اليوم', 'alt']].forEach(([key, label, cls]) => {
+    const t = tiles.find(x => x.key === key);
+    if (!t || !isTileAllowed(t)) return;
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = cls; b.textContent = label;
+    b.addEventListener('click', () => openTile(key, tileTitle(t)));
+    heroActions.appendChild(b);
+  });
   renderMyWeeklyScheduleGrid();
   const { dayKey, dateStr } = todayInfo();
   renderMyScheduleWidget(container, dayKey, dateStr);
@@ -387,22 +474,22 @@ async function renderTeacherDashboard(container) {
   if (missingAssignments.length > 0) {
     any = true;
     const names = missingAssignments.map(a => a.subjects ? a.subjects.name : '').filter(Boolean).join('، ');
-    list.appendChild(attentionItem('weekly', `لسا ما سلّمت خطة هذا الأسبوع لـ: ${names}`));
+    list.appendChild(attentionItem('weekly', `لسا ما سلّمت خطة هذا الأسبوع لـ: ${names}`, { level: 'high', action: 'تسليم الخطة', primary: true }));
   } else if ((assignments || []).length > 0) {
     any = true;
     const t = tiles.find(x => x.key === 'weekly');
     const okDiv = document.createElement('div');
-    okDiv.className = 'emp-row';
-    okDiv.innerHTML = `<div class="ic-diamond ${t ? t.color : 'diamond-teal'}" style="width:34px; height:34px; border-radius:8px;">${t ? t.icon : ''}</div><div class="info" style="font-size:13px; color:var(--ink);">خطتك الأسبوعية مسلّمة لكل موادك 🎉</div>`;
+    okDiv.className = 'attn';
+    okDiv.innerHTML = `<span class="bar" style="background:#2E9155;"></span><div class="txt"><b>خطتك الأسبوعية مسلّمة لكل موادك</b><span>${t ? esc(tileTitle(t)) : ''}</span></div>`;
     list.appendChild(okDiv);
   }
 
   if (opPlanPendingCount > 0) {
     any = true;
-    list.appendChild(attentionItem('plan', `${opPlanPendingCount} مهمة أضفتها بالخطة التشغيلية بانتظار اعتماد المدير`));
+    list.appendChild(attentionItem('plan', `${opPlanPendingCount} مهمة أضفتها بالخطة التشغيلية بانتظار اعتماد المدير`, { level: 'low' }));
   }
 
   if (!any) {
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه شي يحتاج انتباهك حاليًا</p></div>';
+    list.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">ما عندك مهام معلّقة حاليًا.</div>';
   }
 }

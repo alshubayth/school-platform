@@ -69,12 +69,17 @@ const icons = {
   contacts: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
 };
 
-// تجميع الأقسام لأربع مجموعات بالهيدر العلوي وبشبكة الرئيسية بدل عرضها كلها بصف واحد طويل
+// مساحات العمل: كل قسم ينتمي لمساحة وحدة، وترتيب الأقسام داخلها بحسب keys (القائمة الجانبية،
+// بطاقات مساحات العمل بالرئيسية، ومسار التنقل أعلى كل قسم). "الرئيسية" مو منها - هي عنصر مستقل.
 export const GROUPS = [
-  { key: 'admin',    title: 'إدارة المدرسة' },
-  { key: 'students', title: 'شؤون الطلاب' },
-  { key: 'teachers', title: 'شؤون المعلمين' },
-  { key: 'extra',    title: 'خدمات إضافية' },
+  { key: 'students', title: 'الطلاب', keys: ['weekly', 'schedule', 'followups'],
+    icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>' },
+  { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'weekly-tracking', 'duty', 'substitutes', 'portal'],
+    icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
+  { key: 'exams', title: 'الاختبارات', keys: ['exams', 'tracking', 'exam-reports'],
+    icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>' },
+  { key: 'admin', title: 'الإدارة', keys: ['plan', 'admin-tasks', 'budget', 'files', 'computerlab', 'school-contacts', 'perms', 'schools-admin', 'more'],
+    icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 20V9"/></svg>' },
 ];
 
 export const tiles = [
@@ -100,6 +105,14 @@ export const tiles = [
   { key: 'admin-tasks', icon: icons.admintasks, title: 'المهام الإدارية', desc: 'مهام كل أسبوع ومسؤول تنفيذها وحالتها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'admin' },
   { key: 'school-contacts', icon: icons.contacts, title: 'بيانات التواصل', desc: 'أرقام تواصل المدرسة اللي تظهر لولي الأمر', roles: ['admin','deputy'], color: 'diamond-green', group: 'admin' },
 ];
+// مساحة العمل لكل قسم تُستمد من GROUPS (مصدر واحد للترتيب والتجميع)
+tiles.forEach(t => { const g = GROUPS.find(x => x.keys.includes(t.key)); t.group = g ? g.key : 'admin'; });
+export function groupTilesFor(groupKey) {
+  const g = GROUPS.find(x => x.key === groupKey);
+  return g ? g.keys.map(k => tiles.find(t => t.key === k)).filter(t => t && isTileAllowed(t)) : [];
+}
+export function tileTitle(t) { return t.key === 'budget' ? budgetTileTitle() : t.title; }
+export function tileDesc(t) { return t.key === 'budget' ? budgetTileDesc() : t.desc; }
 
 document.getElementById('login-btn').addEventListener('click', async () => {
   const rawInput = document.getElementById('login-email').value.trim();
@@ -278,6 +291,8 @@ function finishShowingDashboard(schoolNameOverride) {
   if (brandSpan && schoolNameOverride) brandSpan.textContent = schoolNameOverride;
   renderNav();
   renderDashboard();
+  import('./search.js').then(m => m.initGlobalSearch()).catch(err => console.warn('search init failed', err));
+  routeFromHash(true);
 }
 
 export async function loadProfileAndShowDashboard(userId) {
@@ -374,66 +389,69 @@ export function budgetTileDesc() {
   return isFullBudget ? 'الإيرادات والمصروفات وطلبات الصرف' : 'تقديم طلب صرف فاتورة باسمك';
 }
 
-function closeAllNavDropdowns(){ document.querySelectorAll('.nav-group.open').forEach(g=>g.classList.remove('open')); }
-document.addEventListener('click', closeAllNavDropdowns);
-
+/* ===== القائمة الجانبية: الرئيسية + مساحات العمل وأقسامها ===== */
 export function renderNav(){
   const nav = document.getElementById('nav-list');
-  nav.innerHTML = `<div class="nav-item active" data-key="home">${icons.home}<span>الرئيسية</span></div>`;
-  nav.querySelector('[data-key="home"]').addEventListener('click', (e)=>{ setActiveNav(e.currentTarget); closeAllNavDropdowns(); backToTiles(); });
-
+  let html = `<a href="#/" class="nav-item" data-key="home">${icons.home}<span>الرئيسية</span></a>`;
   GROUPS.forEach(g => {
-    const groupTiles = tiles.filter(t => t.group === g.key && isTileAllowed(t));
-    if (!groupTiles.length) return;
-
-    const groupEl = document.createElement('div');
-    groupEl.className = 'nav-group';
-
-    const btn = document.createElement('div');
-    btn.className = 'nav-group-btn';
-    btn.innerHTML = `<span>${g.title}</span><svg class="chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 9l6 6 6-6"/></svg>`;
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const wasOpen = groupEl.classList.contains('open');
-      closeAllNavDropdowns();
-      if (!wasOpen) {
-        groupEl.classList.add('open');
-        const r = btn.getBoundingClientRect();
-        dd.style.position = 'fixed';
-        dd.style.top = (r.bottom + 6) + 'px';
-        dd.style.left = r.left + 'px';
-      }
+    const items = groupTilesFor(g.key);
+    if (!items.length) return;
+    html += `<div class="nav-group" data-group="${g.key}">
+      <div class="nav-group-label">${g.icon}<span>${g.title}</span></div>
+      ${items.map(t => `<a href="#/${t.key}" class="nav-item nav-sub" data-key="${t.key}"><span>${tileTitle(t)}</span></a>`).join('')}
+    </div>`;
+  });
+  nav.innerHTML = html;
+  nav.querySelectorAll('.nav-item').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      closeMobileNav();
+      const key = el.dataset.key;
+      if (key === 'home') backToTiles();
+      else { const t = tiles.find(x => x.key === key); openTile(key, t ? tileTitle(t) : ''); }
     });
-
-    const dd = document.createElement('div');
-    dd.className = 'nav-dropdown';
-    groupTiles.forEach(t => {
-      const title = t.key === 'budget' ? budgetTileTitle() : t.title;
-      const item = document.createElement('div');
-      item.className = 'nav-item';
-      item.innerHTML = `${t.icon}<span>${title}</span>`;
-      item.addEventListener('click', (e) => {
-        e.stopPropagation();
-        setActiveNav(item);
-        closeAllNavDropdowns();
-        openTile(t.key, title);
-      });
-      dd.appendChild(item);
-    });
-
-    groupEl.appendChild(btn);
-    groupEl.appendChild(dd);
-    nav.appendChild(groupEl);
+  });
+  setActiveNavByKey(activeRouteKey || 'home');
+}
+export function setActiveNav(el){ if (el && el.dataset && el.dataset.key) setActiveNavByKey(el.dataset.key); }
+export function setActiveNavByKey(key){
+  document.querySelectorAll('#nav-list .nav-item').forEach(n => {
+    const on = n.dataset.key === key;
+    n.classList.toggle('active', on);
+    if (on) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current');
   });
 }
-export function setActiveNav(el){
-  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
-  document.querySelectorAll('.nav-group').forEach(n=>n.classList.remove('active-group'));
-  el.classList.add('active');
-  const parentGroup = el.closest('.nav-group');
-  if (parentGroup) parentGroup.classList.add('active-group');
-}
 
+/* ===== روابط الأقسام (#/exams ...) - التحديث يرجعك لنفس القسم، وزر الرجوع بالمتصفح يشتغل ===== */
+let activeRouteKey = 'home';
+let routingFromHistory = false;
+function routeKeyFromHash() {
+  const m = (location.hash || '').match(/^#\/([\w-]*)/);
+  return m && m[1] ? m[1] : 'home';
+}
+function pushRoute(key) {
+  activeRouteKey = key;
+  if (routingFromHistory) return;
+  const h = key === 'home' ? '#/' : '#/' + key;
+  if (location.hash !== h) history.pushState({ key }, '', h);
+}
+function routeFromHash(initial = false) {
+  const key = routeKeyFromHash();
+  const t = tiles.find(x => x.key === key);
+  routingFromHistory = true;
+  try {
+    if (t && isTileAllowed(t)) openTile(key, tileTitle(t));
+    else if (!initial || key !== 'home') { if (key !== 'home') history.replaceState({ key: 'home' }, '', '#/'); if (!initial) backToTiles(); }
+  } finally { routingFromHistory = false; }
+  if (!(t && isTileAllowed(t))) { activeRouteKey = 'home'; setActiveNavByKey('home'); }
+}
+window.addEventListener('popstate', () => { if (currentProfile && !document.getElementById('dashboard-screen').classList.contains('hidden')) routeFromHash(false); });
+
+/* ===== القائمة على الجوال (درج جانبي) ===== */
+function closeMobileNav() { document.body.classList.remove('nav-open'); }
+document.getElementById('menu-btn').addEventListener('click', () => document.body.classList.toggle('nav-open'));
+document.getElementById('sidebar-overlay').addEventListener('click', closeMobileNav);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMobileNav(); });
 
 export function hideAllModules() {
   document.getElementById('tiles-view').classList.add('hidden');
@@ -468,13 +486,21 @@ function renderModuleHeader(key) {
   let desc = t.desc;
   if (key === 'duty' && currentProfile.role === 'teacher') desc = 'المناوبة المسندة لي';
   if (key === 'budget') { title = budgetTileTitle(); desc = budgetTileDesc(); }
-  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div><h2>${title}</h2><p>${desc}</p></div>`;
+  const g = GROUPS.find(x => x.key === t.group);
+  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div>${g ? `<div class="crumb"><a href="#/">الرئيسية</a> / ${g.title}</div>` : ''}<h2>${title}</h2><p>${desc}</p></div>`;
+  const home = header.querySelector('.crumb a');
+  if (home) home.addEventListener('click', (e) => { e.preventDefault(); backToTiles(); });
   header.classList.remove('hidden');
 }
 
 export async function openTile(key, title) {
   hideAllModules();
   renderModuleHeader(key);
+  pushRoute(key);
+  setActiveNavByKey(key);
+  const tt = tiles.find(x => x.key === key);
+  document.title = `${tt ? tileTitle(tt) : (title || 'القسم')} · منصة المدرسة`;
+  window.scrollTo(0, 0);
   if (key === 'notes') {
     document.getElementById('notes-module').classList.remove('hidden');
     const { loadNotesModule } = await import('./evaluation.js');
@@ -561,6 +587,10 @@ export async function openTile(key, title) {
   }
 }
 export async function backToTiles() {
+  pushRoute('home');
+  setActiveNavByKey('home');
+  document.title = 'الرئيسية · منصة المدرسة';
+  window.scrollTo(0, 0);
   hideAllModules();
   document.getElementById('module-header').classList.add('hidden');
   document.getElementById('tiles-view').classList.remove('hidden');
