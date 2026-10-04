@@ -1,5 +1,6 @@
 import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
+import { initAnswerSheetCard } from './answer-sheet.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
 
@@ -308,6 +309,7 @@ export async function loadExamReportsModule() {
   document.getElementById('er-preview-card').classList.add('hidden');
   document.getElementById('er-file').value = '';
   parsedData = null;
+  initAnswerSheetCard();
   await loadSavedList();
 }
 

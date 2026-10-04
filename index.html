@@ -989,6 +989,94 @@
           </div>
         </div>
 
+        <!-- ===== تصميم ورقة إجابة للتصحيح الآلي (Remark Office OMR) ===== -->
+        <div class="form-card bud-section-card" id="as-card" style="margin-top:16px;">
+          <div class="bud-section-head" style="justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:12px;">
+              <div class="bud-section-icon" style="background:var(--teal-light); color:var(--teal);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="9" cy="9" r="1.6"/><circle cx="15" cy="9" r="1.6" fill="currentColor"/><circle cx="9" cy="15" r="1.6" fill="currentColor"/><circle cx="15" cy="15" r="1.6"/></svg>
+              </div>
+              <div>
+                <h4>ورقة إجابة للتصحيح الآلي</h4>
+                <p>صمّم ورقة فقاعات لبرنامج Remark، مع باركود برقم هوية كل طالب</p>
+              </div>
+            </div>
+            <button class="btn-secondary" id="as-toggle-btn" style="width:auto; padding:9px 16px; flex-shrink:0;">تصميم ورقة</button>
+          </div>
+
+          <div id="as-body" class="hidden" style="margin-top:14px;">
+            <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px;" class="as-grid">
+              <div>
+                <div class="form-row">
+                  <input type="text" id="as-title" placeholder="عنوان الاختبار (اختياري)" />
+                  <input type="text" id="as-subject" placeholder="المادة (اختياري)" />
+                </div>
+                <div class="form-row">
+                  <label style="font-size:12.5px; font-weight:700; display:block;">عدد الأسئلة
+                    <input type="number" id="as-questions" min="1" max="150" value="20" style="margin-top:4px;" />
+                  </label>
+                  <label style="font-size:12.5px; font-weight:700; display:block;">عدد الخيارات لكل سؤال
+                    <select id="as-choices" style="margin-top:4px;">
+                      <option value="2">2 (أ ب)</option>
+                      <option value="3">3 (أ ب ج)</option>
+                      <option value="4" selected>4 (أ ب ج د)</option>
+                      <option value="5">5 (أ ب ج د هـ)</option>
+                      <option value="6">6 (أ ب ج د هـ و)</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="form-row">
+                  <label style="font-size:12.5px; font-weight:700; display:block;">حجم الورقة
+                    <select id="as-size" style="margin-top:4px;">
+                      <option value="A4" selected>A4</option>
+                      <option value="A5">A5</option>
+                    </select>
+                  </label>
+                  <label style="font-size:12.5px; font-weight:700; display:block;">لغة الخيارات
+                    <select id="as-lang" style="margin-top:4px;">
+                      <option value="ar" selected>عربي (أ ب ج د) - من اليمين</option>
+                      <option value="en">English (A B C D) - من اليسار</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="as-limit-hint" style="font-size:12px; color:var(--slate); margin:-4px 0 12px;"></div>
+
+                <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; background:var(--sand); border-radius:10px; padding:11px 12px; cursor:pointer;">
+                  <input type="checkbox" id="as-barcode" style="width:auto; margin:0;" />
+                  إضافة باركود باسم الطالب (ورقة خاصة لكل طالب)
+                </label>
+                <div id="as-barcode-opts" class="hidden" style="background:var(--sand); border-radius:10px; padding:4px 12px 12px; margin-top:-6px;">
+                  <p style="font-size:11.5px; color:var(--slate); margin:6px 0 8px;">يُطبع لكل طالب ورقة فيها اسمه وصفه وفصله، وباركود (Code 128) برقم هويته يقرأه Remark. الطلاب من القائمة المستوردة بقسم الاختبارات.</p>
+                  <select id="as-grade" style="margin-bottom:8px;"></select>
+                  <div id="as-sections" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
+                </div>
+
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+                  <button class="btn-primary" id="as-print-btn" style="width:auto; padding:10px 18px;">طباعة</button>
+                  <button class="btn-secondary" id="as-pdf-btn" style="width:auto; padding:10px 18px;">تحميل PDF</button>
+                </div>
+                <div id="as-status" style="font-size:12.5px; margin-top:8px;"></div>
+
+                <details style="margin-top:14px; font-size:12px; color:var(--slate); background:var(--sand); border-radius:10px; padding:10px 12px;">
+                  <summary style="font-weight:700; color:var(--ink); cursor:pointer;">طريقة الإعداد ببرنامج Remark (مرة وحدة لكل إعدادات)</summary>
+                  <ol style="margin:8px 18px 0; padding:0; line-height:1.9;">
+                    <li>اطبع ورقة فاضية بنفس الإعدادات وامسحها بالسكانر، وافتحها في Remark Template Editor.</li>
+                    <li>عرّف منطقة الباركود (Barcode Region) نوع Code 128 على المربع اللي فوق، وسمّها <b>StudentID</b> عشان ملف النتائج يرتبط تلقائيًا بتقارير المنصة.</li>
+                    <li>عرّف منطقة الإجابات (OMR) لكل عمود أسئلة، والاتجاه: من اليمين لليسار للعربي ومن اليسار لليمين للإنجليزي.</li>
+                    <li>احفظ القالب باسم الإعدادات المكتوبة أسفل الورقة (مثال: A4 · 20 سؤال · 4 خيارات) واستخدمه لكل الأوراق بنفس الإعدادات.</li>
+                    <li>لو غيّرت عدد الأسئلة أو الخيارات أو الحجم، تتغيّر مواقع الفقاعات ويحتاج قالب جديد.</li>
+                    <li>اطبع دايمًا بالحجم الفعلي (100%) بدون "ملاءمة للصفحة".</li>
+                  </ol>
+                </details>
+              </div>
+              <div>
+                <div style="font-size:12px; font-weight:700; color:var(--slate); margin-bottom:6px;">معاينة</div>
+                <div id="as-preview"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <h4 style="margin:22px 0 12px; font-size:14px;">التقارير المحفوظة</h4>
         <div id="er-saved-list"><div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div></div>
       </div>

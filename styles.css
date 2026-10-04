@@ -275,6 +275,7 @@
   .er-items-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
   @media (max-width:1200px){ .er-items-grid{ grid-template-columns:repeat(3,1fr); } }
   @media (max-width:820px){ .er-items-grid{ grid-template-columns:repeat(2,1fr); } }
+  @media (max-width:820px){ .as-grid{ grid-template-columns:1fr !important; } }
   @media (max-width:520px){ .er-items-grid{ grid-template-columns:1fr; } }
   .er-choice-list{ display:flex; flex-direction:column; gap:9px; }
   .er-choice-row{ font-size:12px; }
