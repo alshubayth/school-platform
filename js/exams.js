@@ -1,4 +1,5 @@
 import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+import { initOverlayCard, setOverlayPeriod } from './overlay-print.js';
 import { loadXLSX } from './lib-loader.js';
 
 // شعار الهيئة الملكية للجبيل وينبع - يظهر بمخرجات قسم الاختبارات المطبوعة
@@ -43,6 +44,7 @@ let currentPeriodId = null;
 let currentPeriodRow = null;
 
 export async function loadExamsModule() {
+  initOverlayCard();
   await refreshStudentStats();
   await refreshPeriodsList();
   document.getElementById('exam-period-detail').classList.add('hidden');
@@ -231,6 +233,7 @@ async function selectPeriod(period) {
   await refreshSpecialList();
   await refreshResults();
   await refreshCommitteeLocations();
+  setOverlayPeriod(period.id); // بطاقة "الطباعة على النموذج المعتمد" تستخدم لجان وأرقام جلوس هذي الفترة
 }
 
 /* ---------- مقرات اللجان ---------- */

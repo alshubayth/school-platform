@@ -38,6 +38,7 @@ let students = [], studentsLoaded = false;
 let periods = [], assignments = new Map();   // student_id -> assignment (للفترة المختارة)
 let savedLayouts = [];
 let initialized = false;
+let pendingPeriodId = null; // الفترة المفتوحة حاليًا بقسم الاختبارات - تُختار تلقائيًا
 
 function $(id) { return document.getElementById(id); }
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -104,9 +105,27 @@ async function loadStudentsAndPeriods() {
   students = (st.data || []).filter(s => GRADES.includes(s.grade_level));
   periods = pr.data || [];
   studentsLoaded = true;
+  const prevPeriod = $('ov-period').value;
   $('ov-period').innerHTML = '<option value="">بدون (ما نحتاج رقم جلوس/لجنة)</option>' +
     periods.map(p => `<option value="${p.id}">${esc(p.name)}${p.academic_year ? ' — ' + esc(p.academic_year) : ''}</option>`).join('');
+  if (pendingPeriodId && periods.some(p => p.id === pendingPeriodId)) {
+    // داخل فترة اختبار: نختارها، ونطبع لطلابها الموزعين على اللجان، مرتبين باللجنة ورقم الجلوس
+    $('ov-period').value = pendingPeriodId;
+    await onPeriodChange();
+    $('ov-scope').value = 'school';
+    $('ov-only-period').checked = true;
+    $('ov-order').value = 'committee';
+  } else if (prevPeriod && periods.some(p => p.id === prevPeriod)) {
+    $('ov-period').value = prevPeriod;
+  }
   refreshScope();
+}
+
+/* يُستدعى من قسم الاختبارات لما تنفتح فترة - يعيد تحميل الطلاب والتوزيع عشان يعكس آخر توليد للجان */
+export function setOverlayPeriod(periodId) {
+  pendingPeriodId = periodId;
+  studentsLoaded = false;
+  if ($('ov-body') && !$('ov-body').classList.contains('hidden')) loadStudentsAndPeriods().then(renderStage);
 }
 
 async function onPeriodChange() {
@@ -398,7 +417,7 @@ export function initOverlayCard() {
   $('ov-toggle-btn').addEventListener('click', async () => {
     const open = $('ov-body').classList.toggle('hidden') === false;
     $('ov-toggle-btn').textContent = open ? 'إخفاء' : 'فتح';
-    if (open) { renderAll(); await loadStudentsAndPeriods(); refreshLayouts(); renderStage(); }
+    if (open) { studentsLoaded = false; renderAll(); await loadStudentsAndPeriods(); refreshLayouts(); renderStage(); }
   });
   $('ov-file').addEventListener('change', async (e) => {
     const file = e.target.files[0];
