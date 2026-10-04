@@ -2,17 +2,19 @@
 -- يُشغَّل مرة وحدة في Supabase > SQL Editor. آمن لو انشغّل أكثر من مرة.
 do $$
 declare
-  school_id_type text;
+  sid_type text;
 begin
-  -- نفس نوع معرّف جدول المدارس (uuid أو رقم) عشان الربط يشتغل
-  select data_type into school_id_type
+  -- نوع عمود school_id ينسخ من جدول موجود يستخدمه (عشان يتطابق مع باقي المنصة)، وإلا uuid
+  select data_type into sid_type
   from information_schema.columns
-  where table_schema = 'public' and table_name = 'schools' and column_name = 'id';
+  where table_schema = 'public' and column_name = 'school_id'
+    and table_name in ('exam_reports', 'students', 'weekly_plans', 'classroom_visits')
+  limit 1;
 
   execute format($f$
     create table if not exists public.answer_keys (
       id uuid primary key default gen_random_uuid(),
-      school_id %s references public.schools(id) on delete cascade,
+      school_id %s,
       title text not null,
       subject text,
       grade_level text,
@@ -25,7 +27,7 @@ begin
       created_by uuid default auth.uid(),
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
-    )$f$, case when school_id_type = 'uuid' then 'uuid' else 'bigint' end);
+    )$f$, case when sid_type in ('integer', 'bigint') then sid_type else 'uuid' end);
 end $$;
 
 create index if not exists answer_keys_school_idx on public.answer_keys (school_id, created_at desc);
