@@ -1,6 +1,7 @@
 import { sb, currentUserId, currentProfile, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { DAYS, PERIODS } from './schedule.js';
 import { VOUCHER_LOGO_DATA_URI } from './budget.js';
+import { loadJSZip } from './lib-loader.js';
 
 document.getElementById('back-to-tiles-14').addEventListener('click', backToTiles);
 
@@ -286,6 +287,25 @@ async function renderList(container) {
     html += `<div style="margin-bottom:16px;"><button class="btn-primary" id="cv-new-btn" style="width:auto; padding:11px 22px;">+ زيارة صفية جديدة</button></div>`;
   }
 
+  if (!error && visits.length > 0) {
+    const teachers = groupVisitsByTeacher(visits);
+    html += `
+      <div class="form-card" style="padding:14px 16px; margin-bottom:16px;">
+        <div style="font-weight:800; font-size:13.5px; color:var(--navy); margin-bottom:10px;">تحميل تقارير الزيارات (PDF)</div>
+        <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+          <button class="btn-primary" id="cv-dl-all-btn" style="width:auto; padding:10px 18px;">تحميل الكل</button>
+          <span style="color:var(--slate); font-size:12.5px;">أو لمعلم محدد:</span>
+          <select id="cv-dl-teacher" style="width:auto; min-width:200px; margin-bottom:0;">
+            <option value="">اختر المعلم</option>
+            ${teachers.map(t => `<option value="${esc(t.key)}">${esc(t.name)} (${t.visits.length})</option>`).join('')}
+          </select>
+          <button class="btn-secondary" id="cv-dl-teacher-btn" style="width:auto; padding:10px 16px;" disabled>تحميل</button>
+        </div>
+        <div id="cv-dl-status" style="font-size:12.5px; color:var(--slate); margin-top:8px;"></div>
+        <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">كل معلم له ملف PDF باسمه يضم كل زياراته. "تحميل الكل" ينزّل ملف مضغوط (ZIP) فيه ملفات كل المعلمين.</p>
+      </div>`;
+  }
+
   if (error) {
     html += `<div class="error-msg">تعذر تحميل الزيارات: ${error.message}</div>`;
   } else if (visits.length === 0) {
@@ -309,7 +329,8 @@ async function renderList(container) {
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
               <span class="badge ${v.published ? 'badge-green' : 'badge-gold'}" style="padding:5px 12px; border-radius:20px; font-size:11.5px; font-weight:700; ${v.published ? 'background:#e4f5ea; color:#1f8a4c;' : 'background:#fdf2df; color:#9a6b1e;'}">${v.published ? 'منشورة للمعلم' : 'غير منشورة'}</span>
-              <button class="btn-secondary cv-print-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">طباعة PDF</button>
+              <button class="btn-secondary cv-print-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">طباعة</button>
+              <button class="btn-secondary cv-dl-one-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">تحميل PDF</button>
               ${canEditVisit(v) ? `<button class="btn-secondary cv-edit-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px;">تعديل</button>` : ''}
               ${isAdminOrDeputyHere() ? `<button class="btn-secondary cv-publish-btn" data-id="${v.id}" data-current="${v.published}" style="width:auto; padding:8px 14px; font-size:12.5px;">${v.published ? 'إلغاء النشر' : 'نشر للمعلم'}</button>` : ''}
               ${canEditVisit(v) ? `<button class="btn-secondary cv-delete-btn" data-id="${v.id}" style="width:auto; padding:8px 14px; font-size:12.5px; color:var(--danger);">حذف</button>` : ''}
@@ -341,6 +362,59 @@ async function renderList(container) {
       if (v) printVisitReport(v);
     });
   });
+  container.querySelectorAll('.cv-dl-one-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const v = visits.find(x => x.id === btn.dataset.id);
+      if (!v) return;
+      await runPdfJob(async (status) => {
+        status('جارٍ تجهيز الملف...');
+        const blob = await visitsToPdfBlob([v]);
+        saveBlob(blob, pdfFileName(v.teacher_name));
+      });
+    });
+  });
+
+  const dlTeacherSel = document.getElementById('cv-dl-teacher');
+  const dlTeacherBtn = document.getElementById('cv-dl-teacher-btn');
+  if (dlTeacherSel) {
+    dlTeacherSel.addEventListener('change', () => { dlTeacherBtn.disabled = !dlTeacherSel.value; });
+    dlTeacherBtn.addEventListener('click', async () => {
+      const t = groupVisitsByTeacher(visits).find(x => x.key === dlTeacherSel.value);
+      if (!t) return;
+      await runPdfJob(async (status) => {
+        status(`جارٍ تجهيز تقارير ${t.name}...`);
+        const blob = await visitsToPdfBlob(t.visits, (i, n) => status(`جارٍ تجهيز تقارير ${t.name} (${i} من ${n})...`));
+        saveBlob(blob, pdfFileName(t.name));
+      });
+    });
+    document.getElementById('cv-dl-all-btn').addEventListener('click', async () => {
+      const teachers = groupVisitsByTeacher(visits);
+      await runPdfJob(async (status) => {
+        if (teachers.length === 1) {
+          status('جارٍ تجهيز الملف...');
+          const blob = await visitsToPdfBlob(teachers[0].visits);
+          saveBlob(blob, pdfFileName(teachers[0].name));
+          return;
+        }
+        await loadJSZip();
+        const zip = new window.JSZip();
+        const usedNames = new Set();
+        for (let i = 0; i < teachers.length; i++) {
+          const t = teachers[i];
+          status(`جارٍ تجهيز ملف ${i + 1} من ${teachers.length}: ${t.name}...`);
+          const blob = await visitsToPdfBlob(t.visits);
+          let name = pdfFileName(t.name);
+          for (let n = 2; usedNames.has(name); n++) name = pdfFileName(`${t.name} (${n})`);
+          usedNames.add(name);
+          zip.file(name, blob);
+        }
+        status('جارٍ ضغط الملفات...');
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        saveBlob(zipBlob, `تقارير الزيارات الصفية - ${todayIso()}.zip`);
+      });
+    });
+  }
+
   container.querySelectorAll('.cv-publish-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
       const current = btn.dataset.current === 'true';
@@ -698,57 +772,7 @@ async function saveVisit() {
 /* ================= طباعة تقرير PDF ================= */
 // يطابق تصميم النموذج الرسمي (الهيئة الملكية للجبيل وينبع): شريط كباتن أزرق كنجي، عمود "التوصية" يظهر
 // فقط للمؤشرات اللي تقديرها "فرصة تحسين"، وتذييل بشريط أزرق فيه دليل الرموز.
-function printVisitReport(v) {
-  const dayLabel = (DAYS.find(d => d.key === v.day_of_week) || {}).label || v.day_of_week;
-
-  const sectionHtml = (title) => `
-    <tr class="sec-row"><td colspan="2">${esc(title)}</td></tr>
-    <tr class="col-heads"><td>مؤشر الأداء</td><td>التقدير</td></tr>`;
-
-  const rowHtml = (num) => {
-    const selected = (v.ratings || {})[num] || '';
-    const tier = selected ? tierForOption(num, selected) : null;
-    // لو ما فيه ملاحظة محفوظة بالزيارة (زيارات قديمة قبل تفعيل التعليقات الرسمية لكل خيار) نرجع للتعليق الرسمي المقابل لنفس الخيار تلقائيًا
-    let rec = (v.recommendations || {})[num] || '';
-    if (!rec && tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز')) {
-      const idx = INDICATORS[num].options.indexOf(selected);
-      rec = (OPTION_COMMENTS[num] || [])[idx] || '';
-    }
-    const tierClass = tier ? ({ 'مميز': 'tier-star', 'حقق الهدف': 'tier-ok', 'فرصة تحسين': 'tier-improve' }[tier.label] || '') : '';
-    const recLabel = tier && tier.label === 'مميز' ? 'ملاحظة تميز' : 'التوصية';
-    const recRowClass = tier && tier.label === 'مميز' ? 'rec-row rec-star' : 'rec-row';
-    const recRow = rec
-      ? `<tr class="${recRowClass}"><td colspan="2"><b>${recLabel}:</b> ${esc(rec)}</td></tr>`
-      : '';
-    return `<tr>
-      <td class="ind-cell"><b>${esc(INDICATORS[num].label)}</b><div class="ind-val">${esc(selected || '-')}</div></td>
-      <td class="tier-cell ${tierClass}">${tier ? esc(tier.label) : '-'}</td>
-    </tr>${recRow}`;
-  };
-
-  const sectionsHtml = `
-    <table class="ratings">
-      <tbody>
-        ${SECTIONS.map(sec => sectionHtml(sec.title) + sec.nums.map(rowHtml).join('')).join('')}
-      </tbody>
-    </table>`;
-
-  const strategiesText = [...(v.strategies || []), v.strategies_other ? `أخرى: ${v.strategies_other}` : null].filter(Boolean).join('، ') || '-';
-  const improvementText = [(v.improvement_mentioned_above ? 'تم ذكرها أعلاه' : null), v.improvement_other].filter(Boolean).join('، ') || '-';
-  const visitorRoleLabel = v.visitor_role === 'admin' ? 'مدير المدرسة' : 'وكيل المدرسة';
-  const visitorName = v.profiles?.full_name || null;
-  const visitorLabel = visitorName ? `${visitorName} — ${visitorRoleLabel}` : visitorRoleLabel;
-
-  const logoHtml = VOUCHER_LOGO_DATA_URI
-    ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="الشعار" />`
-    : `<div class="logo-placeholder">الشعار</div>`;
-
-  const html = `<!doctype html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8" />
-<title>تقرير زيارة صفية — ${esc(v.teacher_name)}</title>
-<style>
+const VISIT_REPORT_STYLES = `
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
   @page { size: A4; margin: 10mm; }
   body { font-family: 'Tahoma', 'Arial', sans-serif; padding: 0; margin: 0; color:#16233A; font-size:12px; }
@@ -795,10 +819,54 @@ function printVisitReport(v) {
 
   .footer-bar { margin-top:16px; background:#16233A; color:#fff; border-radius:5px; padding:6px 12px; display:flex; justify-content:space-between; align-items:center; font-size:10.5px; page-break-inside: avoid; break-inside: avoid; }
   .footer-bar .legend span { margin-inline-start:12px; }
-</style>
-</head>
-<body>
-  <div class="doc">
+`;
+
+function buildVisitReportDoc(v) {
+  const dayLabel = (DAYS.find(d => d.key === v.day_of_week) || {}).label || v.day_of_week;
+
+  const sectionHtml = (title) => `
+    <tr class="sec-row"><td colspan="2">${esc(title)}</td></tr>
+    <tr class="col-heads"><td>مؤشر الأداء</td><td>التقدير</td></tr>`;
+
+  const rowHtml = (num) => {
+    const selected = (v.ratings || {})[num] || '';
+    const tier = selected ? tierForOption(num, selected) : null;
+    // لو ما فيه ملاحظة محفوظة بالزيارة (زيارات قديمة قبل تفعيل التعليقات الرسمية لكل خيار) نرجع للتعليق الرسمي المقابل لنفس الخيار تلقائيًا
+    let rec = (v.recommendations || {})[num] || '';
+    if (!rec && tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز')) {
+      const idx = INDICATORS[num].options.indexOf(selected);
+      rec = (OPTION_COMMENTS[num] || [])[idx] || '';
+    }
+    const tierClass = tier ? ({ 'مميز': 'tier-star', 'حقق الهدف': 'tier-ok', 'فرصة تحسين': 'tier-improve' }[tier.label] || '') : '';
+    const recLabel = tier && tier.label === 'مميز' ? 'ملاحظة تميز' : 'التوصية';
+    const recRowClass = tier && tier.label === 'مميز' ? 'rec-row rec-star' : 'rec-row';
+    const recRow = rec
+      ? `<tr class="${recRowClass}"><td colspan="2"><b>${recLabel}:</b> ${esc(rec)}</td></tr>`
+      : '';
+    return `<tr>
+      <td class="ind-cell"><b>${esc(INDICATORS[num].label)}</b><div class="ind-val">${esc(selected || '-')}</div></td>
+      <td class="tier-cell ${tierClass}">${tier ? esc(tier.label) : '-'}</td>
+    </tr>${recRow}`;
+  };
+
+  const sectionsHtml = `
+    <table class="ratings">
+      <tbody>
+        ${SECTIONS.map(sec => sectionHtml(sec.title) + sec.nums.map(rowHtml).join('')).join('')}
+      </tbody>
+    </table>`;
+
+  const strategiesText = [...(v.strategies || []), v.strategies_other ? `أخرى: ${v.strategies_other}` : null].filter(Boolean).join('، ') || '-';
+  const improvementText = [(v.improvement_mentioned_above ? 'تم ذكرها أعلاه' : null), v.improvement_other].filter(Boolean).join('، ') || '-';
+  const visitorRoleLabel = v.visitor_role === 'admin' ? 'مدير المدرسة' : 'وكيل المدرسة';
+  const visitorName = v.profiles?.full_name || null;
+  const visitorLabel = visitorName ? `${visitorName} — ${visitorRoleLabel}` : visitorRoleLabel;
+
+  const logoHtml = VOUCHER_LOGO_DATA_URI
+    ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="الشعار" />`
+    : `<div class="logo-placeholder">الشعار</div>`;
+
+  return `<div class="doc">
     <div class="header">
       <div class="logo-side">${logoHtml}</div>
       <div class="titles">
@@ -835,7 +903,19 @@ function printVisitReport(v) {
       <span>تمت الطباعة من نظام إدارة المدرسة — ${fmtDate(todayIso())}</span>
       <span class="legend"><span>مميز</span><span>حقق الهدف</span><span>فرصة تحسين</span></span>
     </div>
-  </div>
+  </div>`;
+}
+
+function printVisitReport(v) {
+  const html = `<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<title>تقرير زيارة صفية — ${esc(v.teacher_name)}</title>
+<style>${VISIT_REPORT_STYLES}</style>
+</head>
+<body>
+${buildVisitReportDoc(v)}
 </body>
 </html>`;
 
@@ -846,6 +926,158 @@ function printVisitReport(v) {
   win.document.close();
   win.focus();
   setTimeout(() => win.print(), 300);
+}
+
+/* ================= تحميل التقارير كملفات PDF (بدون نافذة طباعة) =================
+ * التقرير يُرسم داخل iframe مخفي (عشان تنسيقات التقرير العامة مثل body و * ما تأثر على المنصة نفسها)،
+ * ثم يُصوَّر بـ html2canvas ويُقسَّم لصفحات A4 عند حدود الصفوف/المربعات - ما ينقص سطر بنص الصفحة -
+ * ويُجمع بـ jsPDF. كل زيارة تبدأ بصفحة جديدة. */
+const PDF_LIBS = {
+  html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+};
+const pdfLibPromises = {};
+function loadPdfLib(key) {
+  if (pdfLibPromises[key]) return pdfLibPromises[key];
+  pdfLibPromises[key] = new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = PDF_LIBS[key];
+    el.onload = resolve;
+    el.onerror = () => { delete pdfLibPromises[key]; reject(new Error('تعذر تحميل مكتبة إنشاء PDF، تأكد من الاتصال بالإنترنت.')); };
+    document.head.appendChild(el);
+  });
+  return pdfLibPromises[key];
+}
+async function loadPdfLibs() {
+  if (!window.html2canvas) await loadPdfLib('html2canvas');
+  if (!window.jspdf) await loadPdfLib('jspdf');
+}
+
+function groupVisitsByTeacher(visits) {
+  const map = new Map();
+  visits.forEach(v => {
+    const key = v.teacher_profile_id || ('name:' + (v.teacher_name || ''));
+    if (!map.has(key)) map.set(key, { key, name: v.teacher_name || 'بدون اسم', visits: [] });
+    map.get(key).visits.push(v);
+  });
+  const list = [...map.values()];
+  // داخل ملف المعلم: الأقدم أولًا (ترتيب زمني للتقارير)
+  list.forEach(t => t.visits.sort((a, b) => (a.visit_date || '').localeCompare(b.visit_date || '')));
+  return list.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+}
+
+function pdfFileName(teacherName) {
+  const clean = String(teacherName || 'تقرير زيارة').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return `${clean || 'تقرير زيارة'}.pdf`;
+}
+
+function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+let pdfJobRunning = false;
+async function runPdfJob(job) {
+  if (pdfJobRunning) return;
+  pdfJobRunning = true;
+  const statusEl = document.getElementById('cv-dl-status');
+  const btns = document.querySelectorAll('#cv-dl-all-btn, #cv-dl-teacher-btn, .cv-dl-one-btn');
+  const prevDisabled = [...btns].map(b => b.disabled);
+  btns.forEach(b => { b.disabled = true; });
+  const status = (msg) => { if (statusEl) { statusEl.style.color = 'var(--slate)'; statusEl.textContent = msg; } };
+  try {
+    await loadPdfLibs();
+    await job(status);
+    if (statusEl) { statusEl.style.color = 'var(--green, #1f8a4c)'; statusEl.textContent = 'تم التحميل ✓'; }
+  } catch (err) {
+    console.error(err);
+    const msg = 'تعذر إنشاء ملف PDF: ' + (err && err.message ? err.message : err);
+    if (statusEl) { statusEl.style.color = 'var(--danger)'; statusEl.textContent = msg; } else alert(msg);
+  } finally {
+    btns.forEach((b, i) => { b.disabled = prevDisabled[i]; });
+    pdfJobRunning = false;
+  }
+}
+
+const PDF_PAGE_W_MM = 210, PDF_PAGE_H_MM = 297, PDF_MARGIN_MM = 10;
+const PDF_CONTENT_W_MM = PDF_PAGE_W_MM - 2 * PDF_MARGIN_MM;
+const PDF_CONTENT_H_MM = PDF_PAGE_H_MM - 2 * PDF_MARGIN_MM;
+// عناصر ما ينفع تنقص بين صفحتين - الصفحة تنكسر قبلها مباشرة لو ما تكفي
+const PDF_BREAK_SELECTOR = '.header, .header-bar, table.meta tr, table.ratings tr, .extra-box, .sign, .footer-bar';
+
+async function visitsToPdfBlob(visitList, onProgress) {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = `position:fixed; top:0; left:0; width:${PDF_CONTENT_W_MM}mm; height:${PDF_CONTENT_H_MM}mm; border:0; opacity:0; pointer-events:none; z-index:-9999;`;
+  document.body.appendChild(iframe);
+
+  try {
+    for (let i = 0; i < visitList.length; i++) {
+      if (onProgress) onProgress(i + 1, visitList.length);
+      const idoc = iframe.contentDocument;
+      idoc.open();
+      idoc.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>${VISIT_REPORT_STYLES}
+        html, body { background:#fff; width:${PDF_CONTENT_W_MM}mm; } .doc { max-width:none; }</style></head>
+        <body>${buildVisitReportDoc(visitList[i])}</body></html>`);
+      idoc.close();
+      await Promise.all([...idoc.images].map(img => img.complete ? null : new Promise(r => { img.onload = img.onerror = r; })));
+      if (idoc.fonts && idoc.fonts.ready) await idoc.fonts.ready;
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      const docEl = idoc.querySelector('.doc');
+      const docRect = docEl.getBoundingClientRect();
+      const pxPerMm = docRect.width / PDF_CONTENT_W_MM;
+      const totalH = docEl.scrollHeight;
+      const pageH = PDF_CONTENT_H_MM * pxPerMm;
+      const breakTops = [...idoc.querySelectorAll(PDF_BREAK_SELECTOR)]
+        .map(el => el.getBoundingClientRect().top - docRect.top)
+        .filter(t => t > 0).sort((a, b) => a - b);
+
+      const scale = 2;
+      const canvas = await window.html2canvas(docEl, {
+        scale, useCORS: true, backgroundColor: '#ffffff',
+        windowWidth: idoc.documentElement.scrollWidth, windowHeight: totalH,
+      });
+      if (!canvas.width || !canvas.height) throw new Error('الصورة الناتجة فارغة');
+
+      // تحديد نقاط القطع: أبعد بداية عنصر تدخل بالصفحة الحالية
+      const cuts = [];
+      let start = 0;
+      while (totalH - start > pageH + 1) {
+        const limit = start + pageH;
+        const candidates = breakTops.filter(t => t > start + 40 && t <= limit);
+        const cut = candidates.length ? candidates[candidates.length - 1] : limit;
+        cuts.push([start, cut]);
+        start = cut;
+      }
+      cuts.push([start, totalH]);
+
+      cuts.forEach(([from, to], pageIdx) => {
+        const sliceH = Math.max(1, Math.round((to - from) * scale));
+        const slice = document.createElement('canvas');
+        slice.width = canvas.width;
+        slice.height = sliceH;
+        const ctx = slice.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(canvas, 0, Math.round(from * scale), canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+        if (i > 0 || pageIdx > 0) pdf.addPage();
+        pdf.addImage(slice.toDataURL('image/jpeg', 0.92), 'JPEG', PDF_MARGIN_MM, PDF_MARGIN_MM, PDF_CONTENT_W_MM, (to - from) / pxPerMm);
+      });
+    }
+    return pdf.output('blob');
+  } finally {
+    iframe.remove();
+  }
 }
 
 /* ---------- أدوات مساعدة ---------- */
