@@ -180,7 +180,7 @@ async function renderMyScheduleWidget(container, dayKey, dateStr) {
  * وكل بطاقة فيها «سطر حالة» من بيانات حقيقية (خطط ناقصة، تغييرات اليوم، الفترية القادمة، اعتمادات).
  * ========================================================================= */
 const WS_COLORS = { students: ['#E3F4F7', '#0B6E7E'], teachers: ['#EFEBFB', '#5A3E9E'], exams: ['#FDEFE3', '#A4501A'], admin: ['#EAF1FC', '#2455A4'] };
-const TONES = { good: ['#E7F5EC', '#1F6A3C'], warn: ['#FDF2DF', '#7A5410'], bad: ['#FBEAE9', '#8A3A30'], idle: ['#F2EFE8', '#5B6472'] };
+const TONES = { good: ['#E7F5EC', '#1F6A3C'], warn: ['#FDF2DF', '#7A5410'], bad: ['#FBEAE9', '#8A3A30'], idle: ['#EEF1F6', '#5B6472'] };
 const isStaffRole = () => ['admin', 'deputy'].includes(currentProfile.role) || currentProfile.role === 'owner';
 
 const statusCache = new Map(); // groupKey -> { at, promise }
@@ -281,7 +281,7 @@ function renderSectionTilesGrid() {
     const [bg, fg] = WS_COLORS[g.key] || ['var(--sand)', 'var(--ink)'];
     return `<div class="ws-card" data-ws="${g.key}">
       <a href="#/ws/${g.key}" class="ws-head" data-ws-open="${g.key}"><span class="ws-title">${g.title}</span><span class="ws-ic" style="background:${bg}; color:${fg};">${g.icon}</span></a>
-      <div class="ws-links">${list.map(t => `<a href="#/${t.key}" data-key="${t.key}">${esc(tileTitle(t))}</a>`).join('')}</div>
+      <div class="ws-links">${list.map(t => `<a href="#/${t.key}" data-key="${t.key}" style="background:${bg}; color:${fg};">${esc(tileTitle(t))}</a>`).join('')}</div>
       <div class="ws-status is-loading" data-status="${g.key}"></div>
     </div>`;
   }).join('');
@@ -357,7 +357,7 @@ function renderHomeHeader() {
   q.classList.toggle('quick-centered', role === 'deputy');
   const qRole = role === 'deputy' ? 'admin' : role;
   const list = (QUICK_ACTIONS[qRole] || []).map(([key, label]) => ({ t: tiles.find(x => x.key === key), label })).filter(x => x.t && isTileAllowed(x.t));
-  q.innerHTML = list.map(x => `<button type="button" class="quick-chip" data-key="${x.t.key}">${x.t.icon}${esc(x.label)}</button>`).join('');
+  q.innerHTML = list.map(x => `<button type="button" class="quick-chip qc-${x.t.color || ''}" data-key="${x.t.key}">${x.t.icon}${esc(x.label)}</button>`).join('');
   q.querySelectorAll('.quick-chip').forEach(b => b.addEventListener('click', () => {
     const t = tiles.find(x => x.key === b.dataset.key);
     openTile(b.dataset.key, t ? tileTitle(t) : '');
@@ -414,7 +414,7 @@ export async function renderDashboard() {
   renderHomeHeader();
   placeWorkspaces(currentProfile.role === 'deputy');
   renderSectionTilesGrid();
-  container.innerHTML = '<div class="kpi-grid">' + '<div class="kpi" style="min-height:92px; background:#F2EFE8; border-color:transparent;"></div>'.repeat(4) + '</div>';
+  container.innerHTML = '<div class="kpi-grid">' + '<div class="kpi" style="min-height:92px; background:#EEF1F6; border-color:transparent;"></div>'.repeat(4) + '</div>';
 
   // كل دور له شكل: المدير ← لوحة القيادة المكثفة، الوكيل ← نظرة عامة مع بحث كبير واختصارات، المعلم ← «يومك»
   if (currentProfile.role === 'admin' || currentProfile.role === 'deputy') {
