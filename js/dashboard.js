@@ -1,4 +1,7 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START } from './core.js';
+
+// أسبوع المتابعة بالرئيسية = الأسبوع القادم (اللي يُفترض المعلمون يدخلون خطته خلال هذا الأسبوع)
+const planWeek = () => Math.min(40, academicWeekInfo().next);
 
 /* ===== قراءة weekly_plans مقيّدة بمدرسة الحساب (نفس منطق js/weekly-plan.js) ===== */
 async function readWeeklyPlansScoped(weekNumber) {
@@ -205,7 +208,9 @@ function renderHomeHeader() {
   const hero = document.querySelector('#tiles-view .home-hero');
   if (hero) hero.classList.toggle('hero-centered', role === 'deputy');
   const g = document.getElementById('home-greeting');
-  const dateStr = now.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const wk = academicWeekInfo();
+  const dateStr = now.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+    + (wk.isBreak ? ' · إجازة' : wk.current ? ` · الأسبوع الدراسي ${wk.current}` : '');
   const sub = document.getElementById('home-sub');
   if (role === 'admin') {
     if (g) g.textContent = 'لوحة القيادة';
@@ -328,7 +333,7 @@ async function renderAdminDashboard(container) {
       return q;
     }),
     sb.from('subjects').select('id'), // المواد الدراسية مشتركة بين كل المدارس عن قصد (منهج رسمي موحّد)
-    readWeeklyPlansScoped(1),
+    readWeeklyPlansScoped(planWeek()),
   ]);
 
   const totalCompletions = (completions || []).length;
@@ -375,7 +380,7 @@ async function renderAdminDashboard(container) {
     <div class="kpi-grid">
       ${kpi('إنجاز الخطة التشغيلية', completionRate + '%', `${approvedCompletions} من ${totalCompletions} معتمدة`, completionRate)}
       ${kpi('بانتظار اعتمادك', pendingApprovals, 'بالخطة التشغيلية', null, pendingApprovals ? '#A4501A' : '')}
-      ${kpi('مواد ناقصة هذا الأسبوع', missingCount, 'بالخطة الأسبوعية', null, missingCount ? '#9B2F28' : '')}
+      ${kpi(`خطط ناقصة للأسبوع ${planWeek()}`, missingCount, 'بالخطة الأسبوعية', null, missingCount ? '#9B2F28' : '')}
       ${kpi('الموظفين', employeesCount ?? 0, unlinkedCount > 0 ? `${unlinkedCount} بدون حساب دخول` : 'كلهم بحسابات دخول')}
     </div>
     <div class="home-cols">
@@ -392,7 +397,7 @@ async function renderAdminDashboard(container) {
   }
   if (missingCount > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('weekly-tracking', `${missingCount} مادة لسا ما دخّل لها المعلمون خطة هذا الأسبوع`, { level: 'mid', action: 'عرض الناقص' }));
+    attentionList.appendChild(attentionItem('weekly-tracking', `${missingCount} مادة لسا ما دخّل لها المعلمون خطة الأسبوع ${planWeek()}`, { level: 'mid', action: 'عرض الناقص' }));
   }
   if (dutyMissingCount > 0) {
     anyAttention = true;
@@ -458,7 +463,7 @@ async function renderTodayCard(dayKey, dateStr, dutyTotal, dutyMissing) {
 
 async function renderTeacherDashboard(container) {
   const { data: assignments } = await sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)').eq('teacher_id', currentUserId);
-  const { data: weeklyPlansThisWeek } = await readWeeklyPlansScoped(1);
+  const { data: weeklyPlansThisWeek } = await readWeeklyPlansScoped(planWeek());
   const enteredSet = new Set((weeklyPlansThisWeek || []).map(p => p.subject_id + '_' + p.grade_level));
 
   const missingAssignments = (assignments || []).filter(a => !enteredSet.has(a.subject_id + '_' + a.grade_level));
@@ -498,7 +503,7 @@ async function renderTeacherDashboard(container) {
   if (missingAssignments.length > 0) {
     any = true;
     const names = missingAssignments.map(a => a.subjects ? a.subjects.name : '').filter(Boolean).join('، ');
-    list.appendChild(attentionItem('weekly', `لسا ما سلّمت خطة هذا الأسبوع لـ: ${names}`, { level: 'high', action: 'تسليم الخطة', primary: true }));
+    list.appendChild(attentionItem('weekly', `لسا ما سلّمت خطة الأسبوع ${planWeek()} لـ: ${names}`, { level: 'high', action: 'تسليم الخطة', primary: true }));
   } else if ((assignments || []).length > 0) {
     any = true;
     const t = tiles.find(x => x.key === 'weekly');
@@ -552,7 +557,7 @@ async function renderCommandDashboard(container) {
     scoped('op_tasks', 'id', q => q.eq('plan_status', 'pending')),
     sb.from('subjects').select('id, name'),
     sb.from('teacher_subjects').select('subject_id, grade_level'),
-    readWeeklyPlansScoped(1),
+    readWeeklyPlansScoped(planWeek()),
     scoped('classroom_visits', 'id, visit_date', q => q.gte('visit_date', lastMonthStart)),
     scoped('exam_reports', 'title, stats, created_at', q => q.order('created_at', { ascending: false }).limit(1)),
   ]);
@@ -597,7 +602,7 @@ async function renderCommandDashboard(container) {
 
   container.innerHTML = `
     <div class="kpi-grid">
-      ${kpi('رفع الخطط الأسبوعية', plansPct + '%', `${doneTotal} من ${expTotal} خانة (مادة × مرحلة)`, plansPct)}
+      ${kpi(`رفع خطط الأسبوع ${planWeek()}`, plansPct + '%', `${doneTotal} من ${expTotal} خانة (مادة × مرحلة)`, plansPct)}
       ${kpi('إنجاز الخطة التشغيلية', opRate + '%', `${approved} من ${comp.length} معتمدة`, opRate)}
       ${kpi('بانتظار اعتمادك', pendingApprovals, 'بالخطة التشغيلية', null, pendingApprovals ? '#A4501A' : '')}
       ${kpi('الزيارات الصفية هذا الشهر', vThis, trend(vThis, vLast))}
@@ -605,7 +610,11 @@ async function renderCommandDashboard(container) {
     </div>
     <div class="home-cols">
       <section class="home-card" style="flex:3 1 460px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;"><h3>رفع الخطط الأسبوعية حسب المادة</h3><button type="button" class="cmd-link" data-key="weekly-tracking">التفاصيل</button></div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; flex-wrap:wrap;">
+          <div><h3>رفع الخطط الأسبوعية حسب المادة</h3><div style="font-size:12.5px; color:var(--slate); margin-top:2px;">${esc(weekLabel(planWeek()))}</div></div>
+          <div style="display:flex; gap:12px;"><button type="button" class="cmd-link" id="cal-edit-btn">ضبط التقويم</button><button type="button" class="cmd-link" data-key="weekly-tracking">التفاصيل</button></div>
+        </div>
+        <div id="cal-editor" class="hidden"></div>
         ${subjRows.length ? `<div style="overflow-x:auto;"><table class="cmd-table">
           <thead><tr><th class="al-r">المادة</th>${GRADE_KEYS.map(g => `<th>${GRADE_SHORT[g]}</th>`).join('')}<th style="width:32%;">النسبة</th></tr></thead>
           <tbody>${subjRows.map(r => `<tr>
@@ -628,7 +637,8 @@ async function renderCommandDashboard(container) {
       <section class="home-card" style="flex:2 1 300px;"><h3>اليوم في المدرسة</h3><div id="dash-today" style="display:flex; flex-direction:column; gap:2px;"><div style="font-size:13px; color:var(--slate);">جارٍ التحميل...</div></div></section>
     </div>`;
 
-  container.querySelectorAll('.cmd-link').forEach(b => b.addEventListener('click', () => {
+  document.getElementById('cal-edit-btn').addEventListener('click', () => toggleCalendarEditor(container));
+  container.querySelectorAll('.cmd-link[data-key]').forEach(b => b.addEventListener('click', () => {
     const t = tiles.find(x => x.key === b.dataset.key);
     if (t && isTileAllowed(t)) openTile(t.key, tileTitle(t));
   }));
@@ -638,7 +648,7 @@ async function renderCommandDashboard(container) {
   const missing = expTotal - doneTotal;
   let any = false;
   if (pendingApprovals > 0) { any = true; list.appendChild(attentionItem('plan', `${pendingApprovals} بانتظار اعتمادك بالخطة التشغيلية`, { level: 'high', action: 'مراجعة', primary: true })); }
-  if (missing > 0) { any = true; list.appendChild(attentionItem('weekly-tracking', `${missing} ${missing >= 3 && missing <= 10 ? 'خطط أسبوعية' : 'خطة أسبوعية'} لم تُرفع`, { level: 'mid', action: 'عرض' })); }
+  if (missing > 0) { any = true; list.appendChild(attentionItem('weekly-tracking', `${missing} ${missing >= 3 && missing <= 10 ? 'خطط' : 'خطة'} للأسبوع ${planWeek()} لم تُرفع`, { level: 'mid', action: 'عرض' })); }
 
   let dutyTotal = 0, dutyMissing = 0;
   if (dayKey) {
@@ -655,4 +665,57 @@ async function renderCommandDashboard(container) {
   }
   if (!any) list.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">كل شي محدّث، ما فيه شي يحتاج قرارك حاليًا.</div>';
   renderTodayCard(dayKey, dateStr, dutyTotal, dutyMissing);
+}
+
+
+/* ===== ضبط التقويم الدراسي (المدير): بداية الأسبوع الأول + أسابيع الإجازة ===== */
+function toggleCalendarEditor(container) {
+  const box = document.getElementById('cal-editor');
+  if (!box) return;
+  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+  let breaks = [...(academicCalendar.breaks || [])];
+  const fmt = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }); };
+  const draw = () => {
+    box.innerHTML = `
+      <div style="background:var(--sand); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:10px; margin-top:6px;">
+        <label style="font-size:13px; font-weight:700; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">بداية الأسبوع الأول (يوم الأحد)
+          <input type="date" id="cal-start" value="${academicCalendar.start || DEFAULT_ACADEMIC_START}" style="width:auto; margin:0;" /></label>
+        <div style="font-size:13px; font-weight:700;">أسابيع الإجازة (ما تنحسب بالترقيم)</div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">${breaks.length ? breaks.map(b => `<span style="display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--border); border-radius:99px; padding:5px 10px; font-size:12.5px;">أسبوع ${fmt(b)}<button type="button" data-rm="${b}" aria-label="حذف" style="border:0; background:none; color:var(--danger); font-size:14px; cursor:pointer; padding:0;">×</button></span>`).join('') : '<span style="font-size:12.5px; color:var(--slate);">لا توجد</span>'}</div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+          <input type="date" id="cal-break" style="width:auto; margin:0;" aria-label="أي يوم من أسبوع الإجازة" />
+          <button type="button" class="btn-secondary" id="cal-add" style="width:auto;">+ إضافة أسبوع إجازة</button>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <button type="button" class="btn-primary" id="cal-save" style="width:auto;">حفظ</button>
+          <span id="cal-msg" style="font-size:12.5px; color:var(--slate);">الأسبوع الحالي حسب الإعداد: ${academicWeekInfo().current ?? '—'}</span>
+        </div>
+      </div>`;
+    box.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { breaks = breaks.filter(x => x !== b.dataset.rm); draw(); }));
+    box.querySelector('#cal-add').addEventListener('click', () => {
+      const v = box.querySelector('#cal-break').value;
+      if (!v) return;
+      const [y, m, d] = v.split('-').map(Number);
+      const sun = toIsoDate(sundayOf(new Date(y, m - 1, d)));
+      if (!breaks.includes(sun)) breaks.push(sun);
+      breaks.sort(); draw();
+    });
+    box.querySelector('#cal-save').addEventListener('click', async () => {
+      const v = box.querySelector('#cal-start').value;
+      const msg = box.querySelector('#cal-msg');
+      if (!v) { msg.textContent = 'حدد تاريخ البداية'; msg.style.color = 'var(--danger)'; return; }
+      const [y, m, d] = v.split('-').map(Number);
+      const start = toIsoDate(sundayOf(new Date(y, m - 1, d)));
+      const res = await saveAcademicCalendar(start, breaks);
+      if (res.error) {
+        const missing = /school_settings|relation|does not exist|schema cache/i.test(res.error.message || '');
+        msg.textContent = missing ? 'جدول الإعدادات غير موجود بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + res.error.message;
+        msg.style.color = 'var(--danger)';
+        return;
+      }
+      renderDashboard();
+    });
+  };
+  draw();
+  box.classList.remove('hidden');
 }

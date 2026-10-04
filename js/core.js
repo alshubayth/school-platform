@@ -271,6 +271,7 @@ async function enterSchool(schoolId, school) {
   // اللي يميّزه كمالك حقيقي لتبويب "إدارة المدارس والخدمات" وزر "تبديل المدرسة" بس
   currentProfile = { ...currentProfile, role: 'admin' };
   document.getElementById('school-picker-screen').classList.add('hidden');
+  await loadAcademicCalendar();
   finishShowingDashboard(school ? school.name : null);
   const { renderMyDutyBanner } = await import('./duty-roster.js');
   renderMyDutyBanner();
@@ -339,6 +340,7 @@ export async function loadProfileAndShowDashboard(userId) {
     myBudgetAccess = budgetPerm ? budgetPerm.level : null;
   }
 
+  await loadAcademicCalendar();
   finishShowingDashboard(profile.schools ? profile.schools.name : null);
   const { renderMyDutyBanner } = await import('./duty-roster.js');
   renderMyDutyBanner();
@@ -363,6 +365,68 @@ export async function writeWithSchool(factory) {
   if (res.error && currentSchoolId) res = await factory({});
   return res;
 }
+
+/* ===== التقويم الدراسي: ترقيم أسابيع الخطة حسب التاريخ =====
+ * الأسبوع الأول يبدأ يوم الأحد المحدد (start)، وأسابيع الإجازة (breaks: تواريخ آحادها) ما تنحسب.
+ * يُحفظ بجدول school_settings (المفتاح academic_calendar)؛ لو الجدول أو الإعداد غير موجود نستخدم
+ * الافتراضي: بداية العام الدراسي ١٤٤٨هـ يوم الأحد ٢٣ أغسطس ٢٠٢٦. */
+export const DEFAULT_ACADEMIC_START = '2026-08-23';
+export let academicCalendar = { start: DEFAULT_ACADEMIC_START, breaks: [], saved: false };
+const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const parseIso = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
+export function sundayOf(date = new Date()) { const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()); d.setDate(d.getDate() - d.getDay()); return d; }
+
+export async function loadAcademicCalendar() {
+  try {
+    const { data, error } = await readScopedBySchool(sc => {
+      let q = sb.from('school_settings').select('value').eq('key', 'academic_calendar');
+      if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.maybeSingle();
+    });
+    if (!error && data && data.value && data.value.start) {
+      academicCalendar = { start: data.value.start, breaks: Array.isArray(data.value.breaks) ? data.value.breaks : [], saved: true };
+    }
+  } catch (e) { /* نبقى على الافتراضي */ }
+  return academicCalendar;
+}
+export async function saveAcademicCalendar(start, breaks) {
+  const value = { start, breaks: [...new Set(breaks)].sort() };
+  const res = await writeWithSchool(extra => sb.from('school_settings').upsert(
+    { key: 'academic_calendar', value, updated_at: new Date().toISOString(), ...extra },
+    { onConflict: 'school_id,key' }));
+  if (!res.error) academicCalendar = { ...value, saved: true };
+  return res;
+}
+// يرجّع { current: رقم أسبوع الدراسة الحالي أو null لو إجازة/قبل بداية العام، next: رقم الأسبوع القادم، isBreak }
+export function academicWeekInfo(date = new Date()) {
+  const start = parseIso(academicCalendar.start);
+  const sun = sundayOf(date);
+  const breaks = new Set(academicCalendar.breaks || []);
+  if (sun < start) return { current: null, next: 1, isBreak: false, beforeStart: true };
+  let n = 0;
+  for (let d = new Date(start); d <= sun; d.setDate(d.getDate() + 7)) if (!breaks.has(isoDate(d))) n++;
+  const isBreak = breaks.has(isoDate(sun));
+  return { current: isBreak ? null : n, next: n + 1, isBreak, beforeStart: false };
+}
+// تاريخ الأحد اللي يبدأ فيه أسبوع الدراسة رقم k (بتخطي أسابيع الإجازة)
+export function studyWeekStart(k) {
+  const breaks = new Set(academicCalendar.breaks || []);
+  const d = parseIso(academicCalendar.start);
+  let n = 0;
+  for (let guard = 0; guard < 80; guard++, d.setDate(d.getDate() + 7)) {
+    if (breaks.has(isoDate(d))) continue;
+    if (++n === k) return new Date(d);
+  }
+  return null;
+}
+export function weekLabel(k, withDate = true) {
+  const info = academicWeekInfo();
+  const tag = k === info.current ? ' (الحالي)' : k === info.next ? ' (القادم)' : '';
+  const ds = studyWeekStart(k);
+  const dateTxt = withDate && ds ? ` · يبدأ ${ds.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' })}` : '';
+  return `الأسبوع ${k}${tag}${dateTxt}`;
+}
+export { isoDate as toIsoDate };
 
 export function isTileAllowed(t) {
   // تبويب "إدارة المدارس والخدمات" خاص بالدور الحقيقي "owner" بس (بدون تحويله لـ"admin")

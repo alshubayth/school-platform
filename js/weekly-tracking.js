@@ -1,13 +1,15 @@
-import { sb, gradeLabels, currentProfile, currentUserId, isAdminOrDeputy, currentSchoolId, writeWithSchool } from './core.js';
+import { academicWeekInfo, weekLabel, sb, gradeLabels, currentProfile, currentUserId, isAdminOrDeputy, currentSchoolId, writeWithSchool } from './core.js';
 
-let wtWeek = 1;
+// افتراضيًا: الأسبوع القادم - نتابع خلال هذا الأسبوع مين دخّل خطته ومين لا
+let wtWeek = null;
 
 export async function loadWeeklyTrackingModule() {
+  if (wtWeek == null) wtWeek = Math.min(40, academicWeekInfo().next);
   const canManagePerms = isAdminOrDeputy();
   document.getElementById('wt-perms-section').classList.toggle('hidden', !canManagePerms);
   if (canManagePerms) await loadPermsSection();
 
-  document.getElementById('wt-week-label').textContent = 'الأسبوع ' + wtWeek;
+  document.getElementById('wt-week-label').textContent = weekLabel(wtWeek);
   await refreshWeeklyTracking();
 }
 

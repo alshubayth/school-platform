@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isAdminOrDeputy, isStaff, gradeLabels, currentSchoolId } from './core.js';
+import { academicWeekInfo, weekLabel, sb, currentUserId, currentProfile, isAdminOrDeputy, isStaff, gradeLabels, currentSchoolId } from './core.js';
 
 /* ===== كتابة آمنة لعمود school_id قبل/بعد تنفيذ ترقية SQL للمرحلة الثانية =====
  * لو عمود school_id لسا ما انضاف لهذا الجدول بقاعدة البيانات (رفع الكود صار قبل تنفيذ SQL
@@ -300,15 +300,17 @@ async function loadFormForCurrentSelection() {
   }
 }
 
-let currentWeek = 1;
+// يفتح افتراضيًا على الأسبوع القادم (اللي يدخّل له المعلمون خطتهم خلال الأسبوع الحالي)
+let currentWeek = null;
 let subjectsCache = [];
 
 export async function loadWeeklyModule() {
+  if (currentWeek == null) currentWeek = Math.min(40, academicWeekInfo().next);
   document.getElementById('weekly-form-card').classList.toggle('hidden', !isStaff());
   document.getElementById('weekly-admin-note-card').classList.toggle('hidden', !isAdminOrDeputy());
   document.getElementById('weekly-publish-card').classList.toggle('hidden', !isAdminOrDeputy());
   document.getElementById('weekly-parent-link-card').classList.toggle('hidden', !isAdminOrDeputy());
-  document.getElementById('week-label').textContent = 'الأسبوع ' + currentWeek;
+  document.getElementById('week-label').textContent = weekLabel(currentWeek);
 
   if (currentProfile.role === 'teacher') {
     document.getElementById('weekly-form-card').classList.remove('hidden');
