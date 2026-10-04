@@ -78,7 +78,7 @@ export const GROUPS = [
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
   { key: 'exams', title: 'الاختبارات', keys: ['exams', 'tracking', 'exam-reports'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>' },
-  { key: 'admin', title: 'الإدارة', keys: ['plan', 'admin-tasks', 'budget', 'files', 'computerlab', 'school-contacts', 'perms', 'schools-admin', 'more'],
+  { key: 'admin', title: 'الإدارة', keys: ['plan', 'admin-tasks', 'budget', 'computerlab', 'school-contacts', 'perms', 'schools-admin', 'more'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 20V9"/></svg>' },
 ];
 
@@ -99,7 +99,6 @@ export const tiles = [
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
   { key: 'substitutes', icon: icons.substitutes, title: 'جدول اليوم والبدلاء', desc: 'الغياب والاستئذان وتحريك الحصص والبدلاء', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'computerlab', icon: icons.computerlab, title: 'معمل الحاسب الآلي', desc: 'توزيع الطلاب على أجهزة المعمل وطباعة الملصقات', roles: ['admin','deputy'], color: 'diamond-teal', group: 'extra' },
-  { key: 'files', icon: icons.files, title: 'الملفات',              desc: 'رفع الملفات ومشاركتها حسب المجلد', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'extra' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold', group: 'extra' },
   { key: 'schools-admin', icon: icons.perms, title: 'إدارة المدارس والخدمات', desc: 'إضافة مدرسة جديدة وتفعيل خدماتها', roles: ['owner'], color: 'diamond-navy', group: 'admin' },
   { key: 'admin-tasks', icon: icons.admintasks, title: 'المهام الإدارية', desc: 'مهام كل أسبوع ومسؤول تنفيذها وحالتها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'admin' },
@@ -580,7 +579,6 @@ export function hideAllModules() {
   document.getElementById('visits-module').classList.add('hidden');
   document.getElementById('substitutes-module').classList.add('hidden');
   document.getElementById('computerlab-module').classList.add('hidden');
-  document.getElementById('files-module').classList.add('hidden');
   document.getElementById('schools-admin-module').classList.add('hidden');
   document.getElementById('admin-tasks-module').classList.add('hidden');
   document.getElementById('school-contacts-module').classList.add('hidden');
@@ -676,10 +674,6 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('computerlab-module').classList.remove('hidden');
     const { loadComputerLabModule } = await import('./computer-lab.js');
     loadComputerLabModule();
-  } else if (key === 'files') {
-    document.getElementById('files-module').classList.remove('hidden');
-    const { loadFilesModule } = await import('./files.js');
-    loadFilesModule();
   } else if (key === 'schools-admin') {
     document.getElementById('schools-admin-module').classList.remove('hidden');
     const { loadSchoolAdminModule } = await import('./school-admin.js');
