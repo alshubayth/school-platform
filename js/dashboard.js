@@ -1,10 +1,11 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek } from './core.js';
 
 // أسبوع المتابعة بالرئيسية = الأسبوع القادم (اللي يُفترض المعلمون يدخلون خطته خلال هذا الأسبوع)
 const planWeek = () => Math.min(40, academicWeekInfo().next);
 
 /* ===== قراءة weekly_plans مقيّدة بمدرسة الحساب (نفس منطق js/weekly-plan.js) ===== */
 async function readWeeklyPlansScoped(weekNumber) {
+  if (isNoPlanWeek(weekNumber)) return { data: null, error: null, exempt: true };
   let q = sb.from('weekly_plans').select('subject_id, grade_level').eq('week_number', weekNumber);
   if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
   let res = await q;
@@ -344,7 +345,7 @@ async function renderAdminDashboard(container) {
 
   const totalPossible = (allSubjects || []).length * 3;
   const enteredSet = new Set((weeklyPlansThisWeek || []).map(p => p.subject_id + '_' + p.grade_level));
-  const missingCount = Math.max(totalPossible - enteredSet.size, 0);
+  const missingCount = isNoPlanWeek(planWeek()) ? 0 : Math.max(totalPossible - enteredSet.size, 0);
 
   const { dayKey, dateStr } = todayInfo();
   let dutyMissingCount = 0;
@@ -466,7 +467,7 @@ async function renderTeacherDashboard(container) {
   const { data: weeklyPlansThisWeek } = await readWeeklyPlansScoped(planWeek());
   const enteredSet = new Set((weeklyPlansThisWeek || []).map(p => p.subject_id + '_' + p.grade_level));
 
-  const missingAssignments = (assignments || []).filter(a => !enteredSet.has(a.subject_id + '_' + a.grade_level));
+  const missingAssignments = isNoPlanWeek(planWeek()) ? [] : (assignments || []).filter(a => !enteredSet.has(a.subject_id + '_' + a.grade_level));
 
   let opPlanPendingCount = 0;
   if (isOpPlanMember) {
@@ -581,7 +582,8 @@ async function renderCommandDashboard(container) {
     const exp = cells.filter(c => c.exp).length, done = cells.filter(c => c.done).length;
     return { name: sj.name, cells, exp, done, pct: exp ? Math.round(done / exp * 100) : null };
   }).filter(r => r.exp > 0).sort((a, b) => (a.pct - b.pct) || a.name.localeCompare(b.name, 'ar'));
-  const expTotal = subjRows.reduce((a, r) => a + r.exp, 0), doneTotal = subjRows.reduce((a, r) => a + r.done, 0);
+  const noPlan = isNoPlanWeek(planWeek());
+  const expTotal = noPlan ? 0 : subjRows.reduce((a, r) => a + r.exp, 0), doneTotal = noPlan ? 0 : subjRows.reduce((a, r) => a + r.done, 0);
   const plansPct = expTotal ? Math.round(doneTotal / expTotal * 100) : 0;
 
   const vThis = (visits || []).filter(v => v.visit_date >= monthStart).length;
@@ -602,7 +604,7 @@ async function renderCommandDashboard(container) {
 
   container.innerHTML = `
     <div class="kpi-grid">
-      ${kpi(`رفع خطط الأسبوع ${planWeek()}`, plansPct + '%', `${doneTotal} من ${expTotal} خانة (مادة × مرحلة)`, plansPct)}
+      ${noPlan ? kpi(`رفع خطط الأسبوع ${planWeek()}`, '—', 'أسبوع بدون خطة') : kpi(`رفع خطط الأسبوع ${planWeek()}`, plansPct + '%', `${doneTotal} من ${expTotal} خانة (مادة × مرحلة)`, plansPct)}
       ${kpi('إنجاز الخطة التشغيلية', opRate + '%', `${approved} من ${comp.length} معتمدة`, opRate)}
       ${kpi('بانتظار اعتمادك', pendingApprovals, 'بالخطة التشغيلية', null, pendingApprovals ? '#A4501A' : '')}
       ${kpi('الزيارات الصفية هذا الشهر', vThis, trend(vThis, vLast))}
@@ -615,7 +617,7 @@ async function renderCommandDashboard(container) {
           <div style="display:flex; gap:12px;"><button type="button" class="cmd-link" id="cal-edit-btn">ضبط التقويم</button><button type="button" class="cmd-link" data-key="weekly-tracking">التفاصيل</button></div>
         </div>
         <div id="cal-editor" class="hidden"></div>
-        ${subjRows.length ? `<div style="overflow-x:auto;"><table class="cmd-table">
+        ${noPlan ? `<div style="font-size:13.5px; color:var(--slate);">الأسبوع ${planWeek()} بدون خطة أسبوعية، فما فيه شي يُتابع.</div>` : subjRows.length ? `<div style="overflow-x:auto;"><table class="cmd-table">
           <thead><tr><th class="al-r">المادة</th>${GRADE_KEYS.map(g => `<th>${GRADE_SHORT[g]}</th>`).join('')}<th style="width:32%;">النسبة</th></tr></thead>
           <tbody>${subjRows.map(r => `<tr>
             <td class="al-r" style="font-weight:600;">${esc(r.name)}</td>
@@ -674,6 +676,7 @@ function toggleCalendarEditor(container) {
   if (!box) return;
   if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
   let breaks = [...(academicCalendar.breaks || [])];
+  let noPlan = [...(academicCalendar.noPlanWeeks || [])];
   const fmt = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }); };
   const draw = () => {
     box.innerHTML = `
@@ -686,12 +689,22 @@ function toggleCalendarEditor(container) {
           <input type="date" id="cal-break" style="width:auto; margin:0;" aria-label="أي يوم من أسبوع الإجازة" />
           <button type="button" class="btn-secondary" id="cal-add" style="width:auto;">+ إضافة أسبوع إجازة</button>
         </div>
+        <div style="font-size:13px; font-weight:700;">أسابيع دراسة بدون خطة أسبوعية (ما تنحسب ناقصة)</div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">${noPlan.length ? noPlan.map(w => `<span style="display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--border); border-radius:99px; padding:5px 10px; font-size:12.5px;">الأسبوع ${w}<button type="button" data-rmw="${w}" aria-label="حذف" style="border:0; background:none; color:var(--danger); font-size:14px; cursor:pointer; padding:0;">×</button></span>`).join('') : '<span style="font-size:12.5px; color:var(--slate);">لا توجد</span>'}
+          <input type="number" id="cal-noplan" min="1" max="40" placeholder="رقم" style="width:80px; margin:0; padding:7px 6px; text-align:center;" aria-label="رقم الأسبوع" />
+          <button type="button" class="btn-secondary" id="cal-noplan-add" style="width:auto;">+ إضافة</button>
+        </div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <button type="button" class="btn-primary" id="cal-save" style="width:auto;">حفظ</button>
           <span id="cal-msg" style="font-size:12.5px; color:var(--slate);">الأسبوع الحالي حسب الإعداد: ${academicWeekInfo().current ?? '—'}</span>
         </div>
       </div>`;
     box.querySelectorAll('[data-rm]').forEach(b => b.addEventListener('click', () => { breaks = breaks.filter(x => x !== b.dataset.rm); draw(); }));
+    box.querySelectorAll('[data-rmw]').forEach(b => b.addEventListener('click', () => { noPlan = noPlan.filter(x => String(x) !== b.dataset.rmw); draw(); }));
+    box.querySelector('#cal-noplan-add').addEventListener('click', () => {
+      const n = parseInt(box.querySelector('#cal-noplan').value, 10);
+      if (n >= 1 && n <= 40 && !noPlan.includes(n)) { noPlan.push(n); noPlan.sort((a, b) => a - b); draw(); }
+    });
     box.querySelector('#cal-add').addEventListener('click', () => {
       const v = box.querySelector('#cal-break').value;
       if (!v) return;
@@ -706,7 +719,7 @@ function toggleCalendarEditor(container) {
       if (!v) { msg.textContent = 'حدد تاريخ البداية'; msg.style.color = 'var(--danger)'; return; }
       const [y, m, d] = v.split('-').map(Number);
       const start = toIsoDate(sundayOf(new Date(y, m - 1, d)));
-      const res = await saveAcademicCalendar(start, breaks);
+      const res = await saveAcademicCalendar(start, breaks, noPlan);
       if (res.error) {
         const missing = /school_settings|relation|does not exist|schema cache/i.test(res.error.message || '');
         msg.textContent = missing ? 'جدول الإعدادات غير موجود بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + res.error.message;

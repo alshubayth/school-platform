@@ -371,7 +371,8 @@ export async function writeWithSchool(factory) {
  * يُحفظ بجدول school_settings (المفتاح academic_calendar)؛ لو الجدول أو الإعداد غير موجود نستخدم
  * الافتراضي: بداية العام الدراسي ١٤٤٨هـ يوم الأحد ٢٣ أغسطس ٢٠٢٦. */
 export const DEFAULT_ACADEMIC_START = '2026-08-23';
-export let academicCalendar = { start: DEFAULT_ACADEMIC_START, breaks: [], saved: false };
+// noPlanWeeks: أسابيع دراسة ما فيها خطة أسبوعية (مثل الأسبوع الأول) - ما تنحسب كخطط ناقصة
+export let academicCalendar = { start: DEFAULT_ACADEMIC_START, breaks: [], noPlanWeeks: [1], saved: false };
 const isoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const parseIso = (s) => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
 export function sundayOf(date = new Date()) { const d = new Date(date.getFullYear(), date.getMonth(), date.getDate()); d.setDate(d.getDate() - d.getDay()); return d; }
@@ -384,13 +385,14 @@ export async function loadAcademicCalendar() {
       return q.maybeSingle();
     });
     if (!error && data && data.value && data.value.start) {
-      academicCalendar = { start: data.value.start, breaks: Array.isArray(data.value.breaks) ? data.value.breaks : [], saved: true };
+      academicCalendar = { start: data.value.start, breaks: Array.isArray(data.value.breaks) ? data.value.breaks : [],
+        noPlanWeeks: Array.isArray(data.value.noPlanWeeks) ? data.value.noPlanWeeks : [1], saved: true };
     }
   } catch (e) { /* نبقى على الافتراضي */ }
   return academicCalendar;
 }
-export async function saveAcademicCalendar(start, breaks) {
-  const value = { start, breaks: [...new Set(breaks)].sort() };
+export async function saveAcademicCalendar(start, breaks, noPlanWeeks = academicCalendar.noPlanWeeks || []) {
+  const value = { start, breaks: [...new Set(breaks)].sort(), noPlanWeeks: [...new Set(noPlanWeeks.map(Number))].filter(n => n >= 1 && n <= 40).sort((a, b) => a - b) };
   const res = await writeWithSchool(extra => sb.from('school_settings').upsert(
     { key: 'academic_calendar', value, updated_at: new Date().toISOString(), ...extra },
     { onConflict: 'school_id,key' }));
@@ -419,6 +421,7 @@ export function studyWeekStart(k) {
   }
   return null;
 }
+export function isNoPlanWeek(k) { return (academicCalendar.noPlanWeeks || []).includes(Number(k)); }
 export function weekLabel(k, withDate = true) {
   const info = academicWeekInfo();
   const tag = k === info.current ? ' (الحالي)' : k === info.next ? ' (القادم)' : '';

@@ -1,4 +1,4 @@
-import { academicWeekInfo, weekLabel, sb, gradeLabels, currentProfile, currentUserId, isAdminOrDeputy, currentSchoolId, writeWithSchool } from './core.js';
+import { academicWeekInfo, weekLabel, isNoPlanWeek, sb, gradeLabels, currentProfile, currentUserId, isAdminOrDeputy, currentSchoolId, writeWithSchool } from './core.js';
 
 // افتراضيًا: الأسبوع القادم - نتابع خلال هذا الأسبوع مين دخّل خطته ومين لا
 let wtWeek = null;
@@ -94,6 +94,10 @@ document.getElementById('wt-week-next').addEventListener('click', () => { if (wt
 
 async function refreshWeeklyTracking() {
   const container = document.getElementById('wt-grades-container');
+  if (isNoPlanWeek(wtWeek)) {
+    container.innerHTML = `<div class="form-card" style="text-align:center; color:var(--slate); font-size:14px;">الأسبوع ${wtWeek} بدون خطة أسبوعية، فما يُحسب فيه أي مادة ناقصة. (تقدر تغيّر هذا من «ضبط التقويم» بلوحة القيادة)</div>`;
+    return;
+  }
   container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
 
   // نجيب المواد المسندة فعليًا لكل مرحلة (عن طريق تخصيص المعلمين) بدل كل مواد المدرسة،
