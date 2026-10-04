@@ -221,6 +221,32 @@
   .day-hero .dh-actions{ display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
   .day-hero .dh-actions button{ border:0; border-radius:10px; padding:10px 14px; font-family:inherit; font-size:13.5px; font-weight:600; cursor:pointer; background:#fff; color:var(--meadow-dark); }
   .day-hero .dh-actions button.alt{ background:rgba(255,255,255,0.14); color:#fff; }
+  .home-hero.hero-centered{ text-align:center; margin:12px 0 16px; }
+  .home-hero.hero-centered h1{ font-size:32px; }
+  #home-bigsearch:empty{ display:none; }
+  .big-search{
+    display:flex; align-items:center; gap:12px; width:100%; max-width:680px; height:58px; margin:0 auto 14px; padding:0 18px;
+    background:#fff; border:1.5px solid var(--meadow-dark); border-radius:16px; box-shadow:0 10px 30px rgba(15,36,71,0.08);
+    font-family:inherit; font-size:16px; color:var(--slate); cursor:text; text-align:right;
+  }
+  .big-search svg{ color:var(--meadow-dark); flex-shrink:0; }
+  .big-search span{ flex:1; }
+  .home-quick.quick-centered{ justify-content:center; margin-bottom:26px; }
+  .cmd-table{ width:100%; border-collapse:collapse; font-size:13.5px; min-width:420px; }
+  .cmd-table th{ font-size:12px; color:var(--slate); font-weight:600; padding:7px 8px; text-align:center; }
+  .cmd-table td{ padding:7px 8px; text-align:center; border-top:1px solid #EEF1F6; }
+  .cmd-table .al-r{ text-align:right; }
+  .cmd-table .ok{ color:#1F6A3C; font-weight:800; }
+  .cmd-table .miss{ color:#9B2F28; font-weight:800; }
+  .cmd-bar{ height:8px; background:#EEF1F6; border-radius:99px; overflow:hidden; }
+  .cmd-bar > div{ height:100%; background:var(--teal); border-radius:99px; }
+  .cmd-link{ background:none; border:0; padding:4px 0; font-family:inherit; font-size:13px; font-weight:600; color:var(--meadow); cursor:pointer; }
+  .cmd-chart{ display:flex; align-items:flex-end; gap:10px; height:150px; padding-top:4px; }
+  .cc-col{ flex:1; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:flex-end; gap:5px; min-width:0; }
+  .cc-bar{ width:100%; max-width:46px; background:var(--teal); border-radius:6px 6px 0 0; }
+  .cc-col:last-child .cc-bar{ background:var(--meadow-dark); }
+  .cc-val{ font-size:11.5px; font-weight:700; color:var(--ink); }
+  .cc-lbl{ font-size:11.5px; color:var(--slate); }
   .page-header .crumb{ font-size:12px; color:var(--slate); margin-bottom:2px; }
   .page-header .crumb a{ color:var(--meadow); text-decoration:none; }
   @media (max-width: 899px){ .main{ padding:18px 14px !important; } .home-hero h1{ font-size:23px; } }
