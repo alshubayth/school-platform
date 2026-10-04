@@ -952,7 +952,7 @@
             </div>
             <div>
               <h4>رفع نتائج اختبار جديد</h4>
-              <p>ملف إكسل فيه إجابات الطلاب (رقم الهوية، الاسم، الصف، الفصل، المادة، ثم عمود لكل سؤال) - ولازم يحتوي صف "النموذج" (الإجابة الصحيحة) برقم هوية كله أصفار</p>
+              <p>ملف إكسل من Remark فيه إجابات الطلاب (رقم الهوية، الاسم، الصف، الفصل، المادة، ثم عمود لكل سؤال). المفتاح ينطبق تلقائيًا لو محفوظ من بطاقة ورقة الإجابة، وإلا تدخله يدويًا</p>
             </div>
           </div>
           <input type="file" id="er-file" accept=".xlsx,.xls" style="margin-bottom:12px;" />
@@ -978,6 +978,13 @@
               <input type="checkbox" id="er-reversed-order" style="width:auto; margin:0;" />
               <span>ترتيب رموز الاختيارات بالملف معكوس (الوضع المعتاد بالمواد العربية) - بطّل هذا الخيار إذا كانت المادة إنجليزية أو لاحظت إن أغلب الطلاب طلعوا ضعاف بشكل غير منطقي بعد الحفظ</span>
             </label>
+
+            <div style="background:var(--teal-light); border-radius:10px; padding:10px 12px; margin:12px 0;">
+              <label style="font-size:12.5px; font-weight:700; display:block;">مفتاح الإجابة المحفوظ
+                <select id="er-saved-key" style="margin:4px 0 0;"></select>
+              </label>
+              <div id="er-saved-key-msg" style="font-size:12px; color:var(--ink); margin-top:6px;"></div>
+            </div>
 
             <h5 style="margin:16px 0 8px; font-size:13px;">الإجابة الصحيحة لكل سؤال</h5>
             <p style="font-size:11.5px; color:var(--slate); margin:0 0 10px;">اختر الإجابة الصحيحة لكل سؤال يدويًا (الملف ما يحتوي نموذج إجابة جاهز)</p>
@@ -1060,9 +1067,15 @@
                     <span style="font-size:13.5px; font-weight:700;">مفتاح الإجابة (ورقة النموذج)</span>
                     <button type="button" class="text-action-btn" id="as-key-clear-btn" style="width:auto; padding:4px 8px; font-size:12px;">مسح</button>
                   </div>
-                  <p style="font-size:11.5px; color:var(--slate); margin:4px 0 8px;">اضغط الإجابة الصحيحة لكل سؤال، واطبع ورقة النموذج: نفس الورقة بالإجابات مظللة ورقم الهوية 0000000000. امسحها مع أوراق الطلاب، ولما ترفع ملف Remark هنا بالتقارير يتعرف عليها ويطبّق المفتاح تلقائيًا.</p>
+                  <p style="font-size:11.5px; color:var(--slate); margin:4px 0 8px;">اضغط الإجابة الصحيحة لكل سؤال واحفظ المفتاح. لما ترفع ملف Remark بالتقارير، تختار المنصة المفتاح المطابق وتطبقه تلقائيًا. وتقدر تطبع ورقة النموذج (الإجابات مظللة ورقم الهوية 0000000000) لو تحتاجها لـ Remark.</p>
+                  <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
+                    <select id="as-saved-keys" style="flex:1; min-width:180px; margin:0;"><option value="">المفاتيح المحفوظة</option></select>
+                    <button type="button" class="btn-secondary" id="as-key-load-btn" style="width:auto; padding:8px 12px;" disabled>تحميل</button>
+                    <button type="button" class="text-action-btn" id="as-key-delete-btn" style="width:auto; padding:8px 10px; color:var(--danger) !important;" disabled>حذف</button>
+                  </div>
                   <div id="as-key-grid" style="display:flex; flex-wrap:wrap; gap:6px; max-height:260px; overflow-y:auto;"></div>
                   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+                    <button class="btn-primary" id="as-key-save-btn" style="width:auto; padding:8px 14px;">حفظ المفتاح</button>
                     <button class="btn-secondary" id="as-key-print-btn" style="width:auto; padding:8px 14px;">طباعة ورقة النموذج</button>
                     <button class="btn-secondary" id="as-key-pdf-btn" style="width:auto; padding:8px 14px;">تحميل PDF النموذج</button>
                     <span id="as-key-status" style="font-size:12px;"></span>
@@ -1105,7 +1118,7 @@
                   <ol style="margin:8px 18px 0; padding:0; line-height:1.9;">
                     <li>اطبع ورقة فاضية بنفس الإعدادات وامسحها بالسكانر، وافتحها في Remark Template Editor.</li>
                     <li>عرّف منطقة الباركود (Barcode Region) نوع Code 128 على المربع اللي فوق، وسمّها <b>StudentID</b> عشان ملف النتائج يرتبط تلقائيًا بتقارير المنصة.</li>
-                    <li>عرّف منطقة الإجابات (OMR) لكل عمود أسئلة، والاتجاه: من اليمين لليسار للعربي ومن اليسار لليمين للإنجليزي.</li>
+                    <li>عرّف منطقة الإجابات (OMR) لكل عمود أسئلة، وخلّ ترتيب القيم الافتراضي (من اليسار لليمين) حتى للعربي - المنصة تعرف إن الحروف العربية معكوسة وتعدّلها تلقائيًا من المفتاح المحفوظ.</li>
                     <li>للجزء المقالي: عرّف منطقة OMR بإجابة وحدة قيمها الأرقام المكتوبة داخل الفقاعات. لو المجموع أكثر من ١٠: منطقتين (العشرات بقيم 0، 10، 20 ... والآحاد 0-9) واجمعهم.</li>
                     <li>احفظ القالب باسم الإعدادات المكتوبة أسفل الورقة (مثال: A4 · 20 سؤال · 4 خيارات) واستخدمه لكل الأوراق بنفس الإعدادات.</li>
                     <li>ورقة "A4 بالعرض" كل نصف فيها نسخة مطابقة لورقة A5، فبعد القص تستخدم نفس قالب A5.</li>

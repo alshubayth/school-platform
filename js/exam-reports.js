@@ -1,6 +1,6 @@
 import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
-import { initAnswerSheetCard } from './answer-sheet.js';
+import { initAnswerSheetCard, fetchSavedKeys } from './answer-sheet.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
 
@@ -341,6 +341,7 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     document.getElementById('er-semester').value = '';
     document.getElementById('er-reversed-order').checked = guessReversedOrder(parsedData.detected.subject);
     renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
+    await setupSavedKeyPicker(parsedData);
     document.getElementById('er-preview-card').classList.remove('hidden');
     document.getElementById('er-preview-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (e) {
@@ -356,7 +357,8 @@ function renderKeyForm(parsed, reversed = true) {
   const el = document.getElementById('er-key-form');
   el.innerHTML = `<div class="er-key-grid">${parsed.choiceCounts.map((numChoices, i) => {
     const options = ARABIC_LETTERS.slice(0, numChoices);
-    const preselect = parsed.detectedKeyRaw ? letterFor(parsed.detectedKeyRaw[i], numChoices, reversed) : null;
+    const preselect = parsed.presetLetters ? (parsed.presetLetters[i] || null)
+      : (parsed.detectedKeyRaw ? letterFor(parsed.detectedKeyRaw[i], numChoices, reversed) : null);
     return `<div class="er-key-item">
       <label>سؤال ${i + 1}</label>
       <select class="er-key-select" data-item="${i}">
@@ -366,6 +368,67 @@ function renderKeyForm(parsed, reversed = true) {
     </div>`;
   }).join('')}</div>`;
 }
+
+/* ===== تطبيق مفتاح محفوظ (من بطاقة ورقة الإجابة) على الملف المرفوع =====
+ * نختار تلقائيًا المفتاح اللي عدد أسئلته = عدد أسئلة الملف، والأقرب بالمادة/المرحلة. والمفتاح
+ * المحفوظ يحدد كمان عدد الخيارات الفعلي لكل سؤال (بدل تخمينه من إجابات الطلاب) واتجاه الحروف. */
+let erSavedKeys = [];
+function normAr(s) { return String(s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim(); }
+
+async function setupSavedKeyPicker(parsed) {
+  const sel = document.getElementById('er-saved-key');
+  const msg = document.getElementById('er-saved-key-msg');
+  parsed._origChoiceCounts = parsed.choiceCounts.slice();
+  const { data, error } = await fetchSavedKeys();
+  erSavedKeys = data;
+  if (error) { sel.innerHTML = '<option value="">—</option>'; msg.textContent = error; return; }
+  const subj = normAr(parsed.detected.subject);
+  const scored = erSavedKeys.map(k => {
+    let score = 0;
+    if (subj && k.subject && (normAr(k.subject).includes(subj) || subj.includes(normAr(k.subject)))) score += 2;
+    if (subj && normAr(k.title).includes(subj)) score += 1;
+    return { k, score, match: k.questions === parsed.itemCount };
+  }).sort((a, b) => (b.match - a.match) || (b.score - a.score));
+  const matches = scored.filter(x => x.match);
+  const others = scored.filter(x => !x.match);
+  sel.innerHTML = '<option value="">بدون - إدخال المفتاح يدويًا</option>' +
+    (matches.length ? `<optgroup label="مطابقة لعدد أسئلة الملف (${parsed.itemCount})">${matches.map(x => `<option value="${x.k.id}">${esc(x.k.title)}${x.k.subject ? ' — ' + esc(x.k.subject) : ''}</option>`).join('')}</optgroup>` : '') +
+    (others.length ? `<optgroup label="عدد أسئلة مختلف">${others.map(x => `<option value="${x.k.id}" disabled>${esc(x.k.title)} (${x.k.questions} سؤال)</option>`).join('')}</optgroup>` : '');
+  if (matches.length) {
+    sel.value = matches[0].k.id;
+    applySavedKey(matches[0].k);
+    if (matches.length > 1) msg.textContent += ` (فيه ${matches.length} مفاتيح بنفس عدد الأسئلة - تأكد إنه الصحيح)`;
+  } else {
+    msg.textContent = erSavedKeys.length
+      ? `ما فيه مفتاح محفوظ بنفس عدد أسئلة الملف (${parsed.itemCount}) - أدخل المفتاح يدويًا أو احفظه من بطاقة ورقة الإجابة`
+      : 'ما فيه مفاتيح محفوظة بعد - تقدر تحفظها من بطاقة "ورقة إجابة للتصحيح الآلي"';
+  }
+}
+
+function applySavedKey(k) {
+  if (!parsedData) return;
+  const msg = document.getElementById('er-saved-key-msg');
+  if (!k) {
+    delete parsedData.presetLetters;
+    parsedData.choiceCounts = parsedData._origChoiceCounts.slice();
+    msg.textContent = '';
+    renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
+    return;
+  }
+  parsedData.presetLetters = (k.answers || []).map(i => (i == null ? null : ARABIC_LETTERS[i]));
+  parsedData.choiceCounts = parsedData._origChoiceCounts.map((c, i) => (parsedData.itemTypes[i] === 'tf' ? c : k.choices));
+  const observedMax = Math.max(0, ...parsedData.students.flatMap(st => st.answers.filter(v => typeof v === 'number')));
+  document.getElementById('er-reversed-order').checked = k.lang !== 'en';
+  if (!document.getElementById('er-title').value.trim()) document.getElementById('er-title').value = k.title || '';
+  if (!document.getElementById('er-subject').value.trim() && k.subject) document.getElementById('er-subject').value = k.subject;
+  renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
+  msg.textContent = `تم تطبيق المفتاح "${k.title}" ✓ راجع الإجابات واضغط "حفظ التقرير"`;
+  if (observedMax > k.choices) msg.textContent += ` — تنبيه: بالملف قيم أكبر من عدد الخيارات بالمفتاح (${k.choices})، تأكد إن الملف لنفس الاختبار`;
+}
+
+document.getElementById('er-saved-key').addEventListener('change', (e) => {
+  applySavedKey(erSavedKeys.find(k => k.id === e.target.value) || null);
+});
 
 document.getElementById('er-reversed-order').addEventListener('change', (e) => {
   if (!parsedData) return;

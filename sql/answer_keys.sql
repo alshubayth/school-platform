@@ -1,0 +1,39 @@
+-- جدول مفاتيح الإجابة المحفوظة (من بطاقة "ورقة إجابة للتصحيح الآلي")
+-- يُشغَّل مرة وحدة في Supabase > SQL Editor. آمن لو انشغّل أكثر من مرة.
+do $$
+declare
+  school_id_type text;
+begin
+  -- نفس نوع معرّف جدول المدارس (uuid أو رقم) عشان الربط يشتغل
+  select data_type into school_id_type
+  from information_schema.columns
+  where table_schema = 'public' and table_name = 'schools' and column_name = 'id';
+
+  execute format($f$
+    create table if not exists public.answer_keys (
+      id uuid primary key default gen_random_uuid(),
+      school_id %s references public.schools(id) on delete cascade,
+      title text not null,
+      subject text,
+      grade_level text,
+      size text not null default 'A4',
+      questions int not null check (questions >= 0),
+      choices int not null check (choices between 2 and 6),
+      lang text not null default 'ar',
+      essay_total int not null default 0,
+      answers jsonb not null default '[]'::jsonb,
+      created_by uuid default auth.uid(),
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )$f$, case when school_id_type = 'uuid' then 'uuid' else 'bigint' end);
+end $$;
+
+create index if not exists answer_keys_school_idx on public.answer_keys (school_id, created_at desc);
+
+alter table public.answer_keys enable row level security;
+
+drop policy if exists "answer_keys_read" on public.answer_keys;
+create policy "answer_keys_read" on public.answer_keys for select to authenticated using (true);
+
+drop policy if exists "answer_keys_write" on public.answer_keys;
+create policy "answer_keys_write" on public.answer_keys for all to authenticated using (true) with check (true);

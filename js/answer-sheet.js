@@ -9,7 +9,7 @@
  * الباركود: Code 128 لرقم هوية الطالب (أرقام فقط) - نولّده هنا مباشرة كـ SVG (بدون مكتبات خارجية)
  * عشان يطلع حاد بالطباعة. ترميز Code C (رقمين بكل رمز) لو عدد الأرقام زوجي، وإلا Code B.
  * ========================================================================= */
-import { sb, gradeLabels, currentSchoolId, readScopedBySchool } from './core.js';
+import { sb, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 
 const ORG_NAME = 'مدرسة المروج المتوسطة';
 const AR_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
@@ -539,6 +539,84 @@ function updateKeyStatus() {
     : '';
 }
 
+/* ---------- حفظ المفتاح بالمنصة (جدول answer_keys) ----------
+ * Remark يستبعد ورقة النموذج من ملف الإكسل، فالمفتاح لازم ينحفظ هنا عشان قسم التقارير
+ * يطبقه تلقائيًا لما يُرفع ملف النتائج. */
+let currentKeyId = null;   // لو المستخدم حمّل مفتاح محفوظ: الحفظ يحدّثه بدل ما يضيف جديد
+let savedKeys = [];
+
+function keyStatusMsg(msg, isErr = false) {
+  const el = $('as-key-status');
+  el.textContent = msg;
+  el.style.color = isErr ? 'var(--danger)' : 'var(--slate)';
+}
+
+export async function fetchSavedKeys() {
+  const { data, error } = await readScopedBySchool(scoped => {
+    let q = sb.from('answer_keys').select('id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, updated_at');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('updated_at', { ascending: false });
+  });
+  if (error) {
+    const missing = /answer_keys|relation|does not exist|schema cache/i.test(error.message || '');
+    return { data: [], error: missing ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : error.message };
+  }
+  return { data: data || [], error: null };
+}
+
+async function refreshSavedKeysList() {
+  const sel = $('as-saved-keys');
+  const res = await fetchSavedKeys();
+  savedKeys = res.data;
+  if (res.error) { sel.innerHTML = '<option value="">—</option>'; keyStatusMsg(res.error, true); return; }
+  sel.innerHTML = `<option value="">${savedKeys.length ? `المفاتيح المحفوظة (${savedKeys.length})` : 'لا توجد مفاتيح محفوظة'}</option>` +
+    savedKeys.map(k => `<option value="${k.id}"${k.id === currentKeyId ? ' selected' : ''}>${escHtml(k.title)} — ${k.questions} سؤال${k.essay_total ? ` + مقالي ${k.essay_total}` : ''}</option>`).join('');
+  $('as-key-load-btn').disabled = $('as-key-delete-btn').disabled = !sel.value;
+}
+
+async function saveKey() {
+  const o = readOptions();
+  if (!o.title) { keyStatusMsg('اكتب عنوان الاختبار فوق (يظهر بقائمة المفاتيح وبالتقارير)', true); $('as-title').focus(); return; }
+  if (!o.questions && !o.essayTotal) { keyStatusMsg('حدد عدد الأسئلة', true); return; }
+  const missing = keyAnswers.filter(v => v == null).length;
+  if (missing) { keyStatusMsg(`باقي ${missing} سؤال بدون إجابة - كمّل المفتاح قبل الحفظ`, true); return; }
+  const row = {
+    title: o.title, subject: o.subject || null,
+    grade_level: $('as-barcode').checked && $('as-scope').value !== 'school' ? $('as-grade').value : null,
+    size: o.size, questions: o.questions, choices: o.choices, lang: o.lang,
+    essay_total: o.essayTotal || 0, answers: keyAnswers.slice(),
+    updated_at: new Date().toISOString(),
+  };
+  $('as-key-save-btn').disabled = true;
+  keyStatusMsg('جارٍ الحفظ...');
+  let res;
+  if (currentKeyId) res = await sb.from('answer_keys').update(row).eq('id', currentKeyId).select('id').single();
+  else res = await writeWithSchool(extra => sb.from('answer_keys').insert({ ...row, ...extra }).select('id').single());
+  $('as-key-save-btn').disabled = false;
+  if (res.error) {
+    const missingTbl = /answer_keys|relation|does not exist|schema cache/i.test(res.error.message || '');
+    keyStatusMsg(missingTbl ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + res.error.message, true);
+    return;
+  }
+  currentKeyId = res.data.id;
+  await refreshSavedKeysList();
+  keyStatusMsg(`تم حفظ المفتاح "${o.title}" ✓ - لما ترفع ملف Remark بالتقارير ينطبق تلقائيًا`);
+}
+
+function loadKeyIntoForm(k) {
+  $('as-title').value = k.title || '';
+  $('as-subject').value = k.subject || '';
+  $('as-size').value = k.size || 'A4';
+  $('as-questions').value = k.questions;
+  $('as-choices').value = String(k.choices);
+  $('as-lang').value = k.lang || 'ar';
+  $('as-essay-on').checked = !!k.essay_total;
+  $('as-essay-total-wrap').classList.toggle('hidden', !k.essay_total);
+  if (k.essay_total) $('as-essay-total').value = k.essay_total;
+  keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
+  currentKeyId = k.id;
+}
+
 function buildKeyPages() {
   const o = readOptions();
   if ((!o.questions || o.questions < 1) && !o.essayTotal) throw new Error('حدد عدد الأسئلة');
@@ -687,13 +765,31 @@ export function initAnswerSheetCard() {
   };
   $('as-key-print-btn').addEventListener('click', keyAction(printSheets));
   $('as-key-pdf-btn').addEventListener('click', keyAction(downloadPdf));
-  $('as-key-clear-btn').addEventListener('click', () => { keyAnswers = []; renderKeyGrid(); });
+  $('as-key-clear-btn').addEventListener('click', () => { keyAnswers = []; currentKeyId = null; $('as-saved-keys').value = ''; renderKeyGrid(); });
+  $('as-key-save-btn').addEventListener('click', saveKey);
+  $('as-saved-keys').addEventListener('change', () => { $('as-key-load-btn').disabled = $('as-key-delete-btn').disabled = !$('as-saved-keys').value; });
+  $('as-key-load-btn').addEventListener('click', () => {
+    const k = savedKeys.find(x => x.id === $('as-saved-keys').value);
+    if (!k) return;
+    loadKeyIntoForm(k);
+    refresh(); renderKeyGrid();
+    keyStatusMsg(`تم تحميل "${k.title}" - أي تعديل وحفظ يحدّث نفس المفتاح`);
+  });
+  $('as-key-delete-btn').addEventListener('click', async () => {
+    const k = savedKeys.find(x => x.id === $('as-saved-keys').value);
+    if (!k || !confirm(`حذف المفتاح "${k.title}" نهائيًا؟`)) return;
+    const { error } = await sb.from('answer_keys').delete().eq('id', k.id);
+    if (error) { keyStatusMsg('تعذر الحذف: ' + error.message, true); return; }
+    if (currentKeyId === k.id) currentKeyId = null;
+    await refreshSavedKeysList();
+    keyStatusMsg('تم حذف المفتاح');
+  });
   ['as-questions', 'as-choices', 'as-lang'].forEach(id => $(id).addEventListener('input', renderKeyGrid));
   ['as-choices', 'as-lang'].forEach(id => $(id).addEventListener('change', renderKeyGrid));
   $('as-toggle-btn').addEventListener('click', () => {
     const open = $('as-body').classList.toggle('hidden') === false;
     $('as-toggle-btn').textContent = open ? 'إخفاء' : 'تصميم ورقة';
-    if (open) { refresh(); renderKeyGrid(); }
+    if (open) { refresh(); renderKeyGrid(); refreshSavedKeysList(); }
   });
   updateLimitHint();
 }
