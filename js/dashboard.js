@@ -175,25 +175,145 @@ async function renderMyScheduleWidget(container, dayKey, dateStr) {
   }
 }
 
-/* بطاقات مساحات العمل أسفل الرئيسية: كل مساحة بأقسامها المسموحة للمستخدم */
+/* =========================================================================
+ * مساحات العمل (اتجاه «مساحات العمل»): بطاقة لكل مساحة بالرئيسية + صفحة لكل مساحة،
+ * وكل بطاقة فيها «سطر حالة» من بيانات حقيقية (خطط ناقصة، تغييرات اليوم، الفترية القادمة، اعتمادات).
+ * ========================================================================= */
 const WS_COLORS = { students: ['#E3F4F7', '#0B6E7E'], teachers: ['#EFEBFB', '#5A3E9E'], exams: ['#FDEFE3', '#A4501A'], admin: ['#EAF1FC', '#2455A4'] };
+const TONES = { good: ['#E7F5EC', '#1F6A3C'], warn: ['#FDF2DF', '#7A5410'], bad: ['#FBEAE9', '#8A3A30'], idle: ['#F2EFE8', '#5B6472'] };
+const isStaffRole = () => ['admin', 'deputy'].includes(currentProfile.role) || currentProfile.role === 'owner';
+
+const statusCache = new Map(); // groupKey -> { at, promise }
+function wsStatus(groupKey) {
+  const c = statusCache.get(groupKey);
+  if (c && Date.now() - c.at < 60000) return c.promise;
+  const promise = computeWsStatus(groupKey).catch(() => null);
+  statusCache.set(groupKey, { at: Date.now(), promise });
+  return promise;
+}
+const scopedSel = (table, cols, build) => readScopedBySchool(sc => {
+  let q = sb.from(table).select(cols);
+  if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+  return build ? build(q) : q;
+});
+
+async function computeWsStatus(groupKey) {
+  const wk = planWeek();
+  const { dayKey, dateStr } = todayInfo();
+  if (groupKey === 'students') {
+    if (isNoPlanWeek(wk)) return { text: `الأسبوع ${wk} بدون خطة أسبوعية`, tone: 'idle' };
+    if (currentProfile.role === 'teacher') {
+      const [{ data: mine }, { data: plans }] = await Promise.all([
+        sb.from('teacher_subjects').select('subject_id, grade_level').eq('teacher_id', currentUserId),
+        readWeeklyPlansScoped(wk),
+      ]);
+      if (!(mine || []).length) return null;
+      const entered = new Set((plans || []).map(p => p.subject_id + '_' + p.grade_level));
+      const miss = mine.filter(a => !entered.has(a.subject_id + '_' + a.grade_level)).length;
+      return miss ? { text: `باقي ${arCount(miss, 'مادة', 'مادتان', 'مواد')} من خططك للأسبوع ${wk}`, tone: 'bad' } : { text: `خططك للأسبوع ${wk} مسلّمة`, tone: 'good' };
+    }
+    if (!isStaffRole()) return null;
+    const [{ data: subjects }, { data: assignments }, { data: plans }] = await Promise.all([
+      sb.from('subjects').select('id'),
+      sb.from('teacher_subjects').select('subject_id, grade_level'),
+      readWeeklyPlansScoped(wk),
+    ]);
+    let expected = new Set((assignments || []).map(a => a.subject_id + '_' + a.grade_level));
+    if (!expected.size) expected = new Set((subjects || []).flatMap(sj => ['first_intermediate', 'second_intermediate', 'third_intermediate'].map(g => sj.id + '_' + g)));
+    if (!expected.size) return null;
+    const entered = new Set((plans || []).map(p => p.subject_id + '_' + p.grade_level));
+    const miss = [...expected].filter(k => !entered.has(k)).length;
+    return miss ? { text: `خطة الأسبوع ${wk}: ${arCount(miss, 'مادة', 'مادتان', 'مواد')} ناقصة`, tone: miss > expected.size / 2 ? 'bad' : 'warn' }
+      : { text: `خطط الأسبوع ${wk} مكتملة لأولياء الأمور`, tone: 'good' };
+  }
+  if (groupKey === 'teachers') {
+    if (!dayKey) return { text: 'إجازة نهاية الأسبوع', tone: 'idle' };
+    const { data: changes } = await scopedSel('daily_schedule_changes', 'id', q => q.eq('change_date', dateStr));
+    const n = (changes || []).length;
+    return n ? { text: `${arCount(n, 'تغيير', 'تغييران', 'تغييرات')} على حصص اليوم (انتظار/تبديل)`, tone: 'bad' } : { text: 'ما فيه تغييرات على جدول اليوم', tone: 'good' };
+  }
+  if (groupKey === 'exams') {
+    const { data: cov } = await scopedSel('subject_exam_coverage', 'subject_name, grade_level, exam_date', q => q.gte('exam_date', dateStr));
+    const next = (cov || []).filter(r => r.exam_date).sort((x, y) => x.exam_date.localeCompare(y.exam_date))[0];
+    if (next) {
+      const days = Math.round((new Date(next.exam_date + 'T00:00:00') - new Date(dateStr + 'T00:00:00')) / 86400000);
+      const when = days === 0 ? 'اليوم' : days === 1 ? 'بكرة' : days === 2 ? 'بعد يومين' : `بعد ${days} ${days <= 10 ? 'أيام' : 'يوم'}`;
+      return { text: `الفترية القادمة: ${next.subject_name} · ${GRADE_SHORT_WS[next.grade_level] || ''} · ${when}`, tone: days <= 2 ? 'warn' : 'idle' };
+    }
+    if (!isStaffRole()) return null;
+    const { data: periods } = await scopedSel('exam_periods', 'name, created_at', q => q.order('created_at', { ascending: false }).limit(1));
+    return periods && periods[0] ? { text: `آخر فترة: ${periods[0].name}`, tone: 'idle' } : null;
+  }
+  if (groupKey === 'admin') {
+    if (!isStaffRole()) return null;
+    const [{ data: t }, { data: c }] = await Promise.all([
+      scopedSel('op_tasks', 'id', q => q.eq('plan_status', 'pending')),
+      scopedSel('op_task_completions', 'id', q => q.eq('status', 'pending')),
+    ]);
+    const n = (t || []).length + (c || []).length;
+    if (currentProfile.role !== 'admin') return n ? { text: `${arCount(n, 'عنصر', 'عنصران', 'عناصر')} بالخطة التشغيلية بانتظار الاعتماد`, tone: 'warn' } : { text: 'ما فيه شي معلّق بالخطة التشغيلية', tone: 'good' };
+    return n ? { text: `${arCount(n, 'عنصر', 'عنصران', 'عناصر')} بانتظار اعتمادك`, tone: 'warn' } : { text: 'ما فيه شي بانتظار اعتمادك', tone: 'good' };
+  }
+  return null;
+}
+// عدّ عربي بسيط: 1 → «تغيير واحد»، 2 → «تغييران»، 3-10 → «5 تغييرات»، أكثر → «12 تغيير»
+function arCount(n, one, two, few) { return n === 1 ? `${one} واحد` : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${one}`; }
+const GRADE_SHORT_WS = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
+
+function fillStatus(el, st) {
+  if (!el) return;
+  if (!st) { el.remove(); return; }
+  const [bg, fg] = TONES[st.tone] || TONES.idle;
+  el.className = 'ws-status';
+  el.style.background = bg; el.style.color = fg;
+  el.textContent = st.text;
+}
+
+function goTile(key) { const t = tiles.find(x => x.key === key); openTile(key, t ? tileTitle(t) : ''); }
+async function goWorkspace(groupKey) { const { openWorkspace } = await import('./core.js'); openWorkspace(groupKey); }
+
 function renderSectionTilesGrid() {
   const grid = document.getElementById('dash-sections-grid');
   if (!grid) return;
-  grid.innerHTML = GROUPS.map(g => {
+  const groups = GROUPS.filter(g => groupTilesFor(g.key).length);
+  grid.innerHTML = groups.map(g => {
     const list = groupTilesFor(g.key);
-    if (!list.length) return '';
     const [bg, fg] = WS_COLORS[g.key] || ['var(--sand)', 'var(--ink)'];
-    return `<div class="ws-card">
-      <div class="ws-head"><span class="ws-ic" style="background:${bg}; color:${fg};">${g.icon}</span>${g.title}</div>
+    return `<div class="ws-card" data-ws="${g.key}">
+      <a href="#/ws/${g.key}" class="ws-head" data-ws-open="${g.key}"><span class="ws-title">${g.title}</span><span class="ws-ic" style="background:${bg}; color:${fg};">${g.icon}</span></a>
       <div class="ws-links">${list.map(t => `<a href="#/${t.key}" data-key="${t.key}">${esc(tileTitle(t))}</a>`).join('')}</div>
+      <div class="ws-status is-loading" data-status="${g.key}"></div>
     </div>`;
   }).join('');
-  grid.querySelectorAll('a[data-key]').forEach(a => a.addEventListener('click', (e) => {
-    e.preventDefault();
-    const t = tiles.find(x => x.key === a.dataset.key);
-    openTile(a.dataset.key, t ? tileTitle(t) : '');
-  }));
+  grid.querySelectorAll('a[data-key]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); goTile(a.dataset.key); }));
+  grid.querySelectorAll('a[data-ws-open]').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); goWorkspace(a.dataset.wsOpen); }));
+  groups.forEach(g => wsStatus(g.key).then(st => fillStatus(grid.querySelector(`[data-status="${g.key}"]`), st)));
+}
+
+/* صفحة مساحة عمل: عنوان + سطر الحالة + بطاقة لكل قسم فيها */
+export function renderWorkspacePage(groupKey, view) {
+  const g = GROUPS.find(x => x.key === groupKey);
+  const list = groupTilesFor(groupKey);
+  const [bg, fg] = WS_COLORS[groupKey] || ['var(--sand)', 'var(--ink)'];
+  view.innerHTML = `
+    <div class="wsp-head">
+      <span class="wsp-ic" style="background:${bg}; color:${fg};">${g.icon}</span>
+      <div class="wsp-titles">
+        <div class="crumb"><a href="#/" data-home>الرئيسية</a> / مساحة العمل</div>
+        <h1>${g.title}</h1>
+        <div class="ws-status is-loading" data-status="${groupKey}"></div>
+      </div>
+    </div>
+    <div class="wsp-grid">
+      ${list.map(t => `<a href="#/${t.key}" class="wsp-card" data-key="${t.key}">
+        <span class="wsp-card-ic" style="background:${bg}; color:${fg};">${t.icon}</span>
+        <span class="wsp-card-main"><b>${esc(tileTitle(t))}</b><span>${esc(t.key === 'budget' ? budgetTileDesc() : (t.key === 'duty' && currentProfile.role === 'teacher' ? 'المناوبة المسندة لي' : t.desc))}</span></span>
+        <svg class="wsp-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+      </a>`).join('')}
+    </div>`;
+  view.querySelectorAll('.wsp-card').forEach(a => a.addEventListener('click', (e) => { e.preventDefault(); goTile(a.dataset.key); }));
+  view.querySelector('[data-home]').addEventListener('click', async (e) => { e.preventDefault(); const { backToTiles } = await import('./core.js'); backToTiles(); });
+  wsStatus(groupKey).then(st => fillStatus(view.querySelector(`[data-status="${groupKey}"]`), st));
 }
 
 /* ترحيب + اختصارات سريعة حسب الدور */
@@ -278,12 +398,23 @@ function attentionItem(sectionKey, text, opts = {}) {
   return div;
 }
 
+function placeWorkspaces(first) {
+  const view = document.getElementById('tiles-view');
+  const title = view && view.querySelector('.home-section-title');
+  const grid = document.getElementById('dash-sections-grid');
+  if (!title || !grid) return;
+  if (first) { const anchor = document.getElementById('my-duty-banner'); view.insertBefore(title, anchor); view.insertBefore(grid, anchor); }
+  else { view.appendChild(title); view.appendChild(grid); }
+  title.classList.toggle('ws-first', first);
+}
+
 export async function renderDashboard() {
   const container = document.getElementById('dashboard-content');
   if (!container) return;
   renderHomeHeader();
+  placeWorkspaces(currentProfile.role === 'deputy');
   renderSectionTilesGrid();
-  container.innerHTML = '<div class="kpi-grid">' + '<div class="kpi" style="min-height:92px; background:#EEF1F6; border-color:transparent;"></div>'.repeat(4) + '</div>';
+  container.innerHTML = '<div class="kpi-grid">' + '<div class="kpi" style="min-height:92px; background:#F2EFE8; border-color:transparent;"></div>'.repeat(4) + '</div>';
 
   // كل دور له شكل: المدير ← لوحة القيادة المكثفة، الوكيل ← نظرة عامة مع بحث كبير واختصارات، المعلم ← «يومك»
   if (currentProfile.role === 'admin' || currentProfile.role === 'deputy') {

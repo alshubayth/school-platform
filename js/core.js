@@ -1,4 +1,4 @@
-import { renderDashboard } from './dashboard.js';
+import { renderDashboard, renderWorkspacePage } from './dashboard.js';
 /* باقي وحدات الأقسام تُحمَّل ديناميكيًا (import() عند الحاجة فقط) داخل openTile()
  * بدل تحميلها كلها مسبقًا عند فتح الصفحة - يقلل حجم التحميل الأولي بشكل كبير
  * لأن المستخدم غالبًا يفتح قسم أو قسمين بس بكل جلسة. */
@@ -456,45 +456,45 @@ export function budgetTileDesc() {
   return isFullBudget ? 'الإيرادات والمصروفات وطلبات الصرف' : 'تقديم طلب صرف فاتورة باسمك';
 }
 
-/* ===== القائمة الجانبية: الرئيسية + مساحات العمل وأقسامها ===== */
+/* ===== الشريط العلوي: الرئيسية + أزرار مساحات العمل (اتجاه «مساحات العمل») ===== */
 export function renderNav(){
   const nav = document.getElementById('nav-list');
-  let html = `<a href="#/" class="nav-item" data-key="home">${icons.home}<span>الرئيسية</span></a>`;
+  let html = `<a href="#/" class="tn-pill" data-nav="home">الرئيسية</a>`;
   GROUPS.forEach(g => {
-    const items = groupTilesFor(g.key);
-    if (!items.length) return;
-    html += `<div class="nav-group" data-group="${g.key}">
-      <div class="nav-group-label">${g.icon}<span>${g.title}</span></div>
-      ${items.map(t => `<a href="#/${t.key}" class="nav-item nav-sub" data-key="${t.key}"><span>${tileTitle(t)}</span></a>`).join('')}
-    </div>`;
+    if (!groupTilesFor(g.key).length) return;
+    html += `<a href="#/ws/${g.key}" class="tn-pill" data-nav="ws/${g.key}">${g.title}</a>`;
   });
   nav.innerHTML = html;
-  nav.querySelectorAll('.nav-item').forEach(el => {
+  nav.querySelectorAll('.tn-pill').forEach(el => {
     el.addEventListener('click', (e) => {
       e.preventDefault();
-      closeMobileNav();
-      const key = el.dataset.key;
-      if (key === 'home') backToTiles();
-      else { const t = tiles.find(x => x.key === key); openTile(key, t ? tileTitle(t) : ''); }
+      const k = el.dataset.nav;
+      if (k === 'home') backToTiles(); else openWorkspace(k.slice(3));
     });
   });
   setActiveNavByKey(activeRouteKey || 'home');
 }
 export function setActiveNav(el){ if (el && el.dataset && el.dataset.key) setActiveNavByKey(el.dataset.key); }
+// الزر النشط: الرئيسية، أو مساحة العمل نفسها، أو مساحة العمل اللي ينتمي لها القسم المفتوح
 export function setActiveNavByKey(key){
-  document.querySelectorAll('#nav-list .nav-item').forEach(n => {
-    const on = n.dataset.key === key;
+  let navKey = 'home';
+  if (key && key.startsWith('ws/')) navKey = key;
+  else if (key && key !== 'home') { const t = tiles.find(x => x.key === key); if (t && t.group) navKey = 'ws/' + t.group; }
+  document.querySelectorAll('#nav-list .tn-pill').forEach(n => {
+    const on = n.dataset.nav === navKey;
     n.classList.toggle('active', on);
     if (on) n.setAttribute('aria-current', 'page'); else n.removeAttribute('aria-current');
   });
+  const act = document.querySelector('#nav-list .tn-pill.active');
+  if (act && act.scrollIntoView && window.innerWidth < 900) act.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
 
-/* ===== روابط الأقسام (#/exams ...) - التحديث يرجعك لنفس القسم، وزر الرجوع بالمتصفح يشتغل ===== */
+/* ===== روابط الأقسام (#/exams ، #/ws/exams ...) - التحديث يرجعك لنفس الصفحة، وزر الرجوع بالمتصفح يشتغل ===== */
 let activeRouteKey = 'home';
 let routingFromHistory = false;
 function routeKeyFromHash() {
-  const m = (location.hash || '').match(/^#\/([\w-]*)/);
-  return m && m[1] ? m[1] : 'home';
+  const m = (location.hash || '').match(/^#\/([\w\/-]*)/);
+  return m && m[1] ? m[1].replace(/\/+$/, '') : 'home';
 }
 function pushRoute(key) {
   activeRouteKey = key;
@@ -505,23 +505,51 @@ function pushRoute(key) {
 function routeFromHash(initial = false) {
   const key = routeKeyFromHash();
   const t = tiles.find(x => x.key === key);
+  const wsKey = key.startsWith('ws/') ? key.slice(3) : null;
+  const wsOk = wsKey && groupTilesFor(wsKey).length > 0;
   routingFromHistory = true;
   try {
     if (t && isTileAllowed(t)) openTile(key, tileTitle(t));
+    else if (wsOk) openWorkspace(wsKey);
     else if (!initial || key !== 'home') { if (key !== 'home') history.replaceState({ key: 'home' }, '', '#/'); if (!initial) backToTiles(); }
   } finally { routingFromHistory = false; }
-  if (!(t && isTileAllowed(t))) { activeRouteKey = 'home'; setActiveNavByKey('home'); }
+  if (!(t && isTileAllowed(t)) && !wsOk) { activeRouteKey = 'home'; setActiveNavByKey('home'); }
 }
 window.addEventListener('popstate', () => { if (currentProfile && !document.getElementById('dashboard-screen').classList.contains('hidden')) routeFromHash(false); });
 
-/* ===== القائمة على الجوال (درج جانبي) ===== */
-function closeMobileNav() { document.body.classList.remove('nav-open'); }
-document.getElementById('menu-btn').addEventListener('click', () => document.body.classList.toggle('nav-open'));
-document.getElementById('sidebar-overlay').addEventListener('click', closeMobileNav);
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMobileNav(); });
+/* ===== صفحة مساحة العمل: أقسامها كبطاقات + سطر حالة ===== */
+export function openWorkspace(groupKey) {
+  const g = GROUPS.find(x => x.key === groupKey);
+  if (!g || !groupTilesFor(groupKey).length) { backToTiles(); return; }
+  hideAllModules();
+  document.getElementById('module-header').classList.add('hidden');
+  pushRoute('ws/' + groupKey);
+  setActiveNavByKey('ws/' + groupKey);
+  document.title = `${g.title} · منصة المدرسة`;
+  window.scrollTo(0, 0);
+  const view = document.getElementById('ws-view');
+  view.classList.remove('hidden');
+  renderWorkspacePage(groupKey, view);
+}
+
+/* ===== قائمة الحساب (الاسم، تبديل المدرسة، الخروج) ===== */
+function closeUserMenu() {
+  document.getElementById('user-menu').classList.add('hidden');
+  document.getElementById('user-menu-btn').setAttribute('aria-expanded', 'false');
+}
+document.getElementById('user-menu-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  const m = document.getElementById('user-menu');
+  const open = m.classList.toggle('hidden') === false;
+  document.getElementById('user-menu-btn').setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('.tn-user')) closeUserMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeUserMenu(); });
+document.getElementById('tn-brand').addEventListener('click', (e) => { e.preventDefault(); backToTiles(); });
 
 export function hideAllModules() {
   document.getElementById('tiles-view').classList.add('hidden');
+  document.getElementById('ws-view').classList.add('hidden');
   document.getElementById('notes-module').classList.add('hidden');
   document.getElementById('weekly-module').classList.add('hidden');
   document.getElementById('weekly-tracking-module').classList.add('hidden');
@@ -554,9 +582,11 @@ function renderModuleHeader(key) {
   if (key === 'duty' && currentProfile.role === 'teacher') desc = 'المناوبة المسندة لي';
   if (key === 'budget') { title = budgetTileTitle(); desc = budgetTileDesc(); }
   const g = GROUPS.find(x => x.key === t.group);
-  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div>${g ? `<div class="crumb"><a href="#/">الرئيسية</a> / ${g.title}</div>` : ''}<h2>${title}</h2><p>${desc}</p></div>`;
-  const home = header.querySelector('.crumb a');
-  if (home) home.addEventListener('click', (e) => { e.preventDefault(); backToTiles(); });
+  header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div>${g ? `<div class="crumb"><a href="#/" data-crumb="home">الرئيسية</a> / <a href="#/ws/${g.key}" data-crumb="${g.key}">${g.title}</a></div>` : ''}<h2>${title}</h2><p>${desc}</p></div>`;
+  header.querySelectorAll('.crumb a').forEach(a => a.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (a.dataset.crumb === 'home') backToTiles(); else openWorkspace(a.dataset.crumb);
+  }));
   header.classList.remove('hidden');
 }
 
