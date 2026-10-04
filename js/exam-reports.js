@@ -1,6 +1,7 @@
 import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
 import { initAnswerSheetCard, fetchSavedKeys } from './answer-sheet.js';
+import { initOverlayCard } from './overlay-print.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
 
@@ -310,6 +311,7 @@ export async function loadExamReportsModule() {
   document.getElementById('er-file').value = '';
   parsedData = null;
   initAnswerSheetCard();
+  initOverlayCard();
   await loadSavedList();
 }
 

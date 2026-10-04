@@ -673,43 +673,40 @@ function scopeFileLabel() {
   return scope === 'grade' ? ` - ${g}` : ` - ${g} ${$('as-section').value}`;
 }
 
-async function downloadPdf(builtOverride) {
-  let built = builtOverride;
-  if (!built) { try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; } }
-  const { pg } = built;
-  const btns = [$('as-print-btn'), $('as-pdf-btn'), $('as-key-print-btn'), $('as-key-pdf-btn')];
-  btns.forEach(b => { b.disabled = true; });
+/* يحوّل صفحات HTML (كل صفحة عنصر بالكلاس pageSelector وبأبعاد w×h مم) لملف PDF:
+ * كل صفحة تُصوَّر كصورة، والباركود يُرسم فوقها كخطوط متجهة حادة (أوضح بالسكانر).
+ * مستخدمة هنا ومن "الطباعة على النموذج المعتمد". */
+export async function htmlPagesToPdf({ html, styles, w, h, pageSelector, filename, onStatus = () => {} }) {
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
-  iframe.style.cssText = `position:fixed; top:0; left:0; width:${pg.w}mm; height:${pg.h}mm; border:0; opacity:0; pointer-events:none; z-index:-9999;`;
+  iframe.style.cssText = `position:fixed; top:0; left:0; width:${w}mm; height:${h}mm; border:0; opacity:0; pointer-events:none; z-index:-9999;`;
   document.body.appendChild(iframe);
   try {
     if (!window.html2canvas) await loadLib('html2canvas');
     if (!window.jspdf) await loadLib('jspdf');
     const idoc = iframe.contentDocument;
     idoc.open();
-    idoc.write(`<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:${pg.w}mm;} ${SHEET_STYLES}</style></head><body>${built.html}</body></html>`);
+    idoc.write(`<!doctype html><html><head><meta charset="utf-8"><style>html,body{width:${w}mm;} ${styles}</style></head><body>${html}</body></html>`);
     idoc.close();
     await Promise.all([...idoc.images].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; })));
     await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
 
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ unit: 'mm', format: pg.pdfFormat, orientation: pg.orientation, compress: true });
-    const pages = [...idoc.querySelectorAll('.as-page')];
+    const orientation = w > h ? 'landscape' : 'portrait';
+    const pdf = new jsPDF({ unit: 'mm', format: [w, h], orientation, compress: true });
+    const pages = [...idoc.querySelectorAll(pageSelector)];
     for (let i = 0; i < pages.length; i++) {
-      setStatus(`جارٍ تجهيز الصفحة ${i + 1} من ${pages.length}...`);
-      // الباركود يُرسم بالـ PDF كخطوط متجهة (vector) بدل ما يكون جزء من الصورة - الصورة تنعّم حواف
-      // الخطوط الرفيعة وتصعّب قراءتها بالسكانر. نخفيه وقت التصوير ونرسمه بعدين بنفس موقعه بالضبط.
+      onStatus(`جارٍ تجهيز الصفحة ${i + 1} من ${pages.length}...`);
       const pageRect = pages[i].getBoundingClientRect();
-      const pxPerMm = pageRect.width / pg.w;
+      const pxPerMm = pageRect.width / w;
       const bcs = [...pages[i].querySelectorAll('svg.as-bc')].map(svg => {
         const r = svg.getBoundingClientRect();
         svg.style.visibility = 'hidden';
         return { code: svg.dataset.code, x: (r.left - pageRect.left) / pxPerMm, y: (r.top - pageRect.top) / pxPerMm, w: r.width / pxPerMm, h: r.height / pxPerMm };
       });
       const canvas = await window.html2canvas(pages[i], { scale: 3, backgroundColor: '#ffffff', useCORS: true, windowWidth: pages[i].scrollWidth, windowHeight: pages[i].scrollHeight });
-      if (i > 0) pdf.addPage(pg.pdfFormat, pg.orientation);
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, pg.w, pg.h, undefined, 'FAST');
+      if (i > 0) pdf.addPage([w, h], orientation);
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h, undefined, 'FAST');
       pdf.setFillColor(0, 0, 0);
       bcs.forEach(bc => {
         const { modules, totalModules } = code128Modules(bc.code);
@@ -718,14 +715,27 @@ async function downloadPdf(builtOverride) {
         modules.forEach((m, k) => { if (k % 2 === 0) pdf.rect(x, bc.y, m * unit, bc.h, 'F'); x += m * unit; });
       });
     }
+    pdf.save(filename);
+    return pages.length;
+  } finally {
+    iframe.remove();
+  }
+}
+
+async function downloadPdf(builtOverride) {
+  let built = builtOverride;
+  if (!built) { try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; } }
+  const { pg } = built;
+  const btns = [$('as-print-btn'), $('as-pdf-btn'), $('as-key-print-btn'), $('as-key-pdf-btn')];
+  btns.forEach(b => { b.disabled = true; });
+  try {
     const base = ((built.o.title || 'ورقة الإجابة') + (built.isKey ? ' - نموذج الإجابة' : scopeFileLabel())).replace(/[\\/:*?"<>|]+/g, ' ').trim();
-    pdf.save(`${base}.pdf`);
-    setStatus(`تم تحميل ${pages.length} صفحة${pg.perPage === 2 ? ` (${built.sheets} ورقة طالب)` : ''} ✓`);
+    const n = await htmlPagesToPdf({ html: built.html, styles: SHEET_STYLES, w: pg.w, h: pg.h, pageSelector: '.as-page', filename: `${base}.pdf`, onStatus: m => setStatus(m) });
+    setStatus(`تم تحميل ${n} صفحة${pg.perPage === 2 ? ` (${built.sheets} ورقة طالب)` : ''} ✓`);
   } catch (e) {
     console.error(e);
     setStatus('تعذر إنشاء PDF: ' + (e.message || e), true);
   } finally {
-    iframe.remove();
     btns.forEach(b => { b.disabled = false; });
   }
 }
