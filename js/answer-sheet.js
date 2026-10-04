@@ -174,6 +174,7 @@ export const SHEET_STYLES = `
   .as-cell.lbl { background:#e9e9e9; font-weight:700; justify-content:center; padding:0 1mm; }
   .as-cell.val { font-weight:700; }
   .as-bubble { position:absolute; border:0.3mm solid #000; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#a0a0a0; font-weight:700; line-height:1; }
+  .as-bubble.fill { background:#000 !important; color:#000; }
   .as-num { position:absolute; font-weight:700; display:flex; align-items:center; justify-content:center; }
   .as-instr { position:absolute; display:flex; align-items:center; justify-content:center; gap:2.5mm; border:0.25mm solid #000; border-radius:1.5mm; padding:0 2.5mm; white-space:nowrap; }
   .as-ex { display:inline-block; border:0.3mm solid #000; border-radius:50%; vertical-align:middle; text-align:center; }
@@ -284,7 +285,8 @@ function buildSheetBody(opts, student, logoSrc, ox) {
       h += `<div class="as-num" style="left:${mm(X(P.side + colStart + P.colPad, P.numW))}; top:${mm(yTop)}; width:${mm(P.numW)}; height:${mm(L.rowH)}; font-size:${P.numSize}pt; direction:ltr;">${q}</div>`;
       letters.forEach((letter, i) => {
         const bx = P.side + colStart + P.colPad + P.numW + i * P.pitch + (P.pitch - P.bubble) / 2;
-        h += `<div class="as-bubble" style="left:${mm(X(bx, P.bubble))}; top:${mm(yMid - P.bubble / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize}pt;">${letter}</div>`;
+        const filled = opts.keyFill && opts.keyFill[q - 1] === i;
+        h += `<div class="as-bubble${filled ? ' fill' : ''}" style="left:${mm(X(bx, P.bubble))}; top:${mm(yMid - P.bubble / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize}pt;">${letter}</div>`;
       });
     }
   }
@@ -315,9 +317,11 @@ function buildSheetBody(opts, student, logoSrc, ox) {
       if (row.label) {
         h += `<div class="as-essay-strip" ${dirA} style="background:none; border:0; left:${mm(X(P.side + startOff - rowLblW, rowLblW))}; top:${mm(yMid - 2.5)}; width:${mm(rowLblW)}; height:5mm;"><span class="q" style="${rtl ? 'left' : 'right'}:1mm; font-size:${P.instrSize - 0.5}pt; font-weight:400;">${row.label}</span></div>`;
       }
+      // ورقة النموذج: يُظلَّل المجموع الكامل (الدرجة القصوى) - صف العشرات بعشرات الدرجة والآحاد بآحادها
+      const fillVal = opts.keyFill ? (L.twoRows ? (ri === 0 ? Math.floor(essayTotal / 10) * 10 : essayTotal % 10) : essayTotal) : null;
       row.values.forEach((v, i) => {
         const bx = P.side + startOff + i * P.pitch + (P.pitch - P.bubble) / 2;
-        h += `<div class="as-bubble" style="left:${mm(X(bx, P.bubble))}; top:${mm(yMid - P.bubble / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize - (String(v).length > 1 ? 1 : 0)}pt; background:#fff;">${v}</div>`;
+        h += `<div class="as-bubble${fillVal === v ? ' fill' : ''}" style="left:${mm(X(bx, P.bubble))}; top:${mm(yMid - P.bubble / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize - (String(v).length > 1 ? 1 : 0)}pt; background:#fff;">${v}</div>`;
       });
     });
     for (let y = top + L.stripH + P.essayLineGap; y < top + L.essayBoxH - 2; y += P.essayLineGap) {
@@ -504,9 +508,53 @@ function renderPreview() {
   }
 }
 
-function printSheets() {
-  let built;
-  try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; }
+/* ================= مفتاح الإجابة (ورقة النموذج) =================
+ * المعلم يحدد الإجابة الصحيحة لكل سؤال، ونطبع له "ورقة نموذج": نفس الورقة بالضبط، الإجابات الصحيحة
+ * مظللة، ورقم الهوية 0000000000. يمسحها مع أوراق الطلاب، وملف Remark يطلع فيه صف بهوية أصفار -
+ * وقسم تقارير الاختبارات يتعرف عليه تلقائيًا كمفتاح إجابة ويستبعده من الطلاب. */
+const KEY_ID = '0000000000';
+let keyAnswers = []; // لكل سؤال: رقم الخيار الصحيح (0 = أ) أو null
+
+function renderKeyGrid() {
+  const o = readOptions();
+  const n = Math.max(0, o.questions);
+  keyAnswers = Array.from({ length: n }, (_, i) => (keyAnswers[i] != null && keyAnswers[i] < o.choices ? keyAnswers[i] : null));
+  const letters = (o.lang === 'en' ? EN_LETTERS : AR_LETTERS).slice(0, o.choices);
+  const grid = $('as-key-grid');
+  if (!n) { grid.innerHTML = '<span style="font-size:12px; color:var(--slate);">ما فيه أسئلة اختيار من متعدد</span>'; updateKeyStatus(); return; }
+  grid.innerHTML = keyAnswers.map((sel, q) => `
+    <div class="as-key-q" style="display:flex; align-items:center; gap:4px; background:#fff; border:1px solid var(--border); border-radius:9px; padding:4px 6px;">
+      <b style="min-width:20px; font-size:12px; text-align:center;">${q + 1}</b>
+      ${letters.map((l, c) => `<button type="button" class="as-key-btn" data-q="${q}" data-c="${c}" style="width:26px; height:26px; border-radius:50%; border:1.5px solid ${sel === c ? 'var(--meadow)' : '#C9CED8'}; background:${sel === c ? 'var(--meadow)' : '#fff'}; color:${sel === c ? '#fff' : 'var(--ink)'}; font-size:12px; font-weight:700; padding:0; cursor:pointer;">${l}</button>`).join('')}
+    </div>`).join('');
+  updateKeyStatus();
+}
+
+function updateKeyStatus() {
+  const missing = keyAnswers.filter(v => v == null).length;
+  const el = $('as-key-status');
+  el.style.color = 'var(--slate)';
+  el.textContent = keyAnswers.length
+    ? (missing ? `باقي ${missing} سؤال بدون إجابة` : `المفتاح مكتمل (${keyAnswers.length} سؤال) ✓`)
+    : '';
+}
+
+function buildKeyPages() {
+  const o = readOptions();
+  if ((!o.questions || o.questions < 1) && !o.essayTotal) throw new Error('حدد عدد الأسئلة');
+  const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices, essayTotal: o.essayTotal });
+  if (!L.ok) throw new Error(L.error);
+  const missing = keyAnswers.map((v, i) => (v == null ? i + 1 : null)).filter(Boolean);
+  if (missing.length) throw new Error(`حدد الإجابة الصحيحة لكل الأسئلة - الناقصة: ${missing.slice(0, 12).join('، ')}${missing.length > 12 ? '...' : ''}`);
+  const pg = PAGE[o.size];
+  const keyStudent = { full_name: o.lang === 'en' ? 'ANSWER KEY' : 'نموذج الإجابة (المفتاح)', national_id: KEY_ID, grade_level: o.withBarcode && $('as-scope').value !== 'school' ? $('as-grade').value : '', class_section: null };
+  const opts = { ...o, keyFill: keyAnswers.slice() };
+  return { o: opts, pg, sheets: 1, count: 1, html: buildPrintPage(opts, [keyStudent], logoUrl()), isKey: true };
+}
+
+function printSheets(builtOverride) {
+  let built = builtOverride;
+  if (!built) { try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; } }
   const { pg } = built;
   const win = window.open('', '_blank');
   if (!win) { setStatus('اسمح بفتح النوافذ المنبثقة للطباعة', true); return; }
@@ -516,7 +564,9 @@ function printSheets() {
   win.document.close();
   const go = () => { win.focus(); win.print(); };
   Promise.all([...win.document.images].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))).then(() => setTimeout(go, 200));
-  setStatus(`جاهز للطباعة: ${built.count} صفحة${pg.perPage === 2 ? ` (${built.sheets} ورقة طالب بعد القص)` : ''}. اطبع بالحجم الفعلي 100% وبدون رؤوس وتذييلات.`);
+  setStatus(built.isKey
+    ? 'ورقة النموذج جاهزة للطباعة - امسحها مع أوراق الطلاب (مرة وحدة بس).'
+    : `جاهز للطباعة: ${built.count} صفحة${pg.perPage === 2 ? ` (${built.sheets} ورقة طالب بعد القص)` : ''}. اطبع بالحجم الفعلي 100% وبدون رؤوس وتذييلات.`);
 }
 
 /* ---------- تحميل PDF (صورة عالية الدقة لكل صفحة) ---------- */
@@ -545,11 +595,11 @@ function scopeFileLabel() {
   return scope === 'grade' ? ` - ${g}` : ` - ${g} ${$('as-section').value}`;
 }
 
-async function downloadPdf() {
-  let built;
-  try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; }
+async function downloadPdf(builtOverride) {
+  let built = builtOverride;
+  if (!built) { try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; } }
   const { pg } = built;
-  const btns = [$('as-print-btn'), $('as-pdf-btn')];
+  const btns = [$('as-print-btn'), $('as-pdf-btn'), $('as-key-print-btn'), $('as-key-pdf-btn')];
   btns.forEach(b => { b.disabled = true; });
   const iframe = document.createElement('iframe');
   iframe.setAttribute('aria-hidden', 'true');
@@ -590,7 +640,7 @@ async function downloadPdf() {
         modules.forEach((m, k) => { if (k % 2 === 0) pdf.rect(x, bc.y, m * unit, bc.h, 'F'); x += m * unit; });
       });
     }
-    const base = ((built.o.title || 'ورقة الإجابة') + scopeFileLabel()).replace(/[\\/:*?"<>|]+/g, ' ').trim();
+    const base = ((built.o.title || 'ورقة الإجابة') + (built.isKey ? ' - نموذج الإجابة' : scopeFileLabel())).replace(/[\\/:*?"<>|]+/g, ' ').trim();
     pdf.save(`${base}.pdf`);
     setStatus(`تم تحميل ${pages.length} صفحة${pg.perPage === 2 ? ` (${built.sheets} ورقة طالب)` : ''} ✓`);
   } catch (e) {
@@ -621,12 +671,29 @@ export function initAnswerSheetCard() {
     refresh();
   });
   ['as-scope', 'as-grade', 'as-section'].forEach(id => $(id).addEventListener('change', refresh));
-  $('as-print-btn').addEventListener('click', printSheets);
-  $('as-pdf-btn').addEventListener('click', downloadPdf);
+  $('as-print-btn').addEventListener('click', () => printSheets());
+  $('as-pdf-btn').addEventListener('click', () => downloadPdf());
+  $('as-key-grid').addEventListener('click', (e) => {
+    const b = e.target.closest('.as-key-btn');
+    if (!b) return;
+    const q = +b.dataset.q, c = +b.dataset.c;
+    keyAnswers[q] = keyAnswers[q] === c ? null : c;
+    renderKeyGrid();
+  });
+  const keyAction = (fn) => () => {
+    let built;
+    try { built = buildKeyPages(); } catch (e) { const el = $('as-key-status'); el.textContent = e.message; el.style.color = 'var(--danger)'; return; }
+    fn(built);
+  };
+  $('as-key-print-btn').addEventListener('click', keyAction(printSheets));
+  $('as-key-pdf-btn').addEventListener('click', keyAction(downloadPdf));
+  $('as-key-clear-btn').addEventListener('click', () => { keyAnswers = []; renderKeyGrid(); });
+  ['as-questions', 'as-choices', 'as-lang'].forEach(id => $(id).addEventListener('input', renderKeyGrid));
+  ['as-choices', 'as-lang'].forEach(id => $(id).addEventListener('change', renderKeyGrid));
   $('as-toggle-btn').addEventListener('click', () => {
     const open = $('as-body').classList.toggle('hidden') === false;
     $('as-toggle-btn').textContent = open ? 'إخفاء' : 'تصميم ورقة';
-    if (open) refresh();
+    if (open) { refresh(); renderKeyGrid(); }
   });
   updateLimitHint();
 }

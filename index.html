@@ -1055,6 +1055,20 @@
                   </div>
                 </div>
 
+                <div style="border:1.5px dashed var(--border); border-radius:10px; padding:11px 12px; margin-bottom:12px;">
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                    <span style="font-size:13.5px; font-weight:700;">مفتاح الإجابة (ورقة النموذج)</span>
+                    <button type="button" class="text-action-btn" id="as-key-clear-btn" style="width:auto; padding:4px 8px; font-size:12px;">مسح</button>
+                  </div>
+                  <p style="font-size:11.5px; color:var(--slate); margin:4px 0 8px;">اضغط الإجابة الصحيحة لكل سؤال، واطبع ورقة النموذج: نفس الورقة بالإجابات مظللة ورقم الهوية 0000000000. امسحها مع أوراق الطلاب، ولما ترفع ملف Remark هنا بالتقارير يتعرف عليها ويطبّق المفتاح تلقائيًا.</p>
+                  <div id="as-key-grid" style="display:flex; flex-wrap:wrap; gap:6px; max-height:260px; overflow-y:auto;"></div>
+                  <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+                    <button class="btn-secondary" id="as-key-print-btn" style="width:auto; padding:8px 14px;">طباعة ورقة النموذج</button>
+                    <button class="btn-secondary" id="as-key-pdf-btn" style="width:auto; padding:8px 14px;">تحميل PDF النموذج</button>
+                    <span id="as-key-status" style="font-size:12px;"></span>
+                  </div>
+                </div>
+
                 <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; background:var(--sand); border-radius:10px; padding:11px 12px; cursor:pointer;">
                   <input type="checkbox" id="as-barcode" style="width:auto; margin:0;" />
                   إضافة باركود باسم الطالب (ورقة خاصة لكل طالب)
