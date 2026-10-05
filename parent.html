@@ -39,8 +39,10 @@
     background:#fff; border:1px solid #E7E8EC; border-inline-start:4px solid var(--meadow);
     display:flex; align-items:center; gap:14px; min-height:0;
   }
-  .hero img{ height:42px; max-width:92px; object-fit:contain; background:#fff; border-radius:8px; padding:4px 6px; flex-shrink:0; }
-  @media (max-width:400px){ .hero img{ height:34px; max-width:64px; padding:2px; } .hero h1{ white-space:nowrap; } }
+  .hero-brand{ display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; }
+  .hero-brand #hero-logo{ height:40px; max-width:84px; object-fit:contain; display:block; }
+  .hero-brand .hero-word{ height:10px; width:auto; display:block; opacity:.75; }
+  @media (max-width:400px){ .hero-brand #hero-logo{ height:34px; max-width:64px; } .hero-brand .hero-word{ height:9px; } .hero h1{ white-space:nowrap; } }
   .hero h1{ font-size:16.5px; font-weight:800; color:var(--ink); }
   @media (max-width:400px){ .hero h1{ font-size:15px; } .hero{ gap:10px; padding:12px 14px; } }
   .hero > div{ min-width:0; }
@@ -289,7 +291,10 @@
 
 <div id="screen">
   <div class="hero">
-    <img id="hero-logo" class="hidden-view" alt="" />
+    <div class="hero-brand">
+      <img id="hero-logo" src="logo.png" alt="" />
+      <img class="hero-word" src="wordmark.svg" alt="مُدار Mudaar" />
+    </div>
     <div>
       <h1>خطة الأسبوع الدراسي</h1>
       <p class="sub" id="hero-school-name">&nbsp;</p>
@@ -447,10 +452,10 @@ async function resolveSchool() {
     const nameEl = document.getElementById('hero-school-name');
     if (nameEl) nameEl.textContent = data.name;
     document.title = 'خطة الأسبوع - ' + data.name;
-    // شعار المدرسة فقط (بدون شعار جهة) - وبدونه ما نعرض أيقونة
+    // شعار المدرسة لو مرفوع، وإلا شعار الكتاب (وتحته مُدار صغير)
     const logo = (data.branding && data.branding.school_logo) || null;
     const logoEl = document.getElementById('hero-logo');
-    if (logoEl && logo) { logoEl.src = logo; logoEl.alt = 'شعار ' + data.name; logoEl.classList.remove('hidden-view'); }
+    if (logoEl && logo) { logoEl.src = logo; logoEl.alt = 'شعار ' + data.name; }
     const inst = document.getElementById('hero-install');
     if (inst && !isStandaloneApp()) {
       inst.href = 'install.html?app=parent&school=' + encodeURIComponent(slug);

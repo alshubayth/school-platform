@@ -28,6 +28,9 @@
   .site-foot{ display:flex; align-items:center; justify-content:center; gap:8px; color:#9AA3B2; font-size:12px; font-weight:600; padding:0 16px 26px; }
   .site-foot img{ height:16px; width:auto; opacity:.5; }
   @media print{ .site-foot{ display:none !important; } }
+  .hero img.book-logo{ width:72px; }
+  .logo-stack{ display:flex; flex-direction:column; align-items:center; gap:6px; flex-shrink:0; }
+  .hero .logo-stack img.stack-word{ width:auto; height:12px; opacity:.8; }
   .hero img.school-logo{ width:64px; height:64px; object-fit:contain; background:#fff; border-radius:16px; padding:6px; }
   .hero img.school-icon{ filter:brightness(0) invert(1); }
   .hero .made-mark{ position:absolute; left:16px; bottom:56px; width:auto; height:16px; opacity:.55; }
@@ -210,15 +213,20 @@
     // الواجهة باسم المدرسة وشعارها، و«مُدار» توقيع صغير على الجنب
     document.getElementById('share-h').textContent = 'شاركها مع أولياء الأمور';
     document.getElementById('share-p').textContent = 'يصوّرون الرمز بكاميرا الجوال وتفتح لهم هذي الصفحة. أو أرسل الرابط في مجموعات الفصول، أو اطبع ملصق وعلّقه عند مدخل المدرسة.';
-    document.getElementById('made-mark').classList.remove('hidden');
+    // مُدار صغير تحت الشعار (نفس صفحة الخطة)
+    const hl = document.getElementById('h-logo');
+    const stack = document.createElement('div'); stack.className = 'logo-stack';
+    hl.parentNode.insertBefore(stack, hl); stack.appendChild(hl);
+    const word = document.createElement('img'); word.src = 'wordmark-white.svg'; word.alt = 'مُدار Mudaar'; word.className = 'stack-word';
+    stack.appendChild(word);
     document.getElementById('p-credit').classList.remove('hidden');
     document.querySelector('link[rel="icon"]').href = 'parent-favicon.svg';
     document.querySelector('link[rel="apple-touch-icon"]').href = 'icon-parent-192.png';
     const setLogo = (src, cls, alt) => ['h-logo', 'p-logo'].forEach(id => {
       const el = document.getElementById(id); el.src = src; el.alt = alt; el.className = cls;
     });
-    // شعار المدرسة فقط لو مرفوع، وإلا بدون أيقونة
-    ['h-logo', 'p-logo'].forEach(id => document.getElementById(id).classList.add('hidden'));
+    // شعار المدرسة لو مرفوع، وإلا شعار الكتاب
+    setLogo('logo-white.png', 'book-logo', '');
     if (school) {
       fetch('https://sovfrlvcvcyjcyauurpl.supabase.co/rest/v1/schools?select=name,branding&slug=eq.' + encodeURIComponent(school),
         { headers: { apikey: 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA' } })
