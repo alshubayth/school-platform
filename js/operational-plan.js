@@ -146,8 +146,8 @@ async function refreshStructureCaches() {
 async function loadOpPlanAdminData() {
   await refreshStructureCaches();
 
-  const semSel = document.getElementById('opplan-semester-select');
-  if (semSel) semSel.value = currentSemester;
+  const semLbl = document.getElementById('opplan-semester-label');
+  if (semLbl) semLbl.textContent = durationLabels[currentSemester] || 'الفصل الأول';
 
   // كل الموظفين (لإضافة مشاركين جدد من تبويب "الموظفين")
   const { data: allStaff } = await readScopedBySchool(scoped => {
@@ -172,17 +172,7 @@ async function loadOpPlanAdminData() {
   await renderOpPlanGuide();
 }
 
-onEl('opplan-semester-select', 'change', async (e) => {
-  const val = e.target.value;
-  if (currentSchoolId) {
-    const { error } = await sb.from('op_plan_settings')
-      .upsert({ school_id: currentSchoolId, current_semester: val, updated_by: currentUserId }, { onConflict: 'school_id' });
-    if (error) await sb.from('op_plan_settings').update({ current_semester: val, updated_by: currentUserId }).eq('id', 1);
-  } else {
-    await sb.from('op_plan_settings').update({ current_semester: val, updated_by: currentUserId }).eq('id', 1);
-  }
-  currentSemester = val;
-});
+// الفصل الدراسي الحالي يتغيّر من الإعدادات ← التقويم الدراسي
 
 // فلتر داشبورد المدير: هدف استراتيجي/تشغيلي مختار حاليًا (null = بدون فلتر) - يُطبّق على شبكة
 // البرامج بالأسفل فقط

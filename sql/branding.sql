@@ -3,7 +3,7 @@
 -- =====================================================================
 -- 1) عمود branding بجدول المدارس (يُقرأ مع اسم المدرسة، ومنه صفحة أولياء الأمور تاخذ الشعار)
 -- 2) دالة set_school_branding: المدير يعدّل هوية مدرسته فقط، والمالك أي مدرسة
--- 3) مدرسة المروج تاخذ هويتها الحالية (الاسم المختصر + الهيئة الملكية) فما يتغير شي
+-- 3) مدرسة المروج تاخذ هويتها الحالية (الاسم المختصر + الهيئة الملكية + اسم المدير) فما يتغير شي
 -- يتنفّذ كامل أو ما يتنفّذ شي. للتراجع: sql/branding_rollback.sql
 -- =====================================================================
 begin;
@@ -37,7 +37,7 @@ revoke all on function public.set_school_branding(uuid, text, jsonb) from public
 grant execute on function public.set_school_branding(uuid, text, jsonb) to authenticated;
 
 update public.schools
-   set branding = '{"short_name": "مدرسة المروج", "authority": "rc"}'::jsonb
+   set branding = '{"short_name": "مدرسة المروج", "authority": "rc", "principal_name": "منيف بن محمد النفيعي"}'::jsonb
  where slug = 'al-murooj' and branding = '{}'::jsonb;
 
 commit;

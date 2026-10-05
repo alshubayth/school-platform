@@ -12,6 +12,7 @@ export function initBrandPane() {
   draft = {
     name: schoolBrand.name || '',
     short: (schoolBrand.raw && schoolBrand.raw.short_name) || '',
+    principal: schoolBrand.principal || '',
     school_logo: schoolBrand.logo || null,
     authority: schoolBrand.authority || 'none',
     authority_name: (schoolBrand.raw && schoolBrand.raw.authority_name) || '',
@@ -19,6 +20,7 @@ export function initBrandPane() {
   };
   $('br-name').value = draft.name;
   $('br-short').value = draft.short;
+  $('br-principal').value = draft.principal;
   $('br-auth-name').value = draft.authority_name;
   $('br-error').style.display = 'none';
   $('br-saved').classList.add('hidden');
@@ -30,6 +32,7 @@ function bind() {
   bound = true;
   $('br-name').addEventListener('input', e => { draft.name = e.target.value; render(); });
   $('br-short').addEventListener('input', e => { draft.short = e.target.value; render(); });
+  $('br-principal').addEventListener('input', e => { draft.principal = e.target.value; render(); });
   $('br-auth-name').addEventListener('input', e => { draft.authority_name = e.target.value; render(); });
   $('br-authority').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { draft.authority = b.dataset.a; render(); }));
   $('br-school-logo-file').addEventListener('change', e => pickImage(e, url => { draft.school_logo = url; render(); }));
@@ -97,6 +100,7 @@ async function save() {
   if (!currentSchoolId) { err.textContent = 'ما فيه مدرسة محددة لهذا الحساب'; err.style.display = 'block'; return; }
   const branding = { authority: draft.authority };
   if (draft.short.trim()) branding.short_name = draft.short.trim();
+  if (draft.principal.trim()) branding.principal_name = draft.principal.trim();
   if (draft.school_logo) branding.school_logo = draft.school_logo;
   if (draft.authority === 'custom') {
     if (draft.authority_name.trim()) branding.authority_name = draft.authority_name.trim();

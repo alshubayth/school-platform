@@ -4,7 +4,6 @@ import { loadXLSX } from './lib-loader.js';
 
 // شعار الترويسة من هوية المدرسة (printLogo بملف core.js)
 
-setupCollapsible('exam-import-toggle', 'exam-import-body', 'exam-import-chevron');
 document.getElementById('exam-period-toggle').addEventListener('click', () => {
   const body = document.getElementById('exam-period-body');
   const open = body.classList.toggle('hidden') === false;
@@ -84,98 +83,6 @@ async function refreshStudentStats() {
   const total = counts.first_intermediate + counts.second_intermediate + counts.third_intermediate;
   container.innerHTML = `<span class="ess-total">${total} طالب</span>` + grades.map(g => `<span class="ess-chip">${gradeLabels[g]} <b>${counts[g]}</b></span>`).join('');
 }
-
-function normalizeGrade(raw) {
-  const s = String(raw || '').trim();
-  if (s.endsWith('730')) return 'first_intermediate';
-  if (s.endsWith('830')) return 'second_intermediate';
-  if (s.endsWith('930')) return 'third_intermediate';
-  return null;
-}
-
-document.getElementById('exam-import-btn').addEventListener('click', async () => {
-  const fileInput = document.getElementById('exam-import-file');
-  const errEl = document.getElementById('exam-import-error');
-  errEl.style.display = 'none';
-  const file = fileInput.files[0];
-  if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
-
-  await loadXLSX();
-  const reader = new FileReader();
-  reader.onload = async (e) => {
-    try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
-      let allRows = [];
-      wb.SheetNames.forEach(name => {
-        const sheet = wb.Sheets[name];
-        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-        allRows = allRows.concat(rows);
-      });
-
-      let headerIdx = -1, colIdx = {};
-      for (let i = 0; i < allRows.length; i++) {
-        const row = allRows[i];
-        const idx = row.findIndex(c => String(c).includes('اسم') && String(c).includes('طالب'));
-        if (idx !== -1) {
-          headerIdx = i;
-          row.forEach((cell, ci) => {
-            const c = String(cell).trim();
-            if (!c) return;
-            if (c.includes('اسم') && c.includes('طالب')) colIdx.name = ci;
-            else if (c.includes('هوية') || (c.includes('رقم') && c.includes('طالب'))) colIdx.nationalId = ci;
-            else if (c.includes('فصل')) colIdx.classSection = ci;
-            else if (c.includes('صف')) colIdx.grade = ci;
-            else if (c.includes('جوال') || c.includes('هاتف') || c.includes('موبايل')) colIdx.mobile = ci;
-          });
-          break;
-        }
-      }
-      if (headerIdx === -1) {
-        errEl.textContent = 'ما لقيت عمود "اسم الطالب" بالملف، تأكد من شكل الملف';
-        errEl.style.display = 'block';
-        return;
-      }
-
-      const students = [];
-      for (let i = headerIdx + 1; i < allRows.length; i++) {
-        const row = allRows[i];
-        const name = row[colIdx.name];
-        const nationalId = row[colIdx.nationalId];
-        const classSection = row[colIdx.classSection];
-        const gradeRaw = row[colIdx.grade];
-        const mobile = row[colIdx.mobile];
-        if (!name || !nationalId) continue;
-        const grade = normalizeGrade(gradeRaw);
-        if (!grade) continue;
-        students.push({
-          national_id: String(nationalId).trim(),
-          full_name: String(name).trim(),
-          mobile: mobile ? String(mobile).trim() : null,
-          grade_level: grade,
-          class_section: parseInt(classSection) || 0,
-          updated_at: new Date().toISOString(),
-        });
-      }
-
-      if (students.length === 0) {
-        errEl.textContent = 'ما لقيت أي صفوف طلاب صالحة بالملف';
-        errEl.style.display = 'block';
-        return;
-      }
-
-      const { error } = await writeWithSchool(extra => sb.from('students').upsert(students.map(s => ({ ...s, ...extra })), { onConflict: 'national_id' }));
-      if (error) { errEl.textContent = 'تعذر الاستيراد: ' + error.message; errEl.style.display = 'block'; return; }
-
-      alert(`تم استيراد ${students.length} طالب بنجاح`);
-      fileInput.value = '';
-      await refreshStudentStats();
-    } catch (err) {
-      errEl.textContent = 'تعذرت قراءة الملف: ' + err.message;
-      errEl.style.display = 'block';
-    }
-  };
-  reader.readAsArrayBuffer(file);
-});
 
 /* ---------- فترات الاختبار ---------- */
 document.getElementById('exam-period-add').addEventListener('click', async () => {

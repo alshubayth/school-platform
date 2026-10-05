@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, myBudgetAccess, setMyBudgetAccess, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo } from './core.js';
+import { sb, currentUserId, currentProfile, myBudgetAccess, setMyBudgetAccess, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo, schoolBrand } from './core.js';
 
 document.getElementById('back-to-tiles-13').addEventListener('click', backToTiles);
 
@@ -698,7 +698,6 @@ async function updateExpenseStatus(id, status) {
 /* ---------- طباعة السند (بيان الصرف) ---------- */
 // شعار الترويسة واسم المدرسة من هوية المدرسة (printLogo / printOrgName بملف core.js)
 const VOUCHER_ORG_SUB = '';
-const VOUCHER_MANAGER_NAME = 'منيف بن محمد النفيعي';
 
 function printVoucher(r, items, total) {
   const catName = r.budget_categories ? r.budget_categories.name : 'بدون بند';
@@ -791,7 +790,7 @@ function printVoucher(r, items, total) {
     </table>
 
     <div class="sign">
-      <div>اعتماد المدير<div class="box"><div class="name">${esc(VOUCHER_MANAGER_NAME)}</div><div class="line">التوقيع</div></div></div>
+      <div>اعتماد المدير<div class="box"><div class="name">${esc(schoolBrand.principal || '')}</div><div class="line">التوقيع</div></div></div>
       <div>استلام المبلغ<div class="box"><div class="name">${esc(r.beneficiary_name)}</div><div class="line">التوقيع</div></div></div>
     </div>
 

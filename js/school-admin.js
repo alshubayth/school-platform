@@ -6,7 +6,7 @@ import { sb, tiles } from './core.js';
  * اختبارات...) - بس بالتنقل بينها وبقائمة الخدمات الظاهرة لها. */
 
 // كل مفتاح خدمة ممكن تفعيله/تعطيله لمدرسة = نفس "key" بقائمة tiles، ما عدا تبويب إدارة المدارس نفسه
-const TOGGLABLE_MODULES = tiles.filter(t => t.key !== 'schools-admin');
+const TOGGLABLE_MODULES = tiles.filter(t => !['schools-admin', 'settings', 'perms', 'school-contacts'].includes(t.key));
 
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
 

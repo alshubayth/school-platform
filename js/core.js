@@ -47,6 +47,7 @@ export function setupCollapsible(toggleId, bodyId, chevronId) {
 }
 
 const icons = {
+  settings: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>',
   home: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>',
   plan: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v3M16 3v3"/></svg>',
   notes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/></svg>',
@@ -78,7 +79,7 @@ export const GROUPS = [
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
   { key: 'exams', title: 'الاختبارات', keys: ['exams', 'tracking', 'exam-reports'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>' },
-  { key: 'admin', title: 'الإدارة', keys: ['plan', 'admin-tasks', 'budget', 'computerlab', 'school-contacts', 'perms', 'schools-admin', 'more'],
+  { key: 'admin', title: 'الإدارة', keys: ['plan', 'admin-tasks', 'budget', 'computerlab', 'schools-admin', 'more'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 20V9"/></svg>' },
 ];
 
@@ -103,9 +104,10 @@ export const tiles = [
   { key: 'schools-admin', icon: icons.perms, title: 'إدارة المدارس والخدمات', desc: 'إضافة مدرسة جديدة وتفعيل خدماتها', roles: ['owner'], color: 'diamond-navy', group: 'admin' },
   { key: 'admin-tasks', icon: icons.admintasks, title: 'المهام الإدارية', desc: 'مهام كل أسبوع ومسؤول تنفيذها وحالتها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'admin' },
   { key: 'school-contacts', icon: icons.contacts, title: 'بيانات التواصل', desc: 'أرقام تواصل المدرسة اللي تظهر لولي الأمر', roles: ['admin','deputy'], color: 'diamond-green', group: 'admin' },
+  { key: 'settings', icon: icons.settings, title: 'الإعدادات', desc: 'بيانات المدرسة والطلاب والتقويم والحسابات', roles: ['admin','deputy'], color: 'diamond-navy' },
 ];
 // مساحة العمل لكل قسم تُستمد من GROUPS (مصدر واحد للترتيب والتجميع)
-tiles.forEach(t => { const g = GROUPS.find(x => x.keys.includes(t.key)); t.group = g ? g.key : 'admin'; });
+tiles.forEach(t => { const g = GROUPS.find(x => x.keys.includes(t.key)); t.group = g ? g.key : (t.key === 'settings' ? null : 'admin'); });
 export function groupTilesFor(groupKey) {
   const g = GROUPS.find(x => x.key === groupKey);
   return g ? g.keys.map(k => tiles.find(t => t.key === k)).filter(t => t && isTileAllowed(t)) : [];
@@ -260,7 +262,7 @@ export let isOwnerAccount = false;
 export const PLATFORM_NAME = 'لوحة المدرسة';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
-export let schoolBrand = { id: null, slug: null, name: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
+export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
 
 function brandFromRow(s) {
   const hasColumn = !!(s && Object.prototype.hasOwnProperty.call(s, 'branding'));
@@ -270,6 +272,8 @@ function brandFromRow(s) {
   return {
     id: s ? s.id : null, slug: s ? s.slug : null, raw: b, hasColumn,
     name: (s && s.name) || '',
+    // اسم مدير المدرسة (توقيع سند الصرف) - قبل ملف SQL الهوية نحافظ على الاسم السابق
+    principal: b.principal_name || (hasColumn ? '' : 'منيف بن محمد النفيعي'),
     short: b.short_name || (s && s.name) || PLATFORM_NAME,
     logo: b.school_logo || null,
     authority,
@@ -373,6 +377,9 @@ function finishShowingDashboard(schoolNameOverride) {
   document.getElementById('user-avatar').textContent = (currentProfile.full_name || '؟').trim().charAt(0);
   document.getElementById('switch-school-btn').classList.toggle('hidden', !isOwnerAccount);
   applyBrandToShell();
+  const gear = document.getElementById('settings-open-btn');
+  const st = tiles.find(x => x.key === 'settings');
+  gear.classList.toggle('hidden', !(st && isTileAllowed(st)));
   renderNav();
   renderDashboard();
   import('./search.js').then(m => m.initGlobalSearch()).catch(err => console.warn('search init failed', err));
@@ -524,7 +531,8 @@ export function isTileAllowed(t) {
   if (t.key === 'weekly-tracking' && role === 'teacher' && !hasWeeklyTrackingAccess) return false;
   // فلترة حسب الخدمات المفعّلة لهذي المدرسة (المرحلة الأولى من دعم تعدد المدارس) - لو ما فيه
   // قائمة خدمات محمّلة (توافق خلفي، أو قبل تنفيذ SQL الترقية) نسمح بعرض كل شي زي ما هو
-  if (Array.isArray(currentSchoolModules) && !currentSchoolModules.includes(t.key)) return false;
+  // الإعدادات أساسية لكل مدرسة، ما تنطفي من قائمة الخدمات
+  if (t.key !== 'settings' && Array.isArray(currentSchoolModules) && !currentSchoolModules.includes(t.key)) return false;
   return true;
 }
 
@@ -562,7 +570,7 @@ export function setActiveNav(el){ if (el && el.dataset && el.dataset.key) setAct
 export function setActiveNavByKey(key){
   let navKey = 'home';
   if (key && key.startsWith('ws/')) navKey = key;
-  else if (key && key !== 'home') { const t = tiles.find(x => x.key === key); if (t && t.group) navKey = 'ws/' + t.group; }
+  else if (key && key !== 'home') { const t = tiles.find(x => x.key === key); navKey = t && t.group ? 'ws/' + t.group : 'none'; }
   document.querySelectorAll('#nav-list .tn-pill').forEach(n => {
     const on = n.dataset.nav === navKey;
     n.classList.toggle('active', on);
@@ -634,6 +642,7 @@ function closeUserMenu() {
   document.getElementById('user-menu').classList.add('hidden');
   document.getElementById('user-menu-btn').setAttribute('aria-expanded', 'false');
 }
+document.getElementById('settings-open-btn').addEventListener('click', () => { closeUserMenu(); openTile('settings'); });
 document.getElementById('user-menu-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   const m = document.getElementById('user-menu');
@@ -666,6 +675,8 @@ export function hideAllModules() {
   document.getElementById('schools-admin-module').classList.add('hidden');
   document.getElementById('admin-tasks-module').classList.add('hidden');
   document.getElementById('school-contacts-module').classList.add('hidden');
+  document.getElementById('settings-module').classList.add('hidden');
+  document.getElementById('settings-open-btn').classList.remove('active');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
 
@@ -687,6 +698,12 @@ function renderModuleHeader(key) {
 }
 
 export async function openTile(key, title, sub = null) {
+  // الصلاحيات وبيانات التواصل انتقلت لصفحة الإعدادات
+  if (key === 'perms' || key === 'school-contacts') {
+    const sec = key === 'perms' ? 'users' : 'contacts';
+    history.replaceState({ key: 'settings/' + sec }, '', '#/settings/' + sec);
+    return openTile('settings', null, sec);
+  }
   hideAllModules();
   renderModuleHeader(key);
   pushRoute(sub ? key + '/' + sub : key);
@@ -766,6 +783,11 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('admin-tasks-module').classList.remove('hidden');
     const { loadAdminTasksModule } = await import('./admin-tasks.js');
     loadAdminTasksModule();
+  } else if (key === 'settings') {
+    document.getElementById('settings-module').classList.remove('hidden');
+    document.getElementById('settings-open-btn').classList.add('active');
+    const { loadSettingsModule } = await import('./settings.js');
+    loadSettingsModule(sub);
   } else if (key === 'school-contacts') {
     document.getElementById('school-contacts-module').classList.remove('hidden');
     const { loadSchoolContactsModule } = await import('./school-contacts.js');

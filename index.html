@@ -115,6 +115,9 @@
           <span>ابحث</span>
           <kbd>Ctrl K</kbd>
         </button>
+        <button type="button" class="tn-gear hidden" id="settings-open-btn" aria-label="الإعدادات" title="الإعدادات">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        </button>
         <div class="tn-user">
           <button type="button" class="tn-avatar" id="user-menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="حسابي"><span id="user-avatar"></span></button>
           <div class="user-menu hidden" id="user-menu" role="menu">
@@ -351,63 +354,21 @@
       <div id="weekly-list"></div>
     </div>
 
-    <div id="perms-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-4">→ رجوع للرئيسية</span>
+    
 
-      <div class="seg-tabs" id="pm-tabs">
-        <button type="button" data-p="subjects" class="active">تخصصات المعلمين</button>
-        <button type="button" data-p="account">إنشاء حساب دخول</button>
-        <button type="button" data-p="brand">هوية المدرسة</button>
-      </div>
+<div id="settings-module" class="panel hidden">
+      <div class="st-layout">
+        <nav class="st-nav" id="st-nav" aria-label="أقسام الإعدادات">
+          <button type="button" data-s="identity"><b>هوية المدرسة</b><small>الاسم والمدير والشعارات</small></button>
+          <button type="button" data-s="students"><b>الطلاب</b><small>ملف نور والفصول</small></button>
+          <button type="button" data-s="calendar"><b>التقويم الدراسي</b><small>بداية العام والإجازات والفصل الحالي</small></button>
+          <button type="button" data-s="contacts"><b>بيانات التواصل</b><small>أرقام تظهر لولي الأمر</small></button>
+          <button type="button" data-s="users"><b>المستخدمين والصلاحيات</b><small>الحسابات وتخصصات المعلمين</small></button>
+        </nav>
+        <div class="st-body">
+          <section class="st-pane hidden" data-s="identity">
+            <div class="st-head"><h3>هوية المدرسة</h3><p>تطلع في الشريط العلوي والمطبوعات وصفحة أولياء الأمور</p></div>
 
-      <div class="pm-pane" data-pane="subjects">
-        <div class="form-card pm-add">
-          <h4>إضافة تخصص لمعلم</h4>
-          <div class="pm-add-row">
-            <select id="perm-teacher"></select>
-            <select id="perm-subject"></select>
-            <select id="perm-grade">
-              <option value="first_intermediate">أول متوسط</option>
-              <option value="second_intermediate">ثاني متوسط</option>
-              <option value="third_intermediate">ثالث متوسط</option>
-            </select>
-            <button class="btn-primary" id="perm-submit" style="width:auto; padding:10px 18px;">+ إضافة</button>
-          </div>
-          <div class="error-msg" id="perm-error"></div>
-          <p class="pt-hint" style="margin:8px 0 0;">التخصص يحدد وش يقدر المعلم يدخّل في الخطة الأسبوعية، ومين يطلع ناقص في متابعتها.</p>
-        </div>
-        <div class="pt-toolbar">
-          <input type="search" id="pm-search" class="cv-search" placeholder="ابحث باسم المعلم أو المادة" />
-          <div class="dd-stats" id="pm-stats" style="margin:0;"></div>
-        </div>
-        <div id="perms-list" class="pm-list"></div>
-      </div>
-
-      <div class="pm-pane hidden" data-pane="account">
-      <div class="form-card pm-newuser">
-        <h4>إنشاء حساب دخول جديد</h4>
-        <div class="form-row">
-          <input type="text" id="newuser-name" placeholder="الاسم الكامل" style="margin-bottom:10px;" />
-          <select id="newuser-role">
-            <option value="teacher">معلم</option>
-            <option value="deputy">وكيل</option>
-            <option value="admin">مدير</option>
-            <option value="parent">ولي أمر</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <input type="text" id="newuser-email" placeholder="البريد الإلكتروني أو الرقم الوظيفي" style="margin-bottom:10px;" />
-          <input type="text" id="newuser-password" placeholder="كلمة مرور مبدئية" style="margin-bottom:10px;" />
-        </div>
-        <div class="error-msg" id="newuser-error"></div>
-        <div id="newuser-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px;"></div>
-        <button class="btn-primary" id="newuser-submit">إنشاء الحساب</button>
-      </div>
-
-      </div>
-
-      <!-- هوية المدرسة: الاسم والشعارات اللي تطلع بالشريط العلوي والمطبوعات وصفحة أولياء الأمور -->
-      <div class="pm-pane hidden" data-pane="brand">
         <div class="br-grid">
           <div class="form-card br-form">
             <div class="field">
@@ -419,6 +380,11 @@
               <label for="br-short">الاسم المختصر</label>
               <input type="text" id="br-short" placeholder="مثال: مدرسة النور" />
               <small class="br-help">يطلع بالشريط العلوي للمنصة</small>
+            </div>
+            <div class="field">
+              <label for="br-principal">اسم مدير المدرسة</label>
+              <input type="text" id="br-principal" placeholder="الاسم كما يطلع في التوقيع" />
+              <small class="br-help">يطلع في خانة "اعتماد المدير" بسند الصرف</small>
             </div>
 
             <div class="br-logo-row">
@@ -481,10 +447,184 @@
             </div>
           </div>
         </div>
+      
+          </section>
+
+          <section class="st-pane hidden" data-s="students">
+            <div class="st-head"><h3>الطلاب</h3><p>كل الأقسام تاخذ الطلاب والفصول من هنا: الاختبارات، المتابعات، المعمل، الجدول، الزيارات</p></div>
+            <div class="st-kpis" id="st-stu-kpis"></div>
+            <div class="form-card st-card">
+              <h4>تحديث من ملف نور (إكسل)</h4>
+              <p class="st-help">ارفع ملف الطلاب المصدّر من نور. الطالب الموجود تتحدث بياناته (الصف والفصل والجوال)، والجديد ينضاف. ما ينحذف أي طالب.</p>
+              <div class="st-upload-row">
+                <input type="file" id="st-stu-file" accept=".xlsx,.xls" />
+                <button type="button" class="btn-primary" id="st-stu-import">استيراد الملف</button>
+              </div>
+              <div class="error-msg" id="st-stu-error"></div>
+              <div class="st-ok hidden" id="st-stu-ok"></div>
+            </div>
+            <div class="form-card st-card">
+              <h4>الفصول حسب ملف الطلاب</h4>
+              <div id="st-stu-sections"></div>
+            </div>
+          </section>
+
+          <section class="st-pane hidden" data-s="calendar">
+            <div class="st-head"><h3>التقويم الدراسي</h3><p>منه يتحدد رقم الأسبوع بالخطة الأسبوعية والخطة التشغيلية والمهام الإدارية</p></div>
+            <div class="form-card st-card">
+              <h4>الفصل الدراسي الحالي</h4>
+              <div class="seg-tabs" id="st-semester">
+                <button type="button" data-v="semester_1">الفصل الأول</button>
+                <button type="button" data-v="semester_2">الفصل الثاني</button>
+              </div>
+              <span class="st-ok hidden" id="st-sem-ok">تم الحفظ ✓</span>
+            </div>
+            <div class="form-card st-card">
+              <h4>بداية العام والإجازات</h4>
+              <div id="st-cal-box"></div>
+            </div>
+          </section>
+
+          <section class="st-pane hidden" data-s="contacts">
+            <div class="st-head"><h3>بيانات التواصل</h3><p>الأرقام اللي تطلع لولي الأمر في صفحة الخطة الأسبوعية</p></div>
+            <div id="school-contacts-module" class="st-embed hidden">
+      <span class="back-link" id="back-to-tiles-21">→ رجوع للرئيسية</span>
+
+      <div class="adm-bar">
+        <button type="button" class="btn-primary adm-add-toggle" id="sc-add-toggle">+ إضافة جهة تواصل</button>
+      </div>
+      <div class="sc-add-card hidden" id="sc-add-card">
+        <div class="sc-add-head">
+          <div class="icon-chip">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+          </div>
+          <h4 id="sc-form-title">إضافة بيانات تواصل جديدة</h4>
+        </div>
+
+        <div class="at-add-row" style="margin-bottom:14px;">
+          <div>
+            <label class="at-field-label">المجموعة</label>
+            <input type="text" id="sc-group" list="sc-group-options" placeholder="مثال: الإدارة" />
+            <datalist id="sc-group-options"></datalist>
+          </div>
+          <div>
+            <label class="at-field-label">المسمى / الصفة</label>
+            <input type="text" id="sc-role" placeholder="مثال: وكيل شؤون الطلاب" />
+          </div>
+        </div>
+
+        <div class="at-add-row" style="margin-bottom:14px;">
+          <div>
+            <label class="at-field-label">الاسم (اختياري)</label>
+            <input type="text" id="sc-name" placeholder="اسم الشخص" />
+          </div>
+          <div>
+            <label class="at-field-label">وصف إضافي (اختياري)</label>
+            <input type="text" id="sc-sub" placeholder="مثال: أول متوسط (1-2-3-4)" />
+          </div>
+        </div>
+
+        <div class="at-add-row" style="margin-bottom:14px;">
+          <div>
+            <label class="at-field-label">رقم الجوال / الهاتف</label>
+            <input type="tel" id="sc-phone" placeholder="05XXXXXXXX" dir="ltr" style="text-align:right;" />
+          </div>
+          <div>
+            <label class="at-field-label">ملاحظة (اختياري)</label>
+            <input type="text" id="sc-note" placeholder="مثال: وقت الدوام الرسمي" />
+          </div>
+        </div>
+
+        <label class="at-field-label">وسيلة التواصل</label>
+        <div class="sc-type-grid" id="sc-type-grid">
+          <button type="button" class="sc-type-btn active" data-type="call">
+            <span class="t">اتصال فقط</span>
+          </button>
+          <button type="button" class="sc-type-btn" data-type="whatsapp">
+            <span class="t">واتساب فقط</span>
+          </button>
+          <button type="button" class="sc-type-btn" data-type="both">
+            <span class="t">اتصال وواتساب</span>
+          </button>
+        </div>
+
+        <div class="at-add-submit-row">
+          <div class="error-msg" id="sc-error" style="margin:0;"></div>
+          <div style="display:flex; gap:8px;">
+            <button type="button" class="btn-secondary hidden" id="sc-cancel-edit-btn" style="width:auto; padding:10px 18px;">إلغاء التعديل</button>
+            <button type="button" class="btn-primary" id="sc-add-btn" style="width:auto; padding:10px 22px;">+ إضافة</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="sc-contacts-list"></div>
+    </div>
+          </section>
+
+          <section class="st-pane hidden" data-s="users">
+            <div class="st-head"><h3>المستخدمين والصلاحيات</h3><p>حسابات الدخول وتخصصات المعلمين</p></div>
+            <div id="perms-module" class="st-embed hidden">
+      <span class="back-link" id="back-to-tiles-4">→ رجوع للرئيسية</span>
+
+      <div class="seg-tabs" id="pm-tabs">
+        <button type="button" data-p="subjects" class="active">تخصصات المعلمين</button>
+        <button type="button" data-p="account">إنشاء حساب دخول</button>
+      </div>
+
+      <div class="pm-pane" data-pane="subjects">
+        <div class="form-card pm-add">
+          <h4>إضافة تخصص لمعلم</h4>
+          <div class="pm-add-row">
+            <select id="perm-teacher"></select>
+            <select id="perm-subject"></select>
+            <select id="perm-grade">
+              <option value="first_intermediate">أول متوسط</option>
+              <option value="second_intermediate">ثاني متوسط</option>
+              <option value="third_intermediate">ثالث متوسط</option>
+            </select>
+            <button class="btn-primary" id="perm-submit" style="width:auto; padding:10px 18px;">+ إضافة</button>
+          </div>
+          <div class="error-msg" id="perm-error"></div>
+          <p class="pt-hint" style="margin:8px 0 0;">التخصص يحدد وش يقدر المعلم يدخّل في الخطة الأسبوعية، ومين يطلع ناقص في متابعتها.</p>
+        </div>
+        <div class="pt-toolbar">
+          <input type="search" id="pm-search" class="cv-search" placeholder="ابحث باسم المعلم أو المادة" />
+          <div class="dd-stats" id="pm-stats" style="margin:0;"></div>
+        </div>
+        <div id="perms-list" class="pm-list"></div>
+      </div>
+
+      <div class="pm-pane hidden" data-pane="account">
+      <div class="form-card pm-newuser">
+        <h4>إنشاء حساب دخول جديد</h4>
+        <div class="form-row">
+          <input type="text" id="newuser-name" placeholder="الاسم الكامل" style="margin-bottom:10px;" />
+          <select id="newuser-role">
+            <option value="teacher">معلم</option>
+            <option value="deputy">وكيل</option>
+            <option value="admin">مدير</option>
+            <option value="parent">ولي أمر</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <input type="text" id="newuser-email" placeholder="البريد الإلكتروني أو الرقم الوظيفي" style="margin-bottom:10px;" />
+          <input type="text" id="newuser-password" placeholder="كلمة مرور مبدئية" style="margin-bottom:10px;" />
+        </div>
+        <div class="error-msg" id="newuser-error"></div>
+        <div id="newuser-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px;"></div>
+        <button class="btn-primary" id="newuser-submit">إنشاء الحساب</button>
+      </div>
+
+      </div>
+
+
+    </div>
+          </section>
+        </div>
       </div>
     </div>
 
-    <div id="portal-module" class="panel hidden">
+        <div id="portal-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-5">→ رجوع للرئيسية</span>
 
       <div class="pt-toolbar">
@@ -613,10 +753,7 @@
             <span class="op-scope-note hidden" id="opplan-scope-note"></span>
             <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
               <label style="font-size:12.5px; color:var(--slate); font-weight:700;">الفصل الدراسي الحالي:</label>
-              <select id="opplan-semester-select" style="width:auto;">
-                <option value="semester_1">الفصل الأول</option>
-                <option value="semester_2">الفصل الثاني</option>
-              </select>
+              <span class="op-sem-label" id="opplan-semester-label"></span> <a href="#/settings/calendar" class="ess-link" id="opplan-semester-link">تغيير</a>
             </div>
           </div>
 
@@ -937,12 +1074,7 @@
             <b>بيانات الطلاب</b>
             <div id="exam-student-stats" class="ess-stats"></div>
           </div>
-          <button type="button" class="btn-secondary" id="exam-import-toggle" style="width:auto; padding:9px 14px;"><span>تحديث من ملف نور (إكسل)</span><svg id="exam-import-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg></button>
-          <div id="exam-import-body" class="hidden ess-import">
-            <input type="file" id="exam-import-file" accept=".xlsx,.xls" style="margin-bottom:10px;" />
-            <button class="btn-primary" id="exam-import-btn" style="width:auto; padding:11px 20px;">استيراد الملف</button>
-            <div class="error-msg" id="exam-import-error"></div>
-          </div>
+          <a href="#/settings/students" class="ess-link" id="exam-students-settings">تحديث ملف الطلاب من الإعدادات</a>
         </div>
 
         <div class="ex-list-head">
@@ -2192,78 +2324,7 @@
       <div id="at-tasks-list"></div>
     </div>
 
-    <div id="school-contacts-module" class="panel hidden">
-      <span class="back-link" id="back-to-tiles-21">→ رجوع للرئيسية</span>
-
-      <div class="adm-bar">
-        <button type="button" class="btn-primary adm-add-toggle" id="sc-add-toggle">+ إضافة جهة تواصل</button>
-      </div>
-      <div class="sc-add-card hidden" id="sc-add-card">
-        <div class="sc-add-head">
-          <div class="icon-chip">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
-          </div>
-          <h4 id="sc-form-title">إضافة بيانات تواصل جديدة</h4>
-        </div>
-
-        <div class="at-add-row" style="margin-bottom:14px;">
-          <div>
-            <label class="at-field-label">المجموعة</label>
-            <input type="text" id="sc-group" list="sc-group-options" placeholder="مثال: الإدارة" />
-            <datalist id="sc-group-options"></datalist>
-          </div>
-          <div>
-            <label class="at-field-label">المسمى / الصفة</label>
-            <input type="text" id="sc-role" placeholder="مثال: وكيل شؤون الطلاب" />
-          </div>
-        </div>
-
-        <div class="at-add-row" style="margin-bottom:14px;">
-          <div>
-            <label class="at-field-label">الاسم (اختياري)</label>
-            <input type="text" id="sc-name" placeholder="اسم الشخص" />
-          </div>
-          <div>
-            <label class="at-field-label">وصف إضافي (اختياري)</label>
-            <input type="text" id="sc-sub" placeholder="مثال: أول متوسط (1-2-3-4)" />
-          </div>
-        </div>
-
-        <div class="at-add-row" style="margin-bottom:14px;">
-          <div>
-            <label class="at-field-label">رقم الجوال / الهاتف</label>
-            <input type="tel" id="sc-phone" placeholder="05XXXXXXXX" dir="ltr" style="text-align:right;" />
-          </div>
-          <div>
-            <label class="at-field-label">ملاحظة (اختياري)</label>
-            <input type="text" id="sc-note" placeholder="مثال: وقت الدوام الرسمي" />
-          </div>
-        </div>
-
-        <label class="at-field-label">وسيلة التواصل</label>
-        <div class="sc-type-grid" id="sc-type-grid">
-          <button type="button" class="sc-type-btn active" data-type="call">
-            <span class="t">اتصال فقط</span>
-          </button>
-          <button type="button" class="sc-type-btn" data-type="whatsapp">
-            <span class="t">واتساب فقط</span>
-          </button>
-          <button type="button" class="sc-type-btn" data-type="both">
-            <span class="t">اتصال وواتساب</span>
-          </button>
-        </div>
-
-        <div class="at-add-submit-row">
-          <div class="error-msg" id="sc-error" style="margin:0;"></div>
-          <div style="display:flex; gap:8px;">
-            <button type="button" class="btn-secondary hidden" id="sc-cancel-edit-btn" style="width:auto; padding:10px 18px;">إلغاء التعديل</button>
-            <button type="button" class="btn-primary" id="sc-add-btn" style="width:auto; padding:10px 22px;">+ إضافة</button>
-          </div>
-        </div>
-      </div>
-
-      <div id="sc-contacts-list"></div>
-    </div>
+    
 
     <div id="placeholder-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-2">→ رجوع للرئيسية</span>

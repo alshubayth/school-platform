@@ -747,7 +747,6 @@ async function renderCommandDashboard(container) {
           <div><h3>رفع الخطط الأسبوعية حسب المادة</h3><div style="font-size:12.5px; color:var(--slate); margin-top:2px;">${esc(weekLabel(planWeek()))}</div></div>
           <div style="display:flex; gap:12px;"><button type="button" class="cmd-link" id="cal-edit-btn">ضبط التقويم</button><button type="button" class="cmd-link" data-key="weekly-tracking">التفاصيل</button></div>
         </div>
-        <div id="cal-editor" class="hidden"></div>
         ${noPlan ? `<div style="font-size:13.5px; color:var(--slate);">الأسبوع ${planWeek()} بدون خطة أسبوعية، فما فيه شي يُتابع.</div>` : subjRows.length ? `<div style="overflow-x:auto;"><table class="cmd-table">
           <thead><tr><th class="al-r">المادة</th>${GRADE_KEYS.map(g => `<th>${GRADE_SHORT[g]}</th>`).join('')}<th style="width:32%;">النسبة</th></tr></thead>
           <tbody>${subjRows.map(r => `<tr>
@@ -770,7 +769,7 @@ async function renderCommandDashboard(container) {
       <section class="home-card" style="flex:2 1 300px;"><h3>اليوم في المدرسة</h3><div id="dash-today" style="display:flex; flex-direction:column; gap:2px;"><div style="font-size:13px; color:var(--slate);">جارٍ التحميل...</div></div></section>
     </div>`;
 
-  document.getElementById('cal-edit-btn').addEventListener('click', () => toggleCalendarEditor(container));
+  document.getElementById('cal-edit-btn').addEventListener('click', () => openTile('settings', null, 'calendar'));
   container.querySelectorAll('.cmd-link[data-key]').forEach(b => b.addEventListener('click', () => {
     const t = tiles.find(x => x.key === b.dataset.key);
     if (t && isTileAllowed(t)) openTile(t.key, tileTitle(t));
@@ -802,10 +801,9 @@ async function renderCommandDashboard(container) {
 
 
 /* ===== ضبط التقويم الدراسي (المدير): بداية الأسبوع الأول + أسابيع الإجازة ===== */
-function toggleCalendarEditor(container) {
-  const box = document.getElementById('cal-editor');
+// يرسم محرر التقويم داخل أي صندوق (صفحة الإعدادات ← التقويم الدراسي)
+export function renderCalendarEditor(box, onSaved) {
   if (!box) return;
-  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
   let breaks = [...(academicCalendar.breaks || [])];
   let noPlan = [...(academicCalendar.noPlanWeeks || [])];
   const fmt = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }); };
@@ -857,7 +855,7 @@ function toggleCalendarEditor(container) {
         msg.style.color = 'var(--danger)';
         return;
       }
-      renderDashboard();
+      if (onSaved) onSaved(); else renderDashboard();
     });
   };
   draw();
