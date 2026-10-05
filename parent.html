@@ -42,7 +42,9 @@
   .hero-brand{ display:flex; flex-direction:column; align-items:center; gap:4px; flex-shrink:0; }
   .hero-brand #hero-logo{ height:40px; max-width:84px; object-fit:contain; display:block; }
   .hero-brand .hero-word{ height:10px; width:auto; display:block; opacity:.75; }
-  @media (max-width:400px){ .hero-brand #hero-logo{ height:34px; max-width:64px; } .hero-brand .hero-word{ height:9px; } .hero h1{ white-space:nowrap; } }
+  @media (max-width:400px){ .hero-brand #hero-logo{ height:34px; max-width:64px; } .hero-brand .hero-word{ height:9px; } .hero h1{ white-space:nowrap; }
+  }
+  @media (max-width:520px){ .hero h1{ white-space:nowrap; } .hero-install span{ display:none; } .hero-install{ width:36px; height:36px; padding:0; justify-content:center; } .hero-bell, .hero-install{ border-radius:10px; } }
   .hero h1{ font-size:16.5px; font-weight:800; color:var(--ink); }
   @media (max-width:400px){ .hero h1{ font-size:15px; } .hero{ gap:10px; padding:12px 14px; } }
   .hero > div{ min-width:0; }
@@ -172,6 +174,22 @@
   .made-by img{ height:15px; width:auto; opacity:.45; }
 
   /* ===== رابط تثبيت التطبيق بالهيدر ===== */
+  .hero-bell{
+    margin-inline-start:auto; flex-shrink:0; width:36px; height:36px; border-radius:11px; display:flex; align-items:center; justify-content:center;
+    background:#F1F4F9; color:var(--slate); position:relative;
+  }
+  .hero-bell.on{ background:var(--teal-light); color:var(--teal); }
+  .hero-bell.on::after{ content:''; position:absolute; top:7px; inset-inline-end:8px; width:7px; height:7px; border-radius:50%; background:var(--teal); box-shadow:0 0 0 2px var(--teal-light); }
+  .hero-bell + .hero-install{ margin-inline-start:0; }
+  .notif-hint{ font-size:13px; color:var(--slate); line-height:1.8; margin:0; }
+  .notif-list{ margin:0; padding-inline-start:18px; font-size:13px; color:var(--ink); line-height:1.9; }
+  .notif-btn{ width:100%; border-radius:13px; padding:13px; font-size:14px; font-weight:800; }
+  .notif-btn.go{ background:linear-gradient(120deg, var(--navy), var(--meadow)); color:#fff; }
+  .notif-btn.off{ background:var(--coral-light); color:var(--coral); }
+  .p-toast{ position:fixed; left:50%; bottom:calc(92px + env(safe-area-inset-bottom)); transform:translate(-50%, 20px); z-index:40;
+    background:var(--navy); color:#fff; font-size:12.5px; font-weight:700; padding:10px 16px; border-radius:12px; max-width:min(92vw, 420px);
+    text-align:center; line-height:1.6; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; box-shadow:0 8px 24px rgba(16,23,40,.25); }
+  .p-toast.show{ opacity:1; transform:translate(-50%, 0); }
   .hero-install{
     margin-inline-start:auto; flex-shrink:0; display:flex; align-items:center; gap:5px; text-decoration:none;
     background:var(--meadow-light); color:var(--meadow); font-size:11.5px; font-weight:800; padding:8px 11px; border-radius:11px;
@@ -299,6 +317,9 @@
       <h1>خطة الأسبوع الدراسي</h1>
       <p class="sub" id="hero-school-name">&nbsp;</p>
     </div>
+    <button type="button" class="hero-bell" id="hero-bell" aria-label="الإشعارات">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+    </button>
     <a class="hero-install hidden-view" id="hero-install" href="install.html?app=parent">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
       <span>تثبيت</span>
@@ -381,6 +402,17 @@
 </div>
 
 <div class="sheet-overlay" id="sheet-overlay"></div>
+<div class="contact-sheet" id="notif-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3>الإشعارات</h3>
+    <button class="sheet-close" id="notif-sheet-close" aria-label="إغلاق">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body" id="notif-sheet-body"></div>
+</div>
+<div class="p-toast" id="p-toast" role="status" aria-live="polite"></div>
 <div class="contact-sheet" id="kid-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-head">
@@ -427,6 +459,7 @@
   </div>
 </div>
 
+<script src="js/push-client.js"></script>
 <script>
 const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
@@ -618,7 +651,7 @@ function openContactSheet() { sheetOverlay.classList.add('open'); contactSheet.c
 function closeContactSheet() { sheetOverlay.classList.remove('open'); contactSheet.classList.remove('open'); document.body.style.overflow = ''; }
 document.getElementById('bn-contact').addEventListener('click', openContactSheet);
 document.getElementById('sheet-close').addEventListener('click', closeContactSheet);
-function closeAllSheets() { closeContactSheet(); closeExamSheet(); closeKidSheet(); closeShareSheet(); }
+function closeAllSheets() { closeContactSheet(); closeExamSheet(); closeKidSheet(); closeShareSheet(); closeNotifSheet(); }
 sheetOverlay.addEventListener('click', closeAllSheets);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllSheets(); });
 function openSheet(el) { sheetOverlay.classList.add('open'); el.classList.add('open'); document.body.style.overflow = 'hidden'; }
@@ -731,11 +764,13 @@ document.getElementById('kid-sheet-body').addEventListener('click', (e) => {
     kidFirstRun = false;
     closeKidSheet();
     selectKid(idx);
+    syncPushTargets();
     return;
   }
   if (e.target.closest('.kid-del')) {
     kids.splice(kidEditIdx, 1);
     lsSet(KIDS_KEY, kids);
+    syncPushTargets();
     closeKidSheet();
     if (kids.length) selectKid(0);
     else { activeKid = 0; lsSet(KID_ACTIVE_KEY, 0); currentSection = null; renderKidsBar(); renderGradeTabs('grade-tabs', currentGrade); loadPlans(); syncScheduleToKid(); }
@@ -1149,9 +1184,99 @@ async function bootParentPage() {
   await loadPublishedWeeks();
   await loadPlans();
   if (!kids.length && !lsGet(KIDS_SKIP_KEY, false)) openKidSheet(null, true);
+  refreshBell();
+  syncPushTargets();
+  // فتح من إشعار جدول الاختبارات
+  if (location.hash === '#exams') { history.replaceState(null, '', location.pathname + location.search); setTimeout(openExamSheet, 400); }
+  window.addEventListener('hashchange', () => {
+    if (location.hash === '#exams') { history.replaceState(null, '', location.pathname + location.search); openExamSheet(); }
+  });
   loadContactList();
 }
 bootParentPage();
+
+/* ===== إشعارات الجوال (لولي الأمر حسب صفوف أبنائه المحفوظة) ===== */
+const notifSheet = document.getElementById('notif-sheet');
+const heroBell = document.getElementById('hero-bell');
+function closeNotifSheet() { closeSheet(notifSheet); }
+document.getElementById('notif-sheet-close').addEventListener('click', closeNotifSheet);
+let toastTimer = null;
+function pToast(msg) {
+  const t = document.getElementById('p-toast'); t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 4200);
+}
+const pushTargets = () => kids.map(k => ({ grade: k.grade, section: k.section ? Number(k.section) : null }));
+async function refreshBell() {
+  const st = window.MudaarPush ? await MudaarPush.status('parent') : 'unsupported';
+  heroBell.classList.toggle('on', st === 'on');
+  heroBell.setAttribute('aria-label', st === 'on' ? 'الإشعارات مفعّلة' : 'تفعيل الإشعارات');
+  return st;
+}
+async function pushSaveParent(sub) {
+  const { data, error } = await sb.rpc('push_subscribe_parent', {
+    p_school_slug: schoolSlug, p_endpoint: sub.endpoint, p_p256dh: sub.p256dh, p_auth: sub.auth, p_targets: pushTargets() });
+  if (error || data !== true) throw new Error(error ? error.message : 'rejected');
+}
+// لو تغيّرت صفوف الأبناء والإشعارات مفعّلة نحدّث الاشتراك
+async function syncPushTargets() {
+  try {
+    if (!window.MudaarPush || await MudaarPush.status('parent') !== 'on') return;
+    if (!kids.length) { await pushDisable(true); return; }
+    const sub = await MudaarPush.currentSubscription();
+    if (sub) { const j = sub.toJSON(); await pushSaveParent({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }); }
+  } catch (e) { /* نحاول المرة الجاية */ }
+}
+async function pushDisable(silent) {
+  try {
+    const sub = await MudaarPush.currentSubscription();
+    if (sub) await sb.rpc('push_unsubscribe', { p_endpoint: sub.endpoint, p_audience: 'parent' });
+  } catch (e) { /* */ }
+  MudaarPush.markOn('parent', false);
+  await refreshBell();
+  if (!silent) pToast('تم إيقاف الإشعارات');
+}
+function renderNotifSheet(st) {
+  const body = document.getElementById('notif-sheet-body');
+  const names = kids.map(k => esc(kidTitle(k)) + (k.name ? ' (' + esc(gradeLabel(k.grade)) + ')' : '')).join('، ');
+  const what = `<ul class="notif-list"><li>نشر الخطة الأسبوعية</li><li>نشر جدول الاختبارات الفترية أو تعديله</li></ul>`;
+  if (st === 'on') {
+    body.innerHTML = `<p class="notif-hint">الإشعارات مفعّلة لـ: <b>${names}</b></p>${what}
+      <button type="button" class="notif-btn off" id="notif-off">إيقاف الإشعارات</button>`;
+  } else {
+    body.innerHTML = `<p class="notif-hint">يوصلك تنبيه على جوالك لما:</p>${what}
+      <p class="notif-hint">لـ: <b>${names}</b></p>
+      <button type="button" class="notif-btn go" id="notif-on">تفعيل الإشعارات</button>`;
+  }
+}
+document.getElementById('notif-sheet-body').addEventListener('click', async (e) => {
+  if (e.target.closest('#notif-off')) { closeNotifSheet(); await pushDisable(false); return; }
+  const onBtn = e.target.closest('#notif-on');
+  if (!onBtn) return;
+  onBtn.disabled = true; onBtn.textContent = 'جارٍ التفعيل...';
+  try {
+    const sub = await MudaarPush.subscribe();
+    await pushSaveParent(sub);
+    MudaarPush.markOn('parent', true);
+    closeNotifSheet();
+    await refreshBell();
+    pToast('تم تفعيل الإشعارات ✓');
+  } catch (err) {
+    closeNotifSheet();
+    const m = String(err && err.message || '');
+    pToast(m === 'denied' ? 'رفضت الإذن. تقدر تسمح بالإشعارات من إعدادات الجوال لهذا التطبيق.'
+      : m === 'dismissed' ? 'ما تم التفعيل. اضغط الجرس مرة ثانية ووافق على الإذن.'
+      : 'تعذر التفعيل حاليًا، حاول لاحقًا.');
+  }
+});
+heroBell.addEventListener('click', async () => {
+  const st = await refreshBell();
+  if (st === 'unsupported') { pToast('جهازك أو متصفحك ما يدعم الإشعارات.'); return; }
+  if (st === 'ios-install') { pToast('في الآيفون: ثبّت التطبيق أولًا من زر «تثبيت»، وبعدها فعّل الإشعارات من داخل التطبيق.'); return; }
+  if (st === 'denied') { pToast('الإشعارات مرفوضة. اسمح بها من إعدادات الجوال لهذا التطبيق ثم ارجع هنا.'); return; }
+  if (!kids.length) { pToast('احفظ صف ابنك أولًا عشان توصلك إشعاراته'); openKidSheet(null, false); return; }
+  renderNotifSheet(st);
+  openSheet(notifSheet);
+});
 
 /* ===== بيانات التواصل (تُقرأ من جدول school_contacts حسب المدرسة الحالية بدل ما تكون
  * بيانات مدرسة واحدة مكتوبة يدويًا وثابتة لكل المدارس) ===== */
