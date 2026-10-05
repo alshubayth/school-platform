@@ -231,18 +231,24 @@ function buildSheetBody(opts, student, logoSrc, ox) {
   // جدول بيانات الطالب (سطرين): خانة عنوان مظللة + خانة قيمة
   const g = student ? (gradeLabels[student.grade_level] || '') : '';
   const sec = student && student.class_section ? String(student.class_section) : '';
+  // الاختبار بنموذجين: خانة "النموذج" بخط كبير عشان المعلم يعطي الطالب ورقة الأسئلة الصحيحة
+  const model = opts.modelsOn ? (student && student.model ? student.model : '') : null;
+  const modelEn = m => (m === 'أ' ? 'A' : m === 'ب' ? 'B' : '');
+  const row2 = model === null
+    ? (rtl ? [['الصف', g, 0.3], ['الفصل', sec, 0.18], ['المادة', subject || '', 0.52]]
+           : [['Grade', g, 0.3], ['Class', sec, 0.18], ['Subject', subject || '', 0.52]])
+    : (rtl ? [['الصف', g, 0.27], ['الفصل', sec, 0.15], ['المادة', subject || '', 0.36], ['النموذج', model, 0.22, true]]
+           : [['Grade', g, 0.27], ['Class', sec, 0.15], ['Subject', subject || '', 0.36], ['Form', modelEn(model), 0.22, true]]);
   const cells = rtl
-    ? [[['اسم الطالب', student ? student.full_name : '', 0.66], ['رقم الهوية', student ? student.national_id : '', 0.34]],
-       [['الصف', g, 0.3], ['الفصل', sec, 0.18], ['المادة', subject || '', 0.52]]]
-    : [[['Name', student ? student.full_name : '', 0.66], ['ID', student ? student.national_id : '', 0.34]],
-       [['Grade', g, 0.3], ['Class', sec, 0.18], ['Subject', subject || '', 0.52]]];
+    ? [[['اسم الطالب', student ? student.full_name : '', 0.66], ['رقم الهوية', student ? student.national_id : '', 0.34]], row2]
+    : [[['Name', student ? student.full_name : '', 0.66], ['ID', student ? student.national_id : '', 0.34]], row2];
   cells.forEach((row, ri) => {
     let off = 0;
     const y = P.infoTop + ri * P.infoRowH;
-    row.forEach(([label, value, frac]) => {
+    row.forEach(([label, value, frac, big]) => {
       const w = innerW * frac;
       h += `<div class="as-cell lbl" dir="${rtl ? 'rtl' : 'ltr'}" style="left:${mm(X(P.side + off, P.infoLabelW))}; top:${mm(y)}; width:${mm(P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${P.infoSize}pt;">${label}</div>`;
-      h += `<div class="as-cell val" style="left:${mm(X(P.side + off + P.infoLabelW, w - P.infoLabelW))}; top:${mm(y)}; width:${mm(w - P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${P.infoSize}pt; direction:${rtl ? 'rtl' : 'ltr'};">${escHtml(value || '')}</div>`;
+      h += `<div class="as-cell val" style="left:${mm(X(P.side + off + P.infoLabelW, w - P.infoLabelW))}; top:${mm(y)}; width:${mm(w - P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${big ? P.infoSize + 5 : P.infoSize}pt;${big ? ' font-weight:900; justify-content:center; text-align:center;' : ''} direction:${rtl ? 'rtl' : 'ltr'};">${escHtml(value || '')}</div>`;
       off += w;
     });
   });
@@ -376,6 +382,7 @@ function readOptions() {
     subject: $('as-subject').value.trim(),
     withBarcode: $('as-barcode').checked,
     essayTotal: $('as-essay-on').checked ? (parseInt($('as-essay-total').value, 10) || 0) : 0,
+    modelsOn: $('as-models-on').checked,
   };
 }
 
@@ -426,7 +433,7 @@ function refreshScopeControls() {
   }
   const n = selectedStudents().length;
   $('as-scope-count').textContent = asStudentsLoaded
-    ? (n ? `عدد الطلاب: ${n}${PAGE[$('as-size').value].perPage === 2 ? ` (${Math.ceil(n / 2)} صفحة A4)` : ''}` : 'لا يوجد طلاب بهذا الاختيار (يُستوردون من قسم الاختبارات)')
+    ? (n ? `عدد الطلاب: ${n}${PAGE[$('as-size').value].perPage === 2 ? ` (${Math.ceil(n / 2)} صفحة A4)` : ''}` : 'لا يوجد طلاب بهذا الاختيار (يُستوردون من الإعدادات ← الطلاب)')
     : '';
 }
 
@@ -467,8 +474,10 @@ function buildAllPages() {
     if (studs.length === 0) throw new Error('ما فيه طلاب بالاختيار الحالي');
     const bad = studs.filter(s => !/^[\x20-\x7E]+$/.test(String(s.national_id || '').trim()));
     if (bad.length) throw new Error(`فيه ${bad.length} طالب رقم هويته فاضي أو غير صالح للباركود (مثال: ${bad[0].full_name})`);
-    const pages = paginate(studs, pg.perPage);
-    return { o, pg, sheets: studs.length, count: pages.length, html: pages.map(ps => buildPrintPage(o, ps, logoUrl())).join('') };
+    let list = studs;
+    if (o.modelsOn) { ensureAssignments(studs); list = studs.map(st => ({ ...st, model: modelMap[String(st.national_id).trim()] || MODEL_A })); }
+    const pages = paginate(list, pg.perPage);
+    return { o, pg, sheets: studs.length, count: pages.length, html: pages.map(ps => buildPrintPage(o, ps, logoUrl())).join(''), modelsStudents: o.modelsOn ? list : null };
   }
   return { o, pg, sheets: pg.perPage, count: 1, html: buildPrintPage(o, [], logoUrl()) };
 }
@@ -512,30 +521,116 @@ function renderPreview() {
  * مظللة، ورقم الهوية 0000000000. يمسحها مع أوراق الطلاب، وملف Remark يطلع فيه صف بهوية أصفار -
  * وقسم تقارير الاختبارات يتعرف عليه تلقائيًا كمفتاح إجابة ويستبعده من الطلاب. */
 const KEY_ID = '0000000000';
-let keyAnswers = []; // لكل سؤال: رقم الخيار الصحيح (0 = أ) أو null
+let keyAnswers = []; // لكل سؤال: رقم الخيار الصحيح (0 = أ) أو null - النموذج أ (أو الوحيد)
+
+/* ---------- الاختبار بنموذجين ----------
+ * keyAnswersB: إجابات النموذج ب. orderB (لو الأسئلة نفسها بترتيب مختلف): orderB[i] = رقم السؤال
+ * المقابل بالنموذج أ (من صفر) لسؤال النموذج ب رقم i. modelMap: رقم هوية الطالب ← نموذجه. */
+const MODEL_A = 'أ', MODEL_B = 'ب';
+let activeModel = MODEL_A;
+let keyAnswersB = [];
+let orderB = [];
+let modelMap = {};
+function modelsOn() { return $('as-models-on').checked; }
+function modelMode() { return $('as-models-mode').value; }
+
+function fitArr(arr, n, max) { return Array.from({ length: n }, (_, i) => (arr[i] != null && (max == null || arr[i] < max) ? arr[i] : null)); }
 
 function renderKeyGrid() {
   const o = readOptions();
   const n = Math.max(0, o.questions);
-  keyAnswers = Array.from({ length: n }, (_, i) => (keyAnswers[i] != null && keyAnswers[i] < o.choices ? keyAnswers[i] : null));
+  keyAnswers = fitArr(keyAnswers, n, o.choices);
+  keyAnswersB = fitArr(keyAnswersB, n, o.choices);
+  orderB = fitArr(orderB, n, n);
+  const on = modelsOn();
+  $('as-models-opts').classList.toggle('hidden', !on);
+  if (!on) activeModel = MODEL_A;
+  $('as-model-tabs').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.m === activeModel));
+  const missA = keyAnswers.filter(v => v == null).length, missB = keyAnswersB.filter(v => v == null).length;
+  $('as-model-cnt-a').textContent = n ? (missA ? missA : '✓') : '';
+  $('as-model-cnt-b').textContent = n ? (missB ? missB : '✓') : '';
+  const ordering = on && activeModel === MODEL_B && modelMode() === 'order';
+  $('as-models-hint').textContent = !on ? '' : ordering
+    ? 'لكل سؤال بالنموذج ب: اضغط إجابته، واختر رقمه المقابل بالنموذج أ (عشان تحليل الأسئلة يجمع السؤال نفسه من النموذجين).'
+    : modelMode() === 'different' ? 'كل نموذج يتحلّل لحاله بالتقارير، والدرجات والترتيب للكل مع بعض.' : 'أدخل إجابة كل نموذج من تبويبه.';
+  const arr = activeModel === MODEL_B ? keyAnswersB : keyAnswers;
   const letters = (o.lang === 'en' ? EN_LETTERS : AR_LETTERS).slice(0, o.choices);
   const grid = $('as-key-grid');
   if (!n) { grid.innerHTML = '<span style="font-size:12px; color:var(--slate);">ما فيه أسئلة اختيار من متعدد</span>'; updateKeyStatus(); return; }
-  grid.innerHTML = keyAnswers.map((sel, q) => `
+  grid.innerHTML = arr.map((sel, q) => `
     <div class="as-key-q" style="display:flex; align-items:center; gap:4px; background:#fff; border:1px solid var(--border); border-radius:9px; padding:4px 6px;">
       <b style="min-width:20px; font-size:12px; text-align:center;">${q + 1}</b>
       ${letters.map((l, c) => `<button type="button" class="as-key-btn" data-q="${q}" data-c="${c}" style="width:26px; height:26px; border-radius:50%; border:1.5px solid ${sel === c ? 'var(--meadow)' : '#C9CED8'}; background:${sel === c ? 'var(--meadow)' : '#fff'}; color:${sel === c ? '#fff' : 'var(--ink)'}; font-size:12px; font-weight:700; padding:0; cursor:pointer;">${l}</button>`).join('')}
+      ${ordering ? `<select class="as-ord" data-q="${q}" aria-label="رقم السؤال المقابل بالنموذج أ" title="رقمه بالنموذج أ"><option value="">=أ؟</option>${Array.from({ length: n }, (_, j) => `<option value="${j}"${orderB[q] === j ? ' selected' : ''}>أ${j + 1}</option>`).join('')}</select>` : ''}
     </div>`).join('');
   updateKeyStatus();
 }
 
+function keyProblems() {
+  const n = keyAnswers.length;
+  const missA = keyAnswers.filter(v => v == null).length;
+  if (!modelsOn()) return missA ? `باقي ${missA} سؤال بدون إجابة` : null;
+  const missB = keyAnswersB.filter(v => v == null).length;
+  if (missA) return `النموذج أ: باقي ${missA} سؤال بدون إجابة`;
+  if (missB) return `النموذج ب: باقي ${missB} سؤال بدون إجابة`;
+  if (modelMode() === 'order') {
+    if (orderB.some(v => v == null)) return `النموذج ب: باقي ${orderB.filter(v => v == null).length} سؤال ما حددت رقمه المقابل بالنموذج أ`;
+    if (new Set(orderB).size !== n) return 'النموذج ب: فيه رقم سؤال من النموذج أ مكرر بالمقابلة';
+  }
+  return null;
+}
+
 function updateKeyStatus() {
-  const missing = keyAnswers.filter(v => v == null).length;
   const el = $('as-key-status');
   el.style.color = 'var(--slate)';
-  el.textContent = keyAnswers.length
-    ? (missing ? `باقي ${missing} سؤال بدون إجابة` : `المفتاح مكتمل (${keyAnswers.length} سؤال) ✓`)
-    : '';
+  if (!keyAnswers.length) { el.textContent = ''; return; }
+  const p = keyProblems();
+  el.textContent = p || (modelsOn() ? `المفتاح مكتمل للنموذجين (${keyAnswers.length} سؤال) ✓` : `المفتاح مكتمل (${keyAnswers.length} سؤال) ✓`);
+}
+
+/* توزيع النموذجين: بالتناوب حسب ترتيب الطلاب داخل كل فصل (أ، ب، أ، ب...) فالجار ياخذ نموذج ثاني.
+ * الطالب اللي له نموذج محفوظ يبقى عليه، إلا لو ضغط المعلم "إعادة التوزيع". */
+function ensureAssignments(studs, force = false) {
+  const groups = new Map();
+  sortStudents(asStudents).forEach(st => {
+    const k = st.grade_level + '|' + (st.class_section || 0);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(st);
+  });
+  const wanted = new Set(studs.map(st => String(st.national_id).trim()));
+  groups.forEach(list => list.forEach((st, i) => {
+    const id = String(st.national_id).trim();
+    if (!wanted.has(id)) return;
+    if (force || !modelMap[id]) modelMap[id] = i % 2 === 0 ? MODEL_A : MODEL_B;
+  }));
+}
+
+function renderDistribution() {
+  const box = $('as-dist');
+  const show = modelsOn() && $('as-barcode').checked && asStudentsLoaded;
+  box.classList.toggle('hidden', !show);
+  if (!show) return;
+  const studs = selectedStudents();
+  ensureAssignments(studs);
+  const a = studs.filter(st => modelMap[String(st.national_id).trim()] !== MODEL_B).length;
+  $('as-dist-sum').textContent = `نموذج أ: ${a} · نموذج ب: ${studs.length - a}`;
+  const list = $('as-dist-list');
+  if (list.classList.contains('hidden')) return;
+  list.innerHTML = studs.map(st => {
+    const id = String(st.national_id).trim();
+    const m = modelMap[id] || MODEL_A;
+    return `<div class="as-dist-row"><span>${escHtml(st.full_name)}</span><small>${escHtml((gradeLabels[st.grade_level] || '').replace(' متوسط', ''))} ${st.class_section || ''}</small>
+      <button type="button" class="as-dist-m ${m === MODEL_B ? 'b' : 'a'}" data-id="${escHtml(id)}" title="اضغط للتبديل">${m}</button></div>`;
+  }).join('') || '<span class="as-models-hint">ما فيه طلاب</span>';
+}
+
+// يحفظ نموذج كل طالب مع المفتاح المحفوظ (بعد الطباعة)
+async function persistModelMap() {
+  if (!currentKeyId) return;
+  const { error } = await sb.from('answer_keys').update({ model_map: modelMap, updated_at: new Date().toISOString() }).eq('id', currentKeyId);
+  if (error) { setStatus('انطبعت الأوراق، بس تعذر حفظ نموذج كل طالب: ' + error.message, true); return; }
+  const k = savedKeys.find(x => x.id === currentKeyId);
+  if (k) k.model_map = { ...modelMap };
 }
 
 /* ---------- حفظ المفتاح بالمنصة (جدول answer_keys) ----------
@@ -552,10 +647,19 @@ function keyStatusMsg(msg, isErr = false) {
 
 export async function fetchSavedKeys() {
   const { data, error } = await readScopedBySchool(scoped => {
-    let q = sb.from('answer_keys').select('id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, updated_at');
+    let q = sb.from('answer_keys').select('id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, updated_at');
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q.order('updated_at', { ascending: false });
   });
+  if (error && /models|model_map/i.test(error.message || '')) {
+    // قبل تشغيل ملف SQL النموذجين: نقرأ بدون الأعمدة الجديدة
+    const r2 = await readScopedBySchool(scoped => {
+      let q = sb.from('answer_keys').select('id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, updated_at');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('updated_at', { ascending: false });
+    });
+    return { data: r2.data || [], error: r2.error ? r2.error.message : null };
+  }
   if (error) {
     const missing = /answer_keys|relation|does not exist|schema cache/i.test(error.message || '');
     return { data: [], error: missing ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : error.message };
@@ -577,8 +681,8 @@ async function saveKey() {
   const o = readOptions();
   if (!o.title) { keyStatusMsg('اكتب عنوان الاختبار فوق (يظهر بقائمة المفاتيح وبالتقارير)', true); $('as-title').focus(); return; }
   if (!o.questions && !o.essayTotal) { keyStatusMsg('حدد عدد الأسئلة', true); return; }
-  const missing = keyAnswers.filter(v => v == null).length;
-  if (missing) { keyStatusMsg(`باقي ${missing} سؤال بدون إجابة - كمّل المفتاح قبل الحفظ`, true); return; }
+  const prob = keyProblems();
+  if (prob) { keyStatusMsg(prob + ' - كمّل المفتاح قبل الحفظ', true); return; }
   const row = {
     title: o.title, subject: o.subject || null,
     grade_level: $('as-barcode').checked && $('as-scope').value !== 'school' ? $('as-grade').value : null,
@@ -586,6 +690,12 @@ async function saveKey() {
     essay_total: o.essayTotal || 0, answers: keyAnswers.slice(),
     updated_at: new Date().toISOString(),
   };
+  if (o.modelsOn) {
+    row.models = { mode: modelMode(), answers_b: keyAnswersB.slice(), order_b: modelMode() === 'order' ? orderB.slice() : null };
+    row.model_map = modelMap;
+  } else if (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).models) {
+    row.models = null;
+  }
   $('as-key-save-btn').disabled = true;
   keyStatusMsg('جارٍ الحفظ...');
   let res;
@@ -593,11 +703,14 @@ async function saveKey() {
   else res = await writeWithSchool(extra => sb.from('answer_keys').insert({ ...row, ...extra }).select('id').single());
   $('as-key-save-btn').disabled = false;
   if (res.error) {
-    const missingTbl = /answer_keys|relation|does not exist|schema cache/i.test(res.error.message || '');
-    keyStatusMsg(missingTbl ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + res.error.message, true);
+    const msg = res.error.message || '';
+    const missingCols = /models|model_map/i.test(msg);
+    const missingTbl = /answer_keys|relation|does not exist|schema cache/i.test(msg);
+    keyStatusMsg(missingCols ? 'ميزة النموذجين تحتاج تشغيل ملف sql/exam_models.sql بقاعدة البيانات أولًا' : missingTbl ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + msg, true);
     return;
   }
   currentKeyId = res.data.id;
+  setStatus('');
   await refreshSavedKeysList();
   keyStatusMsg(`تم حفظ المفتاح "${o.title}" ✓ - لما ترفع ملف Remark بالتقارير ينطبق تلقائيًا`);
 }
@@ -613,6 +726,13 @@ function loadKeyIntoForm(k) {
   $('as-essay-total-wrap').classList.toggle('hidden', !k.essay_total);
   if (k.essay_total) $('as-essay-total').value = k.essay_total;
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
+  const m = k.models && k.models.mode ? k.models : null;
+  $('as-models-on').checked = !!m;
+  if (m) $('as-models-mode').value = m.mode;
+  keyAnswersB = m && Array.isArray(m.answers_b) ? m.answers_b.slice() : [];
+  orderB = m && Array.isArray(m.order_b) ? m.order_b.slice() : [];
+  modelMap = k.model_map && typeof k.model_map === 'object' ? { ...k.model_map } : {};
+  activeModel = MODEL_A;
   currentKeyId = k.id;
 }
 
@@ -623,15 +743,34 @@ function buildKeyPages() {
   if (!L.ok) throw new Error(L.error);
   const missing = keyAnswers.map((v, i) => (v == null ? i + 1 : null)).filter(Boolean);
   if (missing.length) throw new Error(`حدد الإجابة الصحيحة لكل الأسئلة - الناقصة: ${missing.slice(0, 12).join('، ')}${missing.length > 12 ? '...' : ''}`);
+  const prob = keyProblems();
+  if (prob) throw new Error(prob);
   const pg = PAGE[o.size];
   const keyStudent = { full_name: o.lang === 'en' ? 'ANSWER KEY' : 'نموذج الإجابة (المفتاح)', national_id: KEY_ID, grade_level: o.withBarcode && $('as-scope').value !== 'school' ? $('as-grade').value : '', class_section: null };
+  if (o.modelsOn) {
+    const optsA = { ...o, keyFill: keyAnswers.slice() }, optsB = { ...o, keyFill: keyAnswersB.slice() };
+    const html = buildPrintPage(optsA, [{ ...keyStudent, model: MODEL_A }], logoUrl()) + buildPrintPage(optsB, [{ ...keyStudent, model: MODEL_B }], logoUrl());
+    return { o: optsA, pg, sheets: 2, count: 2, html, isKey: true };
+  }
   const opts = { ...o, keyFill: keyAnswers.slice() };
   return { o: opts, pg, sheets: 1, count: 1, html: buildPrintPage(opts, [keyStudent], logoUrl()), isKey: true };
 }
 
+// النموذجين: لازم المفتاح محفوظ قبل طباعة أوراق الطلاب، عشان ينحفظ معه نموذج كل طالب
+function modelsGuard() {
+  const o = readOptions();
+  if (!o.modelsOn) return null;
+  if (!o.withBarcode) return 'الاختبار بنموذجين يحتاج "باركود باسم الطالب"، عشان المنصة تعرف نموذج كل طالب وقت التصحيح';
+  if (!currentKeyId) return 'احفظ مفتاح الإجابة للنموذجين أولًا، وبعدها اطبع الأوراق (ينحفظ نموذج كل طالب مع المفتاح)';
+  return null;
+}
+
 function printSheets(builtOverride) {
   let built = builtOverride;
-  if (!built) { try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; } }
+  if (!built) {
+    const g = modelsGuard(); if (g) { setStatus(g, true); return; }
+    try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; }
+  }
   const { pg } = built;
   const win = window.open('', '_blank');
   if (!win) { setStatus('اسمح بفتح النوافذ المنبثقة للطباعة', true); return; }
@@ -639,6 +778,7 @@ function printSheets(builtOverride) {
   win.document.write(`<!doctype html><html lang="ar"><head><meta charset="utf-8"><title>${escHtml(built.o.title || 'ورقة الإجابة')}</title>
     <style>@page { size:${pg.w}mm ${pg.h}mm; margin:0; } html,body{width:${pg.w}mm;} ${SHEET_STYLES}</style></head><body>${built.html}</body></html>`);
   win.document.close();
+  if (built.modelsStudents) persistModelMap();
   const go = () => { win.focus(); win.print(); };
   Promise.all([...win.document.images].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))).then(() => setTimeout(go, 200));
   setStatus(built.isKey
@@ -723,7 +863,11 @@ export async function htmlPagesToPdf({ html, styles, w, h, pageSelector, filenam
 
 async function downloadPdf(builtOverride) {
   let built = builtOverride;
-  if (!built) { try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; } }
+  if (!built) {
+    const g = modelsGuard(); if (g) { setStatus(g, true); return; }
+    try { built = buildAllPages(); } catch (e) { setStatus(e.message, true); return; }
+  }
+  if (built.modelsStudents) persistModelMap();
   const { pg } = built;
   const btns = [$('as-print-btn'), $('as-pdf-btn'), $('as-key-print-btn'), $('as-key-pdf-btn')];
   btns.forEach(b => { b.disabled = true; });
@@ -744,7 +888,7 @@ export function initAnswerSheetCard() {
   asInitialized = true;
   $('as-grade').innerHTML = GRADES.map(g => `<option value="${g}">${gradeLabels[g] || g}</option>`).join('');
 
-  const refresh = () => { updateLimitHint(); refreshScopeControls(); renderPreview(); };
+  const refresh = () => { updateLimitHint(); refreshScopeControls(); renderDistribution(); renderPreview(); };
   ['as-size', 'as-questions', 'as-choices', 'as-lang', 'as-title', 'as-subject'].forEach(id => {
     $(id).addEventListener('input', refresh);
     $(id).addEventListener('change', refresh);
@@ -764,8 +908,39 @@ export function initAnswerSheetCard() {
     const b = e.target.closest('.as-key-btn');
     if (!b) return;
     const q = +b.dataset.q, c = +b.dataset.c;
-    keyAnswers[q] = keyAnswers[q] === c ? null : c;
+    const arr = activeModel === MODEL_B ? keyAnswersB : keyAnswers;
+    arr[q] = arr[q] === c ? null : c;
     renderKeyGrid();
+  });
+  $('as-key-grid').addEventListener('change', (e) => {
+    const sel = e.target.closest('.as-ord');
+    if (!sel) return;
+    orderB[+sel.dataset.q] = sel.value === '' ? null : +sel.value;
+    renderKeyGrid();
+  });
+  $('as-models-on').addEventListener('change', async () => {
+    if ($('as-models-on').checked && !$('as-barcode').checked) {
+      $('as-barcode').checked = true;
+      $('as-barcode-opts').classList.remove('hidden');
+      await loadAllStudents();
+    }
+    renderKeyGrid(); refresh();
+  });
+  $('as-models-mode').addEventListener('change', renderKeyGrid);
+  $('as-model-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { activeModel = b.dataset.m; renderKeyGrid(); }));
+  $('as-dist-auto').addEventListener('click', () => {
+    if (!confirm('إعادة توزيع النموذجين بالتناوب لكل الطلاب المختارين؟ أي تعديل يدوي عليهم بيتغيّر.')) return;
+    ensureAssignments(selectedStudents(), true); renderDistribution(); renderPreview();
+  });
+  $('as-dist-toggle').addEventListener('click', () => {
+    const l = $('as-dist-list'); const open = l.classList.toggle('hidden') === false;
+    $('as-dist-toggle').textContent = open ? 'إخفاء الطلاب' : 'عرض الطلاب';
+    renderDistribution();
+  });
+  $('as-dist-list').addEventListener('click', (e) => {
+    const b = e.target.closest('.as-dist-m'); if (!b) return;
+    modelMap[b.dataset.id] = modelMap[b.dataset.id] === MODEL_B ? MODEL_A : MODEL_B;
+    renderDistribution(); renderPreview();
   });
   const keyAction = (fn) => () => {
     let built;
@@ -774,13 +949,14 @@ export function initAnswerSheetCard() {
   };
   $('as-key-print-btn').addEventListener('click', keyAction(printSheets));
   $('as-key-pdf-btn').addEventListener('click', keyAction(downloadPdf));
-  $('as-key-clear-btn').addEventListener('click', () => { keyAnswers = []; currentKeyId = null; $('as-saved-keys').value = ''; renderKeyGrid(); });
+  $('as-key-clear-btn').addEventListener('click', () => { keyAnswers = []; keyAnswersB = []; orderB = []; modelMap = {}; activeModel = MODEL_A; currentKeyId = null; $('as-saved-keys').value = ''; renderKeyGrid(); renderDistribution(); });
   $('as-key-save-btn').addEventListener('click', saveKey);
   $('as-saved-keys').addEventListener('change', () => { $('as-key-load-btn').disabled = $('as-key-delete-btn').disabled = !$('as-saved-keys').value; });
   $('as-key-load-btn').addEventListener('click', () => {
     const k = savedKeys.find(x => x.id === $('as-saved-keys').value);
     if (!k) return;
     loadKeyIntoForm(k);
+    if (k.models && k.models.mode && !$('as-barcode').checked) { $('as-barcode').checked = true; $('as-barcode-opts').classList.remove('hidden'); loadAllStudents().then(refresh); }
     refresh(); renderKeyGrid();
     keyStatusMsg(`تم تحميل "${k.title}" - أي تعديل وحفظ يحدّث نفس المفتاح`);
   });

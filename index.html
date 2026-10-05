@@ -1572,6 +1572,23 @@
                     <button type="button" class="btn-secondary" id="as-key-load-btn" style="width:auto; padding:8px 12px;" disabled>تحميل</button>
                     <button type="button" class="text-action-btn" id="as-key-delete-btn" style="width:auto; padding:8px 10px; color:var(--danger) !important;" disabled>حذف</button>
                   </div>
+                  <div class="as-models-box">
+                    <label class="as-models-on"><input type="checkbox" id="as-models-on" /> الاختبار بنموذجين (أ و ب)</label>
+                    <div id="as-models-opts" class="hidden">
+                      <label class="as-models-mode">الفرق بين النموذجين
+                        <select id="as-models-mode">
+                          <option value="choices">نفس الأسئلة ونفس الترتيب، والخيارات مختلفة</option>
+                          <option value="order">نفس الأسئلة بترتيب مختلف</option>
+                          <option value="different">أسئلة مختلفة كليًا</option>
+                        </select>
+                      </label>
+                      <div class="seg-tabs as-model-tabs" id="as-model-tabs">
+                        <button type="button" data-m="أ" class="active">نموذج أ <span class="tr-cnt" id="as-model-cnt-a"></span></button>
+                        <button type="button" data-m="ب">نموذج ب <span class="tr-cnt" id="as-model-cnt-b"></span></button>
+                      </div>
+                      <p class="as-models-hint" id="as-models-hint"></p>
+                    </div>
+                  </div>
                   <div id="as-key-grid" style="display:flex; flex-wrap:wrap; gap:6px; max-height:260px; overflow-y:auto;"></div>
                   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
                     <button class="btn-primary" id="as-key-save-btn" style="width:auto; padding:8px 14px;">حفظ المفتاح</button>
@@ -1603,6 +1620,15 @@
                     </label>
                   </div>
                   <div id="as-scope-count" style="font-size:12px; color:var(--slate); font-weight:700;"></div>
+                  <div id="as-dist" class="as-dist hidden">
+                    <div class="as-dist-head">
+                      <b>توزيع النموذجين</b>
+                      <span id="as-dist-sum"></span>
+                      <button type="button" class="ope-link" id="as-dist-auto">إعادة التوزيع بالتناوب</button>
+                      <button type="button" class="ope-link" id="as-dist-toggle">عرض الطلاب</button>
+                    </div>
+                    <div id="as-dist-list" class="as-dist-list hidden"></div>
+                  </div>
                   <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">ورقة A4 بالعرض: بعد القص، حط رزمة الأنصاف اليسرى تحت رزمة الأنصاف اليمنى، وتصير الأوراق مرتبة بالتسلسل.</p>
                 </div>
 
@@ -1678,6 +1704,7 @@
             </div>
             <div class="error-msg" id="er-editkey-error"></div>
           </div>
+          <div class="seg-tabs er-model-switch hidden" id="er-model-switch" aria-label="عرض حسب النموذج"></div>
           <div class="bud-tabs" id="er-tabs" role="tablist">
             <button class="bud-tab active" id="er-tab-dist" type="button">التوزيع التكرارى</button>
             <button class="bud-tab" id="er-tab-hist" type="button">تقدير الطالب</button>

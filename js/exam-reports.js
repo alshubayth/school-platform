@@ -169,10 +169,12 @@ function mostCommon(arr) {
 export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, reversedOrder = true, itemTypes = [] }) {
   const n = students.length;
 
-  const isCorrect = (ans, i) => ans[i] != null && ans[i] === keyRaw[i];
-  const totals = students.map(s => {
+  // كل طالب يتصحّح بمفتاح نموذجه (s.key) لو الاختبار بأكثر من نموذج، وإلا بالمفتاح العام
+  const K = st => st.key || keyRaw;
+  const isCorrectSt = (st, i) => st.answers[i] != null && st.answers[i] === K(st)[i];
+  const totals = students.map(st => {
     let t = 0;
-    for (let i = 0; i < itemCount; i++) if (isCorrect(s.answers, i)) t++;
+    for (let i = 0; i < itemCount; i++) if (isCorrectSt(st, i)) t++;
     return t;
   });
 
@@ -214,26 +216,33 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
   let mcqSeq = 0, tfSeq = 0;
   for (let i = 0; i < itemCount; i++) {
     const numChoices = choiceCounts[i];
-    const correctLetter = letterFor(keyRaw[i], numChoices, reversedOrder);
+    // لو الطلاب بنماذج إجابتها الصحيحة تختلف بهذا السؤال، الحروف ما تنقارن ببعض - نعرض صحيح/خطأ بس
+    const keyVals = new Set(students.map(st => K(st)[i]));
+    const mixedKey = keyVals.size > 1;
+    const correctLetter = mixedKey ? 'حسب النموذج' : letterFor(students.length ? K(students[0])[i] : keyRaw[i], numChoices, reversedOrder);
     const freqMap = new Map(); // key: label -> {count, isCorrect, sortVal}
     let correctCount = 0, notPresent = 0, multi = 0;
-    students.forEach(s => {
-      const v = s.answers[i];
+    students.forEach(st => {
+      const v = st.answers[i];
+      const ok = v != null && v === K(st)[i];
       let label, sortVal;
       if (v == null || v === -2) { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
       else if (v === -3) { label = 'متعدد'; sortVal = 999; multi++; }
-      else if (typeof v === 'number' && v > 0) { label = letterFor(v, numChoices, reversedOrder); sortVal = v; }
+      else if (typeof v === 'number' && v > 0) {
+        if (mixedKey) { label = ok ? 'إجابة صحيحة' : 'إجابة خاطئة'; sortVal = ok ? 1 : 2; }
+        else { label = letterFor(v, numChoices, reversedOrder); sortVal = v; }
+      }
       else { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
-      if (!freqMap.has(label)) freqMap.set(label, { label, count: 0, isCorrect: label === correctLetter, sortVal });
+      if (!freqMap.has(label)) freqMap.set(label, { label, count: 0, isCorrect: mixedKey ? label === 'إجابة صحيحة' : label === correctLetter, sortVal });
       freqMap.get(label).count++;
-      if (v === keyRaw[i]) correctCount++;
+      if (ok) correctCount++;
     });
     const choices = Array.from(freqMap.values())
       .sort((a, b) => a.sortVal - b.sortVal)
       .map(c => ({ ...c, pct: n ? (c.count / n) * 100 : 0 }));
 
     const correctPct = n ? (correctCount / n) * 100 : 0;
-    const mask = students.map(s => (isCorrect(s.answers, i) ? 1 : 0));
+    const mask = students.map(st => (isCorrectSt(st, i) ? 1 : 0));
     const p = correctCount / n, q = 1 - p;
     const m1vals = [], m0vals = [];
     mask.forEach((m, si) => (m ? m1vals : m0vals).push(totals[si]));
@@ -242,14 +251,14 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
     const pointBiserial = sd > 0 ? ((m1 - m0) / sd) * Math.sqrt(p * q) : 0;
 
     let upperCorrect = 0, lowerCorrect = 0;
-    students.forEach((s, si) => {
-      if (upperSet.has(si) && isCorrect(s.answers, i)) upperCorrect++;
-      if (lowerSet.has(si) && isCorrect(s.answers, i)) lowerCorrect++;
+    students.forEach((st, si) => {
+      if (upperSet.has(si) && isCorrectSt(st, i)) upperCorrect++;
+      if (lowerSet.has(si) && isCorrectSt(st, i)) lowerCorrect++;
     });
     const upper27 = (upperCorrect / k27) * 100;
     const lower27 = (lowerCorrect / k27) * 100;
 
-    const wrongChoices = choices.filter(c => !c.isCorrect && c.label !== 'لا توجد استجابة' && c.label !== 'متعدد');
+    const wrongChoices = mixedKey ? [] : choices.filter(c => !c.isCorrect && c.label !== 'لا توجد استجابة' && c.label !== 'متعدد');
     const topWrong = wrongChoices.reduce((best, c) => (!best || c.count > best.count ? c : best), null);
     const flagged = !!(topWrong && topWrong.count > correctCount);
 
@@ -295,6 +304,65 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
     gradeDistribution, scoreHistogram, itemStats, hardest, easiest, toReview, lowestStudents, highestStudents,
     topStudents, weakStudents,
   };
+}
+
+/* =========================================================================
+ * الاختبار بنموذجين (أ و ب): كل طالب يتصحّح بإجابة نموذجه. نموذج الطالب محفوظ مع مفتاح
+ * الإجابة (model_map) برقم هويته وقت طباعة الأوراق، لأن ملف Remark ما فيه النموذج.
+ * mode: 'choices' نفس الأسئلة والترتيب | 'order' نفس الأسئلة بترتيب مختلف (orderB[i] = رقم السؤال
+ * المقابل بالنموذج أ) | 'different' أسئلة مختلفة (تحليل الأسئلة لكل نموذج لحاله)
+ * ========================================================================= */
+const MODEL_A = 'أ', MODEL_B = 'ب';
+const MODE_LABELS = { choices: 'نفس الأسئلة والترتيب، الخيارات مختلفة', order: 'نفس الأسئلة بترتيب مختلف', different: 'أسئلة مختلفة' };
+// مفتاح محفوظ (فهارس: 0 = أ) ← قيم خام بنفس ترميز ملف Remark
+function rawFromIdx(idxArr, choiceCounts, reversed) {
+  return choiceCounts.map((c, i) => (idxArr && idxArr[i] != null ? valueForLetter(ARABIC_LETTERS[idxArr[i]], c, reversed) : null));
+}
+export function gradeWithModels({ parsed, keyA, keyB, mode, orderB, reversedOrder, modelOf, keyId }) {
+  const n = parsed.itemCount;
+  // بالترتيب المختلف: نرتّب إجابات طالب النموذج ب (ومفتاحه) على أرقام أسئلة النموذج أ
+  const toA = arr => {
+    if (mode !== 'order' || !Array.isArray(orderB)) return arr;
+    const out = Array(n).fill(null);
+    orderB.forEach((j, i) => { if (j != null && j < n) out[j] = arr[i]; });
+    return out;
+  };
+  const keyBA = toA(keyB);
+  const tagged = parsed.students.map(st => ({ ...st, model: modelOf(st) === MODEL_B ? MODEL_B : MODEL_A }));
+  const graded = tagged.map(st => (st.model === MODEL_B ? { ...st, answers: toA(st.answers), key: keyBA } : { ...st, key: keyA }));
+  const base = { itemCount: n, choiceCounts: parsed.choiceCounts, reversedOrder, itemTypes: parsed.itemTypes || [] };
+  const stats = computeExamStats({ ...base, keyRaw: keyA, students: graded });
+  const byModel = {};
+  [MODEL_A, MODEL_B].forEach(m => {
+    const sub = graded.filter(st => st.model === m).map(({ key, ...rest }) => rest);
+    if (sub.length) byModel[m] = computeExamStats({ ...base, keyRaw: m === MODEL_B ? keyBA : keyA, students: sub });
+  });
+  stats.models = { mode, counts: { [MODEL_A]: tagged.filter(st => st.model === MODEL_A).length, [MODEL_B]: tagged.filter(st => st.model === MODEL_B).length } };
+  stats.itemsMixed = mode === 'different';
+  stats.byModel = byModel;
+  const raw_data = { students: tagged, choiceCounts: parsed.choiceCounts, itemTypes: parsed.itemTypes || [], reversedOrder, models: { keyId: keyId || null, mode, keyA, keyB, orderB: orderB || null } };
+  return { stats, raw_data, key_raw: keyA };
+}
+
+function renderModelSummary(parsed) {
+  const k = parsed.modelKey;
+  const map = k.model_map || {};
+  const idOf = st => String(st.id || '').trim();
+  const a = parsed.students.filter(st => map[idOf(st)] === MODEL_A).length;
+  const b = parsed.students.filter(st => map[idOf(st)] === MODEL_B).length;
+  const unknown = parsed.students.filter(st => !map[idOf(st)]);
+  document.getElementById('er-key-form').innerHTML = `<div class="er-models-sum">
+    <div class="er-models-h"><b>اختبار بنموذجين</b><span>${esc(MODE_LABELS[k.models.mode] || '')}</span></div>
+    <div class="dd-stats" style="margin:8px 0;">
+      <span class="ds ds-all"><b>${a}</b> نموذج أ</span>
+      <span class="ds ds-present"><b>${b}</b> نموذج ب</span>
+      ${unknown.length ? `<span class="ds ds-late"><b>${unknown.length}</b> بدون نموذج محفوظ</span>` : ''}
+    </div>
+    <p class="er-models-p">كل طالب يتصحّح بإجابة نموذجه تلقائيًا من رقم هويته. لتعديل الإجابات: عدّل المفتاح من "ورقة إجابة للتصحيح الآلي" واحفظه.</p>
+    ${unknown.length ? `<div class="er-unknown"><p>هذول ما لهم نموذج محفوظ (أوراقهم ما انطبعت من المنصة بهذا المفتاح) - اختر نموذج كل واحد:</p>
+      ${unknown.map(st => `<label class="er-unk-row"><span>${esc(st.name || st.id)}</span><small>${esc(st.id)}</small>
+        <select class="er-model-pick" data-id="${esc(idOf(st))}"><option value="أ">نموذج أ</option><option value="ب">نموذج ب</option></select></label>`).join('')}</div>` : ''}
+  </div>`;
 }
 
 /* =========================================================================
@@ -383,6 +451,7 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
 // معبّاة مبدئيًا من صف النموذج لو انلقى بالملف. تُعاد كل مرة يتغيّر فيها خيار "ترتيب الاختيارات"
 // عشان الحروف المعروضة/المعبّأة تطابق الاتجاه المختار
 function renderKeyForm(parsed, reversed = true) {
+  if (parsed.modelKey) { renderModelSummary(parsed); return; }
   const el = document.getElementById('er-key-form');
   el.innerHTML = `<div class="er-key-grid">${parsed.choiceCounts.map((numChoices, i) => {
     const options = ARABIC_LETTERS.slice(0, numChoices);
@@ -437,6 +506,7 @@ async function setupSavedKeyPicker(parsed) {
 function applySavedKey(k) {
   if (!parsedData) return;
   const msg = document.getElementById('er-saved-key-msg');
+  if (k && k.models && k.models.mode) parsedData.modelKey = k; else delete parsedData.modelKey;
   if (!k) {
     delete parsedData.presetLetters;
     parsedData.choiceCounts = parsedData._origChoiceCounts.slice();
@@ -476,6 +546,39 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   if (!parsedData) { errEl.textContent = 'حلّل الملف أولاً'; errEl.style.display = 'block'; return; }
   const title = document.getElementById('er-title').value.trim();
   if (!title) { errEl.textContent = 'اكتب عنوان للتقرير'; errEl.style.display = 'block'; return; }
+
+  if (parsedData.modelKey) {
+    const k = parsedData.modelKey;
+    const map = k.model_map || {};
+    const picks = {};
+    document.querySelectorAll('.er-model-pick').forEach(sel => { picks[sel.dataset.id] = sel.value; });
+    const reversedOrder = document.getElementById('er-reversed-order').checked;
+    const g = gradeWithModels({
+      parsed: parsedData,
+      keyA: rawFromIdx(k.answers, parsedData.choiceCounts, reversedOrder),
+      keyB: rawFromIdx(k.models.answers_b, parsedData.choiceCounts, reversedOrder),
+      mode: k.models.mode, orderB: k.models.order_b, reversedOrder, keyId: k.id,
+      modelOf: st => { const id = String(st.id || '').trim(); return map[id] || picks[id] || MODEL_A; },
+    });
+    const { error } = await writeWithSchool(extra => sb.from('exam_reports').insert({
+      title,
+      subject_name: document.getElementById('er-subject').value.trim() || null,
+      grade_level: document.getElementById('er-grade').value.trim() || null,
+      semester: document.getElementById('er-semester').value || null,
+      item_count: parsedData.itemCount,
+      students_count: parsedData.students.length,
+      key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data,
+      created_by: currentUserId,
+      ...extra,
+    }));
+    if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
+    parsedData = null;
+    document.getElementById('er-preview-card').classList.add('hidden');
+    document.getElementById('er-file').value = '';
+    openUpload(false);
+    await loadSavedList();
+    return;
+  }
 
   const selects = Array.from(document.querySelectorAll('.er-key-select'));
   const letterSelections = selects.map(s => s.value);
@@ -581,7 +684,9 @@ async function openReport(id) {
   document.getElementById('er-detail-title').textContent = data.title;
   document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`;
   showErTab('dist');
-  renderAllReports(data.stats);
+  renderReportStats(data.stats);
+  const ekb = document.getElementById('er-edit-key-btn');
+  ekb.textContent = data.raw_data && data.raw_data.models ? '↻ إعادة التصحيح بالمفتاح المحفوظ' : '✎ تعديل مفتاح الإجابة';
   document.getElementById('er-editkey-card').classList.add('hidden');
   document.getElementById('er-updatefile-card').classList.add('hidden');
 }
@@ -634,6 +739,34 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       return;
     }
 
+    if (currentReport.raw_data.models) {
+      const m = currentReport.raw_data.models;
+      const key = await fetchKeyById(m.keyId);
+      const oldModel = new Map((currentReport.raw_data.students || []).map(st => [String(st.id || '').trim(), st.model]));
+      const map = (key && key.model_map) || {};
+      let keyA, keyB, mode = m.mode, orderB = m.orderB;
+      if (key && key.models) {
+        keyA = rawFromIdx(key.answers, newParsed.choiceCounts, reversedOrder);
+        keyB = rawFromIdx(key.models.answers_b, newParsed.choiceCounts, reversedOrder);
+        mode = key.models.mode; orderB = key.models.order_b;
+      } else {
+        const conv = raw => buildManualKey(oldChoiceCounts.map((c, i) => letterFor(raw[i], c, reversedOrder)), newParsed.choiceCounts, reversedOrder);
+        keyA = conv(m.keyA); keyB = conv(m.keyB);
+      }
+      const g = gradeWithModels({ parsed: newParsed, keyA, keyB, mode, orderB, reversedOrder, keyId: m.keyId,
+        modelOf: st => { const id = String(st.id || '').trim(); return map[id] || oldModel.get(id) || MODEL_A; } });
+      const { error } = await sb.from('exam_reports').update({
+        item_count: newParsed.itemCount, students_count: newParsed.students.length,
+        key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data,
+      }).eq('id', currentReport.id);
+      if (error) { errEl.textContent = 'تعذر تحديث التقرير: ' + error.message; errEl.style.display = 'block'; return; }
+      currentReport = { ...currentReport, item_count: newParsed.itemCount, students_count: newParsed.students.length, key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data };
+      document.getElementById('er-detail-sub').textContent = `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'} — ${currentReport.students_count} طالب`;
+      renderReportStats(g.stats);
+      document.getElementById('er-updatefile-card').classList.add('hidden');
+      return;
+    }
+
     // نحوّل مفتاح الإجابة الحالي (قيم خام) لحروف باستخدام بيانات الترميز القديمة، وبعدين نبنيه
     // من جديد بنفس الحروف على قيم الملف الجديد - عشان الإجابة الصحيحة (بالحرف) تبقى كما هي
     // حتى لو الترميز الخام اختلف شوي بين الملفين
@@ -658,7 +791,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
 
     currentReport = { ...currentReport, item_count: newParsed.itemCount, students_count: newParsed.students.length, key_raw: newKeyRaw, stats, raw_data: newRawData };
     document.getElementById('er-detail-sub').textContent = `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'} — ${currentReport.students_count} طالب`;
-    renderAllReports(stats);
+    renderReportStats(stats);
     document.getElementById('er-updatefile-card').classList.add('hidden');
   } catch (e) {
     errEl.textContent = e.message || 'تعذر قراءة الملف';
@@ -667,8 +800,37 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
 });
 
 /* ---------- تعديل مفتاح الإجابة لتقرير محفوظ وإعادة حساب التقارير الستة ---------- */
+async function fetchKeyById(id) {
+  if (!id) return null;
+  const { data } = await sb.from('answer_keys').select('id, answers, choices, models, model_map').eq('id', id).maybeSingle();
+  return data || null;
+}
+
+// تقرير بنموذجين: يعيد التصحيح بآخر نسخة من المفتاح المحفوظ (الإجابات ونموذج كل طالب)
+async function regradeModelReport() {
+  const rd = currentReport.raw_data;
+  const key = await fetchKeyById(rd.models.keyId);
+  if (!key || !key.models) { alert('المفتاح المحفوظ لهذا الاختبار انحذف أو صار بنموذج واحد - ما أقدر أعيد التصحيح منه.'); return; }
+  if (!confirm('إعادة تصحيح كل الطلاب بآخر نسخة من المفتاح المحفوظ؟')) return;
+  const reversedOrder = rd.reversedOrder !== false;
+  const map = key.model_map || {};
+  const g = gradeWithModels({
+    parsed: { itemCount: rd.choiceCounts.length, choiceCounts: rd.choiceCounts, itemTypes: rd.itemTypes, students: rd.students },
+    keyA: rawFromIdx(key.answers, rd.choiceCounts, reversedOrder),
+    keyB: rawFromIdx(key.models.answers_b, rd.choiceCounts, reversedOrder),
+    mode: key.models.mode, orderB: key.models.order_b, reversedOrder, keyId: key.id,
+    modelOf: st => map[String(st.id || '').trim()] || st.model || MODEL_A,
+  });
+  const { error } = await sb.from('exam_reports').update({ key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data }).eq('id', currentReport.id);
+  if (error) { alert('تعذر الحفظ: ' + error.message); return; }
+  currentReport = { ...currentReport, key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data };
+  showErTab('dist');
+  renderReportStats(g.stats);
+}
+
 document.getElementById('er-edit-key-btn').addEventListener('click', () => {
   if (!currentReport) return;
+  if (currentReport.raw_data && currentReport.raw_data.models) { regradeModelReport(); return; }
   document.getElementById('er-updatefile-card').classList.add('hidden');
   const errEl = document.getElementById('er-editkey-error');
   errEl.style.display = 'none';
@@ -735,7 +897,7 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
   currentReport = { ...currentReport, key_raw: keyRaw, stats, raw_data: newRawData };
   document.getElementById('er-editkey-card').classList.add('hidden');
   showErTab('dist');
-  renderAllReports(stats);
+  renderReportStats(stats);
 });
 
 document.getElementById('er-back-to-list').addEventListener('click', () => {
@@ -772,6 +934,28 @@ function summaryStatsGrid(s) {
     ${statBox('معامل الثبات (KR20)', fmt2(s.kr20))}
     ${statBox('متوسط الدرجة %', pct(s.meanPct))}
   </div>`;
+}
+
+// تقرير اختبار بنموذجين: تبديل بين "كل الطلاب" وكل نموذج لحاله
+function renderReportStats(stats, view = 'all') {
+  const sw = document.getElementById('er-model-switch');
+  const byModel = stats && stats.byModel;
+  if (!sw || !byModel || !Object.keys(byModel).length) { if (sw) sw.classList.add('hidden'); renderAllReports(stats); return; }
+  const c = (stats.models && stats.models.counts) || {};
+  sw.innerHTML = `<button type="button" data-v="all">كل الطلاب <span class="tr-cnt">${stats.n}</span></button>` +
+    Object.keys(byModel).map(m => `<button type="button" data-v="${m}">نموذج ${m} <span class="tr-cnt">${c[m] || byModel[m].n}</span></button>`).join('');
+  sw.classList.remove('hidden');
+  sw.querySelectorAll('button').forEach(b => {
+    b.classList.toggle('active', b.dataset.v === view);
+    b.onclick = () => renderReportStats(stats, b.dataset.v);
+  });
+  renderAllReports(view === 'all' ? stats : byModel[view]);
+  if (view === 'all' && stats.itemsMixed) {
+    ['er-panel-items', 'er-panel-itemstats', 'er-panel-analysis'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.insertAdjacentHTML('afterbegin', '<div class="er-mixed-note">أسئلة النموذجين مختلفة، فتحليل الأسئلة هنا يخلط سؤالين مختلفين. اختر "نموذج أ" أو "نموذج ب" من فوق لتحليل أسئلة كل نموذج.</div>');
+    });
+  }
 }
 
 function renderAllReports(s) {
