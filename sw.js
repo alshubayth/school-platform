@@ -1,5 +1,5 @@
 // Service Worker: التثبيت كتطبيق + استقبال إشعارات الجوال
-const CACHE_NAME = 'mudaar-v2';
+const CACHE_NAME = 'mudaar-v3';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
@@ -23,8 +23,8 @@ self.addEventListener('push', (event) => {
   const isParent = d.audience === 'parent';
   event.waitUntil(self.registration.showNotification(d.title || (isParent ? 'خطة الأسبوع' : 'مُدار'), {
     body: d.body || '',
-    icon: isParent ? 'icon-parent-192.png' : 'icon-192.png',
-    badge: isParent ? 'icon-parent-192.png' : 'icon-192.png',
+    icon: isParent ? 'icon-parent-192.png?v=2' : 'icon-192.png?v=2',
+    badge: isParent ? 'icon-parent-192.png?v=2' : 'icon-192.png?v=2',
     tag: d.tag || undefined,
     renotify: !!d.tag,
     dir: 'rtl',
