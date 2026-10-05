@@ -28,15 +28,24 @@ async function readScoped(factory) {
 /* ===== رابط صفحة أولياء الأمور (خاص بمدرسة هذا الحساب) =====
  * parent.html يحدد المدرسة من ?school=<slug>. بدون تعدد مدارس (أو قبل تنفيذ ترقية SQL) نستخدم
  * "al-murooj" كافتراضي عشان الرابط يستمر يشتغل بدون تغيير لمدرسة المروج. */
-async function buildParentPageUrl() {
+async function schoolSlugForLinks() {
   let slug = 'al-murooj';
   if (currentSchoolId) {
     const { data } = await sb.from('schools').select('slug').eq('id', currentSchoolId).maybeSingle();
     if (data && data.slug) slug = data.slug;
   }
-  const base = location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/[^/]*$/, '/');
-  return base + 'parent.html?school=' + encodeURIComponent(slug);
+  return slug;
 }
+const siteBase = () => location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/[^/]*$/, '/');
+async function buildParentPageUrl() {
+  return siteBase() + 'parent.html?school=' + encodeURIComponent(await schoolSlugForLinks());
+}
+// صفحة تثبيت تطبيق أولياء الأمور: فيها رمز QR ونسخ الرابط وطباعة ملصق للمدخل
+document.getElementById('weekly-parent-install').addEventListener('click', async () => {
+  const win = window.open('', '_blank');
+  const url = siteBase() + 'install.html?app=parent&school=' + encodeURIComponent(await schoolSlugForLinks());
+  if (win) win.location.href = url; else location.href = url;
+});
 
 document.getElementById('weekly-copy-parent-link').addEventListener('click', async () => {
   const msgEl = document.getElementById('weekly-copy-parent-link-msg');
