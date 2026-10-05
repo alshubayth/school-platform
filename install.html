@@ -25,6 +25,10 @@
   .hero svg.tr{ position:absolute; inset:0; width:100%; height:100%; opacity:.35; pointer-events:none; }
   .hero .in{ max-width:760px; margin:0 auto; position:relative; display:flex; align-items:center; gap:18px; }
   .hero img{ width:78px; height:auto; flex-shrink:0; }
+  .hero img.school-logo{ width:64px; height:64px; object-fit:contain; background:#fff; border-radius:16px; padding:6px; }
+  .hero img.school-icon{ filter:brightness(0) invert(1); }
+  .hero .made-mark{ position:absolute; left:16px; bottom:56px; width:auto; height:16px; opacity:.55; }
+  .hidden{ display:none !important; }
   .hero h1{ font-size:30px; font-weight:800; line-height:1.3; }
   .hero p{ margin:6px 0 0; color:#BFD3F0; font-size:15px; line-height:1.7; }
 
@@ -55,6 +59,7 @@
   .warn{ background:#FFF4E5; color:#8A5200; border-radius:12px; padding:12px 14px; font-size:13.5px; margin-bottom:14px; line-height:1.7; }
 
   .share{ display:grid; grid-template-columns:auto 1fr; gap:18px; align-items:center; }
+  .share > *{ min-width:0; max-width:100%; }
   .qr{ width:150px; height:150px; border:1px solid var(--border); border-radius:12px; padding:8px; background:#fff; }
   .qr svg{ width:100%; height:100%; display:block; }
   .share h3{ font-size:17px; color:var(--navy); }
@@ -74,6 +79,9 @@
     .poster{ display:flex; flex-direction:column; align-items:center; width:210mm; height:297mm; padding:18mm 16mm; text-align:center; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .poster .ph{ width:100%; background:#0F2447; color:#fff; border-radius:8mm; padding:10mm 8mm; display:flex; flex-direction:column; align-items:center; gap:3mm; }
     .poster .ph img{ width:70mm; margin-bottom:3mm; }
+    .poster .ph img.school-logo{ width:28mm; height:28mm; object-fit:contain; background:#fff; border-radius:5mm; padding:2mm; }
+    .poster .ph img.school-icon{ width:24mm; filter:brightness(0) invert(1); }
+    .poster .p-credit{ height:6mm; width:auto; opacity:.5; margin-top:3mm; }
     .poster h1{ font-size:30pt; }
     .poster .ph p{ font-size:13pt; color:#D5E3F7; margin:0; }
     .poster .pqr{ width:95mm; height:95mm; margin:12mm 0 6mm; padding:4mm; border:0.6mm solid #0F2447; border-radius:5mm; }
@@ -92,6 +100,7 @@
     .hero p{ font-size:13.5px; }
     .share{ grid-template-columns:1fr; justify-items:center; text-align:center; }
     .link{ width:100%; }
+    .share > div{ width:100%; }
     .btn{ flex:1; }
   }
 </style>
@@ -107,12 +116,13 @@
     <g fill="#0C2147" stroke="#2FC1B2" stroke-width="2.5"><circle cx="340" cy="130" r="6"/><circle cx="380" cy="110" r="6"/></g>
   </svg>
   <div class="in">
-    <img src="mark-white.svg" alt="مُدار" />
+    <img src="mark-white.svg" alt="مُدار" id="h-logo" />
     <div>
       <h1 id="h-title">ثبّت مُدار على جوالك</h1>
       <p id="h-sub">أيقونة على شاشتك تفتح المنصة مباشرة بشاشة كاملة، وتوصلك التحديثات تلقائيًا</p>
     </div>
   </div>
+  <img class="made-mark hidden" id="made-mark" src="mark-white.svg" alt="مُدار" />
 </header>
 
 <main>
@@ -155,8 +165,8 @@
   <section class="card share">
     <div class="qr" id="qr" aria-label="رمز QR لرابط صفحة التثبيت" role="img"></div>
     <div>
-      <h3>شاركها مع الزملاء</h3>
-      <p>يصوّرون الرمز بكاميرا الجوال وتفتح لهم هذي الصفحة. أو اطبع ملصق وعلّقه في غرفة المعلمين.</p>
+      <h3 id="share-h">شاركها مع الزملاء</h3>
+      <p id="share-p">يصوّرون الرمز بكاميرا الجوال وتفتح لهم هذي الصفحة. أو اطبع ملصق وعلّقه في غرفة المعلمين.</p>
       <div class="link"><code id="url"></code><button type="button" id="copy">نسخ</button></div>
       <div class="actions" style="margin-top:12px;"><button type="button" class="btn ghost" id="print-btn">طباعة ملصق</button></div>
     </div>
@@ -166,7 +176,7 @@
 <!-- ملصق A4 للطباعة -->
 <div class="poster" aria-hidden="true">
   <div class="ph">
-    <img src="wordmark-white.svg" alt="مُدار Mudaar" />
+    <img src="wordmark-white.svg" alt="مُدار Mudaar" id="p-logo" />
     <h1 id="p-title">ثبّت مُدار على جوالك</h1>
     <p id="p-sub">المنصة كتطبيق على شاشتك</p>
   </div>
@@ -177,6 +187,7 @@
     <div class="col"><h3>أندرويد</h3><ol><li>افتح الرابط في Chrome</li><li>اضغط "ثبّت التطبيق"</li><li>أو القائمة ⋮ ← تثبيت التطبيق</li></ol></div>
   </div>
   <div class="url" id="p-url"></div>
+  <img class="p-credit hidden" id="p-credit" src="mark.svg" alt="مُدار" />
 </div>
 
 <script src="js/vendor/qrcode.js"></script>
@@ -189,8 +200,32 @@
   const target = isParent ? 'parent.html' + (school ? '?school=' + encodeURIComponent(school) : '') : 'index.html';
   if (isParent) {
     document.getElementById('app-manifest').href = 'manifest-parent.json';
-    document.title = 'تثبيت خطة الأسبوع';
-    ['h-title', 'p-title'].forEach(id => { document.getElementById(id).textContent = 'ثبّت خطة الأسبوع على جوالك'; });
+    document.title = 'تثبيت لوحة تحكم مدرستك';
+    ['h-title', 'p-title'].forEach(id => { document.getElementById(id).textContent = 'ثبّت لوحة تحكم مدرستك على جوالك'; });
+    // الواجهة باسم المدرسة وشعارها، و«مُدار» توقيع صغير على الجنب
+    document.getElementById('share-h').textContent = 'شاركها مع أولياء الأمور';
+    document.getElementById('share-p').textContent = 'يصوّرون الرمز بكاميرا الجوال وتفتح لهم هذي الصفحة. أو أرسل الرابط في مجموعات الفصول، أو اطبع ملصق وعلّقه عند مدخل المدرسة.';
+    document.getElementById('made-mark').classList.remove('hidden');
+    document.getElementById('p-credit').classList.remove('hidden');
+    document.querySelector('link[rel="icon"]').href = 'parent-favicon.svg';
+    document.querySelector('link[rel="apple-touch-icon"]').href = 'icon-parent-192.png';
+    const setLogo = (src, cls, alt) => ['h-logo', 'p-logo'].forEach(id => {
+      const el = document.getElementById(id); el.src = src; el.alt = alt; el.className = cls;
+    });
+    setLogo('school-icon.svg', 'school-icon', '');
+    if (school) {
+      fetch('https://sovfrlvcvcyjcyauurpl.supabase.co/rest/v1/schools?select=name,branding&slug=eq.' + encodeURIComponent(school),
+        { headers: { apikey: 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA' } })
+        .then(r => r.ok ? r.json() : [])
+        .then(rows => {
+          const sc = rows && rows[0];
+          if (!sc) return;
+          document.title = 'تثبيت لوحة تحكم ' + sc.name;
+          document.getElementById('p-sub').textContent = sc.name;
+          const logo = sc.branding && sc.branding.school_logo;
+          if (logo) setLogo(logo, 'school-logo', 'شعار ' + sc.name);
+        }).catch(() => {});
+    }
     document.getElementById('h-sub').textContent = 'تابع خطة ابنك الأسبوعية وجدوله وأرقام المدرسة من أيقونة على شاشتك';
     document.getElementById('p-sub').textContent = 'خطة الأسبوع والجدول لولي الأمر';
     document.querySelectorAll('.steps b').forEach(b => { b.innerHTML = b.innerHTML.replace('وسجّل دخولك مرة وحدة.', ''); });

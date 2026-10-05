@@ -6,8 +6,8 @@
 <title>خطة الأسبوع</title>
 <link rel="manifest" href="manifest-parent.json">
 <meta name="theme-color" content="#2455A4">
-<link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/svg+xml" href="parent-favicon.svg">
+<link rel="apple-touch-icon" href="icon-parent-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -28,7 +28,7 @@
   h1,h2,h3,h4{ font-family:'Tajawal', sans-serif; margin:0; }
   button{ border:none; font-family:inherit; cursor:pointer; }
 
-  #screen{ max-width:820px; margin:0 auto; padding:18px 16px calc(84px + env(safe-area-inset-bottom)); position:relative; }
+  #screen{ max-width:820px; margin:0 auto; padding:18px 16px 14px; position:relative; }
 
   .blob{ position:absolute; border-radius:50%; filter:blur(40px); opacity:0.3; z-index:0; }
 
@@ -163,6 +163,11 @@
 
   .hidden-view{ display:none !important; }
 
+  /* توقيع المنصة أسفل الصفحة (صغير وهادي - الواجهة باسم المدرسة) */
+  .made-by{ display:flex; align-items:center; justify-content:center; gap:7px; direction:ltr;
+    max-width:820px; margin:0 auto; padding:10px 16px calc(92px + env(safe-area-inset-bottom)); color:#A0A7B4; font-size:11px; font-weight:600; }
+  .made-by img{ height:15px; width:auto; opacity:.45; }
+
   /* ===== رابط تثبيت التطبيق بالهيدر ===== */
   .hero-install{
     margin-inline-start:auto; flex-shrink:0; display:flex; align-items:center; gap:5px; text-decoration:none;
@@ -283,7 +288,7 @@
 
 <div id="screen">
   <div class="hero">
-    <img id="hero-logo" src="mark.svg" alt="مُدار" />
+    <img id="hero-logo" src="school-icon.svg" alt="" />
     <div>
       <h1>خطة الأسبوع الدراسي</h1>
       <p class="sub" id="hero-school-name">&nbsp;</p>
@@ -331,6 +336,11 @@
   </div>
 
 </div>
+
+<footer class="made-by">
+  <span>© <span id="made-year">2026</span></span>
+  <img src="mark.svg" alt="مُدار" />
+</footer>
 
 <nav class="bottom-nav" id="bottom-nav">
   <button class="bn-item active" data-view="weekly">
@@ -1572,6 +1582,8 @@ function printExamCoverage() {
   if (examCoverageRows.length === 0) return;
   printDocument('جدول الاختبارات الفترية', EXAM_COVERAGE_PRINT_STYLES, buildExamCoveragePrintHtml());
 }
+
+document.getElementById('made-year').textContent = new Date().getFullYear();
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {});
