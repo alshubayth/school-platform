@@ -331,22 +331,24 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
   }
 });
 
+let pmTeachers = [];
+let pmAssignments = [];
+let pmSearch = '';
 export async function loadPermsModule() {
   const [{ data: teachers }, { data: subjects }] = await Promise.all([
     readScopedBySchool(scoped => {
       let q = sb.from('profiles').select('id, full_name').eq('role', 'teacher');
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-      return q;
+      return q.order('full_name');
     }),
     sb.from('subjects').select('id, name').order('name'),
   ]);
+  pmTeachers = teachers || [];
 
   const teacherSelect = document.getElementById('perm-teacher');
   teacherSelect.innerHTML = '';
-  (teachers || []).forEach(t => { const o=document.createElement('option'); o.value=t.id; o.textContent=t.full_name; teacherSelect.appendChild(o); });
-  if (!teachers || teachers.length === 0) {
-    teacherSelect.innerHTML = '<option value="">لا يوجد معلمون مضافون بعد</option>';
-  }
+  pmTeachers.forEach(t => { const o=document.createElement('option'); o.value=t.id; o.textContent=t.full_name; teacherSelect.appendChild(o); });
+  if (!pmTeachers.length) teacherSelect.innerHTML = '<option value="">لا يوجد معلمون مضافون بعد</option>';
 
   const subjectSelect = document.getElementById('perm-subject');
   subjectSelect.innerHTML = '';
@@ -354,6 +356,11 @@ export async function loadPermsModule() {
 
   await refreshPermsList();
 }
+document.querySelectorAll('#pm-tabs button').forEach(b => b.addEventListener('click', () => {
+  document.querySelectorAll('#pm-tabs button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('#perms-module .pm-pane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.p));
+}));
+document.getElementById('pm-search').addEventListener('input', (e) => { pmSearch = e.target.value.trim(); renderPermsList(); });
 
 document.getElementById('perm-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('perm-error');
@@ -378,32 +385,53 @@ document.getElementById('perm-submit').addEventListener('click', async () => {
 
 async function refreshPermsList() {
   const { data: assignments } = await readScopedBySchool(scoped => {
-    let q = sb.from('teacher_subjects').select('id, grade_level, profiles(full_name), subjects(name)');
+    let q = sb.from('teacher_subjects').select('id, teacher_id, grade_level, profiles(full_name), subjects(name)');
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
+  pmAssignments = assignments || [];
+  renderPermsList();
+}
 
+function renderPermsList() {
   const list = document.getElementById('perms-list');
-  list.innerHTML = '';
-  if (!assignments || assignments.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:30px;"><p>لا توجد تخصيصات بعد</p></div>';
-    return;
-  }
-  assignments.forEach(a => {
-    const row = document.createElement('div');
-    row.className = 'emp-row';
-    const initials = (a.profiles && a.profiles.full_name ? a.profiles.full_name : '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join('');
-    row.innerHTML = `
-      <div class="avatar-circle" style="background:var(--purple-light); color:var(--purple);">${initials}</div>
-      <div class="info"><div class="name">${a.profiles ? a.profiles.full_name : '-'}</div>
-      <div class="title">${a.subjects ? a.subjects.name : '-'} · ${gradeLabels[a.grade_level]}</div></div>
-      <button class="logout-icon" data-id="${a.id}" title="حذف" style="color:var(--danger);">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
-      </button>`;
-    row.querySelector('button').addEventListener('click', async (e) => {
-      await sb.from('teacher_subjects').delete().eq('id', e.currentTarget.dataset.id);
-      await refreshPermsList();
-    });
-    list.appendChild(row);
+  const GR = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+  const byT = new Map();
+  pmTeachers.forEach(t => byT.set(t.id, { id: t.id, name: t.full_name, items: [] }));
+  pmAssignments.forEach(a => {
+    if (!byT.has(a.teacher_id)) byT.set(a.teacher_id, { id: a.teacher_id, name: a.profiles ? a.profiles.full_name : '-', items: [] });
+    byT.get(a.teacher_id).items.push(a);
   });
+  const all = [...byT.values()];
+  const withNone = all.filter(t => !t.items.length).length;
+  document.getElementById('pm-stats').innerHTML = `
+    <span class="ds"><b>${pmAssignments.length}</b> تخصص</span>
+    <span class="ds ds-all"><b>${all.length - withNone}</b> معلم له تخصص</span>
+    <span class="ds ${withNone ? 'ds-late' : 'ds-present'}"><b>${withNone}</b> بدون تخصص</span>`;
+  const q = pmSearch;
+  let rows = all.filter(t => !q || t.name.includes(q) || t.items.some(a => (a.subjects ? a.subjects.name : '').includes(q)));
+  rows.sort((x, y) => (x.items.length === 0) - (y.items.length === 0) || String(x.name).localeCompare(String(y.name), 'ar'));
+  if (!rows.length) { list.innerHTML = `<div class="ex-empty"><b>${all.length ? 'ما فيه نتائج' : 'لا توجد تخصيصات بعد'}</b></div>`; return; }
+  list.innerHTML = rows.map(t => {
+    const items = [...t.items].sort((a, b) => GR.indexOf(a.grade_level) - GR.indexOf(b.grade_level) || String(a.subjects ? a.subjects.name : '').localeCompare(String(b.subjects ? b.subjects.name : ''), 'ar'));
+    const initials = String(t.name || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join(' ');
+    return `<div class="pm-teacher ${items.length ? '' : 'is-empty'}">
+      <span class="cvt-av">${escP(initials)}</span>
+      <div class="pm-main"><b>${escP(t.name)}</b>
+        <div class="pm-chips">${items.length ? items.map(a => `<span class="pm-chip">${escP(a.subjects ? a.subjects.name : '-')} · ${escP((gradeLabels[a.grade_level] || '').replace(' متوسط', ''))}<button type="button" data-del="${a.id}" aria-label="حذف التخصص">✕</button></span>`).join('') : '<span class="pm-none">بدون تخصص</span>'}</div>
+      </div>
+      <button type="button" class="pm-plus" data-t="${t.id}" title="إضافة تخصص لهذا المعلم" aria-label="إضافة تخصص">+</button>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('button[data-del]').forEach(b => b.addEventListener('click', async () => {
+    if (!confirm('حذف هذا التخصص؟ المعلم ما يقدر يدخّل خطة هذي المادة بعدها.')) return;
+    await sb.from('teacher_subjects').delete().eq('id', b.dataset.del);
+    await refreshPermsList();
+  }));
+  list.querySelectorAll('.pm-plus').forEach(b => b.addEventListener('click', () => {
+    const sel = document.getElementById('perm-teacher');
+    if ([...sel.options].some(o => o.value === b.dataset.t)) sel.value = b.dataset.t;
+    document.querySelector('#perms-module .pm-add').scrollIntoView({ block: 'center', behavior: 'smooth' });
+    document.getElementById('perm-subject').focus();
+  }));
 }

@@ -165,10 +165,24 @@ async function refreshTasksList() {
   list.innerHTML = '';
   if (rows.length === 0) {
     list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه مهام مضافة لهذا الأسبوع بعد</p></div>';
+    setAtFormOpen(true);
     return;
   }
   rows.forEach(t => list.appendChild(buildTaskCard(t)));
 }
+
+/* نموذج الإضافة مطوي خلف زر - يفتح تلقائيًا إذا الأسبوع فاضي */
+function setAtFormOpen(open) {
+  document.getElementById('at-add-card').classList.toggle('hidden', !open);
+  const b = document.getElementById('at-add-toggle');
+  b.textContent = open ? 'إغلاق النموذج' : '+ مهمة جديدة';
+  b.classList.toggle('is-open', open);
+}
+document.getElementById('at-add-toggle').addEventListener('click', () => {
+  const open = document.getElementById('at-add-card').classList.contains('hidden');
+  setAtFormOpen(open);
+  if (open) document.getElementById('at-title').focus();
+});
 
 function buildTaskCard(t) {
   const responsibleName = t.responsible_profile_id ? (t.profiles ? t.profiles.full_name : '-') : t.responsible_other;

@@ -340,8 +340,36 @@
     <div id="perms-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-4">→ رجوع للرئيسية</span>
 
+      <div class="seg-tabs" id="pm-tabs">
+        <button type="button" data-p="subjects" class="active">تخصصات المعلمين</button>
+        <button type="button" data-p="account">إنشاء حساب دخول</button>
+      </div>
 
-      <div class="form-card">
+      <div class="pm-pane" data-pane="subjects">
+        <div class="form-card pm-add">
+          <h4>إضافة تخصص لمعلم</h4>
+          <div class="pm-add-row">
+            <select id="perm-teacher"></select>
+            <select id="perm-subject"></select>
+            <select id="perm-grade">
+              <option value="first_intermediate">أول متوسط</option>
+              <option value="second_intermediate">ثاني متوسط</option>
+              <option value="third_intermediate">ثالث متوسط</option>
+            </select>
+            <button class="btn-primary" id="perm-submit" style="width:auto; padding:10px 18px;">+ إضافة</button>
+          </div>
+          <div class="error-msg" id="perm-error"></div>
+          <p class="pt-hint" style="margin:8px 0 0;">التخصص يحدد وش يقدر المعلم يدخّل في الخطة الأسبوعية، ومين يطلع ناقص في متابعتها.</p>
+        </div>
+        <div class="pt-toolbar">
+          <input type="search" id="pm-search" class="cv-search" placeholder="ابحث باسم المعلم أو المادة" />
+          <div class="dd-stats" id="pm-stats" style="margin:0;"></div>
+        </div>
+        <div id="perms-list" class="pm-list"></div>
+      </div>
+
+      <div class="pm-pane hidden" data-pane="account">
+      <div class="form-card pm-newuser">
         <h4>إنشاء حساب دخول جديد</h4>
         <div class="form-row">
           <input type="text" id="newuser-name" placeholder="الاسم الكامل" style="margin-bottom:10px;" />
@@ -361,23 +389,7 @@
         <button class="btn-primary" id="newuser-submit">إنشاء الحساب</button>
       </div>
 
-      <div class="form-card">
-        <h4>إضافة تخصيص جديد</h4>
-        <div class="form-row">
-          <select id="perm-teacher"></select>
-          <select id="perm-subject"></select>
-        </div>
-        <select id="perm-grade">
-          <option value="first_intermediate">أول متوسط</option>
-          <option value="second_intermediate">ثاني متوسط</option>
-          <option value="third_intermediate">ثالث متوسط</option>
-        </select>
-        <div class="error-msg" id="perm-error"></div>
-        <button class="btn-primary" id="perm-submit">إضافة التخصيص</button>
       </div>
-
-      <h4 style="margin-bottom:14px;">التخصيصات الحالية</h4>
-      <div id="perms-list"></div>
     </div>
 
     <div id="portal-module" class="panel hidden">
@@ -2030,7 +2042,10 @@
         </div>
       </div>
 
-      <div class="at-add-card">
+      <div class="adm-bar">
+        <button type="button" class="btn-primary adm-add-toggle" id="at-add-toggle">+ مهمة جديدة</button>
+      </div>
+      <div class="at-add-card hidden" id="at-add-card">
         <div class="at-add-head">
           <div class="icon-chip">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -2083,7 +2098,10 @@
     <div id="school-contacts-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-21">→ رجوع للرئيسية</span>
 
-      <div class="sc-add-card">
+      <div class="adm-bar">
+        <button type="button" class="btn-primary adm-add-toggle" id="sc-add-toggle">+ إضافة جهة تواصل</button>
+      </div>
+      <div class="sc-add-card hidden" id="sc-add-card">
         <div class="sc-add-head">
           <div class="icon-chip">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>

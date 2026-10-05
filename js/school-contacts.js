@@ -30,7 +30,21 @@ function renderTypeGrid() {
   });
 }
 
+function setScFormOpen(open) {
+  document.getElementById('sc-add-card').classList.toggle('hidden', !open);
+  const b = document.getElementById('sc-add-toggle');
+  b.textContent = open ? 'إغلاق النموذج' : '+ إضافة جهة تواصل';
+  b.classList.toggle('is-open', open);
+}
+document.getElementById('sc-add-toggle').addEventListener('click', () => {
+  const open = document.getElementById('sc-add-card').classList.contains('hidden');
+  if (!open) resetForm();
+  setScFormOpen(open);
+  if (open) document.getElementById('sc-group').focus();
+});
+
 function resetForm() {
+  if (editingId && contactsCache.length) setScFormOpen(false);
   editingId = null;
   document.getElementById('sc-form-title').textContent = 'إضافة بيانات تواصل جديدة';
   document.getElementById('sc-group').value = '';
@@ -120,6 +134,7 @@ async function refreshContactsList() {
 
   list.innerHTML = '';
   if (contactsCache.length === 0) {
+    setScFormOpen(true);
     list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه بيانات تواصل مضافة بعد - أضف أول بطاقة من الأعلى</p></div>';
     return;
   }
@@ -176,6 +191,7 @@ function buildContactTile(c) {
     document.getElementById('sc-add-btn').textContent = 'حفظ التعديل';
     document.getElementById('sc-cancel-edit-btn').classList.remove('hidden');
     document.getElementById('sc-error').style.display = 'none';
+    setScFormOpen(true);
     document.getElementById('school-contacts-module').scrollIntoView({ behavior: 'smooth', block: 'start' });
   });
 
