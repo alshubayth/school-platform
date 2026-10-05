@@ -10,6 +10,12 @@ begin;
 
 alter table public.schools add column if not exists branding jsonb not null default '{}'::jsonb;
 
+-- دالة المالك (موجودة بملف الأمان security_v1، نعرّفها هنا بعد عشان الملف يشتغل لحاله)
+create or replace function public.is_owner() returns boolean
+language sql stable security definer set search_path = public
+as $$ select coalesce((select role = 'owner'::user_role from public.profiles where id = auth.uid()), false) $$;
+grant execute on function public.is_owner() to authenticated, anon;
+
 create or replace function public.set_school_branding(p_school uuid, p_name text, p_branding jsonb)
 returns void
 language plpgsql security definer set search_path = public
