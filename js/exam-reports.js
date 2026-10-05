@@ -49,6 +49,7 @@ export function detectColumns(headerRow) {
     else if (col.grade == null && c.includes('صف')) col.grade = idx;
     else if (col.section == null && c === 'الفصل') col.section = idx;
     else if (col.subject == null && c.includes('اسم') && c.includes('ماد')) col.subject = idx;
+    else if (col.model == null && (c === 'النموذج' || c === 'نموذج' || /^(form|version|model)$/i.test(c))) col.model = idx;
     else if (c.includes('صح') && c.includes('خطأ')) { items.push(idx); itemTypes.push('tf'); }
     else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال') || /متعدد\s*\d+$/.test(c)) { items.push(idx); itemTypes.push('mcq'); }
   });
@@ -122,6 +123,8 @@ export function parseSheetRows(rows) {
       grade: col.grade != null ? String(r[col.grade] == null ? '' : r[col.grade]).trim() : '',
       section: col.section != null ? String(r[col.section] == null ? '' : r[col.section]).trim() : '',
       subject: col.subject != null ? String(r[col.subject] == null ? '' : r[col.subject]).trim() : '',
+      // النموذج اللي ظلّله الطالب بورقته (لو الملف فيه عمود "النموذج") - قيمة خام مثل الأسئلة
+      modelRaw: col.model != null && r[col.model] !== '' && r[col.model] != null && Number.isFinite(Number(r[col.model])) ? Number(r[col.model]) : null,
       answers: items.map(ci => {
         const v = r[ci];
         if (v === '' || v == null) return null;
@@ -318,6 +321,12 @@ const MODE_LABELS = { choices: 'نفس الأسئلة والترتيب، الخ�
 function rawFromIdx(idxArr, choiceCounts, reversed) {
   return choiceCounts.map((c, i) => (idxArr && idxArr[i] != null ? valueForLetter(ARABIC_LETTERS[idxArr[i]], c, reversed) : null));
 }
+// نموذج الطالب من تظليله بالورقة: نفس ترميز الأسئلة (عربي معكوس: ٢ = أ، ١ = ب)
+function fileModel(st, reversed = true) {
+  const v = st && st.modelRaw;
+  if (v !== 1 && v !== 2) return null;
+  return reversed ? (v === 2 ? MODEL_A : MODEL_B) : (v === 1 ? MODEL_A : MODEL_B);
+}
 export function gradeWithModels({ parsed, keyA, keyB, mode, orderB, reversedOrder, modelOf, keyId }) {
   const n = parsed.itemCount;
   // بالترتيب المختلف: نرتّب إجابات طالب النموذج ب (ومفتاحه) على أرقام أسئلة النموذج أ
@@ -348,18 +357,21 @@ function renderModelSummary(parsed) {
   const k = parsed.modelKey;
   const map = k.model_map || {};
   const idOf = st => String(st.id || '').trim();
-  const a = parsed.students.filter(st => map[idOf(st)] === MODEL_A).length;
-  const b = parsed.students.filter(st => map[idOf(st)] === MODEL_B).length;
-  const unknown = parsed.students.filter(st => !map[idOf(st)]);
+  const rev = document.getElementById('er-reversed-order').checked;
+  const mOf = st => fileModel(st, rev) || map[idOf(st)] || null;
+  const a = parsed.students.filter(st => mOf(st) === MODEL_A).length;
+  const b = parsed.students.filter(st => mOf(st) === MODEL_B).length;
+  const unknown = parsed.students.filter(st => !mOf(st));
+  const fromFile = parsed.students.filter(st => fileModel(st, rev)).length;
   document.getElementById('er-key-form').innerHTML = `<div class="er-models-sum">
     <div class="er-models-h"><b>اختبار بنموذجين</b><span>${esc(MODE_LABELS[k.models.mode] || '')}</span></div>
     <div class="dd-stats" style="margin:8px 0;">
       <span class="ds ds-all"><b>${a}</b> نموذج أ</span>
       <span class="ds ds-present"><b>${b}</b> نموذج ب</span>
-      ${unknown.length ? `<span class="ds ds-late"><b>${unknown.length}</b> بدون نموذج محفوظ</span>` : ''}
+      ${unknown.length ? `<span class="ds ds-late"><b>${unknown.length}</b> ما عُرف نموذجهم</span>` : ''}
     </div>
-    <p class="er-models-p">كل طالب يتصحّح بإجابة نموذجه تلقائيًا من رقم هويته. لتعديل الإجابات: عدّل المفتاح من "ورقة إجابة للتصحيح الآلي" واحفظه.</p>
-    ${unknown.length ? `<div class="er-unknown"><p>هذول ما لهم نموذج محفوظ (أوراقهم ما انطبعت من المنصة بهذا المفتاح) - اختر نموذج كل واحد:</p>
+    <p class="er-models-p">${fromFile ? `نموذج ${fromFile} طالب مقروء من تظليلهم بالورقة. ` : ''}كل طالب يتصحّح بإجابة نموذجه تلقائيًا. لتعديل الإجابات: عدّل المفتاح من "ورقة إجابة للتصحيح الآلي" واحفظه.</p>
+    ${unknown.length ? `<div class="er-unknown"><p>هذول ما عرفت نموذجهم (ما ظلّلوه، أو ظلّلوا الاثنين، أو أوراقهم ما انطبعت من المنصة) - اختر نموذج كل واحد:</p>
       ${unknown.map(st => `<label class="er-unk-row"><span>${esc(st.name || st.id)}</span><small>${esc(st.id)}</small>
         <select class="er-model-pick" data-id="${esc(idOf(st))}"><option value="أ">نموذج أ</option><option value="ب">نموذج ب</option></select></label>`).join('')}</div>` : ''}
   </div>`;
@@ -558,7 +570,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
       keyA: rawFromIdx(k.answers, parsedData.choiceCounts, reversedOrder),
       keyB: rawFromIdx(k.models.answers_b, parsedData.choiceCounts, reversedOrder),
       mode: k.models.mode, orderB: k.models.order_b, reversedOrder, keyId: k.id,
-      modelOf: st => { const id = String(st.id || '').trim(); return map[id] || picks[id] || MODEL_A; },
+      modelOf: st => { const id = String(st.id || '').trim(); return fileModel(st, reversedOrder) || map[id] || picks[id] || MODEL_A; },
     });
     const { error } = await writeWithSchool(extra => sb.from('exam_reports').insert({
       title,
@@ -754,7 +766,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
         keyA = conv(m.keyA); keyB = conv(m.keyB);
       }
       const g = gradeWithModels({ parsed: newParsed, keyA, keyB, mode, orderB, reversedOrder, keyId: m.keyId,
-        modelOf: st => { const id = String(st.id || '').trim(); return map[id] || oldModel.get(id) || MODEL_A; } });
+        modelOf: st => { const id = String(st.id || '').trim(); return fileModel(st, reversedOrder) || map[id] || oldModel.get(id) || MODEL_A; } });
       const { error } = await sb.from('exam_reports').update({
         item_count: newParsed.itemCount, students_count: newParsed.students.length,
         key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data,
@@ -819,7 +831,7 @@ async function regradeModelReport() {
     keyA: rawFromIdx(key.answers, rd.choiceCounts, reversedOrder),
     keyB: rawFromIdx(key.models.answers_b, rd.choiceCounts, reversedOrder),
     mode: key.models.mode, orderB: key.models.order_b, reversedOrder, keyId: key.id,
-    modelOf: st => map[String(st.id || '').trim()] || st.model || MODEL_A,
+    modelOf: st => fileModel(st, reversedOrder) || map[String(st.id || '').trim()] || st.model || MODEL_A,
   });
   const { error } = await sb.from('exam_reports').update({ key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data }).eq('id', currentReport.id);
   if (error) { alert('تعذر الحفظ: ' + error.message); return; }

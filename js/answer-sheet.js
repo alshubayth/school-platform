@@ -248,6 +248,20 @@ function buildSheetBody(opts, student, logoSrc, ox) {
     row.forEach(([label, value, frac, big]) => {
       const w = innerW * frac;
       h += `<div class="as-cell lbl" dir="${rtl ? 'rtl' : 'ltr'}" style="left:${mm(X(P.side + off, P.infoLabelW))}; top:${mm(y)}; width:${mm(P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${P.infoSize}pt;">${label}</div>`;
+      if (big && opts.modelBubble) {
+        // الطالب يظلّل نموذجه: فقاعتين بمواقع ثابتة (أ ثم ب من بداية القراءة) يقرأها Remark
+        const vx = P.side + off + P.infoLabelW, vw = w - P.infoLabelW;
+        h += `<div class="as-cell val" style="left:${mm(X(vx, vw))}; top:${mm(y)}; width:${mm(vw)}; height:${mm(P.infoRowH)};"></div>`;
+        const gap = P.bubble * 0.9, totalW = 2 * P.bubble + gap;
+        const fillM = student && student.model ? student.model : null;
+        [rtl ? 'أ' : 'A', rtl ? 'ب' : 'B'].forEach((l, bi) => {
+          const bx = vx + (vw - totalW) / 2 + bi * (P.bubble + gap);
+          const filled = fillM && ((bi === 0 && fillM === 'أ') || (bi === 1 && fillM === 'ب'));
+          h += `<div class="as-bubble${filled ? ' fill' : ''}" style="left:${mm(X(bx, P.bubble))}; top:${mm(y + (P.infoRowH - P.bubble) / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize}pt; background:#fff;">${l}</div>`;
+        });
+        off += w;
+        return;
+      }
       h += `<div class="as-cell val" style="left:${mm(X(P.side + off + P.infoLabelW, w - P.infoLabelW))}; top:${mm(y)}; width:${mm(w - P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${big ? P.infoSize + 5 : P.infoSize}pt;${big ? ' font-weight:900; justify-content:center; text-align:center;' : ''} direction:${rtl ? 'rtl' : 'ltr'};">${escHtml(value || '')}</div>`;
       off += w;
     });
@@ -383,6 +397,7 @@ function readOptions() {
     withBarcode: $('as-barcode').checked,
     essayTotal: $('as-essay-on').checked ? (parseInt($('as-essay-total').value, 10) || 0) : 0,
     modelsOn: $('as-models-on').checked,
+    modelBubble: $('as-models-on').checked && $('as-models-assign').value === 'bubble',
   };
 }
 
@@ -475,9 +490,9 @@ function buildAllPages() {
     const bad = studs.filter(s => !/^[\x20-\x7E]+$/.test(String(s.national_id || '').trim()));
     if (bad.length) throw new Error(`فيه ${bad.length} طالب رقم هويته فاضي أو غير صالح للباركود (مثال: ${bad[0].full_name})`);
     let list = studs;
-    if (o.modelsOn) { ensureAssignments(studs); list = studs.map(st => ({ ...st, model: modelMap[String(st.national_id).trim()] || MODEL_A })); }
+    if (o.modelsOn && !o.modelBubble) { ensureAssignments(studs); list = studs.map(st => ({ ...st, model: modelMap[String(st.national_id).trim()] || MODEL_A })); }
     const pages = paginate(list, pg.perPage);
-    return { o, pg, sheets: studs.length, count: pages.length, html: pages.map(ps => buildPrintPage(o, ps, logoUrl())).join(''), modelsStudents: o.modelsOn ? list : null };
+    return { o, pg, sheets: studs.length, count: pages.length, html: pages.map(ps => buildPrintPage(o, ps, logoUrl())).join(''), modelsStudents: o.modelsOn && !o.modelBubble ? list : null };
   }
   return { o, pg, sheets: pg.perPage, count: 1, html: buildPrintPage(o, [], logoUrl()) };
 }
@@ -607,7 +622,7 @@ function ensureAssignments(studs, force = false) {
 
 function renderDistribution() {
   const box = $('as-dist');
-  const show = modelsOn() && $('as-barcode').checked && asStudentsLoaded;
+  const show = modelsOn() && $('as-models-assign').value === 'auto' && $('as-barcode').checked && asStudentsLoaded;
   box.classList.toggle('hidden', !show);
   if (!show) return;
   const studs = selectedStudents();
@@ -691,7 +706,7 @@ async function saveKey() {
     updated_at: new Date().toISOString(),
   };
   if (o.modelsOn) {
-    row.models = { mode: modelMode(), answers_b: keyAnswersB.slice(), order_b: modelMode() === 'order' ? orderB.slice() : null };
+    row.models = { mode: modelMode(), assign: $('as-models-assign').value, answers_b: keyAnswersB.slice(), order_b: modelMode() === 'order' ? orderB.slice() : null };
     row.model_map = modelMap;
   } else if (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).models) {
     row.models = null;
@@ -728,7 +743,7 @@ function loadKeyIntoForm(k) {
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
   const m = k.models && k.models.mode ? k.models : null;
   $('as-models-on').checked = !!m;
-  if (m) $('as-models-mode').value = m.mode;
+  if (m) { $('as-models-mode').value = m.mode; $('as-models-assign').value = m.assign === 'bubble' ? 'bubble' : 'auto'; }
   keyAnswersB = m && Array.isArray(m.answers_b) ? m.answers_b.slice() : [];
   orderB = m && Array.isArray(m.order_b) ? m.order_b.slice() : [];
   modelMap = k.model_map && typeof k.model_map === 'object' ? { ...k.model_map } : {};
@@ -759,7 +774,7 @@ function buildKeyPages() {
 // النموذجين: لازم المفتاح محفوظ قبل طباعة أوراق الطلاب، عشان ينحفظ معه نموذج كل طالب
 function modelsGuard() {
   const o = readOptions();
-  if (!o.modelsOn) return null;
+  if (!o.modelsOn || o.modelBubble) return null;
   if (!o.withBarcode) return 'الاختبار بنموذجين يحتاج "باركود باسم الطالب"، عشان المنصة تعرف نموذج كل طالب وقت التصحيح';
   if (!currentKeyId) return 'احفظ مفتاح الإجابة للنموذجين أولًا، وبعدها اطبع الأوراق (ينحفظ نموذج كل طالب مع المفتاح)';
   return null;
@@ -919,7 +934,7 @@ export function initAnswerSheetCard() {
     renderKeyGrid();
   });
   $('as-models-on').addEventListener('change', async () => {
-    if ($('as-models-on').checked && !$('as-barcode').checked) {
+    if ($('as-models-on').checked && $('as-models-assign').value === 'auto' && !$('as-barcode').checked) {
       $('as-barcode').checked = true;
       $('as-barcode-opts').classList.remove('hidden');
       await loadAllStudents();
@@ -927,6 +942,7 @@ export function initAnswerSheetCard() {
     renderKeyGrid(); refresh();
   });
   $('as-models-mode').addEventListener('change', renderKeyGrid);
+  $('as-models-assign').addEventListener('change', () => { renderKeyGrid(); refresh(); });
   $('as-model-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { activeModel = b.dataset.m; renderKeyGrid(); }));
   $('as-dist-auto').addEventListener('click', () => {
     if (!confirm('إعادة توزيع النموذجين بالتناوب لكل الطلاب المختارين؟ أي تعديل يدوي عليهم بيتغيّر.')) return;
@@ -956,7 +972,7 @@ export function initAnswerSheetCard() {
     const k = savedKeys.find(x => x.id === $('as-saved-keys').value);
     if (!k) return;
     loadKeyIntoForm(k);
-    if (k.models && k.models.mode && !$('as-barcode').checked) { $('as-barcode').checked = true; $('as-barcode-opts').classList.remove('hidden'); loadAllStudents().then(refresh); }
+    if (k.models && k.models.mode && k.models.assign !== 'bubble' && !$('as-barcode').checked) { $('as-barcode').checked = true; $('as-barcode-opts').classList.remove('hidden'); loadAllStudents().then(refresh); }
     refresh(); renderKeyGrid();
     keyStatusMsg(`تم تحميل "${k.title}" - أي تعديل وحفظ يحدّث نفس المفتاح`);
   });
