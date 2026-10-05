@@ -108,7 +108,7 @@ async function plan(ev, deps) {
     const when = ev.change_date === today ? 'اليوم' : 'بتاريخ ' + ev.change_date;
     const line = it => `الحصة ${it.period} – ${gradeLabel(it.grade)} / ${it.section}${it.subject && it.subject !== 'فراغ' ? ' (' + it.subject + ')' : ''}`;
     const body = items.length === 1
-      ? `${items[0].reason === 'substitute' ? 'عندك حصة انتظار' : 'تغيّر جدولك'} ${when}: ${line(items[0])}`
+      ? `${items[0].reason === 'substitute' ? 'عندك حصة إشغال' : 'تغيّر جدولك'} ${when}: ${line(items[0])}`
       : `عندك تغييرات في ${countPeriods(items.length)} ${when}: ` + items.map(it => `الحصة ${it.period}`).join('، ');
     return [{ subs, title: 'جدول اليوم', body, url: '/index.html', tag: 'sch-' + ev.change_date }];
   }
@@ -120,7 +120,7 @@ async function plan(ev, deps) {
     const today = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10); // توقيت الرياض
     const when = ev.change_date === today ? 'اليوم' : 'بتاريخ ' + ev.change_date;
     const cls = `${gradeLabel(ev.grade_level)} / ${ev.class_section}`;
-    const what = ev.reason === 'substitute' ? 'عندك حصة انتظار' : 'تغيّر جدولك';
+    const what = ev.reason === 'substitute' ? 'عندك حصة إشغال' : 'تغيّر جدولك';
     return [{ subs, title: 'جدول اليوم', body: `${what} ${when}: الحصة ${ev.period_number} – ${cls}${ev.subject_name ? ' (' + ev.subject_name + ')' : ''}`,
       url: '/index.html', tag: `sch-${ev.change_date}-${ev.period_number}` }];
   }
