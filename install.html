@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>تثبيت لوحة المدرسة</title>
+<link rel="manifest" id="app-manifest" href="manifest-staff.json">
+<meta name="theme-color" content="#0F2447">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#0F2447; --navy2:#173A73; --blue:#2353A5; --teal:#2FC1B2;
+    --ink:#1B2433; --slate:#5B6678; --border:#E3E8F0; --canvas:#F2F5FA;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{ font-family:'IBM Plex Sans Arabic', Tahoma, sans-serif; color:var(--ink); background:var(--canvas); -webkit-text-size-adjust:100%; }
+  h1,h2,h3{ font-family:'Tajawal', sans-serif; margin:0; }
+
+  .hero{ background:radial-gradient(120% 120% at 85% 0%, #1E4A8E 0%, #13336A 45%, #0C2147 100%); color:#fff; padding:28px 20px 70px; position:relative; overflow:hidden; }
+  .hero svg.tr{ position:absolute; inset:0; width:100%; height:100%; opacity:.35; pointer-events:none; }
+  .hero .in{ max-width:760px; margin:0 auto; position:relative; display:flex; align-items:center; gap:18px; }
+  .hero img{ width:78px; height:auto; flex-shrink:0; }
+  .hero h1{ font-size:30px; font-weight:800; line-height:1.3; }
+  .hero p{ margin:6px 0 0; color:#BFD3F0; font-size:15px; line-height:1.7; }
+
+  main{ max-width:760px; margin:-46px auto 0; padding:0 16px 40px; position:relative; }
+  .card{ background:#fff; border:1px solid var(--border); border-radius:18px; padding:20px; box-shadow:0 6px 24px rgba(15,36,71,.08); margin-bottom:16px; }
+
+  .switch{ display:flex; gap:4px; background:#EEF2F8; border-radius:12px; padding:4px; margin-bottom:18px; }
+  .switch button{ flex:1; border:0; background:transparent; border-radius:9px; padding:10px 6px; font:700 14px 'IBM Plex Sans Arabic', sans-serif; color:var(--slate); cursor:pointer; }
+  .switch button.on{ background:#fff; color:var(--navy); box-shadow:0 1px 4px rgba(15,36,71,.12); }
+  .switch button:focus-visible{ outline:2px solid var(--blue); outline-offset:1px; }
+
+  .detected{ font-size:13px; color:var(--slate); margin:-8px 0 14px; }
+  .steps{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:12px; counter-reset:st; }
+  .steps li{ display:flex; gap:14px; align-items:flex-start; counter-increment:st; }
+  .steps li::before{ content:counter(st); flex-shrink:0; width:32px; height:32px; border-radius:50%; background:var(--navy); color:#fff; font:800 15px 'Tajawal', sans-serif; display:flex; align-items:center; justify-content:center; }
+  .steps b{ display:block; font-size:15.5px; margin-top:4px; }
+  .steps span{ display:block; font-size:13.5px; color:var(--slate); margin-top:3px; line-height:1.7; }
+  .ic{ display:inline-flex; vertical-align:middle; width:26px; height:26px; border:1px solid var(--border); border-radius:7px; align-items:center; justify-content:center; color:var(--blue); background:#F5F8FE; margin:0 3px; }
+
+  .actions{ display:flex; flex-wrap:wrap; gap:10px; margin-top:18px; }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; border:0; border-radius:12px; padding:13px 20px; font:700 15px 'IBM Plex Sans Arabic', sans-serif; cursor:pointer; text-decoration:none; }
+  .btn.primary{ background:var(--blue); color:#fff; }
+  .btn.primary:hover{ background:#1C468D; }
+  .btn.ghost{ background:#EEF4FF; color:var(--blue); }
+  .btn:focus-visible{ outline:2px solid var(--navy); outline-offset:2px; }
+  .note{ font-size:13px; color:var(--slate); margin:12px 0 0; line-height:1.7; }
+  .ok{ background:#E6F6EE; color:#1E8A55; border-radius:12px; padding:12px 14px; font-weight:700; font-size:14px; margin-bottom:14px; }
+  .warn{ background:#FFF4E5; color:#8A5200; border-radius:12px; padding:12px 14px; font-size:13.5px; margin-bottom:14px; line-height:1.7; }
+
+  .share{ display:grid; grid-template-columns:auto 1fr; gap:18px; align-items:center; }
+  .qr{ width:150px; height:150px; border:1px solid var(--border); border-radius:12px; padding:8px; background:#fff; }
+  .qr svg{ width:100%; height:100%; display:block; }
+  .share h3{ font-size:17px; color:var(--navy); }
+  .share p{ font-size:13.5px; color:var(--slate); margin:6px 0 10px; line-height:1.7; }
+  .link{ display:flex; gap:6px; align-items:center; background:#F3F6FB; border:1px solid var(--border); border-radius:10px; padding:6px 6px 6px 10px; }
+  .link code{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:ltr; text-align:left; font-size:12.5px; color:var(--ink); }
+  .link button{ border:0; background:#fff; border:1px solid var(--border); border-radius:8px; padding:7px 12px; font:700 12.5px 'IBM Plex Sans Arabic', sans-serif; color:var(--blue); cursor:pointer; flex-shrink:0; }
+
+  .hidden{ display:none !important; }
+
+  /* الملصق المطبوع */
+  .poster{ display:none; }
+  @media print{
+    @page{ size:A4; margin:0; }
+    body{ background:#fff; }
+    .hero, main{ display:none !important; }
+    .poster{ display:flex; flex-direction:column; align-items:center; width:210mm; height:297mm; padding:18mm 16mm; text-align:center; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .poster .ph{ width:100%; background:#0F2447; color:#fff; border-radius:8mm; padding:10mm 8mm; display:flex; flex-direction:column; align-items:center; gap:3mm; }
+    .poster .ph img{ width:34mm; }
+    .poster h1{ font-size:30pt; }
+    .poster .ph p{ font-size:13pt; color:#D5E3F7; margin:0; }
+    .poster .pqr{ width:95mm; height:95mm; margin:12mm 0 6mm; padding:4mm; border:0.6mm solid #0F2447; border-radius:5mm; }
+    .poster .pqr svg{ width:100%; height:100%; }
+    .poster .scan{ font:800 18pt 'Tajawal', sans-serif; color:#0F2447; }
+    .poster .cols{ display:grid; grid-template-columns:1fr 1fr; gap:8mm; width:100%; margin-top:10mm; text-align:right; }
+    .poster .col{ border:0.4mm solid #D5DCE8; border-radius:4mm; padding:5mm; }
+    .poster .col h3{ font-size:14pt; color:#0F2447; margin-bottom:2mm; }
+    .poster .col ol{ margin:0; padding-inline-start:5mm; font-size:11.5pt; line-height:1.8; }
+    .poster .url{ margin-top:auto; font-size:11pt; color:#5B6678; direction:ltr; }
+  }
+  @media (max-width:560px){
+    .hero{ padding:22px 16px 64px; }
+    .hero img{ width:60px; }
+    .hero h1{ font-size:23px; }
+    .hero p{ font-size:13.5px; }
+    .share{ grid-template-columns:1fr; justify-items:center; text-align:center; }
+    .link{ width:100%; }
+    .btn{ flex:1; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <svg class="tr" viewBox="0 0 600 260" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <g fill="none" stroke="#2FC1B2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M-10 220 H120 L170 170 H300 L340 130"/>
+      <path d="M610 60 H500 L450 110 H380" stroke="#6FA4F2"/>
+    </g>
+    <g fill="#0C2147" stroke="#2FC1B2" stroke-width="2.5"><circle cx="340" cy="130" r="6"/><circle cx="380" cy="110" r="6"/></g>
+  </svg>
+  <div class="in">
+    <img src="logo-white.png" alt="" />
+    <div>
+      <h1 id="h-title">ثبّت لوحة المدرسة على جوالك</h1>
+      <p id="h-sub">أيقونة على شاشتك تفتح المنصة مباشرة بشاشة كاملة، وتوصلك التحديثات تلقائيًا</p>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="card">
+    <div class="ok hidden" id="installed">التطبيق مثبّت على هذا الجهاز ✓ افتحه من أيقونته على الشاشة.</div>
+    <div class="warn hidden" id="ios-browser">أنت على آيفون بس مو في Safari. التثبيت على الآيفون من Safari فقط: انسخ الرابط تحت وافتحه في Safari.</div>
+
+    <div class="switch" role="tablist" aria-label="نوع الجهاز">
+      <button type="button" role="tab" data-p="ios">آيفون</button>
+      <button type="button" role="tab" data-p="android">أندرويد</button>
+      <button type="button" role="tab" data-p="desktop">كمبيوتر</button>
+    </div>
+    <p class="detected" id="detected"></p>
+
+    <ol class="steps" data-p="ios">
+      <li><div><b>افتح هذي الصفحة في Safari</b><span>متصفح آبل الأساسي، لأن الآيفون ما يسمح بالتثبيت من غيره.</span></div></li>
+      <li><div><b>اضغط زر المشاركة <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg></span></b><span>تحت في منتصف الشاشة (أو فوق جنب الرابط في الآيباد).</span></div></li>
+      <li><div><b>اختر "إضافة إلى الشاشة الرئيسية" <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span></b><span>انزل في القائمة لين تلقاها، وبعدين اضغط "إضافة" فوق.</span></div></li>
+      <li><div><b>افتح التطبيق من أيقونته</b><span>وسجّل دخولك مرة وحدة.</span></div></li>
+    </ol>
+
+    <ol class="steps hidden" data-p="android">
+      <li><div><b>اضغط زر "ثبّت التطبيق" تحت</b><span>لو ما طلع الزر: افتح الصفحة في Chrome، واضغط القائمة <span class="ic" aria-hidden="true">⋮</span> فوق، واختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".</span></div></li>
+      <li><div><b>وافق على التثبيت</b><span>تنضاف أيقونة "لوحة المدرسة" لشاشتك وقائمة تطبيقاتك.</span></div></li>
+      <li><div><b>افتح التطبيق من أيقونته</b><span>وسجّل دخولك مرة وحدة.</span></div></li>
+    </ol>
+
+    <ol class="steps hidden" data-p="desktop">
+      <li><div><b>اضغط زر "ثبّت التطبيق" تحت</b><span>يشتغل في Chrome و Edge. أو اضغط أيقونة التثبيت <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M12 8v6M9 11l3 3 3-3"/><path d="M8 21h8"/></svg></span> بآخر شريط العنوان.</span></div></li>
+      <li><div><b>يفتح التطبيق بنافذة مستقلة</b><span>وتلقاه بقائمة البرامج وتقدر تثبّته بشريط المهام.</span></div></li>
+    </ol>
+
+    <div class="actions">
+      <button type="button" class="btn primary hidden" id="install-btn">ثبّت التطبيق</button>
+      <a class="btn ghost" id="open-link" href="index.html">افتح المنصة بدون تثبيت</a>
+    </div>
+    <p class="note" id="install-note"></p>
+  </section>
+
+  <section class="card share">
+    <div class="qr" id="qr" aria-label="رمز QR لرابط صفحة التثبيت" role="img"></div>
+    <div>
+      <h3>شاركها مع الزملاء</h3>
+      <p>يصوّرون الرمز بكاميرا الجوال وتفتح لهم هذي الصفحة. أو اطبع ملصق وعلّقه في غرفة المعلمين.</p>
+      <div class="link"><code id="url"></code><button type="button" id="copy">نسخ</button></div>
+      <div class="actions" style="margin-top:12px;"><button type="button" class="btn ghost" id="print-btn">طباعة ملصق</button></div>
+    </div>
+  </section>
+</main>
+
+<!-- ملصق A4 للطباعة -->
+<div class="poster" aria-hidden="true">
+  <div class="ph">
+    <img src="logo-white.png" alt="" />
+    <h1 id="p-title">ثبّت لوحة المدرسة على جوالك</h1>
+    <p id="p-sub">المنصة كتطبيق على شاشتك</p>
+  </div>
+  <div class="pqr" id="pqr"></div>
+  <div class="scan">صوّر الرمز بكاميرا جوالك</div>
+  <div class="cols">
+    <div class="col"><h3>آيفون</h3><ol><li>افتح الرابط في Safari</li><li>زر المشاركة</li><li>إضافة إلى الشاشة الرئيسية</li></ol></div>
+    <div class="col"><h3>أندرويد</h3><ol><li>افتح الرابط في Chrome</li><li>اضغط "ثبّت التطبيق"</li><li>أو القائمة ⋮ ← تثبيت التطبيق</li></ol></div>
+  </div>
+  <div class="url" id="p-url"></div>
+</div>
+
+<script src="js/vendor/qrcode.js"></script>
+<script>
+(function () {
+  // ?app=parent&school=slug ← صفحة تثبيت تطبيق أولياء الأمور (خطة الأسبوع) لمدرسة محددة
+  const qs = new URLSearchParams(location.search);
+  const isParent = qs.get('app') === 'parent';
+  const school = qs.get('school');
+  const target = isParent ? 'parent.html' + (school ? '?school=' + encodeURIComponent(school) : '') : 'index.html';
+  if (isParent) {
+    document.getElementById('app-manifest').href = 'manifest-parent.json';
+    document.title = 'تثبيت خطة الأسبوع';
+    ['h-title', 'p-title'].forEach(id => { document.getElementById(id).textContent = 'ثبّت خطة الأسبوع على جوالك'; });
+    document.getElementById('h-sub').textContent = 'تابع خطة ابنك الأسبوعية وجدوله وأرقام المدرسة من أيقونة على شاشتك';
+    document.getElementById('p-sub').textContent = 'خطة الأسبوع والجدول لولي الأمر';
+    document.querySelectorAll('.steps b').forEach(b => { b.innerHTML = b.innerHTML.replace('وسجّل دخولك مرة وحدة.', ''); });
+    document.querySelectorAll('.steps span').forEach(s => { if (s.textContent.trim() === 'وسجّل دخولك مرة وحدة.') s.textContent = 'وتفتح لك خطة الأسبوع مباشرة.'; });
+    document.querySelectorAll('.steps span, .steps b').forEach(el => { el.innerHTML = el.innerHTML.replace('"لوحة المدرسة"', '"خطة الأسبوع"'); });
+  }
+  const openLink = document.getElementById('open-link');
+  openLink.href = target;
+  if (isParent) openLink.textContent = 'افتح خطة الأسبوع بدون تثبيت';
+
+  // نوع الجهاز
+  const ua = navigator.userAgent;
+  const isIOS = /iPhone|iPad|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+  const isSafari = isIOS && !/CriOS|FxiOS|EdgiOS|OPiOS|GSA\//.test(ua);
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  let platform = isIOS ? 'ios' : isAndroid ? 'android' : 'desktop';
+  const names = { ios: 'آيفون', android: 'أندرويد', desktop: 'كمبيوتر' };
+  document.getElementById('detected').textContent = `جهازك: ${names[platform]} - لو مو صحيح اختر من فوق`;
+  if (standalone) document.getElementById('installed').classList.remove('hidden');
+  if (isIOS && !isSafari) document.getElementById('ios-browser').classList.remove('hidden');
+
+  function show(p) {
+    platform = p;
+    document.querySelectorAll('.switch button').forEach(b => {
+      const on = b.dataset.p === p;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelectorAll('.steps').forEach(o => o.classList.toggle('hidden', o.dataset.p !== p));
+    updateInstallBtn();
+  }
+  document.querySelectorAll('.switch button').forEach(b => b.addEventListener('click', () => show(b.dataset.p)));
+
+  // زر التثبيت المباشر (أندرويد وكمبيوتر - Chrome و Edge)
+  let deferred = null;
+  const btn = document.getElementById('install-btn');
+  const note = document.getElementById('install-note');
+  function updateInstallBtn() {
+    btn.classList.toggle('hidden', !deferred || platform === 'ios' || standalone);
+  }
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferred = e; updateInstallBtn(); });
+  window.addEventListener('appinstalled', () => {
+    deferred = null; updateInstallBtn();
+    document.getElementById('installed').classList.remove('hidden');
+    note.textContent = '';
+  });
+  btn.addEventListener('click', async () => {
+    if (!deferred) return;
+    deferred.prompt();
+    const { outcome } = await deferred.userChoice;
+    deferred = null; updateInstallBtn();
+    note.textContent = outcome === 'accepted' ? 'جاري التثبيت... بتلقى الأيقونة على شاشتك.' : 'ما انثبّت. تقدر تثبّته بعدين من نفس الزر أو من قائمة المتصفح.';
+  });
+  show(platform);
+
+  // الرابط + QR
+  const url = location.href.split('#')[0];
+  document.getElementById('url').textContent = url;
+  document.getElementById('p-url').textContent = url;
+  function qrSvg(text) {
+    const q = qrcode(0, 'M');
+    q.addData(text);
+    q.make();
+    return q.createSvgTag({ cellSize: 6, margin: 2, scalable: true });
+  }
+  try {
+    const svg = qrSvg(url);
+    document.getElementById('qr').innerHTML = svg;
+    document.getElementById('pqr').innerHTML = svg;
+  } catch (e) { document.querySelector('.qr').classList.add('hidden'); }
+  document.getElementById('copy').addEventListener('click', async () => {
+    const b = document.getElementById('copy');
+    try { await navigator.clipboard.writeText(url); b.textContent = 'تم ✓'; }
+    catch (e) { b.textContent = 'انسخه يدويًا'; }
+    setTimeout(() => { b.textContent = 'نسخ'; }, 1800);
+  });
+  document.getElementById('print-btn').addEventListener('click', () => window.print());
+
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
