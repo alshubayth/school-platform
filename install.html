@@ -217,7 +217,8 @@
     const setLogo = (src, cls, alt) => ['h-logo', 'p-logo'].forEach(id => {
       const el = document.getElementById(id); el.src = src; el.alt = alt; el.className = cls;
     });
-    setLogo('school-icon.svg', 'school-icon', '');
+    // بدون شعار لين نعرف المدرسة: شعارها، وإلا شعار جهتها، وإلا بدون أيقونة
+    ['h-logo', 'p-logo'].forEach(id => document.getElementById(id).classList.add('hidden'));
     if (school) {
       fetch('https://sovfrlvcvcyjcyauurpl.supabase.co/rest/v1/schools?select=name,branding&slug=eq.' + encodeURIComponent(school),
         { headers: { apikey: 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA' } })
@@ -227,7 +228,9 @@
           if (!sc) return;
           document.title = 'تثبيت لوحة تحكم ' + sc.name;
           document.getElementById('p-sub').textContent = sc.name;
-          const logo = sc.branding && sc.branding.school_logo;
+          const b = sc.branding || null;
+          const authority = b ? (b.authority || 'none') : 'rc';
+          const logo = (b && b.school_logo) || (authority === 'rc' ? 'logo-rc.png' : authority === 'custom' ? (b.authority_logo || null) : null);
           if (logo) setLogo(logo, 'school-logo', 'شعار ' + sc.name);
         }).catch(() => {});
     }

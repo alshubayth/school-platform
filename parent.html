@@ -39,7 +39,8 @@
     background:#fff; border:1px solid #E7E8EC; border-inline-start:4px solid var(--meadow);
     display:flex; align-items:center; gap:14px; min-height:0;
   }
-  .hero img{ height:42px; background:#fff; border-radius:8px; padding:4px 6px; flex-shrink:0; }
+  .hero img{ height:42px; max-width:92px; object-fit:contain; background:#fff; border-radius:8px; padding:4px 6px; flex-shrink:0; }
+  @media (max-width:400px){ .hero img{ height:34px; max-width:64px; padding:2px; } .hero h1{ white-space:nowrap; } }
   .hero h1{ font-size:16.5px; font-weight:800; color:var(--ink); }
   @media (max-width:400px){ .hero h1{ font-size:15px; } .hero{ gap:10px; padding:12px 14px; } }
   .hero > div{ min-width:0; }
@@ -288,7 +289,7 @@
 
 <div id="screen">
   <div class="hero">
-    <img id="hero-logo" src="school-icon.svg" alt="" />
+    <img id="hero-logo" class="hidden-view" alt="" />
     <div>
       <h1>خطة الأسبوع الدراسي</h1>
       <p class="sub" id="hero-school-name">&nbsp;</p>
@@ -446,9 +447,12 @@ async function resolveSchool() {
     const nameEl = document.getElementById('hero-school-name');
     if (nameEl) nameEl.textContent = data.name;
     document.title = 'خطة الأسبوع - ' + data.name;
-    const logo = data.branding && data.branding.school_logo;
+    // الشعار: شعار المدرسة، وإلا شعار الجهة التابعة لها (الهيئة الملكية مثلًا)، وإلا بدون أيقونة
+    const b = data.branding || null;
+    const authority = b ? (b.authority || 'none') : 'rc';
+    const logo = (b && b.school_logo) || (authority === 'rc' ? 'logo-rc.png' : authority === 'custom' ? (b.authority_logo || null) : null);
     const logoEl = document.getElementById('hero-logo');
-    if (logoEl) { if (logo) logoEl.src = logo; logoEl.alt = 'شعار ' + data.name; }
+    if (logoEl && logo) { logoEl.src = logo; logoEl.alt = 'شعار ' + data.name; logoEl.classList.remove('hidden-view'); }
     const inst = document.getElementById('hero-install');
     if (inst && !isStandaloneApp()) {
       inst.href = 'install.html?app=parent&school=' + encodeURIComponent(slug);
@@ -456,6 +460,10 @@ async function resolveSchool() {
     }
   }
   return data;
+}
+function printLogoHtml() {
+  const el = document.getElementById('hero-logo');
+  return (el && !el.classList.contains('hidden-view') && el.getAttribute('src')) ? `<img src="${el.src}" />` : '';
 }
 function isStandaloneApp() {
   return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
@@ -1036,7 +1044,7 @@ function buildWeeklyPlanPrintHtml() {
   const printDate = new Date().toLocaleDateString('ar-SA-u-nu-latn', { year: 'numeric', month: 'long', day: 'numeric' });
   return `
     <div class="print-header">
-      <img src="${document.getElementById('hero-logo').src}" />
+      ${printLogoHtml()}
       <div class="title">
         <h1>الخطة الأسبوعية</h1>
         <p>${esc(currentSchoolName)} — ${esc(planScopeLabel())} — ${esc(weekLabel)}</p>
@@ -1507,7 +1515,7 @@ function buildSchedulePrintHtml() {
 
   return `
     <div class="print-header">
-      <img src="${document.getElementById('hero-logo').src}" />
+      ${printLogoHtml()}
       <div class="title">
         <h1>الجدول الدراسي</h1>
         <p>${esc(currentSchoolName)} — ${esc(gradeLabel(schGrade))} — الفصل ${schSection}</p>
@@ -1562,7 +1570,7 @@ function buildExamCoveragePrintHtml() {
 
   return `
     <div class="print-header">
-      <img src="${document.getElementById('hero-logo').src}" />
+      ${printLogoHtml()}
       <div class="title">
         <h1>جدول الاختبارات الفترية</h1>
         <p>${esc(currentSchoolName)} — ${esc(gradeLabel(examGrade))}</p>
