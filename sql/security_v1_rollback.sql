@@ -125,6 +125,6 @@ end $$;
 drop function if exists public.fill_school_id();
 drop function if exists public.is_school_staff(uuid);
 drop function if exists public.same_school(uuid);
-drop function if exists public.is_owner();
+-- is_owner تبقى: دالة حفظ هوية المدرسة (branding.sql) تعتمد عليها
 
 commit;
