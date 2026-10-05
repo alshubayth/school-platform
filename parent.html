@@ -40,6 +40,8 @@
   }
   .hero img{ height:42px; background:#fff; border-radius:8px; padding:4px 6px; flex-shrink:0; }
   .hero h1{ font-size:16.5px; font-weight:800; color:var(--ink); }
+  @media (max-width:400px){ .hero h1{ font-size:15px; } .hero{ gap:10px; padding:12px 14px; } }
+  .hero > div{ min-width:0; }
   .hero p.sub{ font-size:12px; font-weight:600; color:var(--slate); margin:2px 0 0; }
 
   /* ===== شريط الاختصارات: صار فعليًا أزرار تنقلك للمحتوى، مو بس عرض أرقام ===== */
@@ -127,6 +129,8 @@
   }
   .bn-item svg{ width:21px; height:21px; }
   .bn-item.active{ color:var(--meadow); background:var(--meadow-light); }
+  .bn-item.bn-exams{ color:var(--coral); position:relative; }
+  .bn-item.bn-exams::after{ content:''; position:absolute; top:6px; inset-inline-end:calc(50% - 17px); width:7px; height:7px; border-radius:50%; background:var(--coral); box-shadow:0 0 0 2px #fff; }
 
   .sheet-overlay{ position:fixed; inset:0; background:rgba(16,20,35,0.46); z-index:30; opacity:0; pointer-events:none; transition:opacity .2s; }
   .sheet-overlay.open{ opacity:1; pointer-events:auto; }
@@ -156,7 +160,61 @@
   .icon-btn.call{ background:var(--teal); }
   .icon-btn.whatsapp{ background:#25D366; }
 
-  .hidden-view{ display:none; }
+  .hidden-view{ display:none !important; }
+
+  /* ===== رابط تثبيت التطبيق بالهيدر ===== */
+  .hero-install{
+    margin-inline-start:auto; flex-shrink:0; display:flex; align-items:center; gap:5px; text-decoration:none;
+    background:var(--meadow-light); color:var(--meadow); font-size:11.5px; font-weight:800; padding:8px 11px; border-radius:11px;
+  }
+
+  /* ===== أبنائي: شرائح الأبناء المحفوظة على الجهاز ===== */
+  #kids-bar:empty{ display:none; }
+  .kids-row{ display:flex; gap:8px; overflow-x:auto; padding:2px 2px 4px; margin-bottom:12px; scrollbar-width:none; }
+  .kids-row::-webkit-scrollbar{ display:none; }
+  .kid-chip{
+    flex-shrink:0; display:flex; flex-direction:column; align-items:flex-start; gap:1px; position:relative;
+    background:#fff; border:1.5px solid #E3E8F2; border-radius:14px; padding:9px 14px; text-align:right;
+    box-shadow:0 4px 14px rgba(16,23,40,0.05); color:var(--ink);
+  }
+  .kid-chip .kid-name{ font-family:'Tajawal'; font-weight:800; font-size:14px; line-height:1.2; }
+  .kid-chip .kid-sub{ font-size:10.5px; font-weight:600; color:var(--slate); }
+  .kid-chip.active{ background:linear-gradient(120deg, var(--navy), var(--meadow)); border-color:transparent; color:#fff; padding-inline-end:34px; }
+  .kid-chip.active .kid-sub{ color:#C9D6EE; }
+  .kid-chip .kid-edit{ position:absolute; inset-inline-end:9px; top:50%; transform:translateY(-50%); width:20px; height:20px; border-radius:6px; background:rgba(255,255,255,0.16); display:flex; align-items:center; justify-content:center; }
+  .kid-chip.add{ justify-content:center; align-items:center; min-width:50px; font-size:20px; font-weight:700; color:var(--meadow); border-style:dashed; }
+  .kid-add-link{
+    width:100%; display:flex; align-items:center; justify-content:center; gap:6px; margin-bottom:12px;
+    background:var(--meadow-light); color:var(--meadow); border:1.5px dashed color-mix(in srgb, var(--meadow) 40%, white);
+    border-radius:14px; padding:11px; font-size:12.5px; font-weight:800;
+  }
+  .kid-hint{ font-size:12.5px; color:var(--slate); margin:0; line-height:1.7; }
+  .kid-lbl{ font-size:12px; font-weight:800; color:var(--ink); margin-top:6px; }
+  .kid-lbl small{ color:var(--slate); font-weight:600; }
+  .kid-input{ width:100%; padding:12px 14px; border-radius:12px; border:1.5px solid #E3E8F2; background:#fff; font-family:inherit; font-size:14px; color:var(--ink); }
+  .kid-input:focus{ outline:none; border-color:var(--meadow); }
+  .kid-opts{ display:flex; flex-wrap:wrap; gap:7px; }
+  .kid-opt{ background:#fff; border:1.5px solid #E3E8F2; border-radius:11px; padding:9px 13px; font-size:13px; font-weight:700; color:var(--ink); }
+  .kid-opt.sec{ min-width:46px; }
+  .kid-opt.on{ background:var(--meadow); border-color:var(--meadow); color:#fff; }
+  .kid-actions{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+  .kid-save{ flex:1; background:linear-gradient(120deg, var(--navy), var(--meadow)); color:#fff; border-radius:13px; padding:13px; font-size:14px; font-weight:800; }
+  .kid-del{ background:var(--coral-light); color:var(--coral); border-radius:13px; padding:13px 16px; font-size:13px; font-weight:800; }
+  .kid-skip{ width:100%; background:transparent; color:var(--slate); font-size:12.5px; font-weight:700; padding:6px; text-decoration:underline; }
+
+  /* تاريخ الأسبوع تحت اسمه */
+  .week-tab .wk-date{ display:block; font-size:10px; font-weight:600; opacity:.75; margin-top:2px; }
+  .subject-card .row.muted span{ color:#A0A7B4; }
+
+  /* ===== نافذة المشاركة ===== */
+  .share-opt{
+    display:flex; align-items:center; gap:12px; width:100%; background:#fff; border-radius:14px; padding:13px 14px;
+    box-shadow:0 4px 14px rgba(16,23,40,0.06); text-align:right; color:var(--ink);
+  }
+  .share-opt .s-ic{ width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .share-opt b{ display:block; font-size:14px; font-weight:800; }
+  .share-opt span.d{ display:block; font-size:11.5px; color:var(--slate); margin-top:2px; }
+  .share-opt:active{ transform:scale(0.98); }
 
   .section-select-wrap{ position:relative; z-index:1; margin-bottom:16px; }
   .section-select-wrap select{
@@ -201,34 +259,6 @@
   .coverage-table td.subj-cell{ font-weight:800; color:var(--ink); }
   .coverage-table td.notes-cell{ color:var(--slate); font-size:11px; }
 
-  /* ===== زر عائم: جدول الاختبارات الفترية (متوهج بظل أحمر) =====
-   * يظهر فقط لو فيه مرحلة واحدة على الأقل نشرت الإدارة جدولها. */
-  .exam-fab{
-    position:fixed; z-index:25; bottom:calc(86px + env(safe-area-inset-bottom));
-    left:max(14px, calc(50% - 410px + 14px));
-    display:flex; flex-direction:column; align-items:center; gap:6px;
-    background:transparent; padding:0; cursor:pointer; -webkit-tap-highlight-color:transparent;
-  }
-  .exam-fab.hidden-view{ display:none; }
-  .exam-fab .fab-circle{
-    width:58px; height:58px; border-radius:50%; display:flex; align-items:center; justify-content:center;
-    background:linear-gradient(145deg, #E2554C, var(--coral)); color:#fff;
-    box-shadow:0 0 0 0 rgba(224,69,61,0.55), 0 8px 22px rgba(192,69,61,0.45);
-    animation:examFabGlow 2.2s ease-out infinite; transition:transform .15s;
-  }
-  .exam-fab:active .fab-circle{ transform:scale(0.92); }
-  .exam-fab .fab-label{
-    background:#fff; color:var(--coral); font-family:'Tajawal'; font-weight:800; font-size:11px; line-height:1.25;
-    padding:4px 9px; border-radius:10px; text-align:center; max-width:104px;
-    box-shadow:0 4px 14px rgba(192,69,61,0.22); border:1px solid #F6D3D0;
-  }
-  @keyframes examFabGlow{
-    0%  { box-shadow:0 0 0 0 rgba(224,69,61,0.55), 0 8px 22px rgba(192,69,61,0.45); }
-    70% { box-shadow:0 0 0 16px rgba(224,69,61,0),  0 8px 30px rgba(192,69,61,0.65); }
-    100%{ box-shadow:0 0 0 0 rgba(224,69,61,0),    0 8px 22px rgba(192,69,61,0.45); }
-  }
-  @media (prefers-reduced-motion: reduce){ .exam-fab .fab-circle{ animation:none; box-shadow:0 0 18px 4px rgba(224,69,61,0.5); } }
-
   /* اختيار المرحلة داخل نافذة جدول الاختبارات */
   .exam-grade-pick{ display:flex; flex-direction:column; gap:10px; }
   .exam-grade-btn{
@@ -257,7 +287,13 @@
       <h1>خطة الأسبوع الدراسي</h1>
       <p class="sub" id="hero-school-name">&nbsp;</p>
     </div>
+    <a class="hero-install hidden-view" id="hero-install" href="install.html?app=parent">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+      <span>تثبيت</span>
+    </a>
   </div>
+
+  <div id="kids-bar"></div>
 
   <div id="school-not-found" class="hidden-view" style="padding:40px 20px; text-align:center; color:#c0392b; font-weight:700;">
     تعذر تحديد المدرسة. تأكد إن الرابط اللي استخدمته صحيح، أو تواصل مع إدارة المدرسة.
@@ -270,11 +306,7 @@
     <div id="admin-note-container"></div>
 
     <div class="filters-sticky">
-      <div class="tabs" id="grade-tabs">
-        <button class="tab active" data-grade="first_intermediate">أول متوسط</button>
-        <button class="tab" data-grade="second_intermediate">ثاني متوسط</button>
-        <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
-      </div>
+      <div class="tabs" id="grade-tabs"></div>
 
       <div class="week-tabs" id="week-tabs"></div>
     </div>
@@ -283,11 +315,7 @@
   </div>
 
   <div id="schedule-view" class="hidden-view">
-    <div class="tabs" id="sch-grade-tabs">
-      <button class="tab active" data-grade="first_intermediate">أول متوسط</button>
-      <button class="tab" data-grade="second_intermediate">ثاني متوسط</button>
-      <button class="tab" data-grade="third_intermediate">ثالث متوسط</button>
-    </div>
+    <div class="tabs" id="sch-grade-tabs"></div>
 
 
     <div class="section-select-wrap" style="display:flex; gap:10px; align-items:stretch;">
@@ -312,18 +340,17 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18M8 15h3M8 15h.01"/></svg>
     <span>الجدول</span>
   </button>
+  <button class="bn-item bn-exams hidden-view" id="bn-exams" type="button">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M3 9h18M3 15h18M9 9v12M15 9v12"/></svg>
+    <span>الاختبارات</span>
+  </button>
   <button class="bn-item" id="bn-contact">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
     <span>تواصل</span>
   </button>
 </nav>
 
-<button class="exam-fab hidden-view" id="exam-fab" type="button" aria-label="جدول الاختبارات الفترية">
-  <span class="fab-circle">
-    <svg width="27" height="27" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2.5"/><path d="M3 9h18M3 15h18M9 9v12M15 9v12"/></svg>
-  </span>
-  <span class="fab-label">جدول الاختبارات الفترية</span>
-</button>
+
 
 <div class="contact-sheet" id="exam-sheet">
   <div class="sheet-handle"></div>
@@ -337,6 +364,39 @@
 </div>
 
 <div class="sheet-overlay" id="sheet-overlay"></div>
+<div class="contact-sheet" id="kid-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3 id="kid-sheet-title">صف ابنك</h3>
+    <button class="sheet-close" id="kid-sheet-close" aria-label="إغلاق">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body" id="kid-sheet-body"></div>
+</div>
+<div class="contact-sheet" id="share-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-head">
+    <h3>مشاركة الخطة</h3>
+    <button class="sheet-close" id="share-sheet-close" aria-label="إغلاق">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body">
+    <button class="share-opt" id="share-wa" type="button">
+      <span class="s-ic" style="background:#E5F8EC; color:#1DA851;"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2 22l5.25-1.38c1.45.79 3.08 1.21 4.79 1.21h.01c5.46 0 9.9-4.45 9.9-9.91 0-2.65-1.03-5.14-2.9-7.01A9.82 9.82 0 0012.04 2z"/></svg></span>
+      <div><b>ملخص بالواتساب</b><span class="d">الاختبارات والواجبات ورابط الخطة في رسالة نصية</span></div>
+    </button>
+    <button class="share-opt hidden-view" id="share-native" type="button">
+      <span class="s-ic" style="background:var(--meadow-light); color:var(--meadow);"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12v7a2 2 0 002 2h12a2 2 0 002-2v-7M16 6l-4-4-4 4M12 2v13"/></svg></span>
+      <div><b>مشاركة بتطبيق آخر</b><span class="d">نفس الملخص عبر أي تطبيق في جوالك</span></div>
+    </button>
+    <button class="share-opt" id="share-pdf" type="button">
+      <span class="s-ic" style="background:var(--gold-light); color:var(--gold);"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></span>
+      <div><b>ملف PDF</b><span class="d">الخطة كاملة للطباعة أو الحفظ</span></div>
+    </button>
+  </div>
+</div>
 <div class="contact-sheet" id="contact-sheet">
   <div class="sheet-handle"></div>
   <div class="sheet-head">
@@ -360,8 +420,9 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
  * حتى ما ينكسر أي رابط سبق إرساله لأولياء الأمور. */
 let currentSchoolId = null;
 let currentSchoolName = '';
+const schoolSlug = new URLSearchParams(location.search).get('school') || 'al-murooj';
 async function resolveSchool() {
-  const slug = new URLSearchParams(location.search).get('school') || 'al-murooj';
+  const slug = schoolSlug;
   let { data, error } = await sb.from('schools').select('id, name, branding').eq('slug', slug).maybeSingle();
   if (error) ({ data, error } = await sb.from('schools').select('id, name').eq('slug', slug).maybeSingle());
   if (error) {
@@ -377,33 +438,154 @@ async function resolveSchool() {
     const logo = data.branding && data.branding.school_logo;
     const logoEl = document.getElementById('hero-logo');
     if (logoEl) { if (logo) logoEl.src = logo; logoEl.alt = 'شعار ' + data.name; }
+    const inst = document.getElementById('hero-install');
+    if (inst && !isStandaloneApp()) {
+      inst.href = 'install.html?app=parent&school=' + encodeURIComponent(slug);
+      inst.classList.remove('hidden-view');
+    }
   }
   return data;
+}
+function isStandaloneApp() {
+  return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+}
+
+/* ===== التخزين على جهاز ولي الأمر (صفوف أبنائه) - يبقى محفوظ بعد تحديث الصفحة وإغلاقها ===== */
+function lsGet(k, def) { try { const v = localStorage.getItem(k); return v == null ? def : JSON.parse(v); } catch (e) { return def; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* وضع التصفح الخاص مثلًا */ } }
+const KIDS_KEY = 'lp:kids:' + schoolSlug;
+const KIDS_SKIP_KEY = 'lp:kids-skip:' + schoolSlug;
+const KID_ACTIVE_KEY = 'lp:kid-active:' + schoolSlug;
+let kids = (lsGet(KIDS_KEY, []) || []).filter(k => k && typeof k.grade === 'string');
+let activeKid = Math.max(0, Math.min(Number(lsGet(KID_ACTIVE_KEY, 0)) || 0, kids.length - 1));
+let currentSection = null; // فصل الابن المختار (لو محدد) - يُستخدم لتصفية الاختبارات وفتح جدوله
+
+/* ===== الصفوف والفصول: تُقرأ من جدول الحصص للمدرسة (بدل ما تكون ثابتة على المتوسط) ===== */
+const GRADE_ORDER = ['first_primary', 'second_primary', 'third_primary', 'fourth_primary', 'fifth_primary', 'sixth_primary',
+  'first_intermediate', 'second_intermediate', 'third_intermediate', 'first_secondary', 'second_secondary', 'third_secondary'];
+const GRADE_LABELS = {
+  first_primary: 'أول ابتدائي', second_primary: 'ثاني ابتدائي', third_primary: 'ثالث ابتدائي',
+  fourth_primary: 'رابع ابتدائي', fifth_primary: 'خامس ابتدائي', sixth_primary: 'سادس ابتدائي',
+  first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط',
+  first_secondary: 'أول ثانوي', second_secondary: 'ثاني ثانوي', third_secondary: 'ثالث ثانوي',
+};
+function gradeLabel(g) { return GRADE_LABELS[g] || g || ''; }
+let schoolGrades = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+let sectionsByGrade = {};
+async function loadSchoolStructure() {
+  try {
+    const { data } = await runScoped(scoped => {
+      let q = sb.from('class_schedules').select('grade_level, class_section').lte('period_number', 2);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.range(0, 4999);
+    });
+    const map = {};
+    (data || []).forEach(r => {
+      if (!r.grade_level) return;
+      (map[r.grade_level] = map[r.grade_level] || new Set()).add(Number(r.class_section));
+    });
+    const found = Object.keys(map);
+    if (found.length) {
+      schoolGrades = found.sort((a, b) => {
+        const ia = GRADE_ORDER.indexOf(a), ib = GRADE_ORDER.indexOf(b);
+        return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+      });
+      found.forEach(g => { sectionsByGrade[g] = [...map[g]].filter(n => !isNaN(n)).sort((a, b) => a - b); });
+    }
+  } catch (e) { /* نبقى على الافتراضي */ }
+}
+function renderGradeTabs(id, active) {
+  document.getElementById(id).innerHTML = schoolGrades.map(g =>
+    `<button class="tab${g === active ? ' active' : ''}" data-grade="${g}">${esc(gradeLabel(g))}</button>`).join('');
+}
+
+/* ===== التقويم الدراسي (لتواريخ الأسابيع وتحديد الأسبوع الحالي) - لو ما قدرنا نقرأه نعرض بدون تواريخ ===== */
+let parentCalendar = null;
+async function loadParentCalendar() {
+  try {
+    let q = sb.from('school_settings').select('value').eq('key', 'academic_calendar');
+    if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    const { data, error } = await q.maybeSingle();
+    if (!error && data && data.value && data.value.start) {
+      parentCalendar = { start: data.value.start, breaks: Array.isArray(data.value.breaks) ? data.value.breaks : [] };
+    }
+  } catch (e) { /* بدون تواريخ */ }
+}
+const pIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const pParse = s => { const [y, m, d] = String(s).split('-').map(Number); return new Date(y, m - 1, d); };
+function studyWeekStart(k) {
+  if (!parentCalendar) return null;
+  const br = new Set(parentCalendar.breaks);
+  const d = pParse(parentCalendar.start);
+  let n = 0;
+  for (let g = 0; g < 80; g++, d.setDate(d.getDate() + 7)) {
+    if (br.has(pIso(d))) continue;
+    if (++n === k) return new Date(d);
+  }
+  return null;
+}
+// الأسبوع اللي يهم ولي الأمر الآن: أسبوع اليوم، ويوم الجمعة والسبت يصير الأسبوع الجاي
+function currentStudyWeek() {
+  if (!parentCalendar) return null;
+  const t = new Date();
+  const sun = new Date(t.getFullYear(), t.getMonth(), t.getDate() - t.getDay() + (t.getDay() >= 5 ? 7 : 0));
+  for (let k = 1; k <= 60; k++) {
+    const st = studyWeekStart(k);
+    if (!st || st > sun) return null;
+    if (st.getTime() === sun.getTime()) return k;
+  }
+  return null;
+}
+function weekRangeLabel(k) {
+  const a = studyWeekStart(k);
+  if (!a) return '';
+  const b = new Date(a); b.setDate(b.getDate() + 4);
+  const mon = d => d.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { month: 'long' });
+  return a.getMonth() === b.getMonth()
+    ? `${a.getDate()}–${b.getDate()} ${mon(b)}`
+    : `${a.getDate()} ${mon(a)} – ${b.getDate()} ${mon(b)}`;
 }
 
 let publishedWeeks = [];
 let currentWeekIndex = 0;
 let currentGrade = 'first_intermediate';
 let lastPlans = [];
-const GRADE_LABELS = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
-const WEEK_NAMES_AR = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
+let lastNote = '';
+const WEEK_NAMES_AR = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر',
+  'الحادي عشر', 'الثاني عشر', 'الثالث عشر', 'الرابع عشر', 'الخامس عشر', 'السادس عشر', 'السابع عشر', 'الثامن عشر', 'التاسع عشر', 'العشرون'];
+function weekName(n) { return 'الأسبوع ' + (WEEK_NAMES_AR[n - 1] || n); }
 // مفتاح اليوم الحالي بنفس مفاتيح SCHEDULE_DAYS (جمعة/سبت تعتبر خارج أيام الدوام فما تطابق شي)
 function todayDayKey() {
   const map = { 0: 'sunday', 1: 'monday', 2: 'tuesday', 3: 'wednesday', 4: 'thursday' };
   return map[new Date().getDay()] || null;
 }
 
-const subjectIcons = {
-  'الرياضيات': '<path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5M8 17h3"/>',
-  'العلوم': '<path d="M9 3v6l-5 9a2 2 0 002 3h12a2 2 0 002-3l-5-9V3"/><path d="M9 3h6"/>',
-  'اللغة العربية': '<path d="M4 19V6a2 2 0 012-2h8l6 6v9a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M8 12h8M8 16h5"/>',
-  'اللغة الإنجليزية': '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15.5 0 18M12 3c-2.5 2.5-2.5 15.5 0 18"/>',
-  'التربية الإسلامية': '<path d="M12 3a9 9 0 109 9 7 7 0 01-9-9z"/>',
-  'الحاسب الآلي': '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/>',
-  'الدراسات الاجتماعية': '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 010 18 14 14 0 010-18z"/>',
-  'التربية الفنية': '<path d="M12 3a9 9 0 000 18c1.5 0 2-1 2-2s-.5-1.5-.5-2 1-1 2-1a3 3 0 003-3 7 7 0 00-6.5-10z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="16" cy="10" r="1"/>',
-  'التربية البدنية': '<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/>',
+const ICONS = {
+  math: '<path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h5M8 17h3"/>',
+  sci: '<path d="M9 3v6l-5 9a2 2 0 002 3h12a2 2 0 002-3l-5-9V3"/><path d="M9 3h6"/>',
+  ar: '<path d="M4 19V6a2 2 0 012-2h8l6 6v9a2 2 0 01-2 2H6a2 2 0 01-2-2z"/><path d="M8 12h8M8 16h5"/>',
+  en: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.5 2.5 15.5 0 18M12 3c-2.5 2.5-2.5 15.5 0 18"/>',
+  isl: '<path d="M12 3a9 9 0 109 9 7 7 0 01-9-9z"/>',
+  pc: '<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4"/>',
+  soc: '<path d="M3 6l6-3 6 3 6-3v15l-6 3-6-3-6 3z"/><path d="M9 3v15M15 6v15"/>',
+  art: '<path d="M12 3a9 9 0 000 18c1.5 0 2-1 2-2s-.5-1.5-.5-2 1-1 2-1a3 3 0 003-3 7 7 0 00-6.5-10z"/><circle cx="8" cy="10" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="16" cy="10" r="1"/>',
+  pe: '<circle cx="12" cy="12" r="9"/><path d="M12 3v18M3 12h18M6 6l12 12M18 6L6 18"/>',
+  think: '<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0012 3z"/>',
+  life: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-5h4v5"/>',
 };
+// المطابقة بجزء من الاسم عشان تشمل كل صيغ أسماء المواد (لغتي الخالدة، التوحيد، المهارات الرقمية...)
+const ICON_RULES = [
+  [/حاسب|رقمي|تقني/, 'pc'], [/رياضيات/, 'math'], [/علوم|كيمياء|فيزياء|أحياء/, 'sci'],
+  [/لغتي|عربي|نحو|أدب|بلاغ/, 'ar'], [/إنجليز|انجليز/, 'en'],
+  [/إسلامي|اسلامي|توحيد|فقه|حديث|تفسير|قرآن|قران|تجويد/, 'isl'],
+  [/اجتماع|تاريخ|جغراف|وطني/, 'soc'], [/فني/, 'art'], [/بدني|صحي|التربية الرياضية/, 'pe'],
+  [/تفكير|ناقد|فلسف|منطق/, 'think'], [/حياتي|أسري|اسري/, 'life'],
+];
+function iconFor(name) {
+  const r = ICON_RULES.find(([re]) => re.test(name || ''));
+  return r ? ICONS[r[1]] : defaultIcon;
+}
+const isBlank = v => v == null || !String(v).trim() || String(v).trim() === '-';
 const defaultIcon = '<path d="M4 4h13l3 3v13H4z"/><path d="M8 10h8M8 14h6"/>';
 const accentCycle = ['#2455A4', '#0E93A8', '#E07A34', '#6249A6']; // meadow, teal, gold, purple - نفس هوية المنصة
 const accentLightCycle = ['#EAF1FC', '#E3F4F7', '#FDEFE3', '#EFEBFB'];
@@ -414,8 +596,131 @@ function openContactSheet() { sheetOverlay.classList.add('open'); contactSheet.c
 function closeContactSheet() { sheetOverlay.classList.remove('open'); contactSheet.classList.remove('open'); document.body.style.overflow = ''; }
 document.getElementById('bn-contact').addEventListener('click', openContactSheet);
 document.getElementById('sheet-close').addEventListener('click', closeContactSheet);
-sheetOverlay.addEventListener('click', () => { closeContactSheet(); closeExamSheet(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeContactSheet(); closeExamSheet(); } });
+function closeAllSheets() { closeContactSheet(); closeExamSheet(); closeKidSheet(); closeShareSheet(); }
+sheetOverlay.addEventListener('click', closeAllSheets);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeAllSheets(); });
+function openSheet(el) { sheetOverlay.classList.add('open'); el.classList.add('open'); document.body.style.overflow = 'hidden'; }
+function closeSheet(el) {
+  if (!el.classList.contains('open')) return false;
+  el.classList.remove('open');
+  if (!document.querySelector('.contact-sheet.open')) { sheetOverlay.classList.remove('open'); document.body.style.overflow = ''; }
+  return true;
+}
+
+/* ===== أبنائي ===== */
+function kidTitle(k) { return k.name ? k.name : gradeLabel(k.grade); }
+function kidSub(k) {
+  const sec = k.section ? 'الفصل ' + k.section : 'كل الفصول';
+  return k.name ? gradeLabel(k.grade) + ' · ' + sec : sec;
+}
+function applyActiveKid() {
+  const k = kids[activeKid];
+  if (k) { currentGrade = k.grade; currentSection = k.section ? Number(k.section) : null; }
+  else currentSection = null;
+}
+function renderKidsBar() {
+  const bar = document.getElementById('kids-bar');
+  const tabs = document.getElementById('grade-tabs');
+  const schTabs = document.getElementById('sch-grade-tabs');
+  if (!kids.length) {
+    tabs.classList.remove('hidden-view'); schTabs.classList.remove('hidden-view');
+    bar.innerHTML = `<button class="kid-add-link" data-kid-add type="button">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+      احفظ صف ابنك وتفتح الصفحة عليه مباشرة</button>`;
+    return;
+  }
+  tabs.classList.add('hidden-view'); schTabs.classList.add('hidden-view');
+  const pen = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg>';
+  bar.innerHTML = `<div class="kids-row">${kids.map((k, i) => `
+    <button class="kid-chip${i === activeKid ? ' active' : ''}" data-kid="${i}" type="button">
+      <span class="kid-name">${esc(kidTitle(k))}</span><span class="kid-sub">${esc(kidSub(k))}</span>
+      ${i === activeKid ? `<span class="kid-edit" aria-label="تعديل">${pen}</span>` : ''}
+    </button>`).join('')}
+    <button class="kid-chip add" data-kid-add type="button" aria-label="إضافة ابن">+</button></div>`;
+}
+document.getElementById('kids-bar').addEventListener('click', (e) => {
+  if (e.target.closest('[data-kid-add]')) { openKidSheet(null, false); return; }
+  const chip = e.target.closest('[data-kid]');
+  if (!chip) return;
+  const i = Number(chip.dataset.kid);
+  if (i === activeKid) openKidSheet(i, false); else selectKid(i);
+});
+function selectKid(i) {
+  activeKid = i; lsSet(KID_ACTIVE_KEY, i);
+  applyActiveKid();
+  renderKidsBar();
+  renderGradeTabs('grade-tabs', currentGrade);
+  loadPlans();
+  syncScheduleToKid();
+}
+function syncScheduleToKid() {
+  schGrade = currentGrade;
+  schSection = currentSection;
+  renderGradeTabs('sch-grade-tabs', schGrade);
+  refreshScheduleSections(currentSection);
+}
+
+const kidSheet = document.getElementById('kid-sheet');
+let kidDraft = null, kidEditIdx = null, kidFirstRun = false;
+function openKidSheet(idx, firstRun) {
+  kidEditIdx = idx; kidFirstRun = !!firstRun;
+  kidDraft = idx != null ? { ...kids[idx] } : { name: '', grade: kids.length ? schoolGrades[0] : currentGrade, section: null };
+  if (!schoolGrades.includes(kidDraft.grade)) kidDraft.grade = schoolGrades[0];
+  document.getElementById('kid-sheet-title').textContent = idx != null ? 'تعديل بيانات الابن' : (kids.length ? 'إضافة ابن' : 'في أي صف ابنك؟');
+  renderKidSheet();
+  openSheet(kidSheet);
+}
+function closeKidSheet() {
+  if (!closeSheet(kidSheet)) return;
+  if (kidFirstRun && !kids.length) lsSet(KIDS_SKIP_KEY, true); // ما نعيد السؤال تلقائيًا، ويبقى زر الحفظ متاح
+  kidFirstRun = false;
+}
+document.getElementById('kid-sheet-close').addEventListener('click', closeKidSheet);
+function renderKidSheet() {
+  const d = kidDraft;
+  const nameVal = document.getElementById('kid-name') ? document.getElementById('kid-name').value : (d.name || '');
+  const secs = sectionsByGrade[d.grade] || [];
+  document.getElementById('kid-sheet-body').innerHTML = `
+    <p class="kid-hint">تفتح الصفحة على خطة صفه وجدول فصله مباشرة كل مرة، ويوصلك تنبيه الاختبار اللي يخص فصله. الاختيار يُحفظ في جوالك فقط.</p>
+    <div class="kid-lbl">اسم الابن <small>(اختياري، يفيدك لو عندك أكثر من ابن)</small></div>
+    <input id="kid-name" class="kid-input" maxlength="20" autocomplete="off" value="${escAttr(nameVal)}" />
+    <div class="kid-lbl">الصف</div>
+    <div class="kid-opts">${schoolGrades.map(g => `<button type="button" class="kid-opt${g === d.grade ? ' on' : ''}" data-g="${g}">${esc(gradeLabel(g))}</button>`).join('')}</div>
+    ${secs.length ? `<div class="kid-lbl">الفصل</div>
+      <div class="kid-opts">${secs.map(n => `<button type="button" class="kid-opt sec${Number(d.section) === n ? ' on' : ''}" data-s="${n}">${n}</button>`).join('')}
+        <button type="button" class="kid-opt${!d.section ? ' on' : ''}" data-s="">لا أعرف</button></div>` : ''}
+    <div class="kid-actions">
+      <button type="button" class="kid-save">حفظ</button>
+      ${kidEditIdx != null ? '<button type="button" class="kid-del">حذف</button>' : ''}
+      ${kidFirstRun ? '<button type="button" class="kid-skip">تصفّح كل الصفوف بدون حفظ</button>' : ''}
+    </div>`;
+}
+document.getElementById('kid-sheet-body').addEventListener('click', (e) => {
+  const g = e.target.closest('[data-g]');
+  if (g) { if (kidDraft.grade !== g.dataset.g) { kidDraft.grade = g.dataset.g; kidDraft.section = null; } renderKidSheet(); return; }
+  const sc = e.target.closest('[data-s]');
+  if (sc) { kidDraft.section = sc.dataset.s ? Number(sc.dataset.s) : null; renderKidSheet(); return; }
+  if (e.target.closest('.kid-save')) {
+    kidDraft.name = document.getElementById('kid-name').value.trim().slice(0, 20);
+    const rec = { name: kidDraft.name, grade: kidDraft.grade, section: kidDraft.section || null };
+    let idx = kidEditIdx;
+    if (idx != null) kids[idx] = rec; else { kids.push(rec); idx = kids.length - 1; }
+    lsSet(KIDS_KEY, kids);
+    kidFirstRun = false;
+    closeKidSheet();
+    selectKid(idx);
+    return;
+  }
+  if (e.target.closest('.kid-del')) {
+    kids.splice(kidEditIdx, 1);
+    lsSet(KIDS_KEY, kids);
+    closeKidSheet();
+    if (kids.length) selectKid(0);
+    else { activeKid = 0; lsSet(KID_ACTIVE_KEY, 0); currentSection = null; renderKidsBar(); renderGradeTabs('grade-tabs', currentGrade); loadPlans(); syncScheduleToKid(); }
+    return;
+  }
+  if (e.target.closest('.kid-skip')) closeKidSheet();
+});
 
 // وميض قصير يلفت الانتباه لعنصر معيّن بعد تمرير الصفحة له (اختصارات الاختبارات/الواجبات)
 function scrollToAndFlash(el) {
@@ -453,21 +758,43 @@ async function loadPublishedWeeks() {
     return q.order('week_number', { ascending: true });
   });
   publishedWeeks = (data || []).map(r => r.week_number);
-  currentWeekIndex = publishedWeeks.length > 0 ? publishedWeeks.length - 1 : 0;
+  // يفتح على الأسبوع الحالي لو منشور، وإلا آخر أسبوع منشور
+  const cw = currentStudyWeek();
+  const ci = cw ? publishedWeeks.indexOf(cw) : -1;
+  currentWeekIndex = ci >= 0 ? ci : (publishedWeeks.length > 0 ? publishedWeeks.length - 1 : 0);
 }
 
 function renderWeekTabs() {
   const wrap = document.getElementById('week-tabs');
   wrap.innerHTML = '';
-  const weekNames = ['الأول', 'الثاني', 'الثالث', 'الرابع', 'الخامس', 'السادس', 'السابع', 'الثامن', 'التاسع', 'العاشر'];
+  const cw = currentStudyWeek();
   publishedWeeks.forEach((weekNum, idx) => {
     const btn = document.createElement('button');
     btn.className = 'week-tab' + (idx === currentWeekIndex ? ' active' : '');
-    btn.textContent = 'الأسبوع ' + (weekNames[weekNum - 1] || weekNum);
+    const range = weekRangeLabel(weekNum);
+    const sub = weekNum === cw ? 'هذا الأسبوع' + (range ? ' · ' + range : '') : range;
+    btn.innerHTML = esc(weekName(weekNum)) + (sub ? `<span class="wk-date">${esc(sub)}</span>` : '');
     btn.addEventListener('click', () => { currentWeekIndex = idx; loadPlans(); });
     wrap.appendChild(btn);
   });
+  const act = wrap.querySelector('.week-tab.active');
+  if (act && wrap.scrollWidth > wrap.clientWidth) act.scrollIntoView({ block: 'nearest', inline: 'center' });
 }
+// الاختبار يخص فصل الابن؟ (بدون فصل محدد = كل اختبارات الصف)
+function testApplies(p) {
+  if (!p.has_test) return false;
+  if (!currentSection || !p.test_sections || !p.test_sections.length) return true;
+  return p.test_sections.map(Number).includes(currentSection);
+}
+function testSectionsLabel(sections) {
+  if (currentSection) return '';
+  return (sections && sections.length > 0) ? ` (الفصل ${sections.join('، الفصل ')})` : ' (كل الفصول)';
+}
+function testRowText(p) {
+  if (currentSection) return 'يشمل الفصل ' + currentSection;
+  return testSectionsLabel(p.test_sections).trim().replace(/^\(|\)$/g, '');
+}
+const hasHomeworkOf = p => !p.no_homework && !isBlank(p.homework);
 
 async function loadPlans() {
   if (publishedWeeks.length === 0) {
@@ -493,11 +820,12 @@ async function loadPlans() {
   if (noteError) console.warn('weekly_admin_notes fetch failed (likely missing RLS public-read policy):', noteError);
 
   const noteContainer = document.getElementById('admin-note-container');
-  if (noteData && noteData.note) {
+  lastNote = (noteData && noteData.note) ? String(noteData.note) : '';
+  if (lastNote.trim()) {
     noteContainer.innerHTML = `
       <div class="admin-note">
         <svg class="ic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
-        <div><h4>تعليمات الإدارة</h4><p>${noteData.note}</p></div>
+        <div><h4>تعليمات الإدارة</h4><p style="white-space:pre-line;">${esc(lastNote)}</p></div>
       </div>`;
   } else {
     noteContainer.innerHTML = '';
@@ -538,11 +866,8 @@ async function loadPlans() {
 
   lastPlans = plans;
 
-  function testSectionsLabel(sections) {
-    return (sections && sections.length > 0) ? ` (الفصل ${sections.join('، الفصل ')})` : ' (كل الفصول)';
-  }
-  const testSubjects = plans.filter(p => p.has_test).map(p => p.subjects ? p.subjects.name + testSectionsLabel(p.test_sections) : '').filter(Boolean);
-  const homeworkCount = plans.filter(p => !p.no_homework && p.homework && p.homework.trim() !== '' && p.homework.trim() !== '-').length;
+  const testSubjects = plans.filter(testApplies).map(p => p.subjects ? p.subjects.name + testSectionsLabel(p.test_sections) : '').filter(Boolean);
+  const homeworkCount = plans.filter(hasHomeworkOf).length;
 
   const todayLabel = (SCHEDULE_DAYS.find(d => d.key === todayDayKey()) || {}).label || '-';
   bentoContainer.innerHTML = `
@@ -572,13 +897,13 @@ async function loadPlans() {
   document.getElementById('sc-tests').addEventListener('click', () => scrollToAndFlash(document.querySelector('.subject-card.has-test')));
   document.getElementById('sc-homework').addEventListener('click', () => scrollToAndFlash(document.querySelector('.subject-card[data-has-homework="1"]')));
   document.getElementById('sc-today-schedule').addEventListener('click', () => document.querySelector('#bottom-nav .bn-item[data-view="schedule"]').click());
-  document.getElementById('sc-share-plan').addEventListener('click', shareWeeklyPlanPdf);
+  document.getElementById('sc-share-plan').addEventListener('click', openShareSheet);
 
   if (testSubjects.length > 0) {
     alertContainer.innerHTML = `
       <div class="alert-glass">
         <div class="ic"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.7 3.86a2 2 0 00-3.4 0z"/></svg></div>
-        <div><h4>تذكير مهم</h4><p>يوجد اختبار في: ${testSubjects.join('، ')}</p></div>
+        <div><h4>تذكير مهم</h4><p>يوجد اختبار في: ${esc(testSubjects.join('، '))}</p></div>
       </div>`;
   } else {
     alertContainer.innerHTML = '';
@@ -586,29 +911,32 @@ async function loadPlans() {
 
   plans.forEach((p, idx) => {
     const subjectName = p.subjects ? p.subjects.name : '';
-    const iconPath = subjectIcons[subjectName] || defaultIcon;
+    const iconPath = iconFor(subjectName);
     const accent = accentCycle[idx % accentCycle.length];
     const accentLight = accentLightCycle[idx % accentLightCycle.length];
-    const lessonsList = (p.lessons && p.lessons.length > 0) ? p.lessons : [];
+    const lessonsList = (p.lessons || []).filter(l => !isBlank(l));
     const lessonsHtml = lessonsList.length > 1
-      ? '<ul>' + lessonsList.map(l => `<li>${l}</li>`).join('') + '</ul>'
-      : `<span>${lessonsList[0] || '-'}</span>`;
-    const hasHomework = !p.no_homework && p.homework && p.homework.trim() !== '' && p.homework.trim() !== '-';
+      ? '<ul>' + lessonsList.map(l => `<li>${esc(l)}</li>`).join('') + '</ul>'
+      : `<span>${esc(lessonsList[0] || '')}</span>`;
+    const hasHomework = hasHomeworkOf(p);
+    const applies = testApplies(p);
+    const rows = [];
+    if (lessonsList.length) rows.push(`<div class="row"><b>الدرس:</b>${lessonsHtml}</div>`);
+    if (!isBlank(p.performance_tasks)) rows.push(`<div class="row"><b>المهام:</b><span>${esc(p.performance_tasks)}</span></div>`);
+    if (p.no_homework) rows.push(`<div class="row"><b>الواجب:</b><span>لا يوجد واجب</span></div>`);
+    else if (hasHomework) rows.push(`<div class="row"><b>الواجب:</b><span>${esc(p.homework)}</span></div>`);
+    if (applies) rows.push(`<div class="row"><b>الاختبار:</b><span>${esc(testRowText(p))}</span></div>`);
+    if (applies && !isBlank(p.test_note)) rows.push(`<div class="row"><b>ملاحظة الاختبار:</b><span>${esc(p.test_note)}</span></div>`);
+    if (!rows.length) rows.push(`<div class="row muted"><span>لا توجد تفاصيل مدخلة لهذا الأسبوع</span></div>`);
     const card = document.createElement('div');
-    card.className = 'subject-card' + (p.has_test ? ' has-test' : '');
+    card.className = 'subject-card' + (applies ? ' has-test' : '');
     card.dataset.hasHomework = hasHomework ? '1' : '0';
     card.innerHTML = `
       <div class="top" style="--accent:${accent}; --accent-light:${accentLight};">
         <div class="icon-wrap"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${iconPath}</svg></div>
-        <h3>${subjectName}</h3>
+        <h3>${esc(subjectName)}</h3>
       </div>
-      <div class="body">
-        <div class="row"><b>الدرس:</b>${lessonsHtml}</div>
-        <div class="row"><b>المهام:</b><span>${p.performance_tasks || '-'}</span></div>
-        <div class="row"><b>الواجب:</b><span>${p.no_homework ? 'لا يوجد واجب' : (p.homework || '-')}</span></div>
-        ${p.has_test ? `<div class="row"><b>الاختبار:</b><span>${testSectionsLabel(p.test_sections).trim().replace(/^\(|\)$/g, '')}</span></div>` : ''}
-        ${p.has_test && p.test_note ? `<div class="row"><b>ملاحظة الاختبار:</b><span>${p.test_note}</span></div>` : ''}
-      </div>`;
+      <div class="body">${rows.join('')}</div>`;
     container.appendChild(card);
   });
 }
@@ -657,37 +985,37 @@ const PLAN_PRINT_STYLES = `
 
   .print-footer{ margin-top:14px; font-size:10px; color:#8890A0; text-align:center; }
 `;
+function planScopeLabel() {
+  return gradeLabel(currentGrade) + (currentSection ? ' — الفصل ' + currentSection : '');
+}
 function buildWeeklyPlanPrintHtml() {
-  const gradeLabel = GRADE_LABELS[currentGrade] || '';
   const weekNum = publishedWeeks[currentWeekIndex];
-  const weekLabel = 'الأسبوع ' + (WEEK_NAMES_AR[weekNum - 1] || weekNum);
-  const noteEl = document.querySelector('#admin-note-container .admin-note p');
-
-  function testSectionsLabel(sections) {
-    return (sections && sections.length > 0) ? ` (الفصل ${sections.join('، الفصل ')})` : ' (كل الفصول)';
-  }
-  const testSubjects = lastPlans.filter(p => p.has_test).map(p => p.subjects ? p.subjects.name + testSectionsLabel(p.test_sections) : '').filter(Boolean);
+  const range = weekRangeLabel(weekNum);
+  const weekLabel = weekName(weekNum) + (range ? ' (' + range + ')' : '');
+  const testSubjects = lastPlans.filter(testApplies).map(p => p.subjects ? p.subjects.name + testSectionsLabel(p.test_sections) : '').filter(Boolean);
 
   const cardsHtml = lastPlans.map((p, idx) => {
     const subjectName = p.subjects ? p.subjects.name : '-';
-    const iconPath = subjectIcons[subjectName] || defaultIcon;
+    const iconPath = iconFor(subjectName);
     const accent = accentCycle[idx % accentCycle.length];
     const accentLight = accentLightCycle[idx % accentLightCycle.length];
-    const lessons = (p.lessons && p.lessons.length > 0) ? p.lessons.join('، ') : '-';
-    const homework = p.no_homework ? 'لا يوجد واجب' : (p.homework || '-');
+    const lessons = (p.lessons || []).filter(l => !isBlank(l)).join('، ');
+    const applies = testApplies(p);
+    const rows = [];
+    if (lessons) rows.push(`<div class="p-row"><span class="p-ic">📖</span><b>الدرس:</b><span>${esc(lessons)}</span></div>`);
+    if (!isBlank(p.performance_tasks)) rows.push(`<div class="p-row"><span class="p-ic">✅</span><b>المهام:</b><span>${esc(p.performance_tasks)}</span></div>`);
+    if (p.no_homework) rows.push(`<div class="p-row"><span class="p-ic">📝</span><b>الواجب:</b><span>لا يوجد واجب</span></div>`);
+    else if (hasHomeworkOf(p)) rows.push(`<div class="p-row"><span class="p-ic">📝</span><b>الواجب:</b><span>${esc(p.homework)}</span></div>`);
+    if (applies) rows.push(`<div class="p-row"><span class="p-ic">⚠️</span><b>الاختبار:</b><span>${esc(testRowText(p))}</span></div>`);
+    if (applies && !isBlank(p.test_note)) rows.push(`<div class="p-row"><span class="p-ic">📌</span><b>ملاحظة:</b><span>${esc(p.test_note)}</span></div>`);
+    if (!rows.length) rows.push(`<div class="p-row"><span>لا توجد تفاصيل مدخلة</span></div>`);
     return `
-      <div class="p-card${p.has_test ? ' has-test' : ''}">
+      <div class="p-card${applies ? ' has-test' : ''}">
         <div class="p-top" style="background:${accentLight};">
           <span class="p-icon" style="color:${accent};"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${iconPath}</svg></span>
-          <h3>${subjectName}</h3>
+          <h3>${esc(subjectName)}</h3>
         </div>
-        <div class="p-body">
-          <div class="p-row"><span class="p-ic">📖</span><b>الدرس:</b><span>${lessons}</span></div>
-          <div class="p-row"><span class="p-ic">✅</span><b>المهام:</b><span>${p.performance_tasks || '-'}</span></div>
-          <div class="p-row"><span class="p-ic">📝</span><b>الواجب:</b><span>${homework}</span></div>
-          ${p.has_test ? `<div class="p-row"><span class="p-ic">⚠️</span><b>الاختبار:</b><span>${testSectionsLabel(p.test_sections).trim().replace(/^\(|\)$/g, '')}</span></div>` : ''}
-          ${p.has_test && p.test_note ? `<div class="p-row"><span class="p-ic">📌</span><b>ملاحظة:</b><span>${p.test_note}</span></div>` : ''}
-        </div>
+        <div class="p-body">${rows.join('')}</div>
       </div>`;
   }).join('');
 
@@ -697,27 +1025,76 @@ function buildWeeklyPlanPrintHtml() {
       <img src="${document.getElementById('hero-logo').src}" />
       <div class="title">
         <h1>الخطة الأسبوعية</h1>
-        <p>${currentSchoolName} — ${gradeLabel} — ${weekLabel}</p>
+        <p>${esc(currentSchoolName)} — ${esc(planScopeLabel())} — ${esc(weekLabel)}</p>
       </div>
       <div class="date">تاريخ الطباعة<br>${printDate}</div>
     </div>
-    ${noteEl ? `<div class="plan-note"><span class="ic-em">🔔</span><div><b>تعليمات الإدارة:</b> ${noteEl.textContent}</div></div>` : ''}
-    ${testSubjects.length > 0 ? `<div class="plan-test-summary"><span class="ic-em">⚠️</span><div><b>تذكير مهم:</b> يوجد اختبار في ${testSubjects.join('، ')}</div></div>` : ''}
+    ${lastNote.trim() ? `<div class="plan-note"><span class="ic-em">🔔</span><div><b>تعليمات الإدارة:</b> ${esc(lastNote)}</div></div>` : ''}
+    ${testSubjects.length > 0 ? `<div class="plan-test-summary"><span class="ic-em">⚠️</span><div><b>تذكير مهم:</b> يوجد اختبار في ${esc(testSubjects.join('، '))}</div></div>` : ''}
     <div class="cards-grid">${cardsHtml}</div>
-    <p class="print-footer">${currentSchoolName} — نظام إدارة المدرسة</p>`;
+    <p class="print-footer">${esc(currentSchoolName)} — نظام إدارة المدرسة</p>`;
+}
+/* طباعة مستند: نافذة جديدة بالمتصفح، وداخل التطبيق المثبّت (ما يسمح بنوافذ جديدة) نطبع من إطار مخفي */
+function printDocument(title, styles, bodyHtml) {
+  const html = `<html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${esc(title)}</title><style>${styles}</style></head><body>${bodyHtml}</body></html>`;
+  const whenReady = (w, after) => {
+    const img = w.document.querySelector('.print-header img');
+    const go = () => { w.focus(); w.print(); if (after) after(); };
+    if (!img || img.complete) setTimeout(go, 50); else { img.onload = go; img.onerror = go; }
+  };
+  const win = isStandaloneApp() ? null : window.open('', '_blank');
+  if (win) { win.document.write(html); win.document.close(); whenReady(win); return; }
+  const fr = document.createElement('iframe');
+  fr.style.cssText = 'position:fixed; width:0; height:0; border:0; left:-9999px;';
+  document.body.appendChild(fr);
+  fr.contentDocument.open(); fr.contentDocument.write(html); fr.contentDocument.close();
+  whenReady(fr.contentWindow, () => setTimeout(() => fr.remove(), 60000));
 }
 function shareWeeklyPlanPdf() {
   if (!lastPlans || lastPlans.length === 0) return;
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(`<html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>الخطة الأسبوعية</title>
-    <style>${PLAN_PRINT_STYLES}</style></head><body>${buildWeeklyPlanPrintHtml()}</body></html>`);
-  win.document.close();
-  const img = win.document.querySelector('.print-header img');
-  const doPrint = () => { win.focus(); win.print(); };
-  if (!img || img.complete) doPrint();
-  else { img.onload = doPrint; img.onerror = doPrint; }
+  printDocument('الخطة الأسبوعية', PLAN_PRINT_STYLES, buildWeeklyPlanPrintHtml());
 }
+
+/* ---------- ملخص نصي للواتساب ---------- */
+function buildPlanSummaryText() {
+  const weekNum = publishedWeeks[currentWeekIndex];
+  const range = weekRangeLabel(weekNum);
+  const kid = kids[activeKid];
+  const L = [];
+  L.push('📘 الخطة الأسبوعية — ' + currentSchoolName);
+  L.push((kid && kid.name ? kid.name + ' · ' : '') + planScopeLabel() + ' — ' + weekName(weekNum) + (range ? ' (' + range + ')' : ''));
+  const tests = lastPlans.filter(testApplies);
+  const hws = lastPlans.filter(hasHomeworkOf);
+  if (tests.length) {
+    L.push('', '📝 الاختبارات:');
+    tests.forEach(p => L.push('• ' + (p.subjects ? p.subjects.name : '') + testSectionsLabel(p.test_sections) + (isBlank(p.test_note) ? '' : ' — ' + String(p.test_note).trim())));
+  }
+  if (hws.length) {
+    L.push('', '📚 الواجبات:');
+    hws.forEach(p => L.push('• ' + (p.subjects ? p.subjects.name : '') + ': ' + String(p.homework).trim()));
+  }
+  if (!tests.length && !hws.length) L.push('', 'لا توجد اختبارات ولا واجبات هذا الأسبوع.');
+  if (lastNote.trim()) L.push('', '🔔 تعليمات الإدارة: ' + lastNote.trim());
+  L.push('', 'الخطة كاملة: ' + location.origin + location.pathname + '?school=' + encodeURIComponent(schoolSlug));
+  return L.join('\n');
+}
+const shareSheet = document.getElementById('share-sheet');
+function openShareSheet() {
+  if (!lastPlans || !lastPlans.length) return;
+  document.getElementById('share-native').classList.toggle('hidden-view', !navigator.share);
+  openSheet(shareSheet);
+}
+function closeShareSheet() { closeSheet(shareSheet); }
+document.getElementById('share-sheet-close').addEventListener('click', closeShareSheet);
+document.getElementById('share-wa').addEventListener('click', () => {
+  window.open('https://wa.me/?text=' + encodeURIComponent(buildPlanSummaryText()), '_blank');
+  closeShareSheet();
+});
+document.getElementById('share-native').addEventListener('click', () => {
+  navigator.share({ text: buildPlanSummaryText() }).catch(() => {});
+  closeShareSheet();
+});
+document.getElementById('share-pdf').addEventListener('click', () => { closeShareSheet(); shareWeeklyPlanPdf(); });
 
 async function bootParentPage() {
   const school = await resolveSchool();
@@ -735,10 +1112,19 @@ async function bootParentPage() {
     document.getElementById('bottom-nav').classList.add('hidden-view');
     return;
   }
-  refreshExamFab(); // مستقل: ما ينتظر تحميل الخطة، ولو تعثّر شي ثاني يبقى الزر شغال
+  await Promise.all([loadSchoolStructure(), loadParentCalendar()]);
+  if (!schoolGrades.includes(currentGrade)) currentGrade = schoolGrades[0];
+  applyActiveKid();
+  renderKidsBar();
+  renderGradeTabs('grade-tabs', currentGrade);
+  schGrade = currentGrade;
+  schSection = currentSection;
+  renderGradeTabs('sch-grade-tabs', schGrade);
+  refreshExamFab(); // مستقل: ما ينتظر تحميل الخطة
   await loadPublishedWeeks();
   await loadPlans();
-  await loadContactList();
+  if (!kids.length && !lsGet(KIDS_SKIP_KEY, false)) openKidSheet(null, true);
+  loadContactList();
 }
 bootParentPage();
 
@@ -809,7 +1195,6 @@ const SCHEDULE_DAYS = [
   { key: 'thursday', label: 'الخميس' },
 ];
 const SCHEDULE_PERIODS = [1, 2, 3, 4, 5, 6, 7];
-const SCHEDULE_GRADE_LABELS = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
 let schGrade = 'first_intermediate';
 let schSection = null;
 let schCurrentMap = null;
@@ -822,8 +1207,8 @@ document.getElementById('bottom-nav').addEventListener('click', (e) => {
   const view = btn.dataset.view;
   document.getElementById('weekly-view').classList.toggle('hidden-view', view !== 'weekly');
   document.getElementById('schedule-view').classList.toggle('hidden-view', view !== 'schedule');
-  if (view === 'schedule' && !schSection && document.getElementById('sch-section-select').options.length <= 1) {
-    refreshScheduleSections();
+  if (view === 'schedule' && document.getElementById('sch-section-select').options.length <= 1) {
+    refreshScheduleSections(schSection);
   }
 });
 
@@ -864,20 +1249,18 @@ function dayBadgeHtml(dayName) {
 let examCoverageRows = [];
 let examGrade = null;           // المرحلة المختارة داخل نافذة جدول الاختبارات (مستقلة عن تبويب الجدول الدراسي)
 let examPublishedGrades = [];   // المراحل اللي نشرت الإدارة جدولها
-const EXAM_GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 const examSheet = document.getElementById('exam-sheet');
-const examFab = document.getElementById('exam-fab');
+const examNavBtn = document.getElementById('bn-exams');
 
 function openExamSheet() {
-  sheetOverlay.classList.add('open'); examSheet.classList.add('open'); document.body.style.overflow = 'hidden';
-  if (examPublishedGrades.length === 1) loadExamCoverage(examPublishedGrades[0]);
+  openSheet(examSheet);
+  // لو فيه ابن محفوظ وجدول صفه منشور نفتح عليه مباشرة
+  if (kids.length && examPublishedGrades.includes(currentGrade)) loadExamCoverage(currentGrade);
+  else if (examPublishedGrades.length === 1) loadExamCoverage(examPublishedGrades[0]);
   else renderExamGradePicker();
 }
-function closeExamSheet() {
-  if (!examSheet.classList.contains('open')) return;
-  sheetOverlay.classList.remove('open'); examSheet.classList.remove('open'); document.body.style.overflow = '';
-}
-examFab.addEventListener('click', openExamSheet);
+function closeExamSheet() { closeSheet(examSheet); }
+examNavBtn.addEventListener('click', openExamSheet);
 document.getElementById('exam-sheet-close').addEventListener('click', closeExamSheet);
 
 /* الزر العائم يظهر فقط لو فيه مرحلة واحدة على الأقل منشور جدولها */
@@ -887,8 +1270,9 @@ async function refreshExamFab() {
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
-  examPublishedGrades = EXAM_GRADES.filter(g => (data || []).some(r => r.grade_level === g && r.is_published));
-  examFab.classList.toggle('hidden-view', examPublishedGrades.length === 0);
+  const pub = new Set((data || []).filter(r => r.is_published).map(r => r.grade_level));
+  examPublishedGrades = [...schoolGrades.filter(g => pub.has(g)), ...[...pub].filter(g => !schoolGrades.includes(g))];
+  examNavBtn.classList.toggle('hidden-view', examPublishedGrades.length === 0);
 }
 
 function renderExamGradePicker() {
@@ -899,10 +1283,10 @@ function renderExamGradePicker() {
   document.getElementById('exam-sheet-body').innerHTML = `
     <p style="font-size:12.5px; color:var(--slate); margin:0 0 2px; font-weight:600;">اختر المرحلة لعرض جدول اختباراتها:</p>
     <div class="exam-grade-pick">
-      ${EXAM_GRADES.map(g => {
+      ${examPublishedGrades.concat(schoolGrades.filter(g => !examPublishedGrades.includes(g))).map(g => {
         const on = examPublishedGrades.includes(g);
         return `<button class="exam-grade-btn" data-grade="${g}" ${on ? '' : 'disabled'}>
-          <span>${SCHEDULE_GRADE_LABELS[g]}</span>
+          <span>${esc(gradeLabel(g))}</span>
           ${on ? arrow : '<span class="soon">لم يُنشر بعد</span>'}
         </button>`;
       }).join('')}
@@ -920,7 +1304,7 @@ async function loadExamCoverage(grade) {
   examGrade = grade;
   examCoverageRows = [];
   const body = document.getElementById('exam-sheet-body');
-  document.getElementById('exam-sheet-title').textContent = `جدول الاختبارات الفترية - ${SCHEDULE_GRADE_LABELS[grade] || ''}`;
+  document.getElementById('exam-sheet-title').textContent = `جدول الاختبارات الفترية - ${gradeLabel(grade)}`;
   body.innerHTML = '<div style="text-align:center; padding:30px 10px; color:var(--slate); font-size:12.5px;">جارٍ التحميل...</div>';
 
   const { data } = await runScoped(scoped => {
@@ -939,7 +1323,7 @@ async function loadExamCoverage(grade) {
   });
   examCoverageRows = rows;
 
-  const backBtn = examPublishedGrades.length > 1
+  const backBtn = (examPublishedGrades.length > 1 || kids.length)
     ? '<button class="exam-back-btn" id="exam-back-btn" type="button">→ تغيير المرحلة</button>'
     : '<span></span>';
   const printBtn = rows.length ? `<button id="exam-print-btn" class="print-btn" type="button">
@@ -996,23 +1380,31 @@ document.getElementById('sch-section-select').addEventListener('change', (e) => 
   loadScheduleTable();
 });
 
-async function refreshScheduleSections() {
+async function refreshScheduleSections(preselect) {
   const sel = document.getElementById('sch-section-select');
-  sel.innerHTML = '<option value="">جارٍ التحميل...</option>';
   document.getElementById('sch-table-container').innerHTML = '';
-
-  const { data } = await runScoped(scoped => {
-    let q = sb.from('class_schedules').select('class_section').eq('grade_level', schGrade);
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
-  });
-  const sections = [...new Set((data || []).map(r => r.class_section))].sort((a, b) => a - b);
+  document.getElementById('sch-print-btn').disabled = true;
+  let sections = sectionsByGrade[schGrade];
+  if (!sections) {
+    sel.innerHTML = '<option value="">جارٍ التحميل...</option>';
+    const { data } = await runScoped(scoped => {
+      let q = sb.from('class_schedules').select('class_section').eq('grade_level', schGrade);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    });
+    sections = [...new Set((data || []).map(r => Number(r.class_section)))].sort((a, b) => a - b);
+  }
 
   if (sections.length === 0) {
-    sel.innerHTML = '<option value="">لا يوجد جدول لهذه المرحلة بعد</option>';
+    sel.innerHTML = '<option value="">لا يوجد جدول لهذا الصف بعد</option>';
+    schSection = null;
     return;
   }
   sel.innerHTML = '<option value="">اختر الفصل</option>' + sections.map(n => `<option value="${n}">الفصل ${n}</option>`).join('');
+  // فصل الابن المحفوظ، أو لو الصف فيه فصل واحد بس نفتحه مباشرة
+  const pick = (preselect && sections.includes(Number(preselect))) ? Number(preselect) : (sections.length === 1 ? sections[0] : null);
+  schSection = pick;
+  if (pick) { sel.value = String(pick); loadScheduleTable(); }
 }
 
 async function loadScheduleTable() {
@@ -1045,7 +1437,7 @@ async function loadScheduleTable() {
         const subj = cell ? cell.subject : '';
         const teacher = cell ? cell.teacher : '';
         if (!subj) return `<td><div class="subj-cell empty">-</div></td>`;
-        return `<td><div class="subj-cell">${subj}${teacher ? `<div class="teacher-name">${teacher}</div>` : ''}</div></td>`;
+        return `<td><div class="subj-cell">${esc(subj)}${teacher ? `<div class="teacher-name">${esc(teacher)}</div>` : ''}</div></td>`;
       }).join('')}
     </tr>`).join('');
 
@@ -1085,7 +1477,6 @@ const SCHEDULE_PRINT_STYLES = `
 `;
 
 function buildSchedulePrintHtml() {
-  const gradeLabel = SCHEDULE_GRADE_LABELS[schGrade] || '';
   const rows = SCHEDULE_DAYS.map(d => `
     <tr>
       <td class="period-cell">${d.label}</td>
@@ -1094,7 +1485,7 @@ function buildSchedulePrintHtml() {
         const subj = cell ? cell.subject : '';
         const teacher = cell ? cell.teacher : '';
         if (!subj) return `<td class="empty-cell">-</td>`;
-        return `<td><div class="subj">${subj}</div>${teacher ? `<div class="teacher">${teacher}</div>` : ''}</td>`;
+        return `<td><div class="subj">${esc(subj)}</div>${teacher ? `<div class="teacher">${esc(teacher)}</div>` : ''}</td>`;
       }).join('')}
     </tr>`).join('');
 
@@ -1105,7 +1496,7 @@ function buildSchedulePrintHtml() {
       <img src="${document.getElementById('hero-logo').src}" />
       <div class="title">
         <h1>الجدول الدراسي</h1>
-        <p>${currentSchoolName} — ${gradeLabel} — الفصل ${schSection}</p>
+        <p>${esc(currentSchoolName)} — ${esc(gradeLabel(schGrade))} — الفصل ${schSection}</p>
       </div>
       <div class="date">تاريخ الطباعة<br>${printDate}</div>
     </div>
@@ -1115,20 +1506,12 @@ function buildSchedulePrintHtml() {
       </thead>
       <tbody>${rows}</tbody>
     </table>
-    <p class="print-footer">${currentSchoolName} — نظام إدارة المدرسة</p>`;
+    <p class="print-footer">${esc(currentSchoolName)} — نظام إدارة المدرسة</p>`;
 }
 
 document.getElementById('sch-print-btn').addEventListener('click', () => {
   if (!schCurrentMap) return;
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(`<html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>الجدول الدراسي</title>
-    <style>${SCHEDULE_PRINT_STYLES}</style></head><body>${buildSchedulePrintHtml()}</body></html>`);
-  win.document.close();
-  const img = win.document.querySelector('.print-header img');
-  const doPrint = () => { win.focus(); win.print(); };
-  if (!img || img.complete) doPrint();
-  else { img.onload = doPrint; img.onerror = doPrint; }
+  printDocument('الجدول الدراسي', SCHEDULE_PRINT_STYLES, buildSchedulePrintHtml());
 });
 
 /* ---------- طباعة جدول الاختبارات الفترية ---------- */
@@ -1168,7 +1551,7 @@ function buildExamCoveragePrintHtml() {
       <img src="${document.getElementById('hero-logo').src}" />
       <div class="title">
         <h1>جدول الاختبارات الفترية</h1>
-        <p>${currentSchoolName} — ${SCHEDULE_GRADE_LABELS[examGrade] || ''}</p>
+        <p>${esc(currentSchoolName)} — ${esc(gradeLabel(examGrade))}</p>
       </div>
       <div class="date">تاريخ الطباعة<br>${printDate}</div>
     </div>
@@ -1178,20 +1561,12 @@ function buildExamCoveragePrintHtml() {
       </thead>
       <tbody>${rows}</tbody>
     </table>
-    <p class="print-footer">${currentSchoolName} — نظام إدارة المدرسة</p>`;
+    <p class="print-footer">${esc(currentSchoolName)} — نظام إدارة المدرسة</p>`;
 }
 
 function printExamCoverage() {
   if (examCoverageRows.length === 0) return;
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.write(`<html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>جدول الاختبارات الفترية</title>
-    <style>${EXAM_COVERAGE_PRINT_STYLES}</style></head><body>${buildExamCoveragePrintHtml()}</body></html>`);
-  win.document.close();
-  const img = win.document.querySelector('.print-header img');
-  const doPrint = () => { win.focus(); win.print(); };
-  if (!img || img.complete) doPrint();
-  else { img.onload = doPrint; img.onerror = doPrint; }
+  printDocument('جدول الاختبارات الفترية', EXAM_COVERAGE_PRINT_STYLES, buildExamCoveragePrintHtml());
 }
 
 if ('serviceWorker' in navigator) {
