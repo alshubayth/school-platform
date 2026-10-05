@@ -1582,12 +1582,17 @@
                           <option value="different">أسئلة مختلفة كليًا</option>
                         </select>
                       </label>
-                      <label class="as-models-mode">توزيع النموذج على الطلاب
-                        <select id="as-models-assign">
-                          <option value="auto">المنصة توزّع وتطبع نموذج كل طالب على ورقته</option>
-                          <option value="bubble">الطالب يظلّل نموذجه بالورقة (المدرسة توزّع بنفسها)</option>
+                      <div class="as-models-mode">توزيع النموذج على الطلاب
+                        <div class="seg-tabs as-assign-tabs" id="as-assign-tabs">
+                          <button type="button" data-a="auto">المنصة توزّع</button>
+                          <button type="button" data-a="bubble">الطالب يظلّل نموذجه</button>
+                        </div>
+                        <select id="as-models-assign" hidden>
+                          <option value="auto">auto</option>
+                          <option value="bubble">bubble</option>
                         </select>
-                      </label>
+                        <small class="as-models-hint" id="as-assign-hint"></small>
+                      </div>
                       <div class="seg-tabs as-model-tabs" id="as-model-tabs">
                         <button type="button" data-m="أ" class="active">نموذج أ <span class="tr-cnt" id="as-model-cnt-a"></span></button>
                         <button type="button" data-m="ب">نموذج ب <span class="tr-cnt" id="as-model-cnt-b"></span></button>
@@ -1631,6 +1636,7 @@
                       <b>توزيع النموذجين</b>
                       <span id="as-dist-sum"></span>
                       <button type="button" class="ope-link" id="as-dist-auto">إعادة التوزيع بالتناوب</button>
+                      <button type="button" class="ope-link" id="as-dist-bubble">بدل التوزيع: الطالب يظلّل نموذجه</button>
                       <button type="button" class="ope-link" id="as-dist-toggle">عرض الطلاب</button>
                     </div>
                     <div id="as-dist-list" class="as-dist-list hidden"></div>

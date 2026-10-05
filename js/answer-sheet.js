@@ -559,6 +559,11 @@ function renderKeyGrid() {
   orderB = fitArr(orderB, n, n);
   const on = modelsOn();
   $('as-models-opts').classList.toggle('hidden', !on);
+  const assign = $('as-models-assign').value;
+  $('as-assign-tabs').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.a === assign));
+  $('as-assign-hint').textContent = assign === 'bubble'
+    ? 'بخانة "النموذج" بالورقة فقاعتين (أ) و(ب) يظلّلها الطالب، والمنصة تقرأها من ملف Remark. المدرسة توزّع أوراق الأسئلة بطريقتها.'
+    : 'المنصة توزّع النموذجين بالتناوب داخل كل فصل وتكتب نموذج كل طالب على ورقته.';
   if (!on) activeModel = MODEL_A;
   $('as-model-tabs').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.m === activeModel));
   const missA = keyAnswers.filter(v => v == null).length, missB = keyAnswersB.filter(v => v == null).length;
@@ -942,7 +947,10 @@ export function initAnswerSheetCard() {
     renderKeyGrid(); refresh();
   });
   $('as-models-mode').addEventListener('change', renderKeyGrid);
+  const setAssign = (v) => { $('as-models-assign').value = v; renderKeyGrid(); refresh(); };
   $('as-models-assign').addEventListener('change', () => { renderKeyGrid(); refresh(); });
+  $('as-assign-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => setAssign(b.dataset.a)));
+  $('as-dist-bubble').addEventListener('click', () => setAssign('bubble'));
   $('as-model-tabs').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { activeModel = b.dataset.m; renderKeyGrid(); }));
   $('as-dist-auto').addEventListener('click', () => {
     if (!confirm('إعادة توزيع النموذجين بالتناوب لكل الطلاب المختارين؟ أي تعديل يدوي عليهم بيتغيّر.')) return;
