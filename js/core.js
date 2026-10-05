@@ -454,6 +454,16 @@ export async function readScopedBySchool(factory) {
   if (res.error && currentSchoolId) res = await factory(false);
   return res;
 }
+/* upsert بمفتاح تعارض يشمل المدرسة (عشان مدرستين ما تتصادم بياناتهم)، ولو قاعدة البيانات لسا على
+ * القيد القديم (sql/school_unique_keys.sql ما نُفذ) نرجع للمفتاح القديم بدل ما يفشل الحفظ */
+export async function upsertSchoolKey(run, newKey, oldKey) {
+  const res = await run(newKey);
+  const msg = (res.error && res.error.message) || '';
+  if (res.error && (res.error.code === '42P10' || /no unique or exclusion constraint/i.test(msg))) return run(oldKey);
+  return res;
+}
+export const conflictOpt = key => (key ? { onConflict: key } : undefined);
+
 export async function writeWithSchool(factory) {
   const extra = currentSchoolId ? { school_id: currentSchoolId } : {};
   let res = await factory(extra);

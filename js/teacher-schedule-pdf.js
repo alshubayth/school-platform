@@ -1,4 +1,4 @@
-import { sb, gradeLabels } from './core.js';
+import { sb, gradeLabels, writeWithSchool, upsertSchoolKey, conflictOpt } from './core.js';
 import { SCHEDULE_SUBJECTS } from './schedule.js';
 import { loadPdfJs } from './lib-loader.js';
 
@@ -493,7 +493,8 @@ async function commitAllParsed() {
   for (let i = 0; i < rows.length; i += 200) {
     const chunk = rows.slice(i, i + 200);
     if (chunk.length === 0) continue;
-    const { error } = await sb.from('class_schedules').upsert(chunk, { onConflict: 'grade_level,class_section,day_of_week,period_number' });
+    const { error } = await writeWithSchool(extra => upsertSchoolKey(k => sb.from('class_schedules').upsert(chunk.map(r => ({ ...r, ...extra })), conflictOpt(k)),
+      'school_id,grade_level,class_section,day_of_week,period_number', 'grade_level,class_section,day_of_week,period_number'));
     if (error) {
       statusEl.textContent = 'تعذر الحفظ: ' + error.message;
       statusEl.style.color = 'var(--danger)';

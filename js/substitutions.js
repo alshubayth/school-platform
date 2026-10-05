@@ -6,7 +6,7 @@
  * - حالات المعلمين لليوم (غائب / مستأذن من حصة / متأخر لين حصة) في daily_teacher_absences.
  * - المنصة ما تمنع أي حركة؛ تنبّه بس: معلم غير موجود، أو معلم في مكانين بنفس الحصة.
  */
-import { sb, currentUserId, currentProfile, isAdminOrDeputy, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+import { sb, currentUserId, currentProfile, isAdminOrDeputy, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, upsertSchoolKey, conflictOpt } from './core.js';
 
 document.getElementById('back-to-tiles-15').addEventListener('click', backToTiles);
 
@@ -342,7 +342,8 @@ async function writeCell(k, content) {
     teacher_name: content.teacher || '', subject_name: content.subject || null,
     reason: content.reason || 'swap', note: content.note || null, created_by: currentUserId,
   };
-  const { data, error } = await writeWithSchool(extra => sb.from('daily_schedule_changes').upsert({ ...row, ...extra }, { onConflict: 'change_date,grade_level,class_section,period_number' }).select('*').single());
+  const { data, error } = await writeWithSchool(extra => upsertSchoolKey(k => sb.from('daily_schedule_changes').upsert({ ...row, ...extra }, conflictOpt(k)).select('*').single(),
+    'school_id,change_date,grade_level,class_section,period_number', 'change_date,grade_level,class_section,period_number'));
   if (error) throw error;
   changes.set(k, data || row);
 }
@@ -400,7 +401,8 @@ $('dd-undo').addEventListener('click', async () => {
     for (const b of last.before) {
       if (!b.row) await writeCell(b.k, null);
       else {
-        const { data, error } = await writeWithSchool(extra => sb.from('daily_schedule_changes').upsert({ ...stripMeta(b.row), ...extra }, { onConflict: 'change_date,grade_level,class_section,period_number' }).select('*').single());
+        const { data, error } = await writeWithSchool(extra => upsertSchoolKey(k => sb.from('daily_schedule_changes').upsert({ ...stripMeta(b.row), ...extra }, conflictOpt(k)).select('*').single(),
+          'school_id,change_date,grade_level,class_section,period_number', 'change_date,grade_level,class_section,period_number'));
         if (error) throw error;
         changes.set(b.k, data || b.row);
       }

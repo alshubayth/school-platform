@@ -1,4 +1,4 @@
-import { academicWeekInfo, weekLabel, sb, currentUserId, currentProfile, isAdminOrDeputy, isStaff, gradeLabels, currentSchoolId } from './core.js';
+import { academicWeekInfo, weekLabel, sb, currentUserId, currentProfile, isAdminOrDeputy, isStaff, gradeLabels, currentSchoolId, upsertSchoolKey, conflictOpt } from './core.js';
 
 /* ===== كتابة آمنة لعمود school_id قبل/بعد تنفيذ ترقية SQL للمرحلة الثانية =====
  * لو عمود school_id لسا ما انضاف لهذا الجدول بقاعدة البيانات (رفع الكود صار قبل تنفيذ SQL
@@ -377,7 +377,9 @@ document.getElementById('weekly-publish-toggle').addEventListener('change', asyn
   const isPublished = e.target.checked;
   syncPublishLabel();
   if (isPublished) {
-    await writeWithSchoolFallback(extra => sb.from('weekly_plan_publish_settings').upsert({ week_number: currentWeek, is_published: true, updated_at: new Date().toISOString(), ...extra }));
+    await writeWithSchoolFallback(extra => upsertSchoolKey(k => sb.from('weekly_plan_publish_settings').upsert(
+      { week_number: currentWeek, is_published: true, updated_at: new Date().toISOString(), ...extra }, conflictOpt(k)),
+      'school_id,week_number', null));
   } else {
     let q = sb.from('weekly_plan_publish_settings').delete().eq('week_number', currentWeek);
     if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
@@ -410,10 +412,9 @@ document.getElementById('weekly-admin-note-save').addEventListener('click', asyn
     await q;
     successEl.textContent = 'تم حذف الملاحظة (الحقل فارغ).';
   } else {
-    await writeWithSchoolFallback(extra => sb.from('weekly_admin_notes').upsert(
-      { grade_level: grade, week_number: currentWeek, note, created_by: currentUserId, ...extra },
-      { onConflict: 'grade_level,week_number' }
-    ));
+    await writeWithSchoolFallback(extra => upsertSchoolKey(k => sb.from('weekly_admin_notes').upsert(
+      { grade_level: grade, week_number: currentWeek, note, created_by: currentUserId, ...extra }, conflictOpt(k)),
+      'school_id,grade_level,week_number', 'grade_level,week_number'));
     successEl.textContent = 'تم حفظ الملاحظة بنجاح.';
   }
   successEl.style.display = 'block';

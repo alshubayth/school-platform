@@ -1,4 +1,4 @@
-import { sb, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+import { sb, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, upsertSchoolKey, conflictOpt } from './core.js';
 
 document.getElementById('back-to-tiles-11').addEventListener('click', backToTiles);
 
@@ -304,7 +304,8 @@ async function saveGrid() {
 
   if (rowsToUpsert.length > 0) {
     const { error } = await writeWithSchool(extra =>
-      sb.from('class_schedules').upsert(rowsToUpsert.map(r => ({ ...r, ...extra })), { onConflict: 'grade_level,class_section,day_of_week,period_number' })
+      upsertSchoolKey(k => sb.from('class_schedules').upsert(rowsToUpsert.map(r => ({ ...r, ...extra })), conflictOpt(k)),
+        'school_id,grade_level,class_section,day_of_week,period_number', 'grade_level,class_section,day_of_week,period_number')
     );
     if (error) { statusEl.textContent = 'تعذر الحفظ: ' + error.message; statusEl.style.color = 'var(--danger)'; return; }
   }
