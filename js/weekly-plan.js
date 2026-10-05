@@ -266,13 +266,14 @@ async function loadFormForCurrentSelection() {
     return;
   }
 
-  const { data: existing } = await readScoped(scoped => {
+  const { data: existingRows } = await readScoped(scoped => {
     let q = sb.from('weekly_plans')
       .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections, test_note')
       .eq('subject_id', subjectId).eq('grade_level', grade).eq('week_number', currentWeek);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q.maybeSingle();
+    return q.limit(1);
   });
+  const existing = (existingRows && existingRows[0]) || null;
 
   const lessonsContainer = document.getElementById('weekly-lessons-container');
   const lessonsAddBtn = document.getElementById('weekly-add-lesson-btn');
@@ -430,11 +431,20 @@ document.getElementById('weekly-grade').addEventListener('change', async () => {
   }
 });
 
+let weeklySaving = false;
 document.getElementById('weekly-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('weekly-error');
   const lessons = collectLessonsFromEditor(document.getElementById('weekly-lessons-container'), currentSubjectName());
   if (lessons.length === 0) { errEl.textContent = 'اكتب درس واحد على الأقل'; errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
+  // منع الحفظ المزدوج (ضغطتين سريعتين كانت تضيف الخطة مرتين)
+  if (weeklySaving) return;
+  const submitBtn = document.getElementById('weekly-submit');
+  weeklySaving = true; submitBtn.disabled = true;
+  try { await saveWeeklyPlan(errEl, lessons); } finally { weeklySaving = false; submitBtn.disabled = false; }
+});
+
+async function saveWeeklyPlan(errEl, lessons) {
 
   const { data: userData } = await sb.auth.getUser();
   const hasTest = document.getElementById('weekly-has-test').checked;
@@ -453,19 +463,29 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
     created_by: userData.user.id,
   };
 
-  // تحديث إذا موجودة خطة لنفس المادة/المرحلة/الأسبوع، وإلا إضافة جديدة
-  const { data: existing } = await readScoped(scoped => {
-    let q = sb.from('weekly_plans').select('id')
-      .eq('subject_id', payload.subject_id).eq('grade_level', payload.grade_level).eq('week_number', currentWeek);
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q.maybeSingle();
-  });
+  // خطة وحدة لكل مادة/صف/أسبوع: تحديث الموجودة وإلا إضافة جديدة. البحث بـ limit بدل maybeSingle -
+  // لأن maybeSingle يفشل لو فيه نسختين، فكان يحسبها "ما فيه خطة" ويضيف نسخة ثالثة
+  const findExisting = async () => {
+    const { data } = await readScoped(scoped => {
+      let q = sb.from('weekly_plans').select('id')
+        .eq('subject_id', payload.subject_id).eq('grade_level', payload.grade_level).eq('week_number', currentWeek);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.limit(1);
+    });
+    return (data && data[0]) || null;
+  };
+  const existing = await findExisting();
 
   let error;
   if (existing) {
     ({ error } = await sb.from('weekly_plans').update(payload).eq('id', existing.id));
   } else {
     ({ error } = await writeWithSchoolFallback(extra => sb.from('weekly_plans').insert({ ...payload, ...extra })));
+    // معلم ثاني حفظ نفس المادة بنفس اللحظة (القيد الفريد بقاعدة البيانات رفض النسخة الثانية) - نحدّث بدلها
+    if (error && error.code === '23505') {
+      const again = await findExisting();
+      if (again) ({ error } = await sb.from('weekly_plans').update(payload).eq('id', again.id));
+    }
   }
 
   if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return; }
@@ -481,10 +501,10 @@ document.getElementById('weekly-submit').addEventListener('click', async () => {
   await refreshWeeklyList();
 
   const successEl = document.getElementById('weekly-submit-success');
-  successEl.textContent = `تم إضافة الخطة بنجاح للأسبوع ${currentWeek}`;
+  successEl.textContent = `تم حفظ الخطة بنجاح للأسبوع ${currentWeek}`;
   successEl.style.display = 'block';
   setTimeout(() => { successEl.style.display = 'none'; }, 3500);
-});
+}
 
 function esc(s) {
   const d = document.createElement('div');

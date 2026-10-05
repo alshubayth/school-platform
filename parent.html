@@ -831,7 +831,7 @@ async function loadPlans() {
     noteContainer.innerHTML = '';
   }
 
-  const { data: plans, error } = await runScoped(scoped => {
+  let { data: plans, error } = await runScoped(scoped => {
     let q = sb.from('weekly_plans')
       .select('lessons, performance_tasks, homework, no_homework, has_test, test_sections, test_note, subjects(name)')
       .eq('grade_level', currentGrade).eq('week_number', currentWeek);
@@ -864,6 +864,9 @@ async function loadPlans() {
     return;
   }
 
+  // احتياط: لو فيه نسخ مكررة لنفس المادة نعرض وحدة بس
+  const seenSubj = new Set();
+  plans = plans.filter(p => { const k = p.subjects ? p.subjects.name : ''; if (seenSubj.has(k)) return false; seenSubj.add(k); return true; });
   lastPlans = plans;
 
   const testSubjects = plans.filter(testApplies).map(p => p.subjects ? p.subjects.name + testSectionsLabel(p.test_sections) : '').filter(Boolean);
