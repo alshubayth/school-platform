@@ -298,7 +298,12 @@ export function setSchoolBrandFromRow(row) { schoolBrand = brandFromRow(row); ap
 export function applyBrandToShell() {
   const img = document.querySelector('#tn-brand img');
   const span = document.querySelector('#tn-brand span');
-  if (img) { img.src = schoolBrand.logo || 'logo.png'; img.alt = schoolBrand.logo ? 'شعار ' + (schoolBrand.name || schoolBrand.short) : PLATFORM_NAME; }
+  // الشريط العلوي كحلي: شعار المنصة الأبيض، وشعار المدرسة (لو مرفوع) داخل خلفية بيضاء صغيرة
+  if (img) {
+    img.src = schoolBrand.logo || 'logo-white.png';
+    img.classList.toggle('on-chip', !!schoolBrand.logo);
+    img.alt = schoolBrand.logo ? 'شعار ' + (schoolBrand.name || schoolBrand.short) : PLATFORM_NAME;
+  }
   if (span) span.textContent = schoolBrand.short;
   document.title = pageTitle(lastPageTitle);
 }

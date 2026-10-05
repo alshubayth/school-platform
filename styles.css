@@ -1830,3 +1830,25 @@
 .er-unk-row select{ width:auto; margin:0; padding:5px 8px; }
 .er-model-switch{ margin:4px 0 12px; }
 .er-mixed-note{ background:#FFF4E5; color:#8A5200; border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:12px; }
+
+/* ===== شريط علوي كحلي + خلفية صفحة رمادية فاتحة باردة (البطاقات البيضاء تبرز عليها) ===== */
+:root{ --canvas:#F2F5FA; --nav-bg:#0F2447; --nav-bg2:#173A73; }
+.topnav{ background:linear-gradient(100deg, var(--nav-bg) 0%, #12305E 60%, var(--nav-bg2) 100%); backdrop-filter:none; border-bottom:0; box-shadow:0 2px 14px rgba(11,27,51,0.18); }
+.topnav .brand span{ color:#fff; }
+.topnav .brand img.on-chip{ background:#fff; border-radius:10px; padding:3px 6px; }
+.topnav .tn-pill{ color:rgba(255,255,255,0.82); }
+.topnav .tn-pill:hover{ background:rgba(255,255,255,0.1); color:#fff; }
+.topnav .tn-pill.active, .topnav .tn-pill.active:hover{ background:#fff; color:#0F2447; font-weight:700; }
+.topnav .tn-pill:focus-visible{ outline-color:#7FD8CF; }
+.topnav .tn-search{ background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.18); color:rgba(255,255,255,0.8); }
+.topnav .tn-search:hover{ background:rgba(255,255,255,0.14); border-color:rgba(255,255,255,0.3); color:#fff; }
+.topnav .tn-search kbd{ background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,0.22); color:rgba(255,255,255,0.75); }
+.topnav .tn-gear{ background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.18); color:rgba(255,255,255,0.85); }
+.topnav .tn-gear:hover{ background:rgba(255,255,255,0.14); color:#fff; border-color:rgba(255,255,255,0.3); }
+.topnav .tn-gear.active{ background:#fff; color:#0F2447; border-color:#fff; }
+.topnav .tn-avatar{ background:#2FC1B2; color:#0B2B3A; }
+.topnav .tn-avatar:hover, .topnav .tn-avatar[aria-expanded="true"]{ box-shadow:0 0 0 3px rgba(47,193,178,0.35); }
+@media (max-width: 899px){
+  .topnav .tn-pill{ background:rgba(255,255,255,0.08); }
+  .topnav .tn-pill.active{ background:#fff; }
+}
