@@ -74,7 +74,7 @@ $('dd-prev').addEventListener('click', () => shiftDay(-1));
 $('dd-next').addEventListener('click', () => shiftDay(1));
 
 async function refreshForDate() {
-  selectedKey = null; swapFrom = null; updateSwapBar();
+  selectedKey = null; swapFrom = null; updateSwapBar(); markDirty(false);
   const dk = dayKeyFromDate(subDate);
   $('dd-dayname').textContent = new Date(subDate + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
   if (!dk) {
@@ -354,7 +354,8 @@ async function applyOps(ops, label) {
     for (const o of ops) await writeCell(o.k, o.content);
     undoStack.push({ before, label });
     $('dd-undo').disabled = false;
-    flash(label);
+    markDirty(true);
+    flash(label + ' — اضغط «اعتماد» لإشعار المعلمين');
   } catch (e) {
     flash('تعذّر الحفظ: ' + (e.message || e), true);
   }
@@ -407,6 +408,7 @@ $('dd-undo').addEventListener('click', async () => {
         changes.set(b.k, data || b.row);
       }
     }
+    markDirty(undoStack.length > 0);
     flash('تم التراجع: ' + last.label);
   } catch (e) { flash('تعذّر التراجع: ' + (e.message || e), true); }
   $('dd-undo').disabled = !undoStack.length;
@@ -425,6 +427,23 @@ $('dd-reset').addEventListener('click', async () => {
 });
 
 let flashTimer = null;
+/* ===== اعتماد جدول اليوم وإشعار المعلمين (التعديلات تنحفظ فورًا لكن الإشعار ما يطلع إلا بالاعتماد) ===== */
+function markDirty(on) { const b = $('dd-approve'); if (b) b.classList.toggle('dirty', !!on); }
+$('dd-approve').addEventListener('click', async () => {
+  const b = $('dd-approve');
+  b.disabled = true;
+  try {
+    const { data, error } = await sb.rpc('push_notify_schedule', { p_date: subDate });
+    if (error) throw error;
+    markDirty(false);
+    if (data === -1) flash('الاعتماد للمدير والوكيل فقط', true);
+    else if (data > 0) flash('تم الاعتماد وإرسال الإشعار ' + (data === 1 ? 'لمعلم واحد' : data === 2 ? 'لمعلمَين' : `لـ ${data} معلمين`));
+    else flash('تم الاعتماد. ما فيه تغييرات جديدة تحتاج إشعار');
+  } catch (e) {
+    flash('تعذّر الاعتماد: ' + (e.message || e), true);
+  } finally { b.disabled = false; }
+});
+
 function flash(msg, bad = false) {
   const el = $('dd-msg');
   el.textContent = msg; el.classList.toggle('bad', bad); el.classList.remove('hidden');

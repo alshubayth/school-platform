@@ -15,6 +15,7 @@ const WEEK_NAMES = ['الأول', 'الثاني', 'الثالث', 'الرابع'
 const gradeLabel = g => GRADE_LABELS[g] || g || '';
 const weekName = n => 'الأسبوع ' + (WEEK_NAMES[n - 1] || n);
 const norm = s => String(s || '').replace(/\s+/g, ' ').trim();
+const countPeriods = n => n === 2 ? 'حصتين' : n <= 10 ? `${n} حصص` : `${n} حصة`;
 
 // ---------- قراءة Supabase بمفتاح الخادم ----------
 // يقبل المفتاح السري الجديد (sb_secret_...) أو مفتاح service_role القديم (JWT يبدأ بـ eyJ)
@@ -33,6 +34,20 @@ async function sbDelete(path, deps) {
   await deps.fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method: 'DELETE', headers: sbHeaders(deps) });
 }
 const inList = ids => '(' + ids.map(encodeURIComponent).join(',') + ')';
+
+// المعلم محفوظ بالجدول بالاسم: نربطه بحسابه عن طريق بوابة الموظفين أو اسم الحساب
+async function teacherSubs(teacherName, school, deps) {
+  const name = norm(teacherName);
+  const [emps, profs] = await Promise.all([
+    sbGet(`employees?school_id=eq.${school}&select=full_name,profile_id`, deps).catch(() => []),
+    sbGet(`profiles?school_id=eq.${school}&select=id,full_name`, deps),
+  ]);
+  const ids = new Set();
+  emps.filter(e => e.profile_id && norm(e.full_name) === name).forEach(e => ids.add(e.profile_id));
+  profs.filter(p => norm(p.full_name) === name).forEach(p => ids.add(p.id));
+  if (!ids.size) return [];
+  return sbGet(`push_subscriptions?audience=eq.staff&profile_id=in.${inList([...ids])}&select=*`, deps);
+}
 
 // ---------- تحديد المستلمين والرسائل لكل حدث ----------
 // يرجّع قائمة: [{ subs: [اشتراكات], title, body, url, tag }]
@@ -61,18 +76,23 @@ async function plan(ev, deps) {
     return [{ subs: forGrade, title: 'جدول الاختبارات', body, url: parentUrl + '#exams', tag: 'exams-' + ev.grade_level }];
   }
 
+  if (ev.type === 'schedule_day') {
+    // اعتماد جدول اليوم: إشعار واحد للمعلم بكل حصصه المتغيرة
+    const subs = await teacherSubs(ev.teacher_name, school, deps);
+    if (!subs.length) return [];
+    const items = Array.isArray(ev.items) ? ev.items : [];
+    const today = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10);
+    const when = ev.change_date === today ? 'اليوم' : 'بتاريخ ' + ev.change_date;
+    const line = it => `الحصة ${it.period} – ${gradeLabel(it.grade)} / ${it.section}${it.subject && it.subject !== 'فراغ' ? ' (' + it.subject + ')' : ''}`;
+    const body = items.length === 1
+      ? `${items[0].reason === 'substitute' ? 'عندك حصة انتظار' : 'تغيّر جدولك'} ${when}: ${line(items[0])}`
+      : `عندك تغييرات في ${countPeriods(items.length)} ${when}: ` + items.map(it => `الحصة ${it.period}`).join('، ');
+    return [{ subs, title: 'جدول اليوم', body, url: '/index.html', tag: 'sch-' + ev.change_date }];
+  }
+
   if (ev.type === 'schedule_change') {
     // المعلم محفوظ بالجدول بالاسم: نربطه بحسابه عن طريق بوابة الموظفين أو اسم الحساب
-    const name = norm(ev.teacher_name);
-    const [emps, profs] = await Promise.all([
-      sbGet(`employees?school_id=eq.${school}&select=full_name,profile_id`, deps).catch(() => []),
-      sbGet(`profiles?school_id=eq.${school}&select=id,full_name`, deps),
-    ]);
-    const ids = new Set();
-    emps.filter(e => e.profile_id && norm(e.full_name) === name).forEach(e => ids.add(e.profile_id));
-    profs.filter(p => norm(p.full_name) === name).forEach(p => ids.add(p.id));
-    if (!ids.size) return [];
-    const subs = await sbGet(`push_subscriptions?audience=eq.staff&profile_id=in.${inList([...ids])}&select=*`, deps);
+    const subs = await teacherSubs(ev.teacher_name, school, deps);
     if (!subs.length) return [];
     const today = new Date(Date.now() + 3 * 3600e3).toISOString().slice(0, 10); // توقيت الرياض
     const when = ev.change_date === today ? 'اليوم' : 'بتاريخ ' + ev.change_date;
