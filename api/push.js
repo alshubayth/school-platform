@@ -76,6 +76,29 @@ async function plan(ev, deps) {
     return [{ subs: forGrade, title: 'جدول الاختبارات', body, url: parentUrl + '#exams', tag: 'exams-' + ev.grade_level }];
   }
 
+  if (ev.type === 'notice') {
+    // تنبيه من الإدارة (أو تذكير للي ما ردّوا)
+    const [n] = await sbGet(`staff_notices?id=eq.${ev.notice_id}&select=id,title,body,meeting_at,location,response_type,sender_id`, deps);
+    if (!n) return [];
+    let ids = Array.isArray(ev.profile_ids) && ev.profile_ids.length ? ev.profile_ids : null;
+    if (!ids) ids = (await sbGet(`staff_notice_recipients?notice_id=eq.${n.id}&select=profile_id`, deps)).map(r => r.profile_id);
+    if (!ids.length) return [];
+    const subs = await sbGet(`push_subscriptions?audience=eq.staff&profile_id=in.${inList(ids)}&select=*`, deps);
+    if (!subs.length) return [];
+    let when = '';
+    if (n.meeting_at) {
+      const d = new Date(n.meeting_at);
+      when = d.toLocaleString('ar-SA-u-ca-gregory-nu-latn', { timeZone: 'Asia/Riyadh', weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' });
+    }
+    const parts = [];
+    if (when) parts.push('🗓 ' + when + (n.location ? ' – ' + n.location : ''));
+    else if (n.location) parts.push(n.location);
+    if (n.body) parts.push(String(n.body).replace(/\s+/g, ' ').slice(0, 120));
+    if (n.response_type !== 'none') parts.push('اضغط للرد');
+    const title = (ev.reminder ? 'تذكير: ' : '') + n.title;
+    return [{ subs, title, body: parts.join('\n') || 'تنبيه من الإدارة', url: '/index.html?notice=' + n.id, tag: 'notice-' + n.id }];
+  }
+
   if (ev.type === 'schedule_day') {
     // اعتماد جدول اليوم: إشعار واحد للمعلم بكل حصصه المتغيرة
     const subs = await teacherSubs(ev.teacher_name, school, deps);

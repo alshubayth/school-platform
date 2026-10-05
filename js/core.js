@@ -388,6 +388,7 @@ function finishShowingDashboard(schoolNameOverride) {
   renderNav();
   renderDashboard();
   import('./search.js').then(m => m.initGlobalSearch()).catch(err => console.warn('search init failed', err));
+  import('./notices.js').then(m => m.initNotices()).catch(err => console.warn('notices init failed', err));
   routeFromHash(true);
 }
 
