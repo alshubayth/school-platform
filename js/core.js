@@ -113,7 +113,34 @@ export function groupTilesFor(groupKey) {
 export function tileTitle(t) { return t.key === 'budget' ? budgetTileTitle() : t.title; }
 export function tileDesc(t) { return t.key === 'budget' ? budgetTileDesc() : t.desc; }
 
+/* شاشة الدخول: تاريخ اليوم بالهجري والميلادي + إظهار كلمة المرور + الدخول بزر Enter */
+(function initLoginExtras() {
+  const today = document.getElementById('lg-today');
+  if (today) {
+    const d = new Date();
+    try {
+      const day = d.toLocaleDateString('ar-SA-u-nu-latn', { weekday: 'long' });
+      const hij = d.toLocaleDateString('ar-SA-u-ca-islamic-umalqura-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
+      const greg = d.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
+      today.innerHTML = `<b>${day}</b><span>${hij}</span><span>${greg}</span>`;
+    } catch (e) { today.remove(); }
+  }
+  const eye = document.getElementById('lg-eye');
+  const pass = document.getElementById('login-password');
+  if (eye && pass) eye.addEventListener('click', () => {
+    const show = pass.type === 'password';
+    pass.type = show ? 'text' : 'password';
+    eye.setAttribute('aria-pressed', String(show));
+    eye.setAttribute('aria-label', show ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور');
+    pass.focus();
+  });
+  const form = document.getElementById('login-card');
+  if (form && form.tagName === 'FORM') form.addEventListener('submit', (e) => e.preventDefault());
+})();
+
 document.getElementById('login-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('login-btn');
+  if (btn.disabled) return;
   const rawInput = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
   const errEl = document.getElementById('login-error');
@@ -123,9 +150,11 @@ document.getElementById('login-btn').addEventListener('click', async () => {
     errEl.style.display = 'block';
     return;
   }
+  btn.disabled = true; btn.textContent = 'جارٍ الدخول...';
   const { data, error } = await sb.auth.signInWithPassword({ email: toLoginEmail(rawInput), password });
+  btn.disabled = false; btn.textContent = 'دخول';
   if (error) {
-    errEl.textContent = 'بيانات الدخول غير صحيحة. حاول مرة أخرى';
+    errEl.textContent = 'البريد أو الرقم الوظيفي أو كلمة المرور غير صحيحة';
     errEl.style.display = 'block';
     return;
   }

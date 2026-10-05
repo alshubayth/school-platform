@@ -53,27 +53,52 @@
 
   /* ===== شاشة الدخول ===== */
   #login-screen{
-    display:grid; grid-template-columns: 1fr 1fr; min-height:100vh;
+    display:grid; grid-template-columns: minmax(0, 44fr) minmax(0, 56fr); min-height:100vh; min-height:100dvh;
   }
   .brand-panel{
-    background: linear-gradient(125deg, var(--meadow-dark) 0%, var(--meadow) 55%, var(--teal) 130%);
-    position:relative; overflow:hidden;
-    display:flex; flex-direction:column; justify-content:center; padding:60px;
-    color:#fff;
+    background: radial-gradient(120% 90% at 85% 10%, #1E4A8E 0%, #13336A 45%, #0C2147 100%);
+    position:relative; overflow:hidden; isolation:isolate;
+    display:flex; flex-direction:column; justify-content:space-between; gap:40px;
+    padding:64px 56px 48px; color:#fff;
   }
-  .brand-panel svg.hills{ position:absolute; bottom:-10px; right:-10px; left:-10px; opacity:0.5; }
-  .brand-panel .logo-mark{
-    width:56px; height:56px; border-radius:16px; background:rgba(255,255,255,0.15);
-    display:flex; align-items:center; justify-content:center; margin-bottom:28px;
+  .lg-traces{ position:absolute; inset:0; width:100%; height:100%; z-index:-1; }
+  .lg-traces .t{ stroke:#2FC1B2; stroke-width:2; opacity:.55; stroke-dasharray:900; stroke-dashoffset:900; animation:lgDraw 2.2s cubic-bezier(.65,0,.35,1) forwards; }
+  .lg-traces .t2, .lg-traces .t5{ stroke:#6FA4F2; opacity:.45; }
+  .lg-traces .t2{ animation-delay:.15s; } .lg-traces .t3{ animation-delay:.35s; } .lg-traces .t4{ animation-delay:.5s; }
+  .lg-traces .t5{ animation-delay:.25s; } .lg-traces .t6{ animation-delay:.6s; }
+  .lg-traces .nodes circle{ fill:#0C2147; stroke:#2FC1B2; stroke-width:2.5; opacity:0; animation:lgNode .4s ease-out 1.6s forwards; }
+  @keyframes lgDraw{ to{ stroke-dashoffset:0; } }
+  @keyframes lgNode{ to{ opacity:.9; } }
+  @media (prefers-reduced-motion: reduce){
+    .lg-traces .t{ animation:none; stroke-dashoffset:0; }
+    .lg-traces .nodes circle{ animation:none; opacity:.9; }
   }
-  .brand-panel h1{ font-size:34px; font-weight:800; margin-bottom:10px; position:relative; z-index:1;}
-  .brand-panel p{ font-size:15px; color:#D9E7F5; max-width:340px; line-height:1.8; position:relative; z-index:1;}
+  .lg-brand{ max-width:420px; }
+  .lg-logo{ width:132px; height:auto; display:block; margin-bottom:36px; }
+  .brand-panel h1{ font-size:40px; line-height:1.25; font-weight:800; margin:0 0 14px; color:#fff; letter-spacing:0; }
+  .brand-panel p{ font-size:16px; color:#BFD3F0; max-width:360px; line-height:1.8; margin:0; }
+  .lg-today{ display:flex; flex-direction:column; gap:2px; padding-inline-start:14px; border-inline-start:3px solid #2FC1B2; font-size:14px; color:#BFD3F0; }
+  .lg-today b{ font-family:'Tajawal', sans-serif; font-size:20px; color:#fff; font-weight:800; }
   .login-panel{
-    display:flex; align-items:center; justify-content:center; padding:40px; background:var(--white);
+    display:flex; align-items:center; justify-content:center; padding:48px 40px; background:#fff;
   }
-  .login-card{ width:100%; max-width:340px; }
-  .login-card h2{ font-size:22px; margin-bottom:4px; }
-  .login-card p.sub{ color:var(--slate); font-size:14px; margin:0 0 28px; }
+  .login-card{ width:100%; max-width:380px; display:flex; flex-direction:column; }
+  .login-card h2{ font-size:28px; font-weight:800; color:var(--navy, #0F2447); margin:0 0 6px; }
+  .login-card p.sub{ color:var(--slate); font-size:14.5px; margin:0 0 30px; }
+  .login-card .field label{ font-weight:600; color:#3A4558; }
+  .login-card input{ font-size:15.5px; padding:14px 16px; border-radius:12px; text-align:right; }
+  .login-card input::placeholder{ text-align:right; }
+  .login-card input:focus{ border-color:#2353A5; box-shadow:0 0 0 4px rgba(35,83,165,0.14); outline:none; }
+  .lg-pass{ position:relative; }
+  .lg-pass input{ padding-left:52px; }
+  .lg-eye{ position:absolute; left:6px; top:50%; transform:translateY(-50%); width:40px; height:40px; border:0; border-radius:10px; background:transparent; color:#7A8496; display:flex; align-items:center; justify-content:center; padding:0; cursor:pointer; }
+  .lg-eye:hover{ background:#EEF1F6; color:#2353A5; }
+  .lg-eye[aria-pressed="true"]{ color:#2353A5; }
+  .lg-eye:focus-visible, .lg-link:focus-visible{ outline:2px solid #2353A5; outline-offset:2px; }
+  .login-card .btn-primary{ margin-top:8px; padding:15px; font-size:16px; border-radius:12px; }
+  .login-card .btn-primary:disabled{ opacity:.7; cursor:wait; }
+  .lg-link{ align-self:center; margin-top:18px; background:none; border:0; padding:6px 10px; border-radius:8px; color:#2353A5; font-weight:600; font-size:14px; cursor:pointer; font-family:inherit; width:auto; }
+  .lg-link:hover{ background:#EEF4FF; }
   .field{ margin-bottom:16px; }
   .field label{ display:block; font-size:13px; color:var(--slate); margin-bottom:6px; font-weight:500; }
   input{
@@ -798,10 +823,17 @@
 
   /* ===== تجاوب مع الجوال ===== */
   @media (max-width: 720px){
-    #login-screen{ grid-template-columns: 1fr; }
-    .brand-panel{ padding:32px 24px 40px; min-height:220px; }
-    .brand-panel h1{ font-size:24px; }
-    .login-panel{ padding:28px 20px; }
+    #login-screen{ grid-template-columns: 1fr; grid-template-rows:auto 1fr; }
+    .brand-panel{ padding:28px 20px 26px; gap:18px; justify-content:flex-start; }
+    .lg-brand{ display:flex; align-items:center; gap:14px; }
+    .lg-logo{ width:58px; margin:0; flex-shrink:0; }
+    .brand-panel h1{ font-size:21px; margin:0; }
+    .brand-panel p{ display:none; }
+    .lg-traces{ opacity:.45; }
+    .lg-today{ flex-direction:row; flex-wrap:wrap; align-items:baseline; gap:4px 10px; font-size:12.5px; }
+    .lg-today b{ font-size:15px; }
+    .login-panel{ padding:30px 20px 40px; align-items:flex-start; }
+    .login-card h2{ font-size:24px; }
 
     .main{ padding:18px 14px; }
     .main-header h2{ font-size:19px; }

@@ -18,32 +18,48 @@
 <!-- ===== شاشة تسجيل الدخول ===== -->
 <div id="login-screen">
   <div class="brand-panel">
-    <svg class="hills" viewBox="0 0 500 200" preserveAspectRatio="none">
-      <path d="M0,140 Q125,90 250,130 T500,110 V200 H0 Z" fill="rgba(255,255,255,0.08)"/>
-      <path d="M0,170 Q150,120 300,160 T500,150 V200 H0 Z" fill="rgba(255,255,255,0.12)"/>
+    <!-- خطوط دوائر مستوحاة من الشعار: تنرسم مرة وحدة عند فتح الصفحة -->
+    <svg class="lg-traces" viewBox="0 0 600 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <g fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path class="t t1" d="M-20 610 H140 L200 550 H330 L380 500"/>
+        <path class="t t2" d="M-20 660 H220 L270 610 H420 L470 560 H620"/>
+        <path class="t t3" d="M60 820 V720 L120 660 H180"/>
+        <path class="t t4" d="M240 820 V740 L290 690 H410"/>
+        <path class="t t5" d="M620 470 H520 L470 420 H400"/>
+      </g>
+      <g class="nodes">
+        <circle cx="380" cy="500" r="7"/><circle cx="180" cy="660" r="6"/><circle cx="410" cy="690" r="7"/>
+        <circle cx="400" cy="420" r="6"/><circle cx="330" cy="550" r="4"/><circle cx="420" cy="610" r="4"/>
+      </g>
     </svg>
-    <img src="logo.png" alt="شعار مدرسة المروج المتوسطة" style="width:280px; max-width:70%; height:auto; background:#fff; padding:16px 20px; border-radius:14px; margin-bottom:28px; position:relative; z-index:1;" />
-    <h1>لوحة تحكم<br>المدرسة</h1>
-    <p>منصة إدارة متكاملة لكل خدمات المدرسة — من متابعة الأداء إلى الخطة التشغيلية، في مكان واحد.</p>
+    <div class="lg-brand">
+      <img src="logo-white.png" alt="" class="lg-logo" />
+      <h1>مدرسة المروج المتوسطة</h1>
+      <p>منصة المعلمين والإدارة: الجداول والاختبارات والخطط والمتابعة اليومية</p>
+    </div>
+    <div class="lg-today" id="lg-today" aria-live="off"></div>
   </div>
   <div class="login-panel">
-    <div class="login-card" id="login-card">
+    <form class="login-card" id="login-card" novalidate>
       <h2>تسجيل الدخول</h2>
-      <p class="sub">أدخل بياناتك للمتابعة إلى لوحتك</p>
-      <div class="error-msg" id="login-error"></div>
+      <p class="sub">ادخل بالبريد الإلكتروني أو الرقم الوظيفي</p>
+      <div class="error-msg" id="login-error" role="alert"></div>
       <div class="field">
-        <label>البريد الإلكتروني أو الرقم الوظيفي</label>
-        <input type="text" id="login-email" placeholder="name@example.com أو 12345" />
+        <label for="login-email">البريد الإلكتروني أو الرقم الوظيفي</label>
+        <input type="text" id="login-email" autocomplete="username" inputmode="email" spellcheck="false" />
       </div>
       <div class="field">
-        <label>كلمة المرور</label>
-        <input type="password" id="login-password" placeholder="••••••••" />
+        <label for="login-password">كلمة المرور</label>
+        <div class="lg-pass">
+          <input type="password" id="login-password" autocomplete="current-password" />
+          <button type="button" class="lg-eye" id="lg-eye" aria-label="إظهار كلمة المرور" aria-pressed="false">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
       </div>
-      <button class="btn-primary" id="login-btn">دخول</button>
-      <p style="text-align:center; margin-top:14px;">
-        <span class="text-action-btn" id="show-reset-link">تغيير كلمة المرور</span>
-      </p>
-    </div>
+      <button type="submit" class="btn-primary" id="login-btn">دخول</button>
+      <button type="button" class="lg-link" id="show-reset-link">تغيير كلمة المرور</button>
+    </form>
     <div class="login-card hidden" id="reset-password-card">
       <h2>تغيير كلمة المرور</h2>
       <p class="sub">أدخل بريدك/رقمك الوظيفي وكلمة المرور الحالية، ثم كلمة المرور الجديدة</p>
@@ -66,9 +82,7 @@
         <input type="password" id="reset-new-password-confirm" placeholder="••••••••" />
       </div>
       <button class="btn-primary" id="reset-submit-btn">تغيير كلمة المرور</button>
-      <p style="text-align:center; margin-top:14px;">
-        <span class="text-action-btn" id="hide-reset-link">رجوع لتسجيل الدخول</span>
-      </p>
+      <button type="button" class="lg-link" id="hide-reset-link">رجوع لتسجيل الدخول</button>
     </div>
   </div>
 </div>
