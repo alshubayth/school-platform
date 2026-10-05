@@ -85,6 +85,13 @@
     display:flex; align-items:center; justify-content:center; padding:48px 40px; background:#fff;
   }
   .login-card{ width:100%; max-width:380px; display:flex; flex-direction:column; }
+  /* حقوق المنصة أسفل الصفحات */
+  .site-foot, .login-foot{ display:flex; align-items:center; justify-content:center; gap:8px; color:#9AA3B2; font-size:12px; font-weight:600; }
+  .site-foot{ padding:6px 16px 22px; }
+  .site-foot img, .login-foot img{ height:16px; width:auto; opacity:.5; }
+  .login-panel{ position:relative; }
+  .login-foot{ position:absolute; left:0; right:0; bottom:18px; }
+  @media print{ .site-foot, .login-foot{ display:none !important; } }
   .login-card h2{ font-size:28px; font-weight:800; color:var(--navy, #0F2447); margin:0 0 6px; }
   .login-card p.sub{ color:var(--slate); font-size:14.5px; margin:0 0 30px; }
   .login-card .field label{ font-weight:600; color:#3A4558; }
@@ -836,6 +843,8 @@
     .lg-today{ flex-direction:row; flex-wrap:wrap; align-items:baseline; gap:4px 10px; font-size:12.5px; }
     .lg-today b{ font-size:15px; }
     .login-panel{ padding:30px 20px 40px; align-items:flex-start; }
+    .login-panel{ flex-direction:column; align-items:stretch; }
+    .login-foot{ position:static; margin-top:34px; }
     .login-card h2{ font-size:24px; }
 
     .main{ padding:18px 14px; }

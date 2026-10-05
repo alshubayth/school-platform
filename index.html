@@ -60,6 +60,7 @@
       <button type="submit" class="btn-primary" id="login-btn">دخول</button>
       <button type="button" class="lg-link" id="show-reset-link">تغيير كلمة المرور</button>
     </form>
+    <div class="login-foot"><span>جميع الحقوق محفوظة © <span class="foot-year">2026</span></span><img src="mark.svg" alt="مُدار" /></div>
     <div class="login-card hidden" id="reset-password-card">
       <h2>تغيير كلمة المرور</h2>
       <p class="sub">أدخل بريدك/رقمك الوظيفي وكلمة المرور الحالية، ثم كلمة المرور الجديدة</p>
@@ -2379,9 +2380,11 @@
       </div>
     </div>
   </main>
+  <footer class="site-foot"><span>جميع الحقوق محفوظة © <span class="foot-year">2026</span></span><img src="mark.svg" alt="مُدار" /></footer>
   </div>
 </div>
 
+<script>document.querySelectorAll(".foot-year").forEach(function(e){e.textContent=new Date().getFullYear();});</script>
 <script type="module" src="js/core.js"></script>
 
 <script>
