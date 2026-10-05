@@ -180,6 +180,14 @@
               <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
               <div><h4>تقييم المعلمين</h4><p>اضغط على أي معلم لعرض تقريره الكامل حسب معايير التقييم الرسمية</p></div>
             </div>
+            <div class="ev-toolbar">
+              <input type="search" id="ev-search" class="cv-search" placeholder="ابحث باسم الموظف" />
+              <select id="ev-sort">
+                <option value="name">ترتيب: أبجدي</option>
+                <option value="low">الأقل تقييمًا أول</option>
+                <option value="viol">الأكثر مخالفات أول</option>
+              </select>
+            </div>
             <div id="eval-employee-list"></div>
           </div>
         </div>
@@ -389,9 +397,21 @@
     <div id="portal-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-5">→ رجوع للرئيسية</span>
 
+      <div class="pt-toolbar">
+        <input type="search" id="pt-search" class="cv-search" placeholder="ابحث باسم الموظف أو المسمى" />
+        <div class="seg-tabs" id="pt-filter">
+          <button type="button" data-f="all" class="active">الكل <span class="tr-cnt" data-c="all"></span></button>
+          <button type="button" data-f="linked">لهم حساب <span class="tr-cnt" data-c="linked"></span></button>
+          <button type="button" data-f="unlinked">بدون حساب <span class="tr-cnt" data-c="unlinked"></span></button>
+        </div>
+        <div class="pt-actions" id="pt-actions">
+          <button type="button" class="btn-primary" id="pt-add-toggle" style="width:auto; padding:10px 16px;">+ موظف</button>
+          <button type="button" class="btn-secondary" id="pt-bulk-toggle" style="width:auto; padding:10px 14px;">استيراد حسابات من إكسل</button>
+        </div>
+      </div>
 
-      <div class="form-card" id="portal-add-form">
-        <h4>إضافة موظف جديد</h4>
+      <div class="form-card hidden pt-panel" id="portal-add-form">
+        <h4>إضافة موظف جديد</h4><p class="pt-hint">للتقييم والمتابعة فقط. حساب الدخول يتسوّى من «إدارة الصلاحيات» أو من ملف إكسل.</p>
         <div class="form-row">
           <input type="text" id="portal-name" placeholder="اسم الموظف" style="margin-bottom:10px;" />
           <input type="text" id="portal-title" placeholder="المسمى الوظيفي" style="margin-bottom:10px;" />
@@ -400,12 +420,12 @@
         <button class="btn-primary" id="portal-submit">إضافة الموظف</button>
       </div>
 
-      <div class="form-card" id="portal-bulk-form">
+      <div class="form-card hidden pt-panel" id="portal-bulk-form">
         <h4 id="portal-bulk-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-          <span>+ إنشاء حسابات دخول متعددة من ملف إكسل</span>
+          <span>إنشاء حسابات دخول متعددة من ملف إكسل</span>
           <svg id="portal-bulk-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
         </h4>
-        <div id="portal-bulk-body" class="hidden" style="margin-top:14px;">
+        <div id="portal-bulk-body" style="margin-top:14px;">
           <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج، عبّه ببيانات الموظفين (اسم، إيميل، كلمة مرور، دور)، وارفعه — يتم إنشاء كل حساب وربطه بجدول الموظفين تلقائيًا.</p>
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
             <button id="portal-download-template" style="width:auto; background:var(--sand); color:var(--ink); border:1px solid #E4E2D9;">تنزيل نموذج فارغ</button>
@@ -417,39 +437,46 @@
         </div>
       </div>
 
-      <h4 style="margin-bottom:14px;">كل الموظفين</h4>
-      <div id="portal-list"></div>
+      <div id="portal-list" class="pt-list"></div>
     </div>
 
     <div id="weekly-tracking-module" class="panel hidden">
       <span class="back-link" id="back-to-tiles-7">→ رجوع للرئيسية</span>
 
-      <div class="form-card hidden bud-section-card" id="wt-perms-section">
+      <div class="dd-top">
+        <div class="dd-date">
+          <button type="button" class="dd-nav" id="wt-week-prev" aria-label="الأسبوع السابق">→</button>
+          <span class="dd-dayname" id="wt-week-label">الأسبوع</span>
+          <button type="button" class="dd-nav" id="wt-week-next" aria-label="الأسبوع التالي">←</button>
+        </div>
+        <div class="dd-actions">
+          <button type="button" class="btn-secondary" id="wt-copy">نسخ تذكير للواتساب</button>
+          <button type="button" class="btn-secondary hidden" id="wt-perms-toggle">صلاحيات العرض</button>
+        </div>
+      </div>
+      <div id="wt-msg" class="dd-msg hidden"></div>
+
+      <div class="form-card hidden bud-section-card wt-perms" id="wt-perms-section">
         <div class="bud-section-head">
           <div class="bud-section-icon" style="background:var(--purple-light); color:var(--purple);">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.4 8.7-8 10-4.6-1.3-8-5-8-10V6l8-4z"/></svg>
           </div>
           <div>
             <h4>صلاحية عرض القسم</h4>
-            <p>امنح معلمين محددين إمكانية رؤية متابعة الخطة الأسبوعية</p>
+            <p>معلمين محددين يقدرون يشوفون متابعة الخطة الأسبوعية (مثل رواد النشاط أو المشرفين)</p>
           </div>
         </div>
         <div id="wt-perms-list"></div>
-        <div class="form-row" style="margin-top:14px;">
+        <div class="wt-perm-add">
           <select id="wt-perm-employee"></select>
-          <span></span>
+          <button class="btn-primary" id="wt-perm-submit" style="width:auto; padding:10px 18px;">+ إعطاء الصلاحية</button>
         </div>
-        <button class="btn-primary" id="wt-perm-submit" style="width:auto; padding:10px 18px; margin-top:10px;">+ إعطاء الصلاحية</button>
         <div class="error-msg" id="wt-perm-error"></div>
       </div>
 
-      <div class="week-nav" style="display:flex; align-items:center; gap:10px; margin-bottom:20px;">
-        <button id="wt-week-prev" style="width:auto; padding:8px 16px;">السابق</button>
-        <span id="wt-week-label" style="font-weight:700;">الأسبوع 1</span>
-        <button id="wt-week-next" style="width:auto; padding:8px 16px;">التالي</button>
-      </div>
-
-      <div id="wt-grades-container"></div>
+      <div class="dd-stats" id="wt-stats"></div>
+      <div id="wt-grades-container" class="wt-grades"></div>
+      <div id="wt-teachers" class="wt-teachers"></div>
     </div>
 
     <div id="opplan-module" class="panel hidden">

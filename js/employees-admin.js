@@ -5,12 +5,27 @@ import { loadXLSX } from './lib-loader.js';
 
 /* ================= بوابة الموظفين ================= */
 export async function loadPortalModule() {
-  document.getElementById('portal-add-form').classList.toggle('hidden', !isAdminOrDeputy());
-  document.getElementById('portal-bulk-form').classList.toggle('hidden', !isAdminOrDeputy());
+  document.getElementById('pt-actions').classList.toggle('hidden', !isAdminOrDeputy());
+  document.getElementById('portal-add-form').classList.add('hidden');
+  document.getElementById('portal-bulk-form').classList.add('hidden');
   await refreshPortalList();
 }
 
-setupCollapsible('portal-bulk-toggle', 'portal-bulk-body', 'portal-bulk-chevron');
+function togglePanel(id, btnId, openLabel, closedLabel) {
+  const el = document.getElementById(id);
+  const open = el.classList.toggle('hidden') === false;
+  document.getElementById(btnId).textContent = open ? openLabel : closedLabel;
+  if (open) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+document.getElementById('pt-add-toggle').addEventListener('click', () => togglePanel('portal-add-form', 'pt-add-toggle', 'إلغاء', '+ موظف'));
+document.getElementById('pt-bulk-toggle').addEventListener('click', () => togglePanel('portal-bulk-form', 'pt-bulk-toggle', 'إخفاء الاستيراد', 'استيراد حسابات من إكسل'));
+let ptFilter = 'all';
+let ptSearch = '';
+let ptEmps = [];
+let ptProfiles = [];
+document.querySelectorAll('#pt-filter button').forEach(b => b.addEventListener('click', () => { ptFilter = b.dataset.f; renderPortalRows(); }));
+document.getElementById('pt-search').addEventListener('input', (e) => { ptSearch = e.target.value.trim(); renderPortalRows(); });
+document.addEventListener('click', (e) => { if (!e.target.closest('.row-menu')) document.querySelectorAll('#portal-list .row-menu-pop').forEach(p => p.classList.add('hidden')); });
 
 /* ---------- تنزيل نموذج إكسل لإنشاء حسابات متعددة ---------- */
 document.getElementById('portal-download-template').addEventListener('click', async () => {
@@ -127,115 +142,126 @@ document.getElementById('portal-submit').addEventListener('click', async () => {
 });
 
 async function refreshPortalList() {
-  const { data: emps } = await readScopedBySchool(scoped => {
-    let q = sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role, login_email)');
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
-  });
+  const [{ data: emps }, { data: profs }] = await Promise.all([
+    readScopedBySchool(scoped => {
+      let q = sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role, login_email)');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    isAdminOrDeputy() ? readScopedBySchool(scoped => {
+      let q = sb.from('profiles').select('id, full_name, role');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('full_name');
+    }) : Promise.resolve({ data: [] }),
+  ]);
+  ptEmps = (emps || []).sort((x, y) => String(x.full_name || '').localeCompare(String(y.full_name || ''), 'ar'));
+  ptProfiles = profs || [];
+  document.getElementById('portal-add-form').classList.add('hidden');
+  document.getElementById('pt-add-toggle').textContent = '+ موظف';
+  renderPortalRows();
+}
+
+function escP(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+
+function renderPortalRows() {
   const list = document.getElementById('portal-list');
-  list.innerHTML = '';
+  const admin = isAdminOrDeputy();
+  const counts = { all: ptEmps.length, linked: ptEmps.filter(e => e.profile_id).length };
+  counts.unlinked = counts.all - counts.linked;
+  document.querySelectorAll('#pt-filter button').forEach(b => b.classList.toggle('active', b.dataset.f === ptFilter));
+  document.querySelectorAll('#pt-filter .tr-cnt').forEach(el => { el.textContent = counts[el.dataset.c] || ''; });
+  const q = ptSearch.replace(/\s+/g, ' ');
+  let rows = ptEmps.filter(e => !q || `${e.full_name} ${e.job_title || ''}`.includes(q));
+  if (ptFilter === 'linked') rows = rows.filter(e => e.profile_id);
+  if (ptFilter === 'unlinked') rows = rows.filter(e => !e.profile_id);
+  if (!ptEmps.length) { list.innerHTML = '<div class="ex-empty"><b>لا يوجد موظفون بعد</b><span>اضغط «+ موظف» أو استورد الحسابات من ملف إكسل.</span></div>'; return; }
+  if (!rows.length) { list.innerHTML = '<div class="ex-empty"><b>ما فيه نتائج</b></div>'; return; }
+  const linkedIds = new Set(ptEmps.map(e => e.profile_id).filter(Boolean));
+  const freeProfiles = ptProfiles.filter(p => !linkedIds.has(p.id) && p.role !== 'owner' && p.role !== 'parent');
 
-  if (!emps || emps.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:30px;"><p>لا يوجد موظفون بعد</p></div>';
-    return;
-  }
-
-  emps.forEach(emp => {
-    const row = document.createElement('div');
-    row.className = 'emp-row';
-    row.style.flexWrap = 'wrap';
-
+  list.innerHTML = rows.map(emp => {
     const linked = !!emp.profile_id;
     const loginEmail = linked && emp.profiles ? emp.profiles.login_email : null;
-    const loginDisplay = loginEmail
-      ? (loginEmail.endsWith(STAFF_ID_DOMAIN) ? loginEmail.replace(STAFF_ID_DOMAIN, '') + ' (رقم وظيفي)' : loginEmail)
-      : null;
-    const statusHtml = linked
-      ? `<span class="badge badge-meadow">مرتبط بحساب · ${roleLabels[emp.profiles ? emp.profiles.role : ''] || ''}${loginDisplay ? ' · ' + loginDisplay : ''}</span>`
-      : `<span class="badge badge-gray">بدون حساب دخول (للتقييم فقط)</span>`;
-
-    const initials = (emp.full_name || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join('');
-
-    let linkFormHtml = '';
-    if (!linked && isAdminOrDeputy()) {
-      linkFormHtml = `
-        <div style="display:flex; gap:8px; margin-top:10px; width:100%;">
-          <input type="text" class="link-id-input" placeholder="الصق ID حساب الدخول هنا" style="flex:1; padding:9px 12px; border:1.5px solid #E4E2D9; border-radius:8px; font-size:13px;" />
-          <button class="link-btn" style="padding:8px 16px; background:var(--meadow); color:#fff; font-size:13px; white-space:nowrap;">ربط بحساب</button>
-        </div>`;
-    }
-
-    let actionsHtml = '';
-    if (isAdminOrDeputy()) {
-      actionsHtml = `<div style="display:flex; align-items:center; gap:14px; flex-shrink:0;">`;
-      if (linked) {
-        actionsHtml += `<button class="reset-pw-btn text-action-btn">إعادة تعيين كلمة المرور</button>`;
-      }
-      actionsHtml += `<button class="delete-emp-btn text-action-btn" style="color:var(--danger) !important;">حذف الموظف</button></div>`;
-    }
-
-    row.innerHTML = `
-      <div class="avatar-circle">${initials}</div>
-      <div class="info">
-        <div class="name">${emp.full_name}</div>
-        <div class="title">${emp.job_title || ''}</div>
+    const loginDisplay = loginEmail ? (loginEmail.endsWith(STAFF_ID_DOMAIN) ? loginEmail.replace(STAFF_ID_DOMAIN, '') : loginEmail) : null;
+    const initials = (emp.full_name || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join(' ');
+    const role = linked && emp.profiles ? roleLabels[emp.profiles.role] || '' : '';
+    return `<div class="pt-row ${linked ? '' : 'is-unlinked'}" data-id="${emp.id}">
+      <span class="cvt-av">${escP(initials)}</span>
+      <span class="pt-main"><b>${escP(emp.full_name)}</b><span>${escP(emp.job_title || '')}</span></span>
+      ${linked ? `<span class="pt-acc"><span class="cv-st pub">${escP(role || 'له حساب')}</span>${loginDisplay ? `<span class="pt-login" dir="ltr">${escP(loginDisplay)}</span>` : ''}</span>` : '<span class="cv-st draft">بدون حساب · للتقييم فقط</span>'}
+      ${admin ? `<div class="row-menu">
+        <button type="button" class="row-menu-btn" aria-label="خيارات">⋯</button>
+        <div class="row-menu-pop hidden">
+          ${linked ? '<button type="button" class="pt-reset">إعادة تعيين كلمة المرور</button>' : '<button type="button" class="pt-link">ربط بحساب دخول…</button>'}
+          <button type="button" class="pt-del danger">حذف من قائمة الموظفين</button>
+        </div>
+      </div>` : ''}
+      <div class="pt-linkbox hidden">
+        <select class="pt-link-sel"><option value="">اختر حساب الدخول…</option>${freeProfiles.map(p => `<option value="${p.id}">${escP(p.full_name)} · ${escP(roleLabels[p.role] || p.role)}</option>`).join('')}</select>
+        <button type="button" class="btn-primary pt-link-save" style="width:auto; padding:9px 16px;">ربط</button>
+        <button type="button" class="btn-secondary pt-link-cancel" style="width:auto; padding:9px 14px;">إلغاء</button>
       </div>
-      ${statusHtml}
-      ${actionsHtml}
-      ${linkFormHtml}`;
+    </div>`;
+  }).join('');
 
-    if (!linked && isAdminOrDeputy()) {
-      row.querySelector('.link-btn').addEventListener('click', async () => {
-        const idInput = row.querySelector('.link-id-input');
-        const profileId = idInput.value.trim();
-        if (!profileId) return;
-        const { error } = await sb.from('employees').update({ profile_id: profileId }).eq('id', emp.id);
-        if (error) { alert('تعذر الربط: ' + error.message); return; }
-        await refreshPortalList();
-      });
-    }
-
-    if (isAdminOrDeputy()) {
-      const deleteBtn = row.querySelector('.delete-emp-btn');
-      if (deleteBtn) {
-        deleteBtn.addEventListener('click', async () => {
-          if (!confirm(`متأكد تبي تحذف "${emp.full_name}" من قائمة الموظفين؟ هذا يحذف سجل التقييم فقط، ولا يحذف حساب الدخول لو موجود.`)) return;
-          const { error } = await sb.from('employees').delete().eq('id', emp.id);
-          if (error) { alert('تعذر الحذف: ' + error.message); return; }
-          await refreshPortalList();
+  list.querySelectorAll('.pt-row').forEach(row => {
+    const emp = ptEmps.find(e => String(e.id) === row.dataset.id);
+    const mb = row.querySelector('.row-menu-btn');
+    if (mb) mb.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const pop = mb.nextElementSibling; const willOpen = pop.classList.contains('hidden');
+      list.querySelectorAll('.row-menu-pop').forEach(p => p.classList.add('hidden'));
+      if (willOpen) pop.classList.remove('hidden');
+    });
+    const linkBtn = row.querySelector('.pt-link');
+    if (linkBtn) linkBtn.addEventListener('click', () => {
+      row.querySelector('.row-menu-pop').classList.add('hidden');
+      const box = row.querySelector('.pt-linkbox'); box.classList.remove('hidden');
+      const sel = row.querySelector('.pt-link-sel');
+      const guess = freeProfiles.find(p => String(p.full_name || '').trim() === String(emp.full_name || '').trim());
+      if (guess) sel.value = guess.id;
+      sel.focus();
+    });
+    row.querySelector('.pt-link-cancel').addEventListener('click', () => row.querySelector('.pt-linkbox').classList.add('hidden'));
+    row.querySelector('.pt-link-save').addEventListener('click', async () => {
+      const profileId = row.querySelector('.pt-link-sel').value;
+      if (!profileId) return;
+      const { error } = await sb.from('employees').update({ profile_id: profileId }).eq('id', emp.id);
+      if (error) { alert('تعذر الربط: ' + error.message); return; }
+      await refreshPortalList();
+    });
+    const delBtn = row.querySelector('.pt-del');
+    if (delBtn) delBtn.addEventListener('click', async () => {
+      if (!confirm(`متأكد تبي تحذف "${emp.full_name}" من قائمة الموظفين؟ هذا يحذف سجل التقييم فقط، ولا يحذف حساب الدخول لو موجود.`)) return;
+      const { error } = await sb.from('employees').delete().eq('id', emp.id);
+      if (error) { alert('تعذر الحذف: ' + error.message); return; }
+      await refreshPortalList();
+    });
+    const resetBtn = row.querySelector('.pt-reset');
+    if (resetBtn) resetBtn.addEventListener('click', async () => {
+      row.querySelector('.row-menu-pop').classList.add('hidden');
+      const newPassword = prompt(`كلمة مرور جديدة لـ "${emp.full_name}" (6 أحرف على الأقل):`);
+      if (!newPassword) return;
+      if (newPassword.length < 6) { alert('كلمة المرور لازم تكون 6 أحرف أو أكثر'); return; }
+      try {
+        const { data: sessionData } = await sb.auth.getSession();
+        const accessToken = sessionData.session.access_token;
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/create-user`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+          body: JSON.stringify({ action: 'reset_password', user_id: emp.profile_id, new_password: newPassword }),
         });
+        const result = await res.json();
+        if (!res.ok) { alert('حدث خطأ: ' + (result.error || 'غير معروف')); return; }
+        alert('تم تحديث كلمة المرور بنجاح');
+      } catch (e) {
+        alert('تعذر الاتصال بالخادم: ' + e.message);
       }
-
-      const resetBtn = row.querySelector('.reset-pw-btn');
-      if (resetBtn) {
-        resetBtn.addEventListener('click', async () => {
-          const newPassword = prompt(`كلمة مرور جديدة لـ "${emp.full_name}" (6 أحرف على الأقل):`);
-          if (!newPassword) return;
-          if (newPassword.length < 6) { alert('كلمة المرور لازم تكون 6 أحرف أو أكثر'); return; }
-
-          try {
-            const { data: sessionData } = await sb.auth.getSession();
-            const accessToken = sessionData.session.access_token;
-            const res = await fetch(`${SUPABASE_URL}/functions/v1/create-user`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-              body: JSON.stringify({ action: 'reset_password', user_id: emp.profile_id, new_password: newPassword }),
-            });
-            const result = await res.json();
-            if (!res.ok) { alert('حدث خطأ: ' + (result.error || 'غير معروف')); return; }
-            alert('تم تحديث كلمة المرور بنجاح');
-          } catch (e) {
-            alert('تعذر الاتصال بالخادم: ' + e.message);
-          }
-        });
-      }
-    }
-    list.appendChild(row);
+    });
   });
 }
 
-
-/* ================= إنشاء حساب دخول جديد (Edge Function) ================= */
+/* ================= إدارة الصلاحيات ================= */
 document.getElementById('newuser-submit').addEventListener('click', async () => {
   const name = document.getElementById('newuser-name').value.trim();
   const email = document.getElementById('newuser-email').value.trim();

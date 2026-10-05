@@ -1437,3 +1437,58 @@
     .dd-msg{ bottom:auto; top:120px; }
   }
   .dd-layout.single{ grid-template-columns:1fr; }
+
+  /* ===== متابعة الخطة الأسبوعية ===== */
+  #weekly-tracking-module.panel{ background:transparent; border:0; box-shadow:none; padding:0; }
+  .wt-perms{ margin-bottom:16px; border-top:4px solid var(--purple); }
+  .wt-perm-add{ display:flex; gap:8px; margin-top:12px; }
+  .wt-perm-add select{ flex:1; margin:0 !important; }
+  .wt-grades{ display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:12px; }
+  .wt-grade{ background:#fff; border:1px solid var(--border); border-radius:16px; padding:16px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 3px rgba(21,34,56,0.05); }
+  .wt-gh{ display:flex; align-items:center; justify-content:space-between; }
+  .wt-gh b{ font-family:'Tajawal'; font-size:19px; font-weight:800; color:var(--meadow-dark); }
+  .wt-gcount{ font-size:13px; font-weight:700; color:#7A5410; background:#FDF2DF; border-radius:99px; padding:3px 10px; }
+  .wt-gcount.full{ color:#1F6A3C; background:var(--green-light); }
+  .wt-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+  .wt-chip{ display:inline-flex; flex-direction:column; border-radius:10px; padding:5px 10px; line-height:1.4; }
+  .wt-chip b{ font-size:13px; font-weight:700; }
+  .wt-chip span{ font-size:11px; }
+  .wt-chip.ok{ background:var(--green-light); color:#1F6A3C; }
+  .wt-chip.miss{ background:var(--danger-light); color:#8A3A30; }
+  .wt-tlist{ display:grid; grid-template-columns:repeat(auto-fill, minmax(320px, 1fr)); gap:8px; }
+  .wt-t{ display:flex; align-items:center; gap:10px; background:#fff; border:1px solid var(--border); border-inline-start:4px solid var(--danger); border-radius:12px; padding:10px 12px; }
+  .wt-t .cvt-av{ width:36px; height:36px; font-size:12.5px; background:var(--danger-light); color:#8A3A30; }
+  .wt-t-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+  .wt-t-main b{ font-size:14px; }
+  .wt-t-main span{ font-size:12px; color:var(--slate); }
+  .wt-t-n{ font-family:'Tajawal'; font-size:20px; font-weight:900; color:var(--danger); }
+
+  /* ===== بوابة الموظفين ===== */
+  #portal-module.panel{ background:transparent; border:0; box-shadow:none; padding:0; }
+  .pt-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .pt-toolbar .seg-tabs{ margin:0; }
+  .pt-actions{ display:flex; gap:8px; margin-inline-start:auto; }
+  .pt-panel{ margin-bottom:14px; border-top:4px solid var(--meadow); }
+  .pt-hint{ font-size:12.5px; color:var(--slate); margin:-4px 0 10px; }
+  #portal-bulk-toggle{ cursor:default !important; }
+  #portal-bulk-chevron{ display:none; }
+  .pt-list{ display:flex; flex-direction:column; gap:8px; }
+  .pt-row{ display:flex; align-items:center; flex-wrap:wrap; gap:12px; background:#fff; border:1px solid var(--border); border-radius:14px; padding:11px 14px; box-shadow:0 1px 3px rgba(21,34,56,0.05); }
+  .pt-row.is-unlinked{ border-inline-start:4px solid #E3B98F; }
+  .pt-row .cvt-av{ width:40px; height:40px; font-size:13px; }
+  .pt-main{ flex:1; min-width:150px; display:flex; flex-direction:column; gap:1px; }
+  .pt-main b{ font-size:14.5px; color:var(--meadow-dark); }
+  .pt-main span{ font-size:12.5px; color:var(--slate); }
+  .pt-acc{ display:flex; align-items:center; gap:6px; }
+  .pt-login{ font-size:12px; color:var(--slate); }
+  .pt-linkbox{ flex:1 0 100%; display:flex; gap:8px; padding-top:4px; }
+  .pt-linkbox.hidden{ display:none !important; }
+  .pt-linkbox select{ flex:1; margin:0 !important; }
+  @media (max-width: 899px){ .pt-actions{ margin-inline-start:0; width:100%; } .pt-actions button{ flex:1; } .pt-toolbar .seg-tabs{ width:100%; } }
+
+  /* ===== متابعة أداء الموظفين ===== */
+  #notes-module .bud-head-title{ display:none; }
+  #notes-module .bud-head{ padding:10px 14px; }
+  .ev-toolbar{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
+  .ev-toolbar select{ width:auto !important; margin:0 !important; padding:9px 12px; border-radius:99px; }
+  #notes-module.panel{ background:transparent; border:0; box-shadow:none; padding:0; }

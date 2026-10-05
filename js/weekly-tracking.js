@@ -6,7 +6,8 @@ let wtWeek = null;
 export async function loadWeeklyTrackingModule() {
   if (wtWeek == null) wtWeek = Math.min(40, academicWeekInfo().next);
   const canManagePerms = isAdminOrDeputy();
-  document.getElementById('wt-perms-section').classList.toggle('hidden', !canManagePerms);
+  document.getElementById('wt-perms-toggle').classList.toggle('hidden', !canManagePerms);
+  if (!canManagePerms) document.getElementById('wt-perms-section').classList.add('hidden');
   if (canManagePerms) await loadPermsSection();
 
   document.getElementById('wt-week-label').textContent = weekLabel(wtWeek);
@@ -89,67 +90,93 @@ document.getElementById('wt-perm-submit').addEventListener('click', async () => 
   await loadPermsSection();
 });
 
+document.getElementById('wt-perms-toggle').addEventListener('click', () => {
+  const sec = document.getElementById('wt-perms-section');
+  const open = sec.classList.toggle('hidden') === false;
+  document.getElementById('wt-perms-toggle').textContent = open ? 'إخفاء الصلاحيات' : 'صلاحيات العرض';
+});
 document.getElementById('wt-week-prev').addEventListener('click', () => { if (wtWeek > 1) { wtWeek--; loadWeeklyTrackingModule(); } });
 document.getElementById('wt-week-next').addEventListener('click', () => { if (wtWeek < 40) { wtWeek++; loadWeeklyTrackingModule(); } });
 
+const NO_TEACHER = 'مواد بدون معلم مسند';
+let lastMissing = []; // [{teacher, subject, grade}]
 async function refreshWeeklyTracking() {
   const container = document.getElementById('wt-grades-container');
+  const stats = document.getElementById('wt-stats');
+  const teachersBox = document.getElementById('wt-teachers');
+  lastMissing = [];
+  teachersBox.innerHTML = '';
   if (isNoPlanWeek(wtWeek)) {
-    container.innerHTML = `<div class="form-card" style="text-align:center; color:var(--slate); font-size:14px;">الأسبوع ${wtWeek} بدون خطة أسبوعية، فما يُحسب فيه أي مادة ناقصة. (تقدر تغيّر هذا من «ضبط التقويم» بلوحة القيادة)</div>`;
+    stats.innerHTML = '';
+    container.innerHTML = `<div class="ex-empty"><b>الأسبوع ${wtWeek} بدون خطة أسبوعية</b><span>ما يُحسب فيه أي مادة ناقصة. تقدر تغيّر هذا من «ضبط التقويم» في لوحة القيادة.</span></div>`;
     return;
   }
-  container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
+  container.innerHTML = '<div class="tr-loading">جارٍ التحميل...</div>';
 
-  // نجيب المواد المسندة فعليًا لكل مرحلة (عن طريق تخصيص المعلمين) بدل كل مواد المدرسة،
-  // عشان مادة مسندة لمرحلة وحدة بس (مثل التفكير الناقد لثالث متوسط) ما تظهر "ناقصة" بمرحلة ثانية أصلاً ما تُدرّس فيها.
+  // المواد المسندة فعليًا لكل مرحلة (من تخصيص المعلمين) بدل كل مواد المدرسة
   let wpQuery = sb.from('weekly_plans').select('grade_level, subject_id').eq('week_number', wtWeek);
   if (currentSchoolId) wpQuery = wpQuery.eq('school_id', currentSchoolId);
-  let tsQuery = sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)');
+  let tsQuery = sb.from('teacher_subjects').select('subject_id, grade_level, teacher_id, subjects(name)');
   if (currentSchoolId) tsQuery = tsQuery.eq('school_id', currentSchoolId);
-  let [{ data: assignments, error: tsError }, { data: enteredPlans, error: wpError }] = await Promise.all([
-    tsQuery,
-    wpQuery,
-  ]);
-  if (tsError && currentSchoolId) {
-    ({ data: assignments } = await sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)'));
-  }
-  if (wpError && currentSchoolId) {
-    ({ data: enteredPlans } = await sb.from('weekly_plans').select('grade_level, subject_id').eq('week_number', wtWeek));
-  }
+  let prQuery = sb.from('profiles').select('id, full_name');
+  if (currentSchoolId) prQuery = prQuery.eq('school_id', currentSchoolId);
+  let [{ data: assignments, error: tsError }, { data: enteredPlans, error: wpError }, { data: people }] = await Promise.all([tsQuery, wpQuery, prQuery]);
+  if (tsError && currentSchoolId) ({ data: assignments } = await sb.from('teacher_subjects').select('subject_id, grade_level, teacher_id, subjects(name)'));
+  if (wpError && currentSchoolId) ({ data: enteredPlans } = await sb.from('weekly_plans').select('grade_level, subject_id').eq('week_number', wtWeek));
+  const nameOf = new Map((people || []).map(p => [p.id, p.full_name]));
 
-  container.innerHTML = '';
   const grades = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
-
-  grades.forEach(grade => {
+  let totalAll = 0, doneAll = 0;
+  const html = grades.map(grade => {
     const subjMap = new Map();
     (assignments || []).filter(a => a.grade_level === grade && a.subject_id).forEach(a => {
-      if (!subjMap.has(a.subject_id)) subjMap.set(a.subject_id, a.subjects ? a.subjects.name : '');
+      if (!subjMap.has(a.subject_id)) subjMap.set(a.subject_id, { id: a.subject_id, name: a.subjects ? a.subjects.name : '', teachers: new Set() });
+      if (a.teacher_id) subjMap.get(a.subject_id).teachers.add(nameOf.get(a.teacher_id) || '');
     });
-    const gradeSubjects = Array.from(subjMap, ([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
-
-    const enteredIds = new Set((enteredPlans || []).filter(p => p.grade_level === grade).map(p => p.subject_id));
-    const missingCount = gradeSubjects.filter(s => !enteredIds.has(s.id)).length;
-
-    const chips = gradeSubjects.map(s => {
-      const isEntered = enteredIds.has(s.id);
-      const bg = isEntered ? 'var(--meadow-light)' : 'var(--danger-light)';
-      const color = isEntered ? 'var(--meadow)' : 'var(--danger)';
-      return `<span style="display:inline-block; font-size:12.5px; background:${bg}; color:${color}; padding:4px 12px; border-radius:20px; margin:0 4px 4px 0; font-weight:600;">${s.name}</span>`;
+    const subjects = [...subjMap.values()].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+    const entered = new Set((enteredPlans || []).filter(p => p.grade_level === grade).map(p => p.subject_id));
+    const done = subjects.filter(s => entered.has(s.id)).length;
+    totalAll += subjects.length; doneAll += done;
+    subjects.filter(s => !entered.has(s.id)).forEach(s => {
+      const ts = [...s.teachers].filter(Boolean);
+      (ts.length ? ts : [NO_TEACHER]).forEach(t => lastMissing.push({ teacher: t, subject: s.name, grade }));
+    });
+    const pct = subjects.length ? Math.round(done / subjects.length * 100) : 0;
+    const chips = subjects.map(s => {
+      const ok = entered.has(s.id);
+      const t = [...s.teachers].filter(Boolean).map(n => n.split(' ').slice(0, 2).join(' ')).join('، ');
+      return `<span class="wt-chip ${ok ? 'ok' : 'miss'}"><b>${ok ? '✓ ' : ''}${esc(s.name)}</b>${!ok && t ? `<span>${esc(t)}</span>` : ''}</span>`;
     }).join('');
+    return `<div class="wt-grade">
+      <div class="wt-gh"><b>${gradeLabels[grade]}</b><span class="wt-gcount ${subjects.length && done === subjects.length ? 'full' : ''}">${subjects.length ? `${done} من ${subjects.length}` : 'ما فيه مواد مسندة'}</span></div>
+      ${subjects.length ? `<div class="cmd-bar"><div style="width:${pct}%; ${pct === 100 ? 'background:var(--status-good);' : ''}"></div></div>` : ''}
+      <div class="wt-chips">${chips || '<span class="dd-empty-panel">أضف تخصصات المعلمين من «إدارة الصلاحيات» عشان تظهر المواد هنا.</span>'}</div>
+    </div>`;
+  }).join('');
+  container.innerHTML = html;
 
-    const card = document.createElement('div');
-    card.className = 'form-card';
-    let statusText;
-    if (gradeSubjects.length === 0) {
-      statusText = '<span style="font-size:12px; color:var(--slate); font-weight:400;">لا توجد مواد مُسندة لهذه المرحلة بعد</span>';
-    } else if (missingCount === 0) {
-      statusText = '<span style="color:var(--meadow);">كل المواد مُدخلة لهذا الأسبوع 🎉</span>';
-    } else {
-      statusText = `<span style="font-size:12px; color:var(--slate); font-weight:400;">(${missingCount} مادة ناقصة من ${gradeSubjects.length})</span>`;
-    }
-    card.innerHTML = `
-      <h4 style="margin-bottom:10px;">${gradeLabels[grade]} ${statusText}</h4>
-      <div>${chips}</div>`;
-    container.appendChild(card);
-  });
+  const missingTeachers = new Map();
+  lastMissing.forEach(m => { if (!missingTeachers.has(m.teacher)) missingTeachers.set(m.teacher, []); missingTeachers.get(m.teacher).push(m); });
+  const realTeachers = [...missingTeachers.keys()].filter(t => t !== NO_TEACHER).length;
+  stats.innerHTML = `
+    <span class="ds ${doneAll === totalAll && totalAll ? 'ds-present' : 'ds-all'}"><b>${doneAll}</b> من ${totalAll} خطة مسلّمة</span>
+    <span class="ds ${totalAll - doneAll ? 'ds-absent' : 'ds-present'}"><b>${totalAll - doneAll}</b> ناقصة</span>
+    <span class="ds ${realTeachers ? 'ds-late' : 'ds-present'}"><b>${realTeachers}</b> معلم ما سلّم</span>`;
+  if (missingTeachers.size) {
+    teachersBox.innerHTML = `<h3 class="duty-h" style="margin:24px 0 10px;">المعلمين اللي ما سلّموا</h3><div class="wt-tlist">${[...missingTeachers.entries()].sort((a, b) => b[1].length - a[1].length).map(([t, list]) => `
+      <div class="wt-t"><span class="cvt-av">${esc(t.split(' ').slice(0, 2).map(w => w.charAt(0)).join(' '))}</span><span class="wt-t-main"><b>${esc(t)}</b><span>${list.map(m => `${esc(m.subject)} · ${esc((gradeLabels[m.grade] || '').replace(' متوسط', ''))}`).join(' — ')}</span></span><span class="wt-t-n">${list.length}</span></div>`).join('')}</div>`;
+  }
 }
+
+document.getElementById('wt-copy').addEventListener('click', async () => {
+  const label = document.getElementById('wt-week-label').textContent;
+  const byT = new Map();
+  lastMissing.forEach(m => { if (!byT.has(m.teacher)) byT.set(m.teacher, []); byT.get(m.teacher).push(m); });
+  let text = `تذكير بتسليم الخطة الأسبوعية — ${label}\n`;
+  if (!byT.size) text += '\nكل الخطط مسلّمة، شكرًا للجميع 🌷';
+  else byT.forEach((list, t) => { text += `\n${t === NO_TEACHER ? '' : 'أ. '}${t}: ${list.map(m => `${m.subject} (${(gradeLabels[m.grade] || '').replace(' متوسط', '')})`).join('، ')}`; });
+  const msg = document.getElementById('wt-msg');
+  try { await navigator.clipboard.writeText(text); msg.textContent = 'انسخ التذكير، الصقه في قروب المعلمين'; }
+  catch { prompt('انسخ النص:', text); msg.textContent = ''; }
+  if (msg.textContent) { msg.classList.remove('hidden'); setTimeout(() => msg.classList.add('hidden'), 2500); }
+});

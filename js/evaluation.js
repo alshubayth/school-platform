@@ -201,9 +201,9 @@ function renderStats() {
 function ringSVG(score) {
   const pct = score ? Math.min(score / 5, 1) : 0;
   const r = 16, circ = 2 * Math.PI * r;
-  const color = !score ? '#D8D5C8' : score >= 4 ? '#1D8FA6' : score >= 2.5 ? '#E8763A' : '#B3413A';
+  const color = !score ? '#D5DCE7' : score >= 4 ? '#1D8FA6' : score >= 2.5 ? '#E8763A' : '#B3413A';
   return `<svg width="40" height="40" viewBox="0 0 40 40">
-    <circle cx="20" cy="20" r="${r}" fill="none" stroke="#ECEAE1" stroke-width="4"/>
+    <circle cx="20" cy="20" r="${r}" fill="none" stroke="#EAEEF4" stroke-width="4"/>
     <circle cx="20" cy="20" r="${r}" fill="none" stroke="${color}" stroke-width="4"
       stroke-dasharray="${circ}" stroke-dashoffset="${circ * (1 - pct)}" stroke-linecap="round"
       transform="rotate(-90 20 20)"/>
@@ -216,8 +216,13 @@ function renderEmployeeList() {
     list.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px 4px;">لا يوجد موظفون مضافون بعد. أضفهم من قسم "بوابة الموظفين" أولاً.</p>';
     return;
   }
-  list.innerHTML = employeesCache.map(e => {
-    const { finalScore, violations } = employeeStats(e.id);
+  const q = (document.getElementById('ev-search') || {}).value || '';
+  const sort = (document.getElementById('ev-sort') || {}).value || 'name';
+  let rows = employeesCache.map(e => ({ e, st: employeeStats(e.id) })).filter(x => !q.trim() || `${x.e.full_name} ${x.e.job_title || ''}`.includes(q.trim()));
+  rows.sort((a, b) => sort === 'low' ? ((a.st.finalScore ?? 99) - (b.st.finalScore ?? 99)) : sort === 'viol' ? (b.st.violations.length - a.st.violations.length) : String(a.e.full_name).localeCompare(String(b.e.full_name), 'ar'));
+  if (!rows.length) { list.innerHTML = '<p style="font-size:12.5px; color:var(--slate); padding:10px 4px;">ما فيه نتائج.</p>'; return; }
+  list.innerHTML = rows.map(({ e, st }) => {
+    const { finalScore, violations } = st;
     return `<div class="emp-row" data-employee-id="${e.id}" style="cursor:pointer;">
       <div class="avatar-circle">${esc(initials(e.full_name))}</div>
       <div class="info"><div class="name">${esc(e.full_name)}</div><div class="title">${esc(e.job_title || '')} · ${violations.length} مخالفة</div></div>
@@ -228,6 +233,9 @@ function renderEmployeeList() {
     row.addEventListener('click', () => openDetail(row.dataset.employeeId));
   });
 }
+
+document.getElementById('ev-search').addEventListener('input', () => renderEmployeeList());
+document.getElementById('ev-sort').addEventListener('change', () => renderEmployeeList());
 
 /* ---------- تقرير المعلم ---------- */
 function showEvalDetail(show) {
