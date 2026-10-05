@@ -38,7 +38,18 @@ begin
   end loop;
 end $$;
 
--- (2) إضافة شرط المدرسة على كل سياسات جدول الطلاب الحالية
+-- (2) نسخة احتياطية من السياسات الأصلية (للتراجع الدقيق)، ثم إضافة شرط المدرسة عليها
+create table if not exists public._policy_backup (
+  tablename text, policyname text, qual text, with_check text, saved_at timestamptz default now(),
+  primary key (tablename, policyname)
+);
+alter table public._policy_backup enable row level security;
+insert into public._policy_backup (tablename, policyname, qual, with_check)
+  select tablename, policyname, qual, with_check from pg_policies
+   where schemaname = 'public' and tablename = 'students'
+     and position('same_school' in coalesce(qual, '') || coalesce(with_check, '')) = 0
+on conflict (tablename, policyname) do nothing;
+
 do $$
 declare p record; newq text; newc text;
 begin
