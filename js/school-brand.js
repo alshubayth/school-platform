@@ -111,8 +111,10 @@ async function save() {
   const { error } = await sb.rpc('set_school_branding', { p_school: currentSchoolId, p_name: name, p_branding: branding });
   btn.disabled = false; btn.textContent = 'حفظ الهوية';
   if (error) {
-    const missing = /set_school_branding|function|schema cache/i.test(error.message || '');
-    err.textContent = missing ? 'ميزة الهوية تحتاج تشغيل ملف sql/branding.sql بقاعدة البيانات أولًا' : 'تعذر الحفظ: ' + error.message;
+    // نعرض نص الخطأ الفعلي دايمًا عشان نعرف السبب بدقة
+    const detail = [error.code, error.message, error.details, error.hint].filter(Boolean).join(' | ');
+    const notFound = error.code === 'PGRST202' || /schema cache|could not find the function/i.test(error.message || '');
+    err.textContent = (notFound ? 'قاعدة البيانات ما تعرّفت على دالة الحفظ بعد. ' : 'تعذر الحفظ. ') + 'تفاصيل الخطأ: ' + detail;
     err.style.display = 'block';
     return;
   }
