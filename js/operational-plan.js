@@ -1,6 +1,6 @@
 import { sb, currentUserId, currentProfile, gradeLabels,
          isOpPlanMember, setOpPlanMember, setupCollapsible,
-         currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+         currentSchoolId, readScopedBySchool, writeWithSchool, academicWeekInfo } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 /* ================= الخطة التشغيلية ================= */
@@ -61,7 +61,7 @@ function goalColorVar(goalTitle) {
 }
 
 /* ---------- تبويبات لوحة المدير: المتابعة / الإعدادات / اعتماد المهام ---------- */
-const OPPLAN_TABS = ['dashboard', 'settings', 'approvals'];
+const OPPLAN_TABS = ['dashboard', 'employees', 'approvals', 'settings'];
 function showOpPlanTab(tab) {
   if (!OPPLAN_TABS.includes(tab)) tab = 'dashboard';
   OPPLAN_TABS.forEach(t => {
@@ -149,15 +149,13 @@ async function loadOpPlanAdminData() {
   const semSel = document.getElementById('opplan-semester-select');
   if (semSel) semSel.value = currentSemester;
 
-  // قائمة المشاركين المتاحين للإضافة
+  // كل الموظفين (لإضافة مشاركين جدد من تبويب "الموظفين")
   const { data: allStaff } = await readScopedBySchool(scoped => {
-    let q = sb.from('profiles').select('id, full_name').in('role', ['teacher','deputy']);
+    let q = sb.from('profiles').select('id, full_name, role').in('role', ['teacher','deputy']);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
-  const empSelect = document.getElementById('opm-employee');
-  empSelect.innerHTML = '';
-  (allStaff || []).forEach(p => { const o = document.createElement('option'); o.value = p.id; o.textContent = p.full_name; empSelect.appendChild(o); });
+  opeStaff = (allStaff || []).slice().sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), 'ar'));
 
   // قوائم الهدف العام والتشغيلي
   const goalSelect = document.getElementById('oo-goal');
@@ -170,9 +168,7 @@ async function loadOpPlanAdminData() {
 
   renderProgramManageList();
 
-  await refreshMembersList();
-  await loadProgramAssignAdmin();
-  await refreshOpPlanApprovals();
+  await refreshOpEmployees();
   await renderOpPlanGuide();
 }
 
@@ -188,164 +184,10 @@ onEl('opplan-semester-select', 'change', async (e) => {
   currentSemester = val;
 });
 
-/* ---------- إسناد البرامج للمشاركين (لوحة المدير) ----------
-   بدل ما كل موظف يختار الهدف العام/التشغيلي/البرنامج يدويًا لكل مهمة (تعب مع 44 برنامج)،
-   المدير يسند مسبقًا كل موظف بالبرامج الخاصة فيه، وبعدها الموظف بصفحته يفتح برنامجه المسند
-   مباشرة ويدخل مهامه الأسبوعية بدون أي اختيار متكرر */
-let opaMembersCache = [];
-let opaCurrentAssignments = new Set();
-// نسخة عمل من الاختيارات الحالية بالقائمة (قبل الحفظ) - منفصلة عن opaCurrentAssignments (المحفوظ
-// فعليًا بقاعدة البيانات) عشان ما تنفقد تحديدات سابقة لو المدير بحث/فلتر القائمة بين كل اختيار
-// وثاني، لأن البحث يعيد بناء القائمة بالكامل (innerHTML) وكان ياخذ حالة "محدد" من opaCurrentAssignments
-// مباشرة فيفقد أي تحديد غير محفوظ بعد لما البرنامج يختفي من نتائج البحث الجديد
-let opaPendingChecked = new Set();
-
 // فلتر داشبورد المدير: هدف استراتيجي/تشغيلي مختار حاليًا (null = بدون فلتر) - يُطبّق على شبكة
-// البرامج بالأسفل فقط (الإحصائيات والرسومين وبطاقات الأهداف نفسها تبقى تعرض الصورة الكاملة)
+// البرامج بالأسفل فقط
 let opGuideFilterGoalId = null;
 let opGuideFilterObjId = null;
-
-async function loadProgramAssignAdmin() {
-  const sel = document.getElementById('opa-employee');
-  if (!sel) return;
-  const { data: members } = await readScopedBySchool(scoped => {
-    let q = sb.from('operational_plan_members')
-      .select('profile_id, profiles!operational_plan_members_profile_id_fkey(id, full_name)');
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
-  });
-  opaMembersCache = (members || []).map(m => ({ id: m.profile_id, full_name: m.profiles ? m.profiles.full_name : '-' }));
-
-  await refreshOpaAssignedNames();
-
-  const prevVal = sel.value;
-  sel.innerHTML = '';
-  if (opaMembersCache.length === 0) {
-    sel.innerHTML = '<option value="">أضف مشاركين بالخطة أولاً</option>';
-    document.getElementById('opa-checklist').innerHTML = '';
-    return;
-  }
-  opaMembersCache.forEach(m => { const o = document.createElement('option'); o.value = m.id; o.textContent = m.full_name; sel.appendChild(o); });
-  if (prevVal && opaMembersCache.some(m => m.id === prevVal)) sel.value = prevVal;
-  await renderOpaChecklist();
-}
-
-// خريطة "أي البرامج مسندة لمين" (كل البرامج، كل الموظفين) - تُعرض بخط صغير جنب كل برنامج
-// بالقائمة عشان المدير يعرف بنظرة وحدة وش مسند ولمين، بغض النظر عن الموظف المختار حاليًا بالقائمة
-let opaAssignedNamesByProgram = new Map();
-async function refreshOpaAssignedNames() {
-  const { data } = await readScopedBySchool(scoped => {
-    let q = sb.from('program_assignments')
-      .select('program_id, profiles!program_assignments_profile_id_fkey(full_name)');
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
-  });
-  const map = new Map();
-  (data || []).forEach(a => {
-    const name = a.profiles ? a.profiles.full_name : null;
-    if (!name) return;
-    if (!map.has(a.program_id)) map.set(a.program_id, []);
-    map.get(a.program_id).push(name);
-  });
-  opaAssignedNamesByProgram = map;
-}
-
-async function renderOpaChecklist() {
-  const sel = document.getElementById('opa-employee');
-  const list = document.getElementById('opa-checklist');
-  if (!sel || !list) return;
-  if (!sel.value) { list.innerHTML = ''; return; }
-  const { data: assigned } = await readScopedBySchool(scoped => {
-    let q = sb.from('program_assignments').select('program_id').eq('profile_id', sel.value);
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
-  });
-  opaCurrentAssignments = new Set((assigned || []).map(a => a.program_id));
-  opaPendingChecked = new Set(opaCurrentAssignments);
-  buildOpaChecklistDom();
-}
-
-function buildOpaChecklistDom() {
-  const list = document.getElementById('opa-checklist');
-  if (!list) return;
-  const q = (document.getElementById('opa-search')?.value || '').trim();
-  const goalById = new Map(goalsCache.map(g => [g.id, g]));
-  const objById = new Map(objectivesCache.map(o => [o.id, o]));
-  const byGoal = new Map();
-  programsCache
-    .filter(p => !q || p.title.includes(q) || (p.plan_code || '').includes(q))
-    .forEach(p => {
-      const obj = objById.get(p.operational_objective_id);
-      const goal = obj ? goalById.get(obj.strategic_goal_id) : null;
-      const key = goal ? goal.title : 'بدون هدف';
-      if (!byGoal.has(key)) byGoal.set(key, []);
-      byGoal.get(key).push(p);
-    });
-  if (byGoal.size === 0) { list.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px;">لا نتائج</p>'; return; }
-  list.innerHTML = Array.from(byGoal.entries()).map(([goalTitle, progs]) => `
-    <div class="opa-goal-heading">${esc(goalTitle)}</div>
-    ${progs.map(p => {
-      const names = opaAssignedNamesByProgram.get(p.id) || [];
-      return `
-      <label class="opa-item">
-        <input type="checkbox" data-program-id="${p.id}" ${opaPendingChecked.has(p.id) ? 'checked' : ''} />
-        ${p.plan_code ? `<span class="code">${esc(p.plan_code)}</span>` : ''}
-        <span>${esc(p.title)}</span>
-        ${names.length ? `<span class="opa-assigned-to">مسند لـ: ${esc(names.join('، '))}</span>` : ''}
-      </label>`;
-    }).join('')}
-  `).join('');
-}
-
-onEl('opa-employee', 'change', renderOpaChecklist);
-onEl('opa-search', 'input', buildOpaChecklistDom);
-
-// نستخدم تفويض حدث (event delegation) على الحاوية الثابتة بدل مستمع على كل خانة اختيار على
-// حدة، عشان يستمر يشتغل حتى بعد ما buildOpaChecklistDom يعيد بناء محتوى القائمة بالكامل
-// (مثلًا لما يبحث المدير) - ويحدّث نسخة العمل opaPendingChecked فورًا مع كل تحديد/إلغاء تحديد
-onEl('opa-checklist', 'change', (e) => {
-  const cb = e.target.closest('input[type=checkbox][data-program-id]');
-  if (!cb) return;
-  if (cb.checked) opaPendingChecked.add(cb.dataset.programId);
-  else opaPendingChecked.delete(cb.dataset.programId);
-});
-
-onEl('opa-save', 'click', async () => {
-  const sel = document.getElementById('opa-employee');
-  const msgEl = document.getElementById('opa-save-msg');
-  const errEl = document.getElementById('opa-save-error');
-  if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
-  if (!sel || !sel.value) return;
-  const profileId = sel.value;
-  const checked = opaPendingChecked;
-  const toAdd = Array.from(checked).filter(id => !opaCurrentAssignments.has(id));
-  const toRemove = Array.from(opaCurrentAssignments).filter(id => !checked.has(id));
-
-  const errors = [];
-  if (toAdd.length > 0) {
-    const { error } = await writeWithSchool(extra => sb.from('program_assignments').insert(toAdd.map(programId => ({ program_id: programId, profile_id: profileId, assigned_by: currentUserId, ...extra }))));
-    if (error) errors.push(error.message);
-  }
-  for (const programId of toRemove) {
-    const { error } = await sb.from('program_assignments').delete().eq('program_id', programId).eq('profile_id', profileId);
-    if (error) errors.push(error.message);
-  }
-
-  if (errors.length > 0) {
-    if (errEl) { errEl.textContent = 'تعذر حفظ بعض التغييرات: ' + errors.join(' | '); errEl.style.display = 'block'; }
-    // نعيد تحميل الحالة الفعلية من القاعدة بدل ما نفترض نجاح كل التغييرات، عشان القائمة تعكس
-    // اللي فعلاً انحفظ لا أكثر ولا أقل
-    await renderOpaChecklist();
-    await refreshOpaAssignedNames();
-    return;
-  }
-
-  opaCurrentAssignments = new Set(checked);
-  opaPendingChecked = new Set(checked);
-  await refreshOpaAssignedNames();
-  buildOpaChecklistDom();
-  if (msgEl) { msgEl.style.display = 'inline'; setTimeout(() => { msgEl.style.display = 'none'; }, 2000); }
-});
 
 /* ---------- دليل الخطة الرسمية: داشبورد متابعة تنفيذ مدرستنا (مرحلة المتوسط فقط) ---------- */
 // نسبة التنفيذ لكل برنامج = عدد مهامه الأسبوعية (op_tasks) المعتمدة واللي لها إنجاز معتمد، من
@@ -734,51 +576,6 @@ async function renderOpPlanCharts(goalCards, programStats) {
   }
 }
 
-onEl('opm-add-member', 'click', async () => {
-  const profileId = document.getElementById('opm-employee').value;
-  const empName = document.getElementById('opm-employee').selectedOptions[0]?.textContent || '';
-  if (!profileId) return;
-  const { error } = await writeWithSchool(extra => sb.from('operational_plan_members').insert({ profile_id: profileId, added_by: currentUserId, ...extra }));
-  if (error) {
-    alert(error.message.includes('duplicate') ? 'هذا الموظف مضاف مسبقًا للخطة' : 'تعذر الإضافة: ' + error.message);
-    return;
-  }
-  alert(`تمت إضافة "${empName}" للخطة التشغيلية بنجاح`);
-  await refreshMembersList();
-  await loadProgramAssignAdmin();
-});
-
-async function refreshMembersList() {
-  const { data, error } = await readScopedBySchool(scoped => {
-    let q = sb.from('operational_plan_members').select('id, profiles!operational_plan_members_profile_id_fkey(full_name)');
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
-  });
-  if (error) { console.error('refreshMembersList error:', error); }
-  const list = document.getElementById('opm-members-list');
-  list.innerHTML = '';
-  list.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px;';
-  if (!data || data.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>لا يوجد مشاركون بعد</p></div>';
-    return;
-  }
-  data.forEach(m => {
-    const chip = document.createElement('div');
-    chip.style.cssText = 'display:flex; align-items:center; gap:8px; background:var(--sand); border:1px solid #ECEAE1; border-radius:20px; padding:6px 8px 6px 14px;';
-    chip.innerHTML = `
-      <span style="font-size:13.5px; font-weight:500;">${m.profiles ? m.profiles.full_name : '-'}</span>
-      <button data-id="${m.id}" title="إزالة من الخطة" style="width:auto; padding:5px !important; background:transparent; color:var(--danger); display:flex; align-items:center; justify-content:center; border-radius:50%;">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
-      </button>`;
-    chip.querySelector('button').addEventListener('click', async () => {
-      await sb.from('operational_plan_members').delete().eq('id', m.id);
-      await refreshMembersList();
-      await loadProgramAssignAdmin();
-    });
-    list.appendChild(chip);
-  });
-}
-
 onEl('og-add', 'click', async () => {
   const title = document.getElementById('og-title').value.trim();
   if (!title) return;
@@ -862,95 +659,443 @@ async function deleteProgramFlow(programId, programTitle) {
 
 const durationLabels = { single_week: 'أسبوع محدد', semester_1: 'الفصل الأول', semester_2: 'الفصل الثاني', full_year: 'طوال العام' };
 
-async function refreshOpPlanApprovals() {
-  const { data: pendingPlans, error: pendingPlansErr } = await readScopedBySchool(scoped => {
-    let q = sb.from('op_tasks')
-      .select('id, title, description, duration_type, week_number, profiles!op_tasks_employee_profile_id_fkey(full_name), programs(title, plan_code)')
-      .eq('plan_status', 'pending');
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
+/* =====================================================================
+   تبويب "الموظفين" + "اعتماد المهام": متابعة كل مشارك بالخطة (برامجه، مهامه بالأسابيع،
+   إنجازه، المتأخر، واللي ينتظر اعتماد المدير) - كلها من نفس جداول المهام بتحميل واحد
+   ===================================================================== */
+let opeStaff = [], opeMembers = [], opeAssign = [], opeTasks = [], opeComps = [];
+let opeTaskById = new Map(), opeCompsByTask = new Map();
+let opeSearch = '', opeSort = 'attention', opeOpenId = null, opeAssignOpen = false, opeAssignQ = '';
+let opeAssignChecked = new Set();
+
+// أسبوع الفصل الحالي (الترقيم يرجع لـ1 كل فصل بالخطة) - من تقويم المدرسة؛ وقت الإجازة نأخذ آخر أسبوع دراسة
+function opCurrentSemWeek() {
+  const info = academicWeekInfo();
+  let w = info.current || (info.beforeStart ? 1 : Math.max(1, (info.next || 2) - 1));
+  if (w > WEEKS_PER_SEMESTER) w -= WEEKS_PER_SEMESTER;
+  return Math.min(Math.max(w, 1), WEEKS_PER_SEMESTER);
+}
+
+function arN(n, one, two, few, many) {
+  if (n === 1) return one;
+  if (n === 2) return two;
+  if (n >= 3 && n <= 10) return `${n} ${few}`;
+  return `${n} ${many}`;
+}
+
+// تحميل كل الصفوف حتى لو تعدّت حد الألف صف بالاستعلام الواحد
+async function opFetchAll(table, cols) {
+  const out = [];
+  for (let from = 0; from < 50000; from += 1000) {
+    const { data, error } = await readScopedBySchool(scoped => {
+      let q = sb.from(table).select(cols).order('id', { ascending: true }).range(from, from + 999);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    });
+    if (error) { console.error('opplan fetch', table, error); break; }
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return out;
+}
+
+async function refreshOpEmployees() {
+  const [members, assigns, tasks, comps] = await Promise.all([
+    opFetchAll('operational_plan_members', 'id, profile_id, profiles!operational_plan_members_profile_id_fkey(full_name)'),
+    opFetchAll('program_assignments', 'id, program_id, profile_id, tasks_entry_complete'),
+    opFetchAll('op_tasks', 'id, title, description, program_id, employee_profile_id, plan_status, plan_review_note, duration_type, week_number, semester'),
+    opFetchAll('op_task_completions', 'id, task_id, status, period_label, review_note'),
+  ]);
+  opeMembers = members.map(m => ({ id: m.id, pid: m.profile_id, name: (m.profiles && m.profiles.full_name) || (opeStaff.find(s => s.id === m.profile_id) || {}).full_name || '-' }));
+  opeAssign = assigns; opeTasks = tasks; opeComps = comps;
+  opeTaskById = new Map(tasks.map(t => [t.id, t]));
+  opeCompsByTask = new Map();
+  comps.forEach(c => { if (!opeCompsByTask.has(c.task_id)) opeCompsByTask.set(c.task_id, []); opeCompsByTask.get(c.task_id).push(c); });
+  renderOpEmployees();
+  renderOpApprovals();
+  if (opeOpenId) renderOpeDrawer();
+}
+
+function opeProgram(id) { return allProgramsCache.find(p => p.id === id) || programsCache.find(p => p.id === id) || null; }
+function opeName(pid) {
+  const m = opeMembers.find(x => x.pid === pid); if (m) return m.name;
+  const s = opeStaff.find(x => x.id === pid); return s ? s.full_name : '-';
+}
+function opeInitials(name) { return String(name || '؟').trim().split(/\s+/).slice(0, 2).map(w => w.charAt(0)).join(' '); }
+
+// حالة مهمة واحدة من وجهة نظر المدير
+function opeTaskState(t, curW) {
+  const comps = opeCompsByTask.get(t.id) || [];
+  if (t.plan_status === 'pending') return { cls: 'wait', label: 'بانتظار اعتماد الإضافة' };
+  if (t.plan_status === 'rejected') return { cls: 'bad', label: 'مرفوضة' };
+  const okN = comps.filter(c => c.status === 'approved').length;
+  const pendN = comps.filter(c => c.status === 'pending').length;
+  if (t.duration_type !== 'single_week') {
+    if (pendN) return { cls: 'wait', label: `إنجاز بانتظار اعتمادك` };
+    return okN ? { cls: 'ok', label: `${arN(okN, 'إنجاز معتمد', 'إنجازان معتمدان', 'إنجازات معتمدة', 'إنجازًا معتمدًا')}`, done: true } : { cls: 'idle', label: 'متكررة - لا إنجاز بعد' };
+  }
+  if (okN) return { cls: 'ok', label: 'منجزة ✓', done: true };
+  if (pendN) return { cls: 'wait', label: 'إنجاز بانتظار اعتمادك' };
+  if (t.semester === currentSemester && t.week_number < curW) return { cls: 'bad', label: comps.length ? 'أُرجعت - متأخرة' : 'متأخرة', late: true };
+  if (t.semester === currentSemester && t.week_number === curW) return { cls: 'now', label: 'هذا الأسبوع' };
+  return { cls: 'idle', label: 'قادمة' };
+}
+
+function opeStats(pid) {
+  const curW = opCurrentSemWeek();
+  const tasks = opeTasks.filter(t => t.employee_profile_id === pid);
+  const assigns = opeAssign.filter(a => a.profile_id === pid);
+  const approved = tasks.filter(t => t.plan_status === 'approved');
+  const done = approved.filter(t => (opeCompsByTask.get(t.id) || []).some(c => c.status === 'approved')).length;
+  const late = approved.filter(t => opeTaskState(t, curW).late).length;
+  const pendPlan = tasks.filter(t => t.plan_status === 'pending');
+  const pendComp = opeComps.filter(c => c.status === 'pending' && (opeTaskById.get(c.task_id) || {}).employee_profile_id === pid);
+  const entryDone = assigns.filter(a => a.tasks_entry_complete).length;
+  const pct = approved.length ? Math.round(done / approved.length * 100) : 0;
+  let stage;
+  if (!assigns.length) stage = { cls: 'idle', label: 'بدون برامج مسندة' };
+  else if (!tasks.length) stage = { cls: 'bad', label: 'ما بدأ إدخال المهام' };
+  else if (entryDone < assigns.length) stage = { cls: 'warn', label: `أنهى إدخال ${entryDone} من ${assigns.length} برامج` };
+  else stage = { cls: 'ok', label: 'أنهى إدخال مهامه' };
+  return { tasks, assigns, approved, done, late, pendPlan, pendComp, pending: pendPlan.length + pendComp.length, pct, stage };
+}
+
+function renderOpEmployees() {
+  const list = document.getElementById('ope-list');
+  if (!list) return;
+  // قائمة الإضافة: الموظفين غير المشاركين
+  const addSel = document.getElementById('ope-add-select');
+  const memberIds = new Set(opeMembers.map(m => m.pid));
+  const avail = opeStaff.filter(s => !memberIds.has(s.id));
+  addSel.innerHTML = avail.length ? '<option value="">اختر موظفًا لإضافته...</option>' + avail.map(s => `<option value="${s.id}">${esc(s.full_name)}${s.role === 'deputy' ? ' (وكيل)' : ''}</option>`).join('') : '<option value="">كل الموظفين مضافين</option>';
+
+  const rows = opeMembers.map(m => ({ m, st: opeStats(m.pid) }));
+  const totalApproved = rows.reduce((s, r) => s + r.st.approved.length, 0);
+  const totalDone = rows.reduce((s, r) => s + r.st.done, 0);
+  const totalLate = rows.reduce((s, r) => s + r.st.late, 0);
+  const totalPend = rows.reduce((s, r) => s + r.st.pending, 0);
+  const notStarted = rows.filter(r => r.st.assigns.length && !r.st.tasks.length).length;
+  document.getElementById('ope-stats').innerHTML = `
+    <span class="ds ds-all"><b>${rows.length}</b> مشارك</span>
+    <span class="ds ds-present"><b>${totalApproved ? Math.round(totalDone / totalApproved * 100) : 0}%</b> إنجاز عام</span>
+    <span class="ds ${totalPend ? 'ds-late' : ''}"><b>${totalPend}</b> بانتظار اعتمادك</span>
+    <span class="ds ${totalLate ? 'ds-absent' : ''}"><b>${totalLate}</b> مهمة متأخرة</span>
+    ${notStarted ? `<span class="ds ds-absent"><b>${notStarted}</b> ما بدأ الإدخال</span>` : ''}`;
+
+  const q = opeSearch;
+  let shown = rows.filter(r => !q || r.m.name.includes(q));
+  const att = r => (r.st.pending ? 1000 : 0) + r.st.late * 10 + (r.st.assigns.length && !r.st.tasks.length ? 5 : 0);
+  if (opeSort === 'name') shown.sort((a, b) => a.m.name.localeCompare(b.m.name, 'ar'));
+  else if (opeSort === 'low') shown.sort((a, b) => a.st.pct - b.st.pct || a.m.name.localeCompare(b.m.name, 'ar'));
+  else shown.sort((a, b) => att(b) - att(a) || a.st.pct - b.st.pct || a.m.name.localeCompare(b.m.name, 'ar'));
+
+  if (!rows.length) { list.innerHTML = '<div class="ex-empty"><b>ما فيه مشاركين بالخطة بعد</b><span>أضف الموظفين من الأعلى ثم أسند لكل واحد برامجه</span></div>'; return; }
+  if (!shown.length) { list.innerHTML = '<div class="ex-empty"><b>ما فيه نتائج</b></div>'; return; }
+  list.innerHTML = shown.map(({ m, st }) => `
+    <button type="button" class="ope-card" data-pid="${m.pid}">
+      <span class="cvt-av">${esc(opeInitials(m.name))}</span>
+      <div class="ope-main">
+        <b>${esc(m.name)}</b>
+        <div class="ope-meta">
+          <span>${st.assigns.length ? arN(st.assigns.length, 'برنامج واحد', 'برنامجان', 'برامج', 'برنامجًا') : 'بدون برامج'}</span>
+          <span class="ope-stage ${st.stage.cls}">${esc(st.stage.label)}</span>
+        </div>
+        <div class="ope-bar"><i style="width:${st.pct}%"></i></div>
+      </div>
+      <div class="ope-side">
+        <span class="ope-pct">${st.approved.length ? st.pct + '%' : '-'}</span>
+        <span class="ope-sub">${st.approved.length ? `${st.done} من ${st.approved.length}` : 'لا مهام معتمدة'}</span>
+        <div class="ope-flags">
+          ${st.pending ? `<span class="ope-flag wait">${st.pending} بانتظارك</span>` : ''}
+          ${st.late ? `<span class="ope-flag late">${st.late} متأخرة</span>` : ''}
+        </div>
+      </div>
+    </button>`).join('');
+  list.querySelectorAll('.ope-card').forEach(c => c.addEventListener('click', () => openOpeDrawer(c.dataset.pid)));
+}
+
+onEl('ope-search', 'input', e => { opeSearch = e.target.value.trim(); renderOpEmployees(); });
+onEl('ope-sort', 'change', e => { opeSort = e.target.value; renderOpEmployees(); });
+onEl('ope-add-btn', 'click', async () => {
+  const sel = document.getElementById('ope-add-select');
+  const pid = sel.value; if (!pid) return;
+  const { error } = await writeWithSchool(extra => sb.from('operational_plan_members').insert({ profile_id: pid, added_by: currentUserId, ...extra }));
+  if (error) { alert(error.message.includes('duplicate') ? 'هذا الموظف مضاف مسبقًا للخطة' : 'تعذر الإضافة: ' + error.message); return; }
+  await refreshOpEmployees();
+  opeAssignOpen = true; // نفتح له إسناد البرامج مباشرة
+  openOpeDrawer(pid, true);
+});
+
+/* ---------- لوحة الموظف ---------- */
+function openOpeDrawer(pid, keepAssign = false) {
+  opeOpenId = pid;
+  if (!keepAssign) opeAssignOpen = false;
+  opeAssignQ = '';
+  opeAssignChecked = new Set(opeAssign.filter(a => a.profile_id === pid).map(a => a.program_id));
+  const d = document.getElementById('ope-drawer');
+  d.classList.remove('hidden'); d.setAttribute('aria-hidden', 'false');
+  renderOpeDrawer();
+}
+function closeOpeDrawer() {
+  opeOpenId = null;
+  const d = document.getElementById('ope-drawer');
+  d.classList.add('hidden'); d.setAttribute('aria-hidden', 'true');
+}
+onEl('ope-d-close', 'click', closeOpeDrawer);
+onEl('ope-drawer', 'click', e => { if (e.target.id === 'ope-drawer') closeOpeDrawer(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && opeOpenId) closeOpeDrawer(); });
+
+function opeTaskWhen(t) {
+  if (t.duration_type === 'single_week') return `أسبوع ${t.week_number}${t.semester && t.semester !== currentSemester ? ' · ' + (durationLabels[t.semester] || '') : ''}`;
+  return durationLabels[t.duration_type] || t.duration_type;
+}
+function opeProgLabel(p) { return p ? `${p.plan_code ? esc(p.plan_code) + ' · ' : ''}${esc(p.title)}` : 'بدون برنامج'; }
+
+function renderOpeDrawer() {
+  const pid = opeOpenId; if (!pid) return;
+  const member = opeMembers.find(m => m.pid === pid);
+  const name = opeName(pid);
+  const st = opeStats(pid);
+  const curW = opCurrentSemWeek();
+  document.getElementById('ope-d-name').textContent = name;
+  document.getElementById('ope-d-sub').textContent = member ? `${st.stage.label} · الأسبوع ${curW} من ${durationLabels[currentSemester] || ''}` : 'غير مشارك بالخطة';
+  const body = document.getElementById('ope-d-body');
+
+  const kpis = `
+    <div class="ope-kpis">
+      <div><b>${st.approved.length ? st.pct + '%' : '-'}</b><span>نسبة الإنجاز</span></div>
+      <div><b>${st.done}/${st.approved.length}</b><span>منجزة من المعتمدة</span></div>
+      <div class="${st.late ? 'bad' : ''}"><b>${st.late}</b><span>متأخرة</span></div>
+      <div class="${st.pending ? 'wait' : ''}"><b>${st.pending}</b><span>بانتظار اعتمادك</span></div>
+    </div>`;
+
+  // معلّقات تنتظر المدير
+  let pendingHtml = '';
+  if (st.pending) {
+    const items = [
+      ...st.pendPlan.map(t => ({ kind: 'plan', id: t.id, title: t.title, sub: `إضافة مهمة · ${opeTaskWhen(t)}`, prog: opeProgram(t.program_id) })),
+      ...st.pendComp.map(c => { const t = opeTaskById.get(c.task_id) || {}; return { kind: 'comp', id: c.id, title: t.title || '-', sub: `إنجاز · ${c.period_label || ''}`, prog: opeProgram(t.program_id) }; }),
+    ];
+    pendingHtml = `
+      <section class="ope-sec">
+        <div class="ope-sec-h"><h4>بانتظار اعتمادك</h4><button type="button" class="btn-primary ope-approve-all" data-pid="${pid}">اعتماد الكل (${items.length})</button></div>
+        ${items.map(i => opeApprovalRow(i)).join('')}
+      </section>`;
+  }
+
+  // البرامج ومهامها
+  const byProg = new Map();
+  st.assigns.forEach(a => byProg.set(a.program_id, { assign: a, tasks: [] }));
+  st.tasks.forEach(t => { const k = t.program_id || '__none__'; if (!byProg.has(k)) byProg.set(k, { assign: null, tasks: [] }); byProg.get(k).tasks.push(t); });
+  const progBlocks = [...byProg.entries()].sort((a, b) => String((opeProgram(a[0]) || {}).plan_code || 'zz').localeCompare(String((opeProgram(b[0]) || {}).plan_code || 'zz'), 'en', { numeric: true })).map(([progId, g]) => {
+    const p = opeProgram(progId);
+    const appr = g.tasks.filter(t => t.plan_status === 'approved');
+    const dn = appr.filter(t => (opeCompsByTask.get(t.id) || []).some(c => c.status === 'approved')).length;
+    const pct = appr.length ? Math.round(dn / appr.length * 100) : 0;
+    const tasks = g.tasks.slice().sort((a, b) => (a.duration_type === 'single_week' ? 0 : 1) - (b.duration_type === 'single_week' ? 0 : 1) || String(a.semester || '').localeCompare(String(b.semester || '')) || (a.week_number || 0) - (b.week_number || 0));
+    const entry = g.assign ? (g.assign.tasks_entry_complete ? '<span class="ope-stage ok">أنهى الإدخال</span>' : (g.tasks.length ? '<span class="ope-stage warn">يُدخل المهام</span>' : '<span class="ope-stage bad">ما دخّل مهام</span>')) : '<span class="ope-stage idle">غير مسند حاليًا</span>';
+    return `
+      <div class="ope-prog">
+        <div class="ope-prog-h">
+          <div class="ope-prog-t"><b>${opeProgLabel(p)}</b>${entry}</div>
+          <span class="ope-prog-pct">${appr.length ? pct + '%' : ''}</span>
+          ${g.assign ? `<button type="button" class="ope-unassign" data-aid="${g.assign.id}" data-n="${g.tasks.length}" title="إلغاء إسناد البرنامج" aria-label="إلغاء الإسناد">✕</button>` : ''}
+        </div>
+        ${appr.length ? `<div class="ope-bar thin"><i style="width:${pct}%"></i></div>` : ''}
+        ${tasks.length ? `<div class="ope-tasks">${tasks.map(t => { const s = opeTaskState(t, curW); return `
+          <div class="ope-task">
+            <span class="ope-when">${esc(opeTaskWhen(t))}</span>
+            <span class="ope-tt">${esc(t.title)}${t.plan_status === 'rejected' && t.plan_review_note ? `<small>سبب الرفض: ${esc(t.plan_review_note)}</small>` : ''}</span>
+            <span class="ope-st ${s.cls}">${esc(s.label)}</span>
+          </div>`; }).join('')}</div>` : ''}
+      </div>`;
+  }).join('');
+
+  // إسناد البرامج
+  let assignHtml = '';
+  if (opeAssignOpen && member) {
+    const q = opeAssignQ;
+    const goalById = new Map(goalsCache.map(g => [g.id, g]));
+    const objById = new Map(objectivesCache.map(o => [o.id, o]));
+    const others = new Map();
+    opeAssign.forEach(a => { if (a.profile_id === pid) return; if (!others.has(a.program_id)) others.set(a.program_id, []); others.get(a.program_id).push(opeName(a.profile_id)); });
+    const groups = new Map();
+    programsCache.filter(p => !q || p.title.includes(q) || (p.plan_code || '').includes(q)).forEach(p => {
+      const obj = objById.get(p.operational_objective_id); const goal = obj ? goalById.get(obj.strategic_goal_id) : null;
+      const k = goal ? goal.title : 'بدون هدف'; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p);
+    });
+    assignHtml = `
+      <section class="ope-sec ope-assign">
+        <div class="ope-sec-h"><h4>إسناد البرامج</h4><span class="ope-hint">${opeAssignChecked.size} محدد</span></div>
+        <input type="search" class="cv-search" id="ope-assign-q" placeholder="بحث باسم البرنامج أو رمزه" value="${esc(q)}" />
+        <div class="opa-checklist ope-assign-list">
+          ${groups.size ? [...groups.entries()].map(([gt, ps]) => `<div class="opa-goal-heading">${esc(gt)}</div>${ps.map(p => `
+            <label class="opa-item"><input type="checkbox" data-prog="${p.id}" ${opeAssignChecked.has(p.id) ? 'checked' : ''} />
+              ${p.plan_code ? `<span class="code">${esc(p.plan_code)}</span>` : ''}<span>${esc(p.title)}</span>
+              ${others.get(p.id) ? `<span class="opa-assigned-to">مسند لـ: ${esc(others.get(p.id).join('، '))}</span>` : ''}
+            </label>`).join('')}`).join('') : '<p class="ope-hint" style="padding:10px;">لا نتائج</p>'}
+        </div>
+        <div class="ope-assign-actions">
+          <button type="button" class="btn-primary" id="ope-assign-save">حفظ الإسناد</button>
+          <button type="button" class="ope-link" id="ope-assign-cancel">إلغاء</button>
+          <span class="error-msg" id="ope-assign-err" style="margin:0;"></span>
+        </div>
+      </section>`;
+  }
+
+  body.innerHTML = kpis + pendingHtml + assignHtml + `
+    <section class="ope-sec">
+      <div class="ope-sec-h"><h4>البرامج والمهام</h4>${member && !opeAssignOpen ? '<button type="button" class="ope-link strong" id="ope-assign-open">+ إسناد برامج</button>' : ''}</div>
+      ${progBlocks || '<div class="ex-empty"><b>ما فيه برامج مسندة</b><span>اضغط "إسناد برامج" وحدد برامجه</span></div>'}
+    </section>
+    ${member ? `<button type="button" class="ope-link danger" id="ope-remove-member">إزالة ${esc(name)} من الخطة</button>` : ''}`;
+
+  wireApprovalButtons(body);
+  const allBtn = body.querySelector('.ope-approve-all');
+  if (allBtn) allBtn.addEventListener('click', () => opApproveAll(pid, allBtn));
+  body.querySelectorAll('.ope-unassign').forEach(b => b.addEventListener('click', async () => {
+    const n = Number(b.dataset.n);
+    if (!confirm(n ? `إلغاء إسناد البرنامج؟ مهامه المدخلة (${n}) تبقى محفوظة بس الموظف ما يقدر يضيف عليه مهام جديدة.` : 'إلغاء إسناد هذا البرنامج؟')) return;
+    const { error } = await sb.from('program_assignments').delete().eq('id', b.dataset.aid);
+    if (error) { alert('تعذر الإلغاء: ' + error.message); return; }
+    await refreshOpEmployees();
+  }));
+  const openBtn = body.querySelector('#ope-assign-open');
+  if (openBtn) openBtn.addEventListener('click', () => { opeAssignOpen = true; opeAssignChecked = new Set(st.assigns.map(a => a.program_id)); renderOpeDrawer(); body.querySelector('#ope-assign-q')?.focus(); });
+  const qEl = body.querySelector('#ope-assign-q');
+  if (qEl) qEl.addEventListener('input', () => { opeAssignQ = qEl.value.trim(); const pos = qEl.selectionStart; renderOpeDrawer(); const n = document.getElementById('ope-assign-q'); n.focus(); n.setSelectionRange(pos, pos); });
+  body.querySelectorAll('.ope-assign-list input[data-prog]').forEach(cb => cb.addEventListener('change', () => {
+    if (cb.checked) opeAssignChecked.add(cb.dataset.prog); else opeAssignChecked.delete(cb.dataset.prog);
+    const h = body.querySelector('.ope-assign .ope-hint'); if (h) h.textContent = `${opeAssignChecked.size} محدد`;
+  }));
+  body.querySelector('#ope-assign-cancel')?.addEventListener('click', () => { opeAssignOpen = false; renderOpeDrawer(); });
+  body.querySelector('#ope-assign-save')?.addEventListener('click', async (e) => {
+    const btn = e.currentTarget; btn.disabled = true;
+    const current = new Set(st.assigns.map(a => a.program_id));
+    const toAdd = [...opeAssignChecked].filter(id => !current.has(id));
+    const toRemove = st.assigns.filter(a => !opeAssignChecked.has(a.program_id));
+    const errs = [];
+    if (toAdd.length) {
+      const { error } = await writeWithSchool(extra => sb.from('program_assignments').insert(toAdd.map(program_id => ({ program_id, profile_id: pid, assigned_by: currentUserId, ...extra }))));
+      if (error) errs.push(error.message);
+    }
+    if (toRemove.length) {
+      const { error } = await sb.from('program_assignments').delete().in('id', toRemove.map(a => a.id));
+      if (error) errs.push(error.message);
+    }
+    btn.disabled = false;
+    if (errs.length) { const el = document.getElementById('ope-assign-err'); el.textContent = 'تعذر حفظ بعض التغييرات: ' + errs.join(' | '); el.style.display = 'block'; await refreshOpEmployees(); return; }
+    opeAssignOpen = false;
+    await refreshOpEmployees();
   });
-  if (pendingPlansErr) console.error('opplan pendingPlans error:', pendingPlansErr);
+  body.querySelector('#ope-remove-member')?.addEventListener('click', async () => {
+    if (!confirm(`إزالة ${name} من الخطة التشغيلية؟ ما يقدر يدخل صفحة الخطة بعدها، ومهامه المدخلة تبقى محفوظة.`)) return;
+    const { error } = await sb.from('operational_plan_members').delete().eq('id', member.id);
+    if (error) { alert('تعذرت الإزالة: ' + error.message); return; }
+    closeOpeDrawer();
+    await refreshOpEmployees();
+  });
+}
+
+/* ---------- الاعتماد (مشترك بين لوحة الموظف وتبويب الاعتماد) ---------- */
+function opeApprovalRow(i) {
+  return `
+    <div class="ope-appr" data-kind="${i.kind}" data-id="${i.id}">
+      <div class="ope-appr-main">
+        <b>${esc(i.title)}</b>
+        <span>${esc(i.sub)}${i.prog ? ' · ' + opeProgLabel(i.prog) : ''}${i.who ? ' · ' + esc(i.who) : ''}</span>
+        ${i.desc ? `<small>${esc(i.desc)}</small>` : ''}
+      </div>
+      <div class="ope-appr-btns">
+        <button type="button" class="ope-ok" title="اعتماد">✓ اعتماد</button>
+        <button type="button" class="ope-no" title="${i.kind === 'plan' ? 'رفض' : 'إرجاع'}">${i.kind === 'plan' ? 'رفض' : 'إرجاع'}</button>
+      </div>
+    </div>`;
+}
+
+async function opAfterReview() {
+  await refreshOpEmployees();
+  renderOpPlanGuide();
+}
+
+function wireApprovalButtons(root) {
+  root.querySelectorAll('.ope-appr').forEach(row => {
+    const { kind, id } = row.dataset;
+    row.querySelector('.ope-ok').addEventListener('click', async () => {
+      row.classList.add('busy');
+      const { error } = kind === 'plan'
+        ? await sb.from('op_tasks').update({ plan_status: 'approved' }).eq('id', id)
+        : await sb.from('op_task_completions').update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: currentUserId }).eq('id', id);
+      if (error) { row.classList.remove('busy'); alert('تعذر الاعتماد: ' + error.message); return; }
+      await opAfterReview();
+    });
+    row.querySelector('.ope-no').addEventListener('click', async () => {
+      const note = prompt(kind === 'plan' ? 'سبب الرفض (اختياري):' : 'ملاحظة الإرجاع (اختياري):');
+      if (note === null) return;
+      row.classList.add('busy');
+      const { error } = kind === 'plan'
+        ? await sb.from('op_tasks').update({ plan_status: 'rejected', plan_review_note: note }).eq('id', id)
+        : await sb.from('op_task_completions').update({ status: 'rejected', review_note: note, reviewed_at: new Date().toISOString(), reviewed_by: currentUserId }).eq('id', id);
+      if (error) { row.classList.remove('busy'); alert('تعذر الحفظ: ' + error.message); return; }
+      await opAfterReview();
+    });
+  });
+}
+
+async function opApproveAll(pid, btn) {
+  const st = opeStats(pid);
+  const n = st.pendPlan.length + st.pendComp.length;
+  if (!n || !confirm(`اعتماد كل المعلّق لـ${opeName(pid)} (${n})؟`)) return;
+  btn.disabled = true;
+  const errs = [];
+  if (st.pendPlan.length) {
+    const { error } = await sb.from('op_tasks').update({ plan_status: 'approved' }).in('id', st.pendPlan.map(t => t.id));
+    if (error) errs.push(error.message);
+  }
+  if (st.pendComp.length) {
+    const { error } = await sb.from('op_task_completions').update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: currentUserId }).in('id', st.pendComp.map(c => c.id));
+    if (error) errs.push(error.message);
+  }
+  btn.disabled = false;
+  if (errs.length) alert('تعذر اعتماد بعض العناصر: ' + errs.join(' | '));
+  await opAfterReview();
+}
+
+// تبويب "اعتماد المهام": مجمّع حسب الموظف، مع "اعتماد الكل" لكل موظف
+function renderOpApprovals() {
+  const pendPlan = opeTasks.filter(t => t.plan_status === 'pending');
+  const pendComp = opeComps.filter(c => c.status === 'pending');
+  const setTxt = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  setTxt('opplan-stat-pending-plan', pendPlan.length);
+  setTxt('opplan-stat-pending-completion', pendComp.length);
+  const total = opeComps.length, ok = opeComps.filter(c => c.status === 'approved').length;
+  setTxt('opplan-stat-rate', total ? Math.round(ok / total * 100) + '%' : '-');
+  const cnt = document.getElementById('opplan-approvals-cnt');
+  if (cnt) { cnt.textContent = pendPlan.length + pendComp.length || ''; cnt.classList.toggle('hidden', !(pendPlan.length + pendComp.length)); }
+
+  const byEmp = new Map();
+  const push = (pid, item) => { if (!byEmp.has(pid)) byEmp.set(pid, []); byEmp.get(pid).push(item); };
+  pendPlan.forEach(t => push(t.employee_profile_id, { kind: 'plan', id: t.id, title: t.title, desc: t.description, sub: `إضافة مهمة · ${opeTaskWhen(t)}`, prog: opeProgram(t.program_id) }));
+  pendComp.forEach(c => { const t = opeTaskById.get(c.task_id) || {}; push(t.employee_profile_id, { kind: 'comp', id: c.id, title: t.title || '-', sub: `إنجاز · ${c.period_label || ''}`, prog: opeProgram(t.program_id) }); });
 
   const planList = document.getElementById('opplan-pending-plan-list');
-  planList.innerHTML = '';
-  document.getElementById('opplan-stat-pending-plan').textContent = (pendingPlans || []).length;
-
-  if (!pendingPlans || pendingPlans.length === 0) {
-    planList.innerHTML = '<div class="placeholder" style="padding:24px;"><p>لا توجد مهام بانتظار الاعتماد</p></div>';
-  } else {
-    pendingPlans.forEach(t => {
-      const card = document.createElement('div');
-      card.className = 'form-card';
-      card.innerHTML = `
-        <p style="margin:0 0 4px;"><strong>${t.title}</strong> — ${t.profiles ? t.profiles.full_name : ''}</p>
-        ${t.programs ? `<p style="margin:0 0 4px; font-size:12px; color:var(--meadow); font-weight:700;">${t.programs.plan_code ? esc(t.programs.plan_code) + ' - ' : ''}${esc(t.programs.title)}</p>` : '<p style="margin:0 0 4px; font-size:12px; color:var(--slate);">بدون برنامج محدد</p>'}
-        <p style="margin:0 0 10px; font-size:13px; color:var(--slate);">${durationLabels[t.duration_type]}${t.week_number ? ' (الأسبوع ' + t.week_number + ')' : ''} — ${t.description || ''}</p>
-        <div style="display:flex; gap:8px;">
-          <button class="approve-btn" style="width:auto; padding:8px 16px; background:var(--meadow); color:#fff;">اعتماد</button>
-          <button class="reject-btn" style="width:auto; padding:8px 16px; background:var(--danger-light); color:var(--danger);">رفض</button>
-        </div>`;
-      card.querySelector('.approve-btn').addEventListener('click', async () => {
-        await sb.from('op_tasks').update({ plan_status: 'approved' }).eq('id', t.id);
-        await refreshOpPlanApprovals();
-      });
-      card.querySelector('.reject-btn').addEventListener('click', async () => {
-        const note = prompt('سبب الرفض (اختياري):') || '';
-        await sb.from('op_tasks').update({ plan_status: 'rejected', plan_review_note: note }).eq('id', t.id);
-        await refreshOpPlanApprovals();
-      });
-      planList.appendChild(card);
-    });
-  }
-
-  const { data: pendingCompletions } = await readScopedBySchool(scoped => {
-    let q = sb.from('op_task_completions')
-      .select('id, period_label, status, op_tasks(title, profiles!op_tasks_employee_profile_id_fkey(full_name), programs(title, plan_code))')
-      .eq('status', 'pending');
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
-  });
-
   const compList = document.getElementById('opplan-pending-completion-list');
-  compList.innerHTML = '';
-  document.getElementById('opplan-stat-pending-completion').textContent = (pendingCompletions || []).length;
-
-  if (!pendingCompletions || pendingCompletions.length === 0) {
-    compList.innerHTML = '<div class="placeholder" style="padding:24px;"><p>لا توجد إنجازات بانتظار الاعتماد</p></div>';
-  } else {
-    pendingCompletions.forEach(c => {
-      const card = document.createElement('div');
-      card.className = 'form-card';
-      const prog = c.op_tasks ? c.op_tasks.programs : null;
-      card.innerHTML = `
-        <p style="margin:0 0 4px;"><strong>${c.op_tasks ? c.op_tasks.title : ''}</strong> — ${c.op_tasks && c.op_tasks.profiles ? c.op_tasks.profiles.full_name : ''} · ${c.period_label}</p>
-        ${prog ? `<p style="margin:0 0 10px; font-size:12px; color:var(--meadow); font-weight:700;">${prog.plan_code ? esc(prog.plan_code) + ' - ' : ''}${esc(prog.title)}</p>` : '<p style="margin:0 0 10px; font-size:12px; color:var(--slate);">بدون برنامج محدد</p>'}
-        <div style="display:flex; gap:8px;">
-          <button class="approve-btn" style="width:auto; padding:8px 16px; background:var(--meadow); color:#fff;">اعتماد الإنجاز</button>
-          <button class="reject-btn" style="width:auto; padding:8px 16px; background:var(--danger-light); color:var(--danger);">إرجاع</button>
-        </div>`;
-      card.querySelector('.approve-btn').addEventListener('click', async () => {
-        await sb.from('op_task_completions').update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: currentUserId }).eq('id', c.id);
-        await refreshOpPlanApprovals();
-      });
-      card.querySelector('.reject-btn').addEventListener('click', async () => {
-        const note = prompt('ملاحظة الإرجاع (اختياري):') || '';
-        await sb.from('op_task_completions').update({ status: 'rejected', review_note: note, reviewed_at: new Date().toISOString(), reviewed_by: currentUserId }).eq('id', c.id);
-        await refreshOpPlanApprovals();
-      });
-      compList.appendChild(card);
-    });
-  }
-
-  const { data: allCompletions } = await readScopedBySchool(scoped => {
-    let q = sb.from('op_task_completions').select('status');
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q;
-  });
-  const total = (allCompletions || []).length;
-  const approved = (allCompletions || []).filter(c => c.status === 'approved').length;
-  document.getElementById('opplan-stat-rate').textContent = total ? Math.round((approved/total)*100) + '%' : '-';
+  if (!planList) return;
+  if (compList) compList.innerHTML = '';
+  if (!byEmp.size) { planList.innerHTML = '<div class="ex-empty"><b>ما فيه شي ينتظر اعتمادك</b><span>أي مهمة جديدة أو إنجاز يسجله الموظفين بيطلع هنا</span></div>'; return; }
+  planList.innerHTML = [...byEmp.entries()].sort((a, b) => b[1].length - a[1].length).map(([pid, items]) => `
+    <section class="ope-sec ope-appr-group">
+      <div class="ope-sec-h">
+        <button type="button" class="ope-who" data-pid="${pid}"><span class="cvt-av">${esc(opeInitials(opeName(pid)))}</span><b>${esc(opeName(pid))}</b><span class="ope-hint">${items.length} معلّق</span></button>
+        <button type="button" class="btn-primary ope-approve-all" data-pid="${pid}">اعتماد الكل (${items.length})</button>
+      </div>
+      ${items.map(i => opeApprovalRow(i)).join('')}
+    </section>`).join('');
+  wireApprovalButtons(planList);
+  planList.querySelectorAll('.ope-approve-all').forEach(b => b.addEventListener('click', () => opApproveAll(b.dataset.pid, b)));
+  planList.querySelectorAll('.ope-who').forEach(b => b.addEventListener('click', () => openOpeDrawer(b.dataset.pid)));
 }
+
 
 /* ---------- منطقة الخطر: إعادة تهيئة الخطة التشغيلية بالكامل (حذف كل المهام المُدخلة) ---------- */
 onEl('opplan-reset-btn', 'click', () => {
@@ -1000,8 +1145,11 @@ onEl('opplan-reset-confirm', 'click', async () => {
 /* ---------- شاشة الموظف المشارك ---------- */
 setupCollapsible('opt-excel-toggle', 'opt-excel-body', 'opt-excel-chevron');
 
+let opWeekInitialized = false;
 async function loadOpPlanEmployeeData() {
   await refreshStructureCaches();
+  // يفتح الموظف على أسبوع الدراسة الحالي بدل الأسبوع 1 دايمًا
+  if (!opWeekInitialized) { opPlanWeek = opCurrentSemWeek(); opWeekInitialized = true; }
   await loadMyProgramAssignments();
   await refreshMyTasks();
 }

@@ -498,13 +498,17 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-8"/></svg>
               لوحة المتابعة
             </button>
-            <button class="bud-tab" id="opplan-tab-settings" type="button">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-              الإعدادات
+            <button class="bud-tab" id="opplan-tab-employees" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.3c2.2.6 3.5 2.7 3.5 5.7"/></svg>
+              الموظفين
             </button>
             <button class="bud-tab" id="opplan-tab-approvals" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-              اعتماد المهام
+              اعتماد المهام <span class="tr-cnt" id="opplan-approvals-cnt"></span>
+            </button>
+            <button class="bud-tab" id="opplan-tab-settings" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009.6 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9.6a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              الإعدادات
             </button>
           </div>
         </div>
@@ -572,32 +576,37 @@
           </div>
         </div>
 
-        <!-- ===== لوحة: الإعدادات (إسناد + هيكل الأهداف + اعتمادات) ===== -->
+        <!-- ===== لوحة: الموظفين (متابعة كل مشارك: برامجه ومهامه وإنجازه) ===== -->
+      <div class="bud-panel hidden" id="opplan-panel-employees">
+        <div class="dd-stats" id="ope-stats"></div>
+        <div class="pt-toolbar">
+          <input type="search" id="ope-search" class="cv-search" placeholder="ابحث باسم الموظف" />
+          <select id="ope-sort" class="ope-sort">
+            <option value="attention">يحتاج متابعة أولًا</option>
+            <option value="low">الأقل إنجازًا</option>
+            <option value="name">الاسم</option>
+          </select>
+          <div class="ope-add">
+            <select id="ope-add-select"></select>
+            <button type="button" class="btn-primary" id="ope-add-btn">+ إضافة للخطة</button>
+          </div>
+        </div>
+        <div id="ope-list" class="ope-list"></div>
+      </div>
+
+      <!-- لوحة موظف واحد: برامجه ومهامه بالأسابيع، واعتماد معلّقاته، وإسناد البرامج -->
+      <div id="ope-drawer" class="tr-drawer hidden" aria-hidden="true">
+        <div class="trd-panel" role="dialog" aria-modal="true" aria-labelledby="ope-d-name">
+          <div class="trd-head">
+            <div><h3 id="ope-d-name"></h3><div id="ope-d-sub" class="trd-sub"></div></div>
+            <button type="button" class="trd-close" id="ope-d-close" aria-label="إغلاق">✕</button>
+          </div>
+          <div id="ope-d-body"></div>
+        </div>
+      </div>
+
+      <!-- ===== لوحة: الإعدادات (إسناد + هيكل الأهداف + اعتمادات) ===== -->
         <div class="bud-panel hidden" id="opplan-panel-settings">
-        <div class="form-card">
-          <h4>المشاركون بالخطة</h4>
-          <div class="form-row">
-            <select id="opm-employee"></select>
-            <button class="btn-primary" id="opm-add-member" style="width:auto; padding:11px 20px;">إضافة للخطة</button>
-          </div>
-          <div id="opm-members-list" style="margin-top:10px;"></div>
-        </div>
-
-        <div class="form-card">
-          <h4>إسناد البرامج للمشاركين</h4>
-          <p style="font-size:12.5px; color:var(--slate); margin:0 0 12px;">اختر مشاركًا وحدد البرامج المسندة له — يشوفها بصفحته ويدخل مهامها الأسبوعية برنامجًا برنامج</p>
-          <div class="form-row">
-            <select id="opa-employee"></select>
-          </div>
-          <input type="text" id="opa-search" placeholder="بحث باسم البرنامج أو رمزه..." style="margin:10px 0;" />
-          <div id="opa-checklist" class="opa-checklist"></div>
-          <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
-            <button class="btn-primary" id="opa-save" style="width:auto; padding:10px 20px;">حفظ الإسناد</button>
-            <span id="opa-save-msg" style="font-size:12.5px; color:var(--meadow); display:none;">تم الحفظ ✓</span>
-          </div>
-          <div class="error-msg" id="opa-save-error" style="margin-top:10px;"></div>
-        </div>
-
         <div class="form-card">
           <h4>الهيكل: أهداف عامة ← تشغيلية ← برامج</h4>
           <div class="form-row">
@@ -625,17 +634,13 @@
 
         <!-- ===== لوحة: اعتماد المهام ===== -->
         <div class="bud-panel hidden" id="opplan-panel-approvals">
-        <div class="op-stat-row" style="margin-bottom:26px;">
+        <div class="op-stat-row" style="margin-bottom:18px;">
           <div class="op-stat-tile" style="--op-accent:var(--gold);"><div class="lbl">مهام بانتظار اعتماد الإضافة</div><div class="val" id="opplan-stat-pending-plan">-</div></div>
           <div class="op-stat-tile" style="--op-accent:var(--purple);"><div class="lbl">إنجازات بانتظار الاعتماد</div><div class="val" id="opplan-stat-pending-completion">-</div></div>
           <div class="op-stat-tile" style="--op-accent:var(--status-good);"><div class="lbl">نسبة الإنجاز المعتمد</div><div class="val" id="opplan-stat-rate">-</div></div>
         </div>
-
-        <h4 style="margin-bottom:14px;">بانتظار اعتماد إضافة المهمة</h4>
-        <div id="opplan-pending-plan-list"></div>
-
-        <h4 style="margin:20px 0 14px;">بانتظار اعتماد الإنجاز</h4>
-        <div id="opplan-pending-completion-list"></div>
+        <div id="opplan-pending-plan-list" class="ope-appr-list"></div>
+        <div id="opplan-pending-completion-list" class="hidden"></div>
         </div>
       </div>
 
