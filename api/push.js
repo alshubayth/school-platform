@@ -17,15 +17,20 @@ const weekName = n => 'الأسبوع ' + (WEEK_NAMES[n - 1] || n);
 const norm = s => String(s || '').replace(/\s+/g, ' ').trim();
 
 // ---------- قراءة Supabase بمفتاح الخادم ----------
+// يقبل المفتاح السري الجديد (sb_secret_...) أو مفتاح service_role القديم (JWT يبدأ بـ eyJ)
+function sbHeaders(deps) {
+  const key = String(deps.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+  const h = { apikey: key };
+  if (key.startsWith('eyJ')) h.Authorization = `Bearer ${key}`;
+  return h;
+}
 async function sbGet(path, deps) {
-  const key = deps.env.SUPABASE_SERVICE_ROLE_KEY;
-  const r = await deps.fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: { apikey: key, Authorization: `Bearer ${key}` } });
+  const r = await deps.fetch(`${SUPABASE_URL}/rest/v1/${path}`, { headers: sbHeaders(deps) });
   if (!r.ok) throw new Error(`supabase ${r.status}: ${path}`);
   return r.json();
 }
 async function sbDelete(path, deps) {
-  const key = deps.env.SUPABASE_SERVICE_ROLE_KEY;
-  await deps.fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method: 'DELETE', headers: { apikey: key, Authorization: `Bearer ${key}` } });
+  await deps.fetch(`${SUPABASE_URL}/rest/v1/${path}`, { method: 'DELETE', headers: sbHeaders(deps) });
 }
 const inList = ids => '(' + ids.map(encodeURIComponent).join(',') + ')';
 
