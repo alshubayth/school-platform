@@ -269,7 +269,7 @@ async function renderCompose() {
     const btn = $('nt-submit'); btn.disabled = true; btn.textContent = 'جارٍ الإرسال...';
     const { error } = await sb.rpc('notice_send', {
       p_title: title, p_body: $('nt-f-body').value.trim(), p_meeting_at: whenVal ? new Date(whenVal).toISOString() : null,
-      p_location: $('nt-f-where').value.trim(), p_response_type: rtype, p_options: options, p_recipients: [...picked] });
+      p_location: $('nt-f-where').value.trim(), p_response_type: rtype, p_options: options, p_recipients: [...picked], p_school: currentSchoolId });
     btn.disabled = false; btn.textContent = 'إرسال التنبيه';
     if (error) return msg(/function|does not exist|schema cache/i.test(error.message || '') ? 'خدمة التنبيهات تحتاج تشغيل ملف sql/staff_notices.sql' : 'تعذّر الإرسال: ' + error.message);
     openPanel('sent');
