@@ -1,6 +1,6 @@
 {
-  "name": "لوحة المدرسة",
-  "short_name": "لوحة المدرسة",
+  "name": "مُدار",
+  "short_name": "مُدار",
   "description": "منصة المعلمين والإدارة لخدمات المدرسة",
   "start_url": "/index.html",
   "scope": "/",

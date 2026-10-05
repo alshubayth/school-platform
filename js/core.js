@@ -259,7 +259,7 @@ export let isOwnerAccount = false;
  * كل مدرسة لها هويتها بعمود schools.branding: الاسم المختصر، شعار المدرسة، والجهة التابعة لها
  * (الهيئة الملكية أو جهة ثانية بشعارها أو بدون). المطبوعات والشريط العلوي تاخذ منها بدل الأسماء الثابتة.
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
-export const PLATFORM_NAME = 'لوحة المدرسة';
+export const PLATFORM_NAME = 'مُدار';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -300,7 +300,7 @@ export function applyBrandToShell() {
   const span = document.querySelector('#tn-brand span');
   // الشريط العلوي كحلي: شعار المنصة الأبيض، وشعار المدرسة (لو مرفوع) داخل خلفية بيضاء صغيرة
   if (img) {
-    img.src = schoolBrand.logo || 'logo-white.png';
+    img.src = schoolBrand.logo || 'mark-white.svg';
     img.classList.toggle('on-chip', !!schoolBrand.logo);
     img.alt = schoolBrand.logo ? 'شعار ' + (schoolBrand.name || schoolBrand.short) : PLATFORM_NAME;
   }

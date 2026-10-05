@@ -75,6 +75,8 @@
   }
   .lg-brand{ max-width:420px; }
   .lg-logo{ width:132px; height:auto; display:block; margin-bottom:36px; }
+  .lg-word{ margin:0 0 22px !important; line-height:0 !important; }
+  .lg-word img{ width:300px; max-width:100%; height:auto; display:block; }
   .brand-panel h1{ font-size:40px; line-height:1.25; font-weight:800; margin:0 0 14px; color:#fff; letter-spacing:0; }
   .brand-panel p{ font-size:16px; color:#BFD3F0; max-width:360px; line-height:1.8; margin:0; }
   .lg-today{ display:flex; flex-direction:column; gap:2px; padding-inline-start:14px; border-inline-start:3px solid #2FC1B2; font-size:14px; color:#BFD3F0; }
@@ -827,6 +829,7 @@
     .brand-panel{ padding:28px 20px 26px; gap:18px; justify-content:flex-start; }
     .lg-brand{ display:flex; align-items:center; gap:14px; }
     .lg-logo{ width:58px; margin:0; flex-shrink:0; }
+    .lg-word img{ width:156px; }
     .brand-panel h1{ font-size:21px; margin:0; }
     .brand-panel p{ display:none; }
     .lg-traces{ opacity:.45; }

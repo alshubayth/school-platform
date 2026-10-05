@@ -1,5 +1,5 @@
 // Service Worker بسيط: يخزن الصفحة الأساسية للسماح بالتثبيت والعمل الجزئي بدون إنترنت
-const CACHE_NAME = 'lawhat-almadrasa-v1';
+const CACHE_NAME = 'mudaar-v1';
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();

@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>تثبيت لوحة المدرسة</title>
+<title>تثبيت مُدار</title>
 <link rel="manifest" id="app-manifest" href="manifest-staff.json">
 <meta name="theme-color" content="#0F2447">
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -72,7 +73,7 @@
     .hero, main{ display:none !important; }
     .poster{ display:flex; flex-direction:column; align-items:center; width:210mm; height:297mm; padding:18mm 16mm; text-align:center; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
     .poster .ph{ width:100%; background:#0F2447; color:#fff; border-radius:8mm; padding:10mm 8mm; display:flex; flex-direction:column; align-items:center; gap:3mm; }
-    .poster .ph img{ width:34mm; }
+    .poster .ph img{ width:70mm; margin-bottom:3mm; }
     .poster h1{ font-size:30pt; }
     .poster .ph p{ font-size:13pt; color:#D5E3F7; margin:0; }
     .poster .pqr{ width:95mm; height:95mm; margin:12mm 0 6mm; padding:4mm; border:0.6mm solid #0F2447; border-radius:5mm; }
@@ -106,9 +107,9 @@
     <g fill="#0C2147" stroke="#2FC1B2" stroke-width="2.5"><circle cx="340" cy="130" r="6"/><circle cx="380" cy="110" r="6"/></g>
   </svg>
   <div class="in">
-    <img src="logo-white.png" alt="" />
+    <img src="mark-white.svg" alt="مُدار" />
     <div>
-      <h1 id="h-title">ثبّت لوحة المدرسة على جوالك</h1>
+      <h1 id="h-title">ثبّت مُدار على جوالك</h1>
       <p id="h-sub">أيقونة على شاشتك تفتح المنصة مباشرة بشاشة كاملة، وتوصلك التحديثات تلقائيًا</p>
     </div>
   </div>
@@ -135,7 +136,7 @@
 
     <ol class="steps hidden" data-p="android">
       <li><div><b>اضغط زر "ثبّت التطبيق" تحت</b><span>لو ما طلع الزر: افتح الصفحة في Chrome، واضغط القائمة <span class="ic" aria-hidden="true">⋮</span> فوق، واختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".</span></div></li>
-      <li><div><b>وافق على التثبيت</b><span>تنضاف أيقونة "لوحة المدرسة" لشاشتك وقائمة تطبيقاتك.</span></div></li>
+      <li><div><b>وافق على التثبيت</b><span>تنضاف أيقونة "مُدار" لشاشتك وقائمة تطبيقاتك.</span></div></li>
       <li><div><b>افتح التطبيق من أيقونته</b><span>وسجّل دخولك مرة وحدة.</span></div></li>
     </ol>
 
@@ -165,8 +166,8 @@
 <!-- ملصق A4 للطباعة -->
 <div class="poster" aria-hidden="true">
   <div class="ph">
-    <img src="logo-white.png" alt="" />
-    <h1 id="p-title">ثبّت لوحة المدرسة على جوالك</h1>
+    <img src="wordmark-white.svg" alt="مُدار Mudaar" />
+    <h1 id="p-title">ثبّت مُدار على جوالك</h1>
     <p id="p-sub">المنصة كتطبيق على شاشتك</p>
   </div>
   <div class="pqr" id="pqr"></div>
@@ -194,7 +195,7 @@
     document.getElementById('p-sub').textContent = 'خطة الأسبوع والجدول لولي الأمر';
     document.querySelectorAll('.steps b').forEach(b => { b.innerHTML = b.innerHTML.replace('وسجّل دخولك مرة وحدة.', ''); });
     document.querySelectorAll('.steps span').forEach(s => { if (s.textContent.trim() === 'وسجّل دخولك مرة وحدة.') s.textContent = 'وتفتح لك خطة الأسبوع مباشرة.'; });
-    document.querySelectorAll('.steps span, .steps b').forEach(el => { el.innerHTML = el.innerHTML.replace('"لوحة المدرسة"', '"خطة الأسبوع"'); });
+    document.querySelectorAll('.steps span, .steps b').forEach(el => { el.innerHTML = el.innerHTML.replace('"مُدار"', '"خطة الأسبوع"'); });
   }
   const openLink = document.getElementById('open-link');
   openLink.href = target;

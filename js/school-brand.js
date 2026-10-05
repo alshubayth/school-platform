@@ -82,7 +82,7 @@ function render() {
   $('br-auth-logo-remove').classList.toggle('hidden', !draft.authority_logo);
   // المعاينة
   const shortName = draft.short.trim() || draft.name.trim() || PLATFORM_NAME;
-  $('br-prev-nav-logo').src = draft.school_logo || 'logo.png';
+  $('br-prev-nav-logo').src = draft.school_logo || 'mark.svg';
   $('br-prev-nav-name').textContent = shortName;
   const docLogo = draft.authority === 'rc' ? RC_LOGO : draft.authority === 'custom' ? draft.authority_logo : null;
   const headLogo = docLogo || draft.school_logo;
