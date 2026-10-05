@@ -359,6 +359,7 @@ export async function loadPermsModule() {
 document.querySelectorAll('#pm-tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('#pm-tabs button').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('#perms-module .pm-pane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.p));
+  if (b.dataset.p === 'brand') import('./school-brand.js').then(m => m.initBrandPane()).catch(err => console.error('brand pane', err));
 }));
 document.getElementById('pm-search').addEventListener('input', (e) => { pmSearch = e.target.value.trim(); renderPermsList(); });
 

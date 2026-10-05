@@ -253,6 +253,62 @@ export let currentSchoolModules = null; // null = بدون قيد (توافق خ
 // تبويب "إدارة المدارس والخدمات" وزر "تبديل المدرسة")
 export let isOwnerAccount = false;
 
+/* ===== هوية المدرسة (الاسم والشعارات) =====
+ * كل مدرسة لها هويتها بعمود schools.branding: الاسم المختصر، شعار المدرسة، والجهة التابعة لها
+ * (الهيئة الملكية أو جهة ثانية بشعارها أو بدون). المطبوعات والشريط العلوي تاخذ منها بدل الأسماء الثابتة.
+ * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
+export const PLATFORM_NAME = 'لوحة المدرسة';
+export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
+const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
+export let schoolBrand = { id: null, slug: null, name: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
+
+function brandFromRow(s) {
+  const hasColumn = !!(s && Object.prototype.hasOwnProperty.call(s, 'branding'));
+  const b = (s && s.branding) || {};
+  // قبل تشغيل ملف SQL الهوية (العمود غير موجود) نحافظ على السلوك القديم: شعار الهيئة الملكية
+  const authority = b.authority || (hasColumn ? 'none' : 'rc');
+  return {
+    id: s ? s.id : null, slug: s ? s.slug : null, raw: b, hasColumn,
+    name: (s && s.name) || '',
+    short: b.short_name || (s && s.name) || PLATFORM_NAME,
+    logo: b.school_logo || null,
+    authority,
+    authorityName: authority === 'rc' ? RC_AUTHORITY_NAME : authority === 'custom' ? (b.authority_name || '') : '',
+    authorityLogo: authority === 'rc' ? RC_LOGO_URL : authority === 'custom' ? (b.authority_logo || null) : null,
+  };
+}
+
+export async function loadSchoolBrand() {
+  let row = null;
+  if (currentSchoolId) {
+    let r = await sb.from('schools').select('id, name, slug, branding').eq('id', currentSchoolId).maybeSingle();
+    if (r.error) r = await sb.from('schools').select('id, name, slug').eq('id', currentSchoolId).maybeSingle();
+    row = r.data || null;
+  }
+  schoolBrand = brandFromRow(row);
+  applyBrandToShell();
+  return schoolBrand;
+}
+export function setSchoolBrandFromRow(row) { schoolBrand = brandFromRow(row); applyBrandToShell(); }
+
+export function applyBrandToShell() {
+  const img = document.querySelector('#tn-brand img');
+  const span = document.querySelector('#tn-brand span');
+  if (img) { img.src = schoolBrand.logo || 'logo.png'; img.alt = schoolBrand.logo ? 'شعار ' + (schoolBrand.name || schoolBrand.short) : PLATFORM_NAME; }
+  if (span) span.textContent = schoolBrand.short;
+  document.title = pageTitle(lastPageTitle);
+}
+// عنوان تبويب المتصفح: الصفحة الحالية - اسم المدرسة المختصر (أو اسم المنصة)
+let lastPageTitle = '';
+export function pageTitle(page) {
+  lastPageTitle = page || '';
+  const tail = schoolBrand.short || PLATFORM_NAME;
+  return lastPageTitle ? `${lastPageTitle} - ${tail}` : tail;
+}
+// اسم المدرسة بالمطبوعات، وشعار ترويستها (شعار الجهة التابعة لها، وإلا شعار المدرسة، وإلا بدون)
+export function printOrgName() { return schoolBrand.name || schoolBrand.short || ''; }
+export function printLogo() { return schoolBrand.authorityLogo || schoolBrand.logo || null; }
+
 export function effectiveRoleForTiles() {
   return currentProfile.role === 'owner' ? 'admin' : currentProfile.role;
 }
@@ -299,7 +355,7 @@ async function enterSchool(schoolId, school) {
   // اللي يميّزه كمالك حقيقي لتبويب "إدارة المدارس والخدمات" وزر "تبديل المدرسة" بس
   currentProfile = { ...currentProfile, role: 'admin' };
   document.getElementById('school-picker-screen').classList.add('hidden');
-  await loadAcademicCalendar();
+  await Promise.all([loadAcademicCalendar(), loadSchoolBrand()]);
   finishShowingDashboard(school ? school.name : null);
   const { renderMyDutyBanner } = await import('./duty-roster.js');
   renderMyDutyBanner();
@@ -316,8 +372,7 @@ function finishShowingDashboard(schoolNameOverride) {
   document.getElementById('user-role-badge').textContent = isOwnerAccount ? 'مالك النظام' : (roleLabels[currentProfile.role] || currentProfile.role);
   document.getElementById('user-avatar').textContent = (currentProfile.full_name || '؟').trim().charAt(0);
   document.getElementById('switch-school-btn').classList.toggle('hidden', !isOwnerAccount);
-  const brandSpan = document.querySelector('#dashboard-screen .brand span');
-  if (brandSpan && schoolNameOverride) brandSpan.textContent = schoolNameOverride;
+  applyBrandToShell();
   renderNav();
   renderDashboard();
   import('./search.js').then(m => m.initGlobalSearch()).catch(err => console.warn('search init failed', err));
@@ -368,7 +423,7 @@ export async function loadProfileAndShowDashboard(userId) {
     myBudgetAccess = budgetPerm ? budgetPerm.level : null;
   }
 
-  await loadAcademicCalendar();
+  await Promise.all([loadAcademicCalendar(), loadSchoolBrand()]);
   finishShowingDashboard(profile.schools ? profile.schools.name : null);
   const { renderMyDutyBanner } = await import('./duty-roster.js');
   renderMyDutyBanner();
@@ -567,7 +622,7 @@ export function openWorkspace(groupKey) {
   document.getElementById('module-header').classList.add('hidden');
   pushRoute('ws/' + groupKey);
   setActiveNavByKey('ws/' + groupKey);
-  document.title = `${g.title} · منصة المدرسة`;
+  document.title = pageTitle(g.title);
   window.scrollTo(0, 0);
   const view = document.getElementById('ws-view');
   view.classList.remove('hidden');
@@ -637,7 +692,7 @@ export async function openTile(key, title, sub = null) {
   pushRoute(sub ? key + '/' + sub : key);
   setActiveNavByKey(key);
   const tt = tiles.find(x => x.key === key);
-  document.title = `${tt ? tileTitle(tt) : (title || 'القسم')} · منصة المدرسة`;
+  document.title = pageTitle(tt ? tileTitle(tt) : (title || 'القسم'));
   window.scrollTo(0, 0);
   if (key === 'notes') {
     document.getElementById('notes-module').classList.remove('hidden');
@@ -723,7 +778,7 @@ export async function openTile(key, title, sub = null) {
 export async function backToTiles() {
   pushRoute('home');
   setActiveNavByKey('home');
-  document.title = 'الرئيسية · منصة المدرسة';
+  document.title = pageTitle('الرئيسية');
   window.scrollTo(0, 0);
   hideAllModules();
   document.getElementById('module-header').classList.add('hidden');

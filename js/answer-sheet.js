@@ -9,9 +9,8 @@
  * الباركود: Code 128 لرقم هوية الطالب (أرقام فقط) - نولّده هنا مباشرة كـ SVG (بدون مكتبات خارجية)
  * عشان يطلع حاد بالطباعة. ترميز Code C (رقمين بكل رمز) لو عدد الأرقام زوجي، وإلا Code B.
  * ========================================================================= */
-import { sb, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+import { sb, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo } from './core.js';
 
-const ORG_NAME = 'مدرسة المروج المتوسطة';
 const AR_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
 const EN_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
@@ -217,7 +216,7 @@ function buildSheetBody(opts, student, logoSrc, ox) {
   const titleW = innerW - logoW - P.barcodeW - 4;
   h += `<div class="as-abs as-title" style="left:${mm(X(P.side + logoW + 2, titleW))}; top:${mm(P.headTop)}; width:${mm(titleW)}; height:${mm(P.headH)}; display:flex; flex-direction:column; justify-content:center;">
     <div style="font-size:${P.titleSize}pt;">${rtl ? 'ورقة الإجابة' : 'Answer Sheet'}</div>
-    <div style="font-size:${P.subSize}pt;">${escHtml(ORG_NAME)}</div>
+    <div style="font-size:${P.subSize}pt;">${escHtml(printOrgName())}</div>
     ${title ? `<div style="font-size:${P.subSize}pt; font-weight:400;">${escHtml(title)}</div>` : ''}
   </div>`;
   h += `<div class="as-abs as-box" style="left:${mm(X(P.w - P.side - P.barcodeW, P.barcodeW))}; top:${mm(P.headTop)}; width:${mm(P.barcodeW)}; height:${mm(P.headH)}; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.8mm;">`;
@@ -440,7 +439,7 @@ function selectedStudents() {
   return asStudents.filter(s => s.grade_level === grade && (s.class_section || 0) === sec);
 }
 
-function logoUrl() { return new URL('logo-rc.png', window.location.href).href; }
+function logoUrl() { return printLogo(); }
 
 /* يقسّم الطلاب على الصفحات. لورقة "طالبين بالصفحة": ترتيب "قص ورتّب" - النصف الأول من القائمة
  * على الأنصاف اليمنى بالترتيب، والنصف الثاني على الأنصاف اليسرى؛ فبعد القص تحط رزمة الأنصاف

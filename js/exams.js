@@ -1,9 +1,8 @@
-import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute } from './core.js';
+import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, printOrgName, printLogo } from './core.js';
 import { initOverlayCard, setOverlayPeriod } from './overlay-print.js';
 import { loadXLSX } from './lib-loader.js';
 
-// شعار الهيئة الملكية للجبيل وينبع - يظهر بمخرجات قسم الاختبارات المطبوعة
-const SCHOOL_LOGO = new URL('logo-rc.png', window.location.href).href;
+// شعار الترويسة من هوية المدرسة (printLogo بملف core.js)
 
 setupCollapsible('exam-import-toggle', 'exam-import-body', 'exam-import-chevron');
 document.getElementById('exam-period-toggle').addEventListener('click', () => {
@@ -758,11 +757,13 @@ function openPrintWindow(win, title, innerHtml) {
     <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
     <style>${PRINT_STYLES}</style></head><body>${innerHtml}</body></html>`);
   win.document.close();
+  const logoSrc = printLogo();
   const logos = win.document.querySelectorAll('.print-logo');
-  if (logos.length === 0) { win.print(); return; }
+  if (!logoSrc) logos.forEach(img => img.remove());
+  if (logos.length === 0 || !logoSrc) { win.print(); return; }
   let loaded = 0;
   const done = () => { loaded++; if (loaded === logos.length) win.print(); };
-  logos.forEach(img => { img.onload = done; img.onerror = done; img.src = SCHOOL_LOGO; });
+  logos.forEach(img => { img.onload = done; img.onerror = done; img.src = logoSrc; });
 }
 
 function printCommittee(title, rows) {

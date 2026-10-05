@@ -1,5 +1,4 @@
-import { sb, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
-import { VOUCHER_LOGO_DATA_URI } from './budget.js';
+import { sb, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo } from './core.js';
 
 function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
 function initials(name) { return (name || '').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join(''); }
@@ -8,7 +7,6 @@ function todayIso() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
-const ORG_NAME = 'مدرسة المروج';
 const WEIGHT_TYPE_LABELS = { fixed: 'ثابت', per_period: 'نسبي - حصص', per_duty: 'نسبي - مناوبات' };
 
 let employeesCache = [];
@@ -315,7 +313,7 @@ function printPerformanceCard(employeeId) {
   const emp = employeesCache.find(e => e.id === employeeId);
   if (!emp) return;
   const { finalScore, breakdown, violations } = employeeStats(employeeId);
-  const logoHtml = VOUCHER_LOGO_DATA_URI ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="شعار" style="height:54px;" />` : '';
+  const logoHtml = printLogo() ? `<img src="${printLogo()}" alt="شعار" style="height:54px;" />` : '';
 
   const rowsHtml = breakdown.map((b, i) => `
     <tr>
@@ -367,7 +365,7 @@ function printPerformanceCard(employeeId) {
       ${logoHtml}
       <div style="text-align:center; flex:1;">
         <h1>بطاقة أداء الموظف</h1>
-        <p>${esc(ORG_NAME)}</p>
+        <p>${esc(printOrgName())}</p>
       </div>
       <div style="width:54px;"></div>
     </div>

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>خطة الأسبوع - مدرسة المروج</title>
+<title>خطة الأسبوع</title>
 <link rel="manifest" href="manifest-parent.json">
 <meta name="theme-color" content="#2455A4">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -252,10 +252,10 @@
 
 <div id="screen">
   <div class="hero">
-    <img id="hero-logo" src="logo.png" alt="شعار مدرسة المروج المتوسطة" />
+    <img id="hero-logo" src="logo.png" alt="" />
     <div>
       <h1>خطة الأسبوع الدراسي</h1>
-      <p class="sub" id="hero-school-name">مدرسة المروج المتوسطة</p>
+      <p class="sub" id="hero-school-name">&nbsp;</p>
     </div>
   </div>
 
@@ -356,13 +356,14 @@ const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 /* ===== تحديد المدرسة من رابط الصفحة (?school=المعرف-المختصر) =====
- * بدون باراميتر (رابط قديم كان يشتغل قبل دعم تعدد المدارس) نفترض مدرسة المروج تلقائيًا
+ * بدون باراميتر (رابط قديم كان يشتغل قبل دعم تعدد المدارس) نفترض المدرسة الأصلية (al-murooj)
  * حتى ما ينكسر أي رابط سبق إرساله لأولياء الأمور. */
 let currentSchoolId = null;
-let currentSchoolName = 'مدرسة المروج المتوسطة';
+let currentSchoolName = '';
 async function resolveSchool() {
   const slug = new URLSearchParams(location.search).get('school') || 'al-murooj';
-  const { data, error } = await sb.from('schools').select('id, name').eq('slug', slug).maybeSingle();
+  let { data, error } = await sb.from('schools').select('id, name, branding').eq('slug', slug).maybeSingle();
+  if (error) ({ data, error } = await sb.from('schools').select('id, name').eq('slug', slug).maybeSingle());
   if (error) {
     console.error('resolveSchool error:', error);
     window.__resolveSchoolError = error;
@@ -373,6 +374,9 @@ async function resolveSchool() {
     const nameEl = document.getElementById('hero-school-name');
     if (nameEl) nameEl.textContent = data.name;
     document.title = 'خطة الأسبوع - ' + data.name;
+    const logo = data.branding && data.branding.school_logo;
+    const logoEl = document.getElementById('hero-logo');
+    if (logoEl) { if (logo) logoEl.src = logo; logoEl.alt = 'شعار ' + data.name; }
   }
   return data;
 }

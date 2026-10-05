@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, myBudgetAccess, setMyBudgetAccess, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+import { sb, currentUserId, currentProfile, myBudgetAccess, setMyBudgetAccess, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo } from './core.js';
 
 document.getElementById('back-to-tiles-13').addEventListener('click', backToTiles);
 
@@ -696,10 +696,7 @@ async function updateExpenseStatus(id, status) {
 }
 
 /* ---------- طباعة السند (بيان الصرف) ---------- */
-// شعار الهيئة الملكية للجبيل وينبع - يظهر بكل المطبوعات الرسمية (سند الصرف، الزيارات الصفية،
-// متابعات الطلاب، التقييم)، بعكس شعار المدرسة (logo.png) المستخدم بواجهة النظام فقط
-export const VOUCHER_LOGO_DATA_URI = new URL('logo-rc.png', window.location.href).href;
-const VOUCHER_ORG_NAME = 'مدرسة المروج';
+// شعار الترويسة واسم المدرسة من هوية المدرسة (printLogo / printOrgName بملف core.js)
 const VOUCHER_ORG_SUB = '';
 const VOUCHER_MANAGER_NAME = 'منيف بن محمد النفيعي';
 
@@ -717,9 +714,9 @@ function printVoucher(r, items, total) {
       <td class="amt">${fmtAmount(it.amount)}</td>
     </tr>`).join('');
 
-  const logoHtml = VOUCHER_LOGO_DATA_URI
-    ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="شعار الهيئة الملكية للجبيل وينبع" />`
-    : `<div class="logo-placeholder">الشعار</div>`;
+  const logoHtml = printLogo()
+    ? `<img src="${printLogo()}" alt="الشعار" />`
+    : '';
 
   const html = `<!doctype html>
 <html lang="ar" dir="rtl">
@@ -773,7 +770,7 @@ function printVoucher(r, items, total) {
       <div class="logo-side">${logoHtml}</div>
       <div class="titles">
         <h1>سند صرف</h1>
-        <p class="org">${esc(VOUCHER_ORG_NAME)}</p>
+        <p class="org">${esc(printOrgName())}</p>
         ${VOUCHER_ORG_SUB ? `<p class="org-sub">${esc(VOUCHER_ORG_SUB)}</p>` : ''}
       </div>
       <div class="num-side">
@@ -1165,7 +1162,7 @@ function printBatchReport(batchId) {
         <td>${fmtAmount(it.amount)}</td>
       </tr>`)).join('');
 
-  const logoHtml = VOUCHER_LOGO_DATA_URI ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="شعار" style="height:54px;" />` : '';
+  const logoHtml = printLogo() ? `<img src="${printLogo()}" alt="شعار" style="height:54px;" />` : '';
 
   const html = `<!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -1198,7 +1195,7 @@ function printBatchReport(batchId) {
       ${logoHtml}
       <div style="text-align:center; flex:1;">
         <h1>تقرير ${b.revenue_type}</h1>
-        <p>${esc(VOUCHER_ORG_NAME)}</p>
+        <p>${esc(printOrgName())}</p>
       </div>
       <div style="width:54px;"></div>
     </div>

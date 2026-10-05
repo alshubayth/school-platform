@@ -1,12 +1,10 @@
-import { sb, currentUserId, currentProfile, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, academicCalendar } from './core.js';
+import { sb, currentUserId, currentProfile, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, academicCalendar, printOrgName, printLogo } from './core.js';
 import { DAYS, PERIODS } from './schedule.js';
-import { VOUCHER_LOGO_DATA_URI } from './budget.js';
 import { loadJSZip } from './lib-loader.js';
 
 document.getElementById('back-to-tiles-14').addEventListener('click', backToTiles);
 
 const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
-const ORG_NAME = 'مدرسة المروج المتوسطة';
 
 /* ---------- مؤشرات نموذج الزيارة الصفية الرسمي (الهيئة الملكية للجبيل وينبع) ---------- */
 // كل مؤشر: نص المؤشر + قائمة الخيارات مرتبة من الأفضل للأسوأ، وآخر خيار دايمًا "لم يتم تقييم..."
@@ -963,16 +961,16 @@ function buildVisitReportDoc(v) {
   const visitorName = v.profiles?.full_name || null;
   const visitorLabel = visitorName ? `${visitorName} — ${visitorRoleLabel}` : visitorRoleLabel;
 
-  const logoHtml = VOUCHER_LOGO_DATA_URI
-    ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="الشعار" />`
-    : `<div class="logo-placeholder">الشعار</div>`;
+  const logoHtml = printLogo()
+    ? `<img src="${printLogo()}" alt="الشعار" />`
+    : '';
 
   return `<div class="doc">
     <div class="header">
       <div class="logo-side">${logoHtml}</div>
       <div class="titles">
         <h1>تقرير زيارة صفية</h1>
-        <p class="dept">${esc(ORG_NAME)}</p>
+        <p class="dept">${esc(printOrgName())}</p>
       </div>
       <div class="logo-side"></div>
     </div>

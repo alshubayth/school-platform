@@ -1,5 +1,4 @@
-import { sb, currentUserId, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
-import { VOUCHER_LOGO_DATA_URI } from './budget.js';
+import { sb, currentUserId, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo } from './core.js';
 
 document.getElementById('back-to-tiles-12').addEventListener('click', backToTiles);
 
@@ -11,7 +10,6 @@ function onEl(id, event, handler) {
 }
 
 const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
-const ORG_NAME = 'مدرسة المروج';
 
 const TYPE_LABELS = { note: 'ملاحظة', participation: 'مشاركة', exam: 'اختبار', deduction: 'خصم' };
 const TYPE_BADGE = { note: 'badge-gray', participation: 'badge-meadow', exam: 'badge-gold', deduction: 'badge-danger' };
@@ -536,7 +534,7 @@ async function printStudentReport(studentId) {
   const avgP = avg(participationScores);
   const avgE = avg(examScores);
 
-  const logoHtml = VOUCHER_LOGO_DATA_URI ? `<img src="${VOUCHER_LOGO_DATA_URI}" alt="شعار" style="height:54px;" />` : '';
+  const logoHtml = printLogo() ? `<img src="${printLogo()}" alt="شعار" style="height:54px;" />` : '';
 
   const rowsHtml = rows.length === 0 ? '<tr><td colspan="4" style="color:#999;">لا توجد سجلات</td></tr>' : rows.map(r => `
     <tr>
@@ -575,7 +573,7 @@ async function printStudentReport(studentId) {
       ${logoHtml}
       <div style="text-align:center; flex:1;">
         <h1>تقرير متابعة الطالب</h1>
-        <p>${esc(ORG_NAME)}</p>
+        <p>${esc(printOrgName())}</p>
       </div>
       <div style="width:54px;"></div>
     </div>

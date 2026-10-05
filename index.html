@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>لوحة تحكم مدرسة المروج</title>
+<title>لوحة المدرسة</title>
 <link rel="manifest" href="manifest-staff.json">
 <meta name="theme-color" content="#0F2447">
 <link rel="apple-touch-icon" href="icon-192.png">
@@ -34,7 +34,7 @@
     </svg>
     <div class="lg-brand">
       <img src="logo-white.png" alt="" class="lg-logo" />
-      <h1>مدرسة المروج المتوسطة</h1>
+      <h1>لوحة المدرسة</h1>
       <p>منصة المعلمين والإدارة: الجداول والاختبارات والخطط والمتابعة اليومية</p>
     </div>
     <div class="lg-today" id="lg-today" aria-live="off"></div>
@@ -105,8 +105,8 @@
   <header class="topnav">
     <div class="tn-inner">
       <a href="#/" class="brand" id="tn-brand">
-        <img src="logo.png" alt="شعار مدرسة المروج المتوسطة" />
-        <span>مدرسة المروج</span>
+        <img src="logo.png" alt="لوحة المدرسة" />
+        <span>لوحة المدرسة</span>
       </a>
       <nav id="nav-list" class="tn-pills" aria-label="مساحات العمل"></nav>
       <div class="tn-actions">
@@ -357,6 +357,7 @@
       <div class="seg-tabs" id="pm-tabs">
         <button type="button" data-p="subjects" class="active">تخصصات المعلمين</button>
         <button type="button" data-p="account">إنشاء حساب دخول</button>
+        <button type="button" data-p="brand">هوية المدرسة</button>
       </div>
 
       <div class="pm-pane" data-pane="subjects">
@@ -403,6 +404,83 @@
         <button class="btn-primary" id="newuser-submit">إنشاء الحساب</button>
       </div>
 
+      </div>
+
+      <!-- هوية المدرسة: الاسم والشعارات اللي تطلع بالشريط العلوي والمطبوعات وصفحة أولياء الأمور -->
+      <div class="pm-pane hidden" data-pane="brand">
+        <div class="br-grid">
+          <div class="form-card br-form">
+            <div class="field">
+              <label for="br-name">اسم المدرسة الرسمي</label>
+              <input type="text" id="br-name" placeholder="مثال: مدرسة النور المتوسطة" />
+              <small class="br-help">يطلع بترويسة المطبوعات وصفحة أولياء الأمور</small>
+            </div>
+            <div class="field">
+              <label for="br-short">الاسم المختصر</label>
+              <input type="text" id="br-short" placeholder="مثال: مدرسة النور" />
+              <small class="br-help">يطلع بالشريط العلوي للمنصة</small>
+            </div>
+
+            <div class="br-logo-row">
+              <div class="br-logo-box" id="br-school-logo-box"></div>
+              <div class="br-logo-info">
+                <b>شعار المدرسة</b>
+                <small class="br-help">يطلع بالشريط العلوي وصفحة أولياء الأمور. PNG بخلفية شفافة أفضل.</small>
+                <div class="br-logo-actions">
+                  <label class="br-upload">رفع شعار<input type="file" id="br-school-logo-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden /></label>
+                  <button type="button" class="ope-link danger br-remove" id="br-school-logo-remove">إزالة</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="field" style="margin-top:18px;">
+              <label>الجهة التابعة لها المدرسة</label>
+              <div class="seg-tabs br-auth" id="br-authority">
+                <button type="button" data-a="rc">الهيئة الملكية للجبيل وينبع</button>
+                <button type="button" data-a="custom">جهة أخرى</button>
+                <button type="button" data-a="none">بدون</button>
+              </div>
+              <small class="br-help">شعار الجهة يطلع بترويسة كل المطبوعات (سند الصرف، الزيارات، التقييم، كشوف الاختبارات...)</small>
+            </div>
+            <div id="br-custom" class="hidden">
+              <div class="field">
+                <label for="br-auth-name">اسم الجهة</label>
+                <input type="text" id="br-auth-name" placeholder="مثال: وزارة التعليم - إدارة تعليم المنطقة الشرقية" />
+              </div>
+              <div class="br-logo-row">
+                <div class="br-logo-box" id="br-auth-logo-box"></div>
+                <div class="br-logo-info">
+                  <b>شعار الجهة</b>
+                  <div class="br-logo-actions">
+                    <label class="br-upload">رفع شعار<input type="file" id="br-auth-logo-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden /></label>
+                    <button type="button" class="ope-link danger br-remove" id="br-auth-logo-remove">إزالة</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="error-msg" id="br-error"></div>
+            <div class="br-save-row">
+              <button type="button" class="btn-primary" id="br-save">حفظ الهوية</button>
+              <span class="br-saved hidden" id="br-saved">تم الحفظ ✓</span>
+            </div>
+          </div>
+
+          <div class="br-preview-col">
+            <h4>معاينة</h4>
+            <div class="br-prev-label">الشريط العلوي</div>
+            <div class="br-prev-nav"><img id="br-prev-nav-logo" alt="" /><span id="br-prev-nav-name"></span></div>
+            <div class="br-prev-label">ترويسة المطبوعات</div>
+            <div class="br-prev-doc">
+              <div class="br-prev-head">
+                <div class="br-prev-logo" id="br-prev-doc-logo"></div>
+                <div class="br-prev-titles"><b>تقرير زيارة صفية</b><span id="br-prev-doc-name"></span></div>
+                <div class="br-prev-logo"></div>
+              </div>
+              <div class="br-prev-lines"><i></i><i></i><i style="width:60%"></i></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

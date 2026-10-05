@@ -1,4 +1,4 @@
-import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels } from './core.js';
+import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, printOrgName, printLogo } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
 import { initAnswerSheetCard, fetchSavedKeys } from './answer-sheet.js';
 
@@ -1035,8 +1035,7 @@ function studentRankTable(list, title, badgeClass) {
 }
 
 /* ---------- طباعة تقرير أعلى/أدنى ١٥ درجة ---------- */
-// شعار الهيئة الملكية للجبيل وينبع - يظهر بمخرجات قسم الاختبارات المطبوعة
-const ER_LOGO_DATA_URI = new URL('logo-rc.png', window.location.href).href;
+// شعار الترويسة من هوية المدرسة (printLogo بملف core.js)
 function printTopBottomReport(s, scope = 'both', sectionFilter = []) {
   const title = currentReport ? currentReport.title : 'تقرير أعلى وأدنى الدرجات';
   const sub = currentReport ? `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'}` : '';
@@ -1058,7 +1057,7 @@ function printTopBottomReport(s, scope = 'both', sectionFilter = []) {
       </tr>`).join('')
     : '<tr><td colspan="5">لا يوجد</td></tr>';
 
-  const logoHtml = ER_LOGO_DATA_URI ? `<img src="${ER_LOGO_DATA_URI}" alt="شعار" style="height:50px;" />` : '';
+  const logoHtml = printLogo() ? `<img src="${printLogo()}" alt="شعار" style="height:50px;" />` : '';
   const colHtml = (heading, list) => `<div>
         <h3>${esc(heading)}</h3>
         <table><thead><tr><th style="width:28px;">#</th><th>الاسم</th><th>الفصل</th><th>الدرجة</th><th>النسبة</th></tr></thead>
@@ -1144,7 +1143,6 @@ async function exportTopBottomExcel(s, sectionFilter = []) {
  * (بمكتبة JSZip بس، بدون أي مكتبة خارجية زيادة) فتبقى كل التنسيقات (الخطوط، الحدود، خانات الاختيار، نص
  * رأي المعلم...) مطابقة تمامًا للملف الأصلي بدون أي تغيير. نصدّر ملف .docx حقيقي واحد لكل فصل، مضغوطين
  * بملف zip واحد. */
-const SCHOOL_NAME = 'مدرسة المروج المتوسطة';
 const REMEDIAL_TEMPLATE_URL = new URL('js/templates/remedial-plan-template.docx', window.location.href).href;
 
 // يشيل رموز ممنوعة بأسماء الملفات (Windows/macOS) عشان التنزيل ما يفشل أو يتقطع الاسم
@@ -1194,7 +1192,7 @@ async function exportRemedialPlans(weakStudents) {
       const docZip = await JSZip.loadAsync(templateBuf);
       let xml = await docZip.file('word/document.xml').async('string');
       xml = xml
-        .replace(/\{SCHOOL\}/g, escXml(SCHOOL_NAME))
+        .replace(/\{SCHOOL\}/g, escXml(printOrgName()))
         .replace(/\{SUBJECT\}/g, escXml(subject || '-'))
         .replace(/\{GRADE\}/g, escXml(grade || '-'))
         .replace(/\{SECTION\}/g, escXml(sectionLabel))
