@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, effectiveRoleForTiles } from './core.js';
+import { sb, currentUserId, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, effectiveRoleForTiles, upsertSchoolKey, conflictOpt } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 /* ===== صفحة الإعدادات: هوية المدرسة، الطلاب، التقويم، بيانات التواصل، المستخدمين =====
@@ -182,7 +182,9 @@ async function importStudentsFile() {
         return;
       }
 
-      const { error } = await writeWithSchool(extra => sb.from('students').upsert(students.map(s => ({ ...s, ...extra })), { onConflict: 'national_id' }));
+      // الطالب مميّز برقم هويته داخل المدرسة (الطالب المنتقل له سجل خاص بكل مدرسة)
+      const { error } = await writeWithSchool(extra => upsertSchoolKey(k => sb.from('students').upsert(students.map(s => ({ ...s, ...extra })), conflictOpt(k)),
+        'school_id,national_id', 'national_id'));
       if (error) { errEl.textContent = 'تعذر الاستيراد: ' + error.message; errEl.style.display = 'block'; return; }
 
       const known = new Set(stuCache.map(x => String(x.national_id)));
