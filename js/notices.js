@@ -271,7 +271,12 @@ async function renderCompose() {
       p_title: title, p_body: $('nt-f-body').value.trim(), p_meeting_at: whenVal ? new Date(whenVal).toISOString() : null,
       p_location: $('nt-f-where').value.trim(), p_response_type: rtype, p_options: options, p_recipients: [...picked], p_school: currentSchoolId });
     btn.disabled = false; btn.textContent = 'إرسال التنبيه';
-    if (error) return msg(/function|does not exist|schema cache/i.test(error.message || '') ? 'خدمة التنبيهات تحتاج تشغيل ملف sql/staff_notices.sql' : 'تعذّر الإرسال: ' + error.message);
+    if (error) {
+      const m = error.message || '';
+      if (/not allowed/i.test(m)) return msg('ما عندك صلاحية الإرسال لهذي المدرسة');
+      if (/no recipients/i.test(m)) return msg('المستلمين المختارين مو من موظفين هذي المدرسة');
+      return msg('تعذّر الإرسال: ' + m + (error.code ? ' (' + error.code + ')' : ''));
+    }
     openPanel('sent');
     toast(`تم إرسال التنبيه لـ ${picked.size} ${picked.size === 1 ? 'موظف' : 'موظفين'} ✓`);
   });
