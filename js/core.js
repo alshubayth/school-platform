@@ -308,6 +308,15 @@ export function applyBrandToShell() {
   }
   if (span) span.textContent = schoolBrand.short;
   document.title = pageTitle(lastPageTitle);
+  // التطبيق المثبّت يحمل اسم المدرسة تحت الأيقونة (ملف التطبيق يتولّد حسب المدرسة)
+  if (schoolBrand.slug) {
+    const mf = document.getElementById('app-manifest');
+    if (mf) mf.href = '/api/manifest?app=staff&school=' + encodeURIComponent(schoolBrand.slug);
+    const at = document.getElementById('apple-title');
+    if (at) at.setAttribute('content', schoolBrand.short || PLATFORM_NAME);
+    const il = document.getElementById('um-install-link');
+    if (il) il.href = 'install.html?school=' + encodeURIComponent(schoolBrand.slug);
+  }
 }
 // عنوان تبويب المتصفح: الصفحة الحالية - اسم المدرسة المختصر (أو اسم المنصة)
 let lastPageTitle = '';

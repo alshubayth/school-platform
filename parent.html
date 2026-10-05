@@ -4,10 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>خطة الأسبوع</title>
-<link rel="manifest" href="manifest-parent.json">
+<link rel="manifest" id="app-manifest" href="manifest-parent.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" id="apple-title" content="خطة الأسبوع">
+<script>/* اسم التطبيق تحت الأيقونة = اسم المدرسة */
+(function () { var s = new URLSearchParams(location.search).get('school') || 'al-murooj';
+  document.getElementById('app-manifest').href = '/api/manifest?app=parent&school=' + encodeURIComponent(s); })();</script>
 <meta name="theme-color" content="#2455A4">
 <link rel="icon" type="image/svg+xml" href="parent-favicon.svg">
-<link rel="apple-touch-icon" href="icon-parent-192.png?v=2">
+<link rel="apple-touch-icon" href="icon-parent-192.png?v=3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -485,6 +490,8 @@ async function resolveSchool() {
     const nameEl = document.getElementById('hero-school-name');
     if (nameEl) nameEl.textContent = data.name;
     document.title = 'خطة الأسبوع - ' + data.name;
+    const appTitle = document.getElementById('apple-title');
+    if (appTitle) appTitle.setAttribute('content', (data.branding && data.branding.short_name) || data.name);
     // شعار المدرسة لو مرفوع، وإلا شعار الكتاب (وتحته مُدار صغير)
     const logo = (data.branding && data.branding.school_logo) || null;
     const logoEl = document.getElementById('hero-logo');

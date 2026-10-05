@@ -4,10 +4,12 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>مُدار</title>
-<link rel="manifest" href="manifest-staff.json">
+<link rel="manifest" id="app-manifest" href="manifest-staff.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" id="apple-title" content="مُدار">
 <meta name="theme-color" content="#0F2447">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="apple-touch-icon" href="icon-192.png?v=2">
+<link rel="apple-touch-icon" href="icon-192.png?v=3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
@@ -135,7 +137,7 @@
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
               <span id="push-toggle-label">تفعيل الإشعارات على الجوال</span>
             </button>
-            <a class="um-item" href="install.html" target="_blank" rel="noopener" role="menuitem" style="text-decoration:none;">
+            <a class="um-item" id="um-install-link" href="install.html" target="_blank" rel="noopener" role="menuitem" style="text-decoration:none;">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M12 7v7M9 11l3 3 3-3"/></svg>
               تثبيت التطبيق على الجوال
             </a>

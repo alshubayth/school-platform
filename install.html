@@ -5,9 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>تثبيت مُدار</title>
 <link rel="manifest" id="app-manifest" href="manifest-staff.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" id="apple-title" content="مُدار">
 <meta name="theme-color" content="#0F2447">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
-<link rel="apple-touch-icon" href="icon-192.png?v=2">
+<link rel="apple-touch-icon" href="icon-192.png?v=3">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap" rel="stylesheet">
@@ -209,8 +211,19 @@
   const isParent = qs.get('app') === 'parent';
   const school = qs.get('school');
   const target = isParent ? 'parent.html' + (school ? '?school=' + encodeURIComponent(school) : '') : 'index.html';
+  // ملف التطبيق حسب المدرسة: اسم المدرسة تحت الأيقونة
+  if (school) document.getElementById('app-manifest').href = '/api/manifest?app=' + (isParent ? 'parent' : 'staff') + '&school=' + encodeURIComponent(school);
+  if (school && !isParent) {
+    fetch('https://sovfrlvcvcyjcyauurpl.supabase.co/rest/v1/schools?select=name,branding&slug=eq.' + encodeURIComponent(school),
+      { headers: { apikey: 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA' } })
+      .then(r => r.ok ? r.json() : []).then(rows => {
+        const sc = rows && rows[0]; if (!sc) return;
+        const t = (sc.branding && sc.branding.short_name) || sc.name;
+        const at = document.getElementById('apple-title'); if (at) at.setAttribute('content', t);
+      }).catch(() => {});
+  }
   if (isParent) {
-    document.getElementById('app-manifest').href = 'manifest-parent.json';
+    if (!school) document.getElementById('app-manifest').href = 'manifest-parent.json';
     document.body.classList.add('is-parent');
     document.title = 'تثبيت لوحة تحكم مدرستك';
     ['h-title', 'p-title'].forEach(id => { document.getElementById(id).textContent = 'ثبّت لوحة تحكم مدرستك على جوالك'; });
@@ -225,7 +238,7 @@
     stack.appendChild(word);
     document.getElementById('p-credit').classList.remove('hidden');
     document.querySelector('link[rel="icon"]').href = 'parent-favicon.svg';
-    document.querySelector('link[rel="apple-touch-icon"]').href = 'icon-parent-192.png?v=2';
+    document.querySelector('link[rel="apple-touch-icon"]').href = 'icon-parent-192.png?v=3';
     const setLogo = (src, cls, alt) => ['h-logo', 'p-logo'].forEach(id => {
       const el = document.getElementById(id); el.src = src; el.alt = alt; el.className = cls;
     });
@@ -240,6 +253,7 @@
           if (!sc) return;
           document.title = 'تثبيت لوحة تحكم ' + sc.name;
           document.getElementById('p-sub').textContent = sc.name;
+          const at = document.getElementById('apple-title'); if (at) at.setAttribute('content', (sc.branding && sc.branding.short_name) || sc.name);
           const logo = (sc.branding && sc.branding.school_logo) || null;
           if (logo) setLogo(logo, 'school-logo', 'شعار ' + sc.name);
         }).catch(() => {});

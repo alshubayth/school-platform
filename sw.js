@@ -23,8 +23,8 @@ self.addEventListener('push', (event) => {
   const isParent = d.audience === 'parent';
   event.waitUntil(self.registration.showNotification(d.title || (isParent ? 'خطة الأسبوع' : 'مُدار'), {
     body: d.body || '',
-    icon: isParent ? 'icon-parent-192.png?v=2' : 'icon-192.png?v=2',
-    badge: isParent ? 'icon-parent-192.png?v=2' : 'icon-192.png?v=2',
+    icon: isParent ? 'icon-parent-192.png?v=3' : 'icon-192.png?v=3',
+    badge: isParent ? 'icon-parent-192.png?v=3' : 'icon-192.png?v=3',
     tag: d.tag || undefined,
     renotify: !!d.tag,
     dir: 'rtl',
