@@ -53,6 +53,7 @@ document.getElementById('weekly-copy-parent-link').addEventListener('click', asy
 
 /* ===== تقييد نموذج الخطة الأسبوعية للمعلم حسب تخصصه ===== */
 let teacherAssignments = [];
+let teacherListenersBound = false;
 async function loadTeacherAssignments() {
   const { data } = await sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)').eq('teacher_id', currentUserId);
   teacherAssignments = data || [];
@@ -68,8 +69,10 @@ function restrictWeeklyFormForTeacher() {
     return;
   }
 
+  const prevGrade = gradeSelect.value;
   gradeSelect.innerHTML = '';
   allowedGrades.forEach(g => { const o=document.createElement('option'); o.value=g; o.textContent=gradeLabels[g]; gradeSelect.appendChild(o); });
+  if (allowedGrades.includes(prevGrade)) gradeSelect.value = prevGrade;
 
 function refreshSubjectsForGrade() {
     const grade = gradeSelect.value;
@@ -79,8 +82,12 @@ function refreshSubjectsForGrade() {
     });
     loadFormForCurrentSelection();
   }
-  gradeSelect.addEventListener('change', () => { refreshSubjectsForGrade(); refreshWeeklyList(); });
-  subSelect.addEventListener('change', loadFormForCurrentSelection);
+  // نربط المستمعين مرة وحدة بس (الدالة تنستدعى مع كل تغيير أسبوع)
+  if (!teacherListenersBound) {
+    teacherListenersBound = true;
+    gradeSelect.addEventListener('change', () => { refreshSubjectsForGrade(); });
+    subSelect.addEventListener('change', loadFormForCurrentSelection);
+  }
   refreshSubjectsForGrade();
 }
 
@@ -198,12 +205,8 @@ function collectLessonsFromEditor(container, subjectName) {
  * موجودة) نعيد بناء واجهة الإدخال فاضية لتطابق نوع المادة الجديدة. */
 document.getElementById('weekly-subject').addEventListener('change', () => {
   if (currentProfile.role === 'teacher') return;
-  buildLessonEditorUI({
-    container: document.getElementById('weekly-lessons-container'),
-    addBtn: document.getElementById('weekly-add-lesson-btn'),
-    subjectName: currentSubjectName(),
-    lessons: [''],
-  });
+  // الإدارة: لو للمادة خطة محفوظة لهذا الأسبوع تنفتح بالنموذج للتعديل (بدل نموذج فاضي يكتب فوقها)
+  loadFormForCurrentSelection();
 });
 
 /* ===== تحديد الفصول اللي عليها الاختبار (لو المادة تُدرّس بأكثر من فصل بمعلمين مختلفين) ===== */
@@ -254,7 +257,7 @@ document.getElementById('weekly-has-test').addEventListener('change', async (e) 
 
 /* تحميل خطة المعلم الحالية (إن وُجدت) للمادة/المرحلة/الأسبوع المحددين، للتعديل بدل الإدخال من الصفر */
 async function loadFormForCurrentSelection() {
-  if (currentProfile.role !== 'teacher') return;
+  if (!isStaff() && currentProfile.role !== 'teacher') return;
   const subjectId = document.getElementById('weekly-subject').value;
   const grade = document.getElementById('weekly-grade').value;
   const titleEl = document.getElementById('weekly-form-title');
@@ -307,7 +310,8 @@ let subjectsCache = [];
 export async function loadWeeklyModule() {
   if (currentWeek == null) currentWeek = Math.min(40, academicWeekInfo().next);
   document.getElementById('weekly-form-card').classList.toggle('hidden', !isStaff());
-  document.getElementById('weekly-admin-note-card').classList.toggle('hidden', !isAdminOrDeputy());
+  document.getElementById('wp-note-toggle').classList.toggle('hidden', !isAdminOrDeputy());
+  if (!isAdminOrDeputy()) document.getElementById('weekly-admin-note-card').classList.add('hidden');
   document.getElementById('weekly-publish-card').classList.toggle('hidden', !isAdminOrDeputy());
   document.getElementById('weekly-parent-link-card').classList.toggle('hidden', !isAdminOrDeputy());
   document.getElementById('week-label').textContent = weekLabel(currentWeek);
@@ -325,12 +329,38 @@ export async function loadWeeklyModule() {
     buildLessonEditorUI({ container: document.getElementById('weekly-lessons-container'), addBtn: document.getElementById('weekly-add-lesson-btn'), subjectName: currentSubjectName(), lessons: [''] });
   }
 
+  syncGradeTabs();
+  if (currentProfile.role !== 'teacher' && isStaff()) loadFormForCurrentSelection();
   if (isAdminOrDeputy()) {
     await loadWeeklyAdminNote();
     await loadPublishToggle();
   }
   await refreshWeeklyList();
 }
+
+/* تبويبات المراحل بدل القائمة المنسدلة (تقرأ خيارات #weekly-grade - للمعلم: مراحله فقط) */
+function syncGradeTabs() {
+  const sel = document.getElementById('weekly-grade');
+  const box = document.getElementById('wp-grade-tabs');
+  box.innerHTML = [...sel.options].map(o => `<button type="button" role="tab" data-g="${o.value}" class="${o.value === sel.value ? 'active' : ''}">${esc(o.textContent)}</button>`).join('');
+  box.classList.toggle('hidden', sel.options.length < 2);
+  box.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+    if (sel.value === b.dataset.g) return;
+    sel.value = b.dataset.g;
+    box.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+    sel.dispatchEvent(new Event('change'));
+  }));
+}
+function syncPublishLabel() {
+  const on = document.getElementById('weekly-publish-toggle').checked;
+  document.getElementById('weekly-publish-card').classList.toggle('on', on);
+  document.querySelector('#weekly-publish-card .wp-publish-txt').textContent = on ? 'منشور لأولياء الأمور' : 'غير منشور (مسودة)';
+}
+document.getElementById('wp-note-toggle').addEventListener('click', () => {
+  const card = document.getElementById('weekly-admin-note-card');
+  card.classList.toggle('hidden');
+  if (!card.classList.contains('hidden')) document.getElementById('weekly-admin-note-text').focus();
+});
 
 async function loadPublishToggle() {
   const { data } = await readScoped(scoped => {
@@ -339,10 +369,12 @@ async function loadPublishToggle() {
     return q.maybeSingle();
   });
   document.getElementById('weekly-publish-toggle').checked = !!(data && data.is_published);
+  syncPublishLabel();
 }
 
 document.getElementById('weekly-publish-toggle').addEventListener('change', async (e) => {
   const isPublished = e.target.checked;
+  syncPublishLabel();
   if (isPublished) {
     await writeWithSchoolFallback(extra => sb.from('weekly_plan_publish_settings').upsert({ week_number: currentWeek, is_published: true, updated_at: new Date().toISOString(), ...extra }));
   } else {
@@ -361,6 +393,9 @@ async function loadWeeklyAdminNote() {
   });
   document.getElementById('weekly-admin-note-text').value = data ? data.note : '';
   document.getElementById('weekly-admin-note-success').style.display = 'none';
+  // الملاحظة تظهر تلقائيًا لو فيه ملاحظة محفوظة، وإلا تبقى خلف زر «ملاحظة الإدارة»
+  document.getElementById('weekly-admin-note-card').classList.toggle('hidden', !(data && data.note));
+  document.getElementById('wp-note-toggle').textContent = data && data.note ? 'ملاحظة الإدارة ✓' : 'ملاحظة الإدارة';
 }
 
 document.getElementById('weekly-admin-note-save').addEventListener('click', async () => {
@@ -388,6 +423,7 @@ document.getElementById('week-next').addEventListener('click', () => { if (curre
 document.getElementById('weekly-grade').addEventListener('change', async () => {
   refreshWeeklyList();
   if (isAdminOrDeputy()) loadWeeklyAdminNote();
+  if (currentProfile.role !== 'teacher') loadFormForCurrentSelection();
   const testWrap = document.getElementById('weekly-test-sections-wrap');
   if (!testWrap.classList.contains('hidden')) {
     await renderTestSectionsPicker(document.getElementById('weekly-test-sections-list'), document.getElementById('weekly-grade').value, null);
@@ -460,7 +496,7 @@ async function refreshWeeklyList() {
   const grade = document.getElementById('weekly-grade').value;
   const { data: plans } = await readScoped(scoped => {
     let q = sb.from('weekly_plans')
-      .select('id, grade_level, lessons, performance_tasks, homework, no_homework, has_test, test_sections, test_note, subjects(name)')
+      .select('id, subject_id, grade_level, lessons, performance_tasks, homework, no_homework, has_test, test_sections, test_note, subjects(name)')
       .eq('grade_level', grade).eq('week_number', currentWeek);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
@@ -468,6 +504,7 @@ async function refreshWeeklyList() {
 
   const list = document.getElementById('weekly-list');
   list.innerHTML = '';
+  renderSubjectStatus(grade, plans || []);
 
   if (!plans || plans.length === 0) {
     list.innerHTML = `<div class="placeholder" style="padding:30px;"><p>لا توجد خطة مُدخلة لـ${gradeLabels[grade]} في الأسبوع ${currentWeek} بعد.</p></div>`;
@@ -486,6 +523,43 @@ async function refreshWeeklyList() {
     renderPlanViewMode(row, p);
     table.appendChild(row);
   });
+}
+
+/* شريط حالة المواد: كل مادة مسندة لهذي المرحلة ✓ مسلّمة أو لسا - الضغط يفتح المادة بالنموذج */
+let gradeAssignCache = null;
+async function renderSubjectStatus(grade, plans) {
+  const box = document.getElementById('wp-status');
+  if (!box) return;
+  let subjects;
+  if (currentProfile.role === 'teacher') {
+    subjects = teacherAssignments.filter(a => a.grade_level === grade).map(a => ({ id: a.subject_id, name: a.subjects ? a.subjects.name : '' }));
+  } else {
+    if (!gradeAssignCache) {
+      const { data } = await readScoped(scoped => {
+        let q = sb.from('teacher_subjects').select('subject_id, grade_level, subjects(name)');
+        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+        return q;
+      });
+      gradeAssignCache = data || [];
+    }
+    const m = new Map();
+    gradeAssignCache.filter(a => a.grade_level === grade).forEach(a => { if (!m.has(a.subject_id)) m.set(a.subject_id, { id: a.subject_id, name: a.subjects ? a.subjects.name : '' }); });
+    subjects = [...m.values()];
+  }
+  subjects.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  if (!subjects.length) { box.innerHTML = ''; return; }
+  const done = new Set(plans.map(p => p.subject_id));
+  const n = subjects.filter(s => done.has(s.id)).length;
+  const mine = currentProfile.role === 'teacher';
+  box.innerHTML = `<div class="wp-status-head"><b>${mine ? 'موادي' : 'المواد'} في ${esc(gradeLabels[grade] || '')}</b><span class="wt-gcount ${n === subjects.length ? 'full' : ''}">${n} من ${subjects.length} مسلّمة</span></div>
+    <div class="wt-chips">${subjects.map(s => `<button type="button" class="wt-chip ${done.has(s.id) ? 'ok' : 'miss'}" data-id="${s.id}"><b>${done.has(s.id) ? '✓ ' : ''}${esc(s.name)}</b><span>${done.has(s.id) ? 'مسلّمة · اضغط للتعديل' : 'لسا · اضغط للإدخال'}</span></button>`).join('')}</div>`;
+  box.querySelectorAll('.wt-chip').forEach(b => b.addEventListener('click', () => {
+    const sel = document.getElementById('weekly-subject');
+    if (![...sel.options].some(o => o.value === b.dataset.id)) return;
+    sel.value = b.dataset.id;
+    sel.dispatchEvent(new Event('change'));
+    document.getElementById('weekly-form-card').scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }));
 }
 
 function renderPlanViewMode(row, p) {

@@ -1492,3 +1492,49 @@
   .ev-toolbar{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; }
   .ev-toolbar select{ width:auto !important; margin:0 !important; padding:9px 12px; border-radius:99px; }
   #notes-module.panel{ background:transparent; border:0; box-shadow:none; padding:0; }
+
+  /* ===== الخطة الأسبوعية ===== */
+  #weekly-module.panel{ background:transparent; border:0; box-shadow:none; padding:0; }
+  .wp-toolbar{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+  .wp-toolbar .seg-tabs{ margin:0; }
+  .wp-week-label{ font-family:'Tajawal'; font-size:16px; font-weight:800; color:var(--meadow-dark); padding:0 4px; }
+  .wp-admin-actions{ display:flex; align-items:center; gap:8px; margin-inline-start:auto; flex-wrap:wrap; }
+  .wp-admin-actions .btn-secondary{ width:auto; padding:9px 13px; font-size:13px; }
+  .wp-publish{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; background:#FDF2DF; color:#7A5410; border-radius:99px; padding:7px 12px 7px 14px; font-size:13px; font-weight:700; }
+  .wp-publish.on{ background:var(--green-light); color:#1F6A3C; }
+  .wp-publish input{ position:absolute; opacity:0; width:1px !important; height:1px; pointer-events:none; }
+  .wp-switch{ width:34px; height:20px; border-radius:99px; background:#D9C29A; position:relative; transition:background 0.15s; flex-shrink:0; }
+  .wp-switch::after{ content:''; position:absolute; top:2px; right:2px; width:16px; height:16px; border-radius:50%; background:#fff; transition:right 0.15s; box-shadow:0 1px 2px rgba(0,0,0,0.2); }
+  .wp-publish.on .wp-switch{ background:var(--status-good); }
+  .wp-publish.on .wp-switch::after{ right:16px; }
+  .wp-publish input:focus-visible + .wp-switch{ outline:2px solid var(--teal); outline-offset:2px; }
+  .wp-msg{ font-size:12.5px; color:#1F6A3C; background:var(--green-light); border-radius:10px; padding:8px 12px; margin-bottom:12px; word-break:break-all; }
+  .wp-note-card{ border-top:4px solid var(--gold); }
+  .wp-status{ background:#fff; border:1px solid var(--border); border-radius:16px; padding:14px 16px; margin-bottom:14px; display:flex; flex-direction:column; gap:10px; box-shadow:0 1px 3px rgba(21,34,56,0.05); }
+  .wp-status:empty{ display:none; }
+  .wp-status-head{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .wp-status-head b{ font-size:15px; color:var(--meadow-dark); }
+  .wp-status .wt-chip{ border:0; text-align:right; cursor:pointer; font-family:inherit; }
+  .wp-status .wt-chip:hover{ filter:brightness(0.96); }
+  #weekly-form-card{ scroll-margin-top:90px; border-top:4px solid var(--meadow); }
+  @media (max-width: 899px){ .wp-admin-actions{ margin-inline-start:0; } .wp-toolbar .seg-tabs{ width:100%; } .wp-toolbar .seg-tabs button{ flex:1; } }
+
+  /* ===== تبويبات المراحل العامة (.tabs/.tab) بنفس شكل seg-tabs ===== */
+  .tabs{ display:inline-flex; flex-wrap:wrap; gap:4px; background:var(--sand); border-radius:99px; padding:4px; margin-bottom:14px; }
+  .tabs .tab{ border:0; background:transparent; border-radius:99px; padding:8px 16px; font-size:14px; font-weight:600; color:var(--slate); white-space:nowrap; width:auto; }
+  .tabs .tab:hover{ color:var(--ink); }
+  .tabs .tab.active{ background:#fff; color:var(--meadow-dark); box-shadow:0 1px 4px rgba(21,34,56,0.12); }
+
+  /* ===== الجدول الدراسي ===== */
+  #schedule-module.panel{ background:transparent; border:0; box-shadow:none; padding:0; }
+  .sc-toolbar{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .sc-toolbar .seg-tabs{ margin:0; }
+  .sc-import{ border-top:4px solid var(--meadow); }
+  .sc-section-row{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
+  .sc-section-row label{ font-size:13px; font-weight:700; color:var(--slate); }
+  .sc-section-row select{ width:auto !important; min-width:220px; margin:0 !important; }
+
+  /* ===== كشوف المتابعة ===== */
+  #followups-module.panel{ background:transparent; border:0; box-shadow:none; padding:0; }
+  #followups-module .bud-head-title{ display:none; }
+  #followups-module .bud-head{ padding:10px 14px; }

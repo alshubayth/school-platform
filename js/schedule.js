@@ -321,3 +321,18 @@ async function saveGrid() {
   statusEl.textContent = 'تم الحفظ بنجاح ✓';
   statusEl.style.color = 'var(--meadow)';
 }
+
+/* ===== تبويبين: جدول الحصص / جدول الاختبارات الفترية + الاستيراد خلف زر ===== */
+function setScheduleMode(mode) {
+  document.querySelectorAll('#sc-mode-tabs button').forEach(b => b.classList.toggle('active', b.dataset.m === mode));
+  document.getElementById('sc-coverage-card').classList.toggle('hidden', mode !== 'exams');
+  document.getElementById('sc-section-row').classList.toggle('hidden', mode !== 'classes');
+  document.getElementById('sc-grid-container').classList.toggle('hidden', mode !== 'classes');
+}
+document.querySelectorAll('#sc-mode-tabs button').forEach(b => b.addEventListener('click', () => setScheduleMode(b.dataset.m)));
+document.getElementById('sc-import-toggle').addEventListener('click', () => {
+  const card = document.getElementById('sc-import-card');
+  const open = card.classList.toggle('hidden') === false;
+  document.getElementById('sc-import-toggle').textContent = open ? 'إخفاء الاستيراد' : 'استيراد الجدول من PDF';
+});
+setScheduleMode('classes');
