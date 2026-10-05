@@ -164,3 +164,11 @@ begin
 end $$;
 
 commit;
+
+notify pgrst, 'reload schema';
+
+-- فحص بعد التنفيذ: كل القيم المفروض أكبر من صفر
+select
+  (select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname in ('is_owner','same_school','is_school_staff','fill_school_id')) as functions_4,
+  (select count(*) from pg_policies where schemaname = 'public' and policyname in ('answer_keys_school_read','weekly_plans_staff_manage','profiles_staff_update','classroom_visits_select')) as policies_4,
+  (select count(*) from pg_trigger where tgname = 'trg_fill_school_id') as school_triggers;
