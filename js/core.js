@@ -113,8 +113,8 @@ export function groupTilesFor(groupKey) {
   const g = GROUPS.find(x => x.key === groupKey);
   return g ? g.keys.map(k => tiles.find(t => t.key === k)).filter(t => t && isTileAllowed(t)) : [];
 }
-export function tileTitle(t) { return t.key === 'budget' ? budgetTileTitle() : t.title; }
-export function tileDesc(t) { return t.key === 'budget' ? budgetTileDesc() : t.desc; }
+export function tileTitle(t) { if (t.key === 'substitutes' && currentProfile && currentProfile.role === 'teacher') return 'جدول يومي'; return t.key === 'budget' ? budgetTileTitle() : t.title; }
+export function tileDesc(t) { if (t.key === 'substitutes' && currentProfile && currentProfile.role === 'teacher') return 'حصصي اليوم وحصص الإشغال'; return t.key === 'budget' ? budgetTileDesc() : t.desc; }
 
 /* شاشة الدخول: تاريخ اليوم بالهجري والميلادي + إظهار كلمة المرور + الدخول بزر Enter */
 (function initLoginExtras() {
@@ -262,7 +262,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-06j';
+export const ASSET_VERSION = '2026-10-06k';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -717,6 +717,7 @@ function renderModuleHeader(key) {
   let desc = t.desc;
   if (key === 'duty' && currentProfile.role === 'teacher') desc = 'المناوبة المسندة لي';
   if (key === 'achievements' && currentProfile.role === 'teacher') desc = 'بنود ملف إنجازي واكتمالها';
+  if (key === 'substitutes' && currentProfile.role === 'teacher') { title = 'جدول يومي'; desc = 'حصصي اليوم وحصص الإشغال'; }
   if (key === 'budget') { title = budgetTileTitle(); desc = budgetTileDesc(); }
   const g = GROUPS.find(x => x.key === t.group);
   header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div>${g ? `<div class="crumb"><a href="#/" data-crumb="home">الرئيسية</a> / <a href="#/ws/${g.key}" data-crumb="${g.key}">${g.title}</a></div>` : ''}<h2>${title}</h2><p>${desc}</p></div>`;

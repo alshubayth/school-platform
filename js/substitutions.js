@@ -505,13 +505,30 @@ $('dd-print').addEventListener('click', () => {
   w.document.close();
 });
 
-/* ---------- المعلم: تغييراتي اليوم ---------- */
+/* ---------- المعلم: يومي (حصصه فقط) ---------- */
+// المعلم ما يشوف جدول المدرسة كامل - يشوف حصصه اليوم وحصص الإشغال اللي عليه والحصص اللي انتقلت منه
 function renderMine() {
   const box = $('dd-mine');
   if (!box) return;
-  if (isAdminOrDeputy()) { box.classList.add('hidden'); return; }
+  const manage = isAdminOrDeputy();
+  document.querySelectorAll('#substitutes-module .dd-gridwrap, #substitutes-module .dd-legend').forEach(el => el.classList.toggle('hidden', !manage));
+  if (manage) { box.classList.add('hidden'); return; }
   const me = norm(currentProfile.full_name);
-  const rows = changeList().filter(r => r.teacher === me || (baseMap.get(keyOf(r.g, r.s, r.p)) && norm(baseMap.get(keyOf(r.g, r.s, r.p)).teacher_name) === me));
+  const items = [];
+  PERIODS.forEach(p => classes.forEach(c => {
+    const k = keyOf(c.grade, c.section, p);
+    const base = baseMap.get(k);
+    const e = effective(k);
+    const mineNow = e && !e.free && e.teacher === me;
+    const mineBase = base && norm(base.teacher_name) === me;
+    if (mineNow) items.push({ p, cls: classLabel(c.grade, c.section), subject: e.subject, kind: e.changed && !mineBase ? 'sub' : 'own', note: e.note });
+    else if (mineBase) items.push({ p, cls: classLabel(c.grade, c.section), subject: base.subject_name || '', kind: 'moved', to: e && !e.free ? e.teacher : '', note: e ? e.note : '' });
+  }));
   box.classList.remove('hidden');
-  box.innerHTML = `<h4 class="dd-mine-h">تغييراتي اليوم</h4>${rows.length ? rows.map(r => `<div class="dd-mine-row"><b>الحصة ${r.p} · ${esc(r.cls)}</b><span>${r.teacher === me ? `عليك: ${esc(r.to.split(' · ')[0])}` : `حصتك راحت لـ ${esc(r.to)}`}${r.note ? ' — ' + esc(r.note) : ''}</span></div>`).join('') : '<p class="dd-empty-panel">ما عليك تغييرات في هذا اليوم. حصصك مميزة في الجدول.</p>'}`;
+  const subs = items.filter(x => x.kind === 'sub').length;
+  box.innerHTML = `<h4 class="dd-mine-h">حصصي ${subs ? `<span class="dd-mine-badge">${subs} ${subs === 1 ? 'حصة إشغال' : subs === 2 ? 'حصتين إشغال' : 'حصص إشغال'}</span>` : ''}</h4>
+    ${items.length ? items.map(x => `<div class="dd-mine-row k-${x.kind}">
+      <b>الحصة ${x.p} · ${esc(x.cls)}</b>
+      <span>${x.kind === 'sub' ? `حصة إشغال${x.subject ? ' · ' + esc(x.subject) : ''}` : x.kind === 'moved' ? `انتقلت ${x.to ? 'إلى ' + esc(x.to) : '(فراغ)'}` : esc(x.subject || '')}${x.note ? ' — ' + esc(x.note) : ''}</span>
+    </div>`).join('') : '<p class="dd-empty-panel">ما عندك حصص في هذا اليوم.</p>'}`;
 }

@@ -2064,3 +2064,8 @@
 .av-exc-row:last-child{ border-bottom:0; }
 .av-restore{ font-size:12px; background:none; border:0; color:var(--meadow); cursor:pointer; }
 .av-found summary{ color:var(--meadow-dark); } .av-found .av-table td:first-child{ min-width:0; color:var(--slate); }
+.dd-mine-badge{ font-size:12px; font-weight:700; background:var(--gold-light); color:#8a4a12; border-radius:99px; padding:3px 10px; margin-inline-start:8px; vertical-align:middle; }
+.dd-mine-row.k-sub{ border-inline-start-color:var(--gold); background:#FFFBF5; }
+.dd-mine-row.k-sub span{ color:#8a4a12; font-weight:600; }
+.dd-mine-row.k-moved{ border-inline-start-color:var(--status-idle); opacity:.8; }
+.dd-mine-row.k-moved b{ text-decoration:line-through; text-decoration-color:var(--status-idle); }
