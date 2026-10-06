@@ -89,7 +89,8 @@ async function refreshForDate() {
   const [{ data: sched }, { data: chg }, { data: abs }, { data: wk }] = await Promise.all([
     readScopedBySchool(scoped => { let q = sb.from('class_schedules').select('*').eq('day_of_week', dk); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
     readScopedBySchool(scoped => { let q = sb.from('daily_schedule_changes').select('*').eq('change_date', subDate); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
-    readScopedBySchool(scoped => { let q = sb.from('daily_teacher_absences').select('*').eq('absence_date', subDate); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.order('created_at'); }),
+    // غياب واستئذان الزملاء للإدارة فقط - المعلم ما يحتاجه ولا يشوفه
+    isAdminOrDeputy() ? readScopedBySchool(scoped => { let q = sb.from('daily_teacher_absences').select('*').eq('absence_date', subDate); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.order('created_at'); }) : Promise.resolve({ data: [] }),
     readScopedBySchool(scoped => { let q = sb.from('daily_schedule_changes').select('teacher_name, change_date, reason').gte('change_date', isoOf(sun)).lte('change_date', isoOf(thu)); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
   ]);
   schedule = sched || [];
@@ -164,7 +165,7 @@ function renderGrid() {
       const e = effective(k);
       if (!e) return `<td class="dd-cell dd-none" data-k="${k}" ${manage ? 'tabindex="0"' : ''}></td>`;
       const out = !e.free && teacherOut(e.teacher, p);
-      const cls = ['dd-cell', e.changed ? 'is-changed' : '', e.free ? 'is-free' : '', out ? 'is-out' : '', !e.free && conf.get(p).has(e.teacher) ? 'is-conflict' : '', k === selectedKey ? 'is-selected' : '', k === swapFrom ? 'is-swapfrom' : '', !manage && me && e.teacher === me ? 'is-mine' : ''].filter(Boolean).join(' ');
+      const cls = ['dd-cell', e.changed ? 'is-changed' : '', e.free ? 'is-free' : '', out ? 'is-out' : '', manage && !e.free && conf.get(p).has(e.teacher) ? 'is-conflict' : '', k === selectedKey ? 'is-selected' : '', k === swapFrom ? 'is-swapfrom' : '', !manage && me && e.teacher === me ? 'is-mine' : ''].filter(Boolean).join(' ');
       return `<td class="${cls}" data-k="${k}" ${manage ? 'draggable="true" tabindex="0"' : ''} title="${esc((e.subject || '') + (e.teacher ? ' · ' + e.teacher : '') + (e.note ? ' · ' + e.note : '') + (out ? ' · ' + out : ''))}">
         <span class="dc-sub">${esc(e.free ? (e.note || 'فراغ') : (e.subject || ''))}</span>
         <span class="dc-t">${esc(e.free ? '' : shortName(e.teacher))}</span>
@@ -177,6 +178,8 @@ function renderGrid() {
 }
 
 function renderStats() {
+  $('dd-stats').classList.toggle('hidden', !isAdminOrDeputy());
+  if (!isAdminOrDeputy()) { $('dd-stats').innerHTML = ''; return; }
   const conf = conflictsByPeriod();
   let affected = 0, unresolved = 0, conflicts = 0;
   classes.forEach(c => PERIODS.forEach(p => {
