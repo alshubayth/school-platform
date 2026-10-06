@@ -223,8 +223,29 @@ function renderManager() {
       <button class="btn-secondary" id="av-print">طباعة التقرير</button>
     </div>
     <div class="av-list">${list.length ? list.map(teacherRow).join('') : '<div class="av-empty">ما فيه نتائج.</div>'}</div>
+    ${discoveredPanel()}
     ${state.excluded.size ? `<details class="av-excluded"><summary>المستبعدون من المتابعة (${state.excluded.size})</summary>${state.staff.filter(p => state.excluded.has(p.id)).map(p => `<div class="av-exc-row"><span>${esc(p.full_name)}</span><button class="text-action-btn av-restore" data-id="${p.id}">إرجاع</button></div>`).join('')}</details>` : ''}` : ''}`;
   bindManager();
+}
+
+// كل مجلدات المعلمين اللي لقاها الإكسل (كل الفصول) - للتأكد إن القراءة شملت الجميع
+function discoveredPanel() {
+  const rows = (state.snap && state.snap.rows) || [];
+  if (!rows.length) return '';
+  const by = new Map();
+  for (const r of rows) {
+    if (!by.has(r.teacher)) by.set(r.teacher, { spec: r.spec || '', files: 0, terms: new Map(), items: new Set() });
+    const t = by.get(r.teacher);
+    t.files += r.files || 0;
+    if (r.term) t.terms.set(r.term, (t.terms.get(r.term) || 0) + (r.files || 0));
+    if (r.item && r.item !== '(no item)') t.items.add(r.item);
+  }
+  const staffName = id => (state.staff.find(p => p.id === id) || {}).full_name || '';
+  const list = [...by].sort((a, b) => a[1].spec.localeCompare(b[1].spec, 'ar') || a[0].localeCompare(b[0], 'ar'));
+  return `<details class="av-excluded av-found"><summary>المعلمين المكتشفين في الملف (${list.length}) · ${rows.reduce((a, r) => a + (r.files || 0), 0)} ملف</summary>
+    <div class="av-tablewrap"><table class="av-table"><thead><tr><th>#</th><th>اسم المجلد</th><th>التخصص</th><th>الملفات</th><th>البنود</th><th>حسب الفصل</th><th>الحساب المربوط</th></tr></thead><tbody>
+    ${list.map(([name, t], i) => { const pid = state.map.get(name); return `<tr><td>${i + 1}</td><td>${esc(name)}</td><td>${esc(t.spec)}</td><td>${t.files}</td><td>${t.items.size}</td><td>${[...t.terms].map(([k, v]) => esc(k) + ': ' + v).join('، ') || '—'}</td><td>${pid ? esc(staffName(pid)) : '<span class="av-st part">غير مربوط</span>'}</td></tr>`; }).join('')}
+    </tbody></table></div></details>`;
 }
 
 function staffOptions(selected) {
