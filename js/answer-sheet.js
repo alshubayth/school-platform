@@ -857,8 +857,15 @@ export async function htmlPagesToPdf({ html, styles, w, h, pageSelector, filenam
     const orientation = w > h ? 'landscape' : 'portrait';
     const pdf = new jsPDF({ unit: 'mm', format: [w, h], orientation, compress: true });
     const pages = [...idoc.querySelectorAll(pageSelector)];
+    // نصوّر كل صفحة وهي لحالها بالمستند: html2canvas ينسخ المستند كامل مع كل صفحة، فلو بقت كل
+    // الصفحات موجودة يصير الوقت يتضاعف مع عددها (مئات الصفحات = بطء شديد)
+    const anchors = pages.map(pg => { const c = idoc.createComment('p'); pg.replaceWith(c); return c; });
+    const t0 = Date.now();
     for (let i = 0; i < pages.length; i++) {
-      onStatus(`جارٍ تجهيز الصفحة ${i + 1} من ${pages.length}...`);
+      const left = i > 2 ? Math.round((Date.now() - t0) / i * (pages.length - i) / 1000) : null;
+      onStatus(`جارٍ تجهيز الصفحة ${i + 1} من ${pages.length}${left != null ? ` · باقي تقريبًا ${left > 90 ? Math.round(left / 60) + ' دقيقة' : left + ' ثانية'}` : ''}...`);
+      anchors[i].replaceWith(pages[i]);
+      await new Promise(r => setTimeout(r, 0)); // نخلي الصفحة تتنفس (ما تعلق)
       const pageRect = pages[i].getBoundingClientRect();
       const pxPerMm = pageRect.width / w;
       const bcs = [...pages[i].querySelectorAll('svg.as-bc')].map(svg => {
@@ -866,9 +873,11 @@ export async function htmlPagesToPdf({ html, styles, w, h, pageSelector, filenam
         svg.style.visibility = 'hidden';
         return { code: svg.dataset.code, x: (r.left - pageRect.left) / pxPerMm, y: (r.top - pageRect.top) / pxPerMm, w: r.width / pxPerMm, h: r.height / pxPerMm };
       });
-      const canvas = await window.html2canvas(pages[i], { scale: 3, backgroundColor: '#ffffff', useCORS: true, windowWidth: pages[i].scrollWidth, windowHeight: pages[i].scrollHeight });
+      const canvas = await window.html2canvas(pages[i], { scale: pages.length > 40 ? 2 : 3, backgroundColor: '#ffffff', useCORS: true, logging: false, windowWidth: pages[i].scrollWidth, windowHeight: pages[i].scrollHeight });
       if (i > 0) pdf.addPage([w, h], orientation);
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, w, h, undefined, 'FAST');
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', 0, 0, w, h, undefined, 'FAST');
+      canvas.width = canvas.height = 0; // تحرير الذاكرة
+      pages[i].remove();
       pdf.setFillColor(0, 0, 0);
       bcs.forEach(bc => {
         const { modules, totalModules } = code128Modules(bc.code);
