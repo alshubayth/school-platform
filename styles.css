@@ -2051,3 +2051,6 @@
 .av-tablewrap{ overflow-x:auto; }
 .av-table td:first-child{ min-width:150px; }
 @media (max-width:520px){ .av-table th:nth-child(5), .av-table td:nth-child(5){ display:none; } .av-table th, .av-table td{ padding:6px 4px; } .av-table td:first-child{ min-width:115px; } .av-mine{ padding:14px; } }
+.av-link.need{ border-color:var(--status-warn); background:#FFF9EC; color:#8a6410; font-weight:600; }
+.av-note-link{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+.av-note-link .btn-secondary{ width:auto; padding:6px 12px; font-size:12.5px; }

@@ -164,7 +164,7 @@ function renderManager() {
   const rules = (state.snap && state.snap.rules) || [];
   const specs = [...new Set(teachers.map(t => t.spec).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
   const f = state.filter;
-  let list = teachers.filter(t => (!f.spec || t.spec === f.spec) && (!f.q || norm(t.name).includes(norm(f.q))));
+  let list = teachers.filter(t => (!f.spec || t.spec === f.spec) && (!f.q || norm(t.name).includes(norm(f.q))) && (!f.unlinked || !t.profile));
   list.sort((a, b) => f.sort === 'name' ? a.name.localeCompare(b.name, 'ar')
     : f.sort === 'spec' ? (a.spec.localeCompare(b.spec, 'ar') || a.name.localeCompare(b.name, 'ar'))
     : ((a.ev.pct ?? 101) - (b.ev.pct ?? 101)) || a.name.localeCompare(b.name, 'ar'));
@@ -186,7 +186,7 @@ function renderManager() {
       <div class="stat-card"><div class="label">يحتاج متابعة</div><div class="value">${behind}</div></div>
     </div>
     ${!reqRules.length ? '<div class="av-note">ورقة «البنود» في الإكسل ما فيها بنود إلزامية، فما تنحسب نسبة إنجاز. حدّد الإلزامي من الإكسل.</div>' : ''}
-    ${unlinked ? `<div class="av-note">${unlinked} مجلد غير مربوط بحساب معلم، فما يوصله تذكير. اربطه من القائمة بجانب الاسم.</div>` : ''}
+    ${unlinked ? `<div class="av-note av-note-link"><span>⚠ ${unlinked} معلم اسم مجلده ما تطابق مع اسم حسابه بالمنصة. اربطه من القائمة بجانب اسمه عشان يوصله التذكير ويشوف ملفه.</span><button class="btn-secondary" id="av-only-unlinked">${f.unlinked ? 'عرض الكل' : 'عرض غير المربوطين'}</button></div>` : ''}
     <div class="av-toolbar">
       <input id="av-q" type="search" placeholder="بحث باسم المعلم" value="${esc(f.q)}">
       ${termsOf(state.snap && state.snap.rows).length > 1 ? `<select id="av-term">${termsOf(state.snap.rows).map(x => `<option ${x === f.term ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>` : ''}
@@ -206,20 +206,17 @@ function renderManager() {
 
 function staffOptions(selected) {
   const guess = selected;
-  return `<option value="">— غير مربوط —</option>` + state.staff.map(p =>
+  return `<option value="">${selected ? '— إلغاء الربط —' : '⚠ اختر حساب المعلم'}</option>` + state.staff.map(p =>
     `<option value="${p.id}" ${p.id === guess ? 'selected' : ''}>${esc(p.full_name)}</option>`).join('');
 }
 // اقتراح الحساب من اسم المجلد: أكثر حساب يشترك بالاسم الأول والأخير
 function guessProfile(folder) {
-  const ft = norm(folder).split(' ').filter(w => w.length > 1 && !['بن', 'ابن', 'ال', 'م', 'ا', 'أ'].includes(w));
-  if (!ft.length) return null;
-  let best = null, bestScore = 0;
-  for (const p of state.staff) {
-    const pt = norm(p.full_name).split(' ');
-    const score = ft.filter(w => pt.includes(w)).length + (pt[0] === ft[0] ? 1 : 0) + (pt[pt.length - 1] === ft[ft.length - 1] ? 1 : 0);
-    if (score > bestScore) { bestScore = score; best = p.id; }
-  }
-  return bestScore >= 3 ? best : null;
+  // ربط تلقائي فقط لما يتطابق الاسم (بعد تجاهل «بن» والمسافات والهمزات) مع حساب واحد بالضبط
+  const key = n => norm(n).split(' ').filter(w => w && !['بن', 'ابن', 'بنت'].includes(w)).join(' ');
+  const k = key(folder);
+  if (!k) return null;
+  const hits = state.staff.filter(p => key(p.full_name) === k);
+  return hits.length === 1 ? hits[0].id : null;
 }
 
 function bar(pct) {
@@ -242,7 +239,7 @@ function teacherRow(t) {
       </button>
       <div class="av-progress">${bar(ev.pct)}</div>
       <div class="av-missing">${ev.pct === 100 ? '<span class="av-chip ok">كل البنود الإلزامية مكتملة</span>' : chips}</div>
-      <select class="av-link" data-folder="${esc(t.name)}" title="ربط المجلد بحساب المعلم">${staffOptions(t.profile)}</select>
+      <select class="av-link ${t.profile ? '' : 'need'}" data-folder="${esc(t.name)}" title="ربط المجلد بحساب المعلم" aria-label="ربط ${esc(t.name)} بحساب">${staffOptions(t.profile)}</select>
     </div>
     ${open ? teacherDetail(t) : ''}
   </div>`;
@@ -266,6 +263,7 @@ function bindManager() {
   if (ch) ch.onclick = () => { state.source = null; renderManager(); const u = $('av-url'); if (u) u.focus(); };
   const q = $('av-q');
   if (q) q.oninput = () => { state.filter.q = q.value; const pos = q.selectionStart; renderManager(); const n = $('av-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  const ou = $('av-only-unlinked'); if (ou) ou.onclick = () => { state.filter.unlinked = !state.filter.unlinked; renderManager(); };
   const tm = $('av-term'); if (tm) tm.onchange = () => { state.filter.term = tm.value; renderManager(); };
   const sp = $('av-spec'); if (sp) sp.onchange = () => { state.filter.spec = sp.value; renderManager(); };
   const so = $('av-sort'); if (so) so.onchange = () => { state.filter.sort = so.value; renderManager(); };
@@ -296,7 +294,7 @@ async function saveLink(folder, profileId, sel) {
     : await sb.from('achv_teacher_map').delete().eq('school_id', currentSchoolId).eq('folder_name', folder);
   if (res.error) { toast('تعذر حفظ الربط: ' + res.error.message, true); return; }
   if (profileId) state.map.set(folder, profileId); else state.map.delete(folder);
-  sel.classList.add('saved'); setTimeout(() => sel.classList.remove('saved'), 900);
+  renderManager();
   toast(profileId ? 'تم ربط المجلد بالحساب' : 'تم إلغاء الربط');
 }
 
