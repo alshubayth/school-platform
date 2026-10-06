@@ -36,6 +36,7 @@ const daysSince = s => s ? Math.floor((Date.now() - new Date(s.length === 16 ? s
 /* ---------- الحساب ---------- */
 // يطابق صفوف المعلم مع قواعد البنود: بالرقم أولاً، وإلا بالاسم
 function evaluateTeacher(rows, rules) {
+  rows = rows.filter(r => r.item); // صفوف «مجلد بدون ملفات» للعرض فقط
   const used = new Set();
   const items = rules.map(rule => {
     const matched = rows.filter((r, i) => {

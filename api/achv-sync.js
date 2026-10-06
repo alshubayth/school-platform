@@ -59,7 +59,7 @@ function findHeader(rows, must) {
 
 function parseWorkbook(buf) {
   const wb = XLSX.read(buf, { type: 'buffer' });
-  let data = null, rules = [];
+  let data = null, rules = [], folders = [];
   for (const name of wb.SheetNames) {
     const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null });
     if (!data) {
@@ -84,6 +84,19 @@ function parseWorkbook(buf) {
         continue;
       }
     }
+    // قائمة مجلدات المعلمين (حتى الفاضية) من استعلام ثاني: أعمدة التخصص والمعلم بدون البند
+    if (!folders.length) {
+      const h = findHeader(rows, ['التخصص', 'المعلم']);
+      if (h && h.col('البند') < 0) {
+        const cs = h.col('التخصص'), ct = h.col('المعلم');
+        for (const r of rows.slice(h.index + 1)) {
+          const teacher = clean(r[ct]);
+          if (teacher) folders.push({ spec: clean(r[cs]), teacher });
+          if (folders.length >= 1000) break;
+        }
+        if (folders.length) continue;
+      }
+    }
     if (!rules.length) {
       const h = findHeader(rows, ['البند', 'إلزامي']);
       if (h) {
@@ -105,7 +118,12 @@ function parseWorkbook(buf) {
   }
   // ملخص الأوراق (للتشخيص لو ما لقينا الجدول)
   const sheets = wb.SheetNames.map(n => { const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }); const first = rows.find(r => (r || []).some(v => v != null && String(v).trim())) || []; return n + ' (' + rows.length + '): ' + first.slice(0, 7).map(clean).filter(Boolean).join(' | ').slice(0, 120); });
-  return { data, rules, sheets };
+  // المعلم اللي مجلده فاضي ينضاف بصف بدون بند عشان يطلع بالمنصة
+  if (data && folders.length) {
+    const seen = new Set(data.map(r => r.teacher));
+    for (const f of folders) if (!seen.has(f.teacher)) { seen.add(f.teacher); data.push({ spec: f.spec, term: '', teacher: f.teacher, item: '', no: null, files: 0, modified: null }); }
+  }
+  return { data, rules, sheets, folders: folders.length };
 }
 
 async function handle(body, token, deps) {
