@@ -234,23 +234,26 @@ function buildSheetBody(opts, student, logoSrc, ox) {
   // الاختبار بنموذجين: خانة "النموذج" بخط كبير عشان المعلم يعطي الطالب ورقة الأسئلة الصحيحة
   const model = opts.modelsOn ? (student && student.model ? student.model : '') : null;
   const modelEn = m => (m === 'أ' ? 'A' : m === 'ب' ? 'B' : '');
-  const row2 = model === null
-    ? (rtl ? [['الصف', g, 0.3], ['الفصل', sec, 0.18], ['المادة', subject || '', 0.52]]
-           : [['Grade', g, 0.3], ['Class', sec, 0.18], ['Subject', subject || '', 0.52]])
-    : (rtl ? [['الصف', g, 0.27], ['الفصل', sec, 0.15], ['المادة', subject || '', 0.36], ['النموذج', model, 0.22, true]]
-           : [['Grade', g, 0.27], ['Class', sec, 0.15], ['Subject', subject || '', 0.36], ['Form', modelEn(model), 0.22, true]]);
-  const cells = rtl
-    ? [[['اسم الطالب', student ? student.full_name : '', 0.66], ['رقم الهوية', student ? student.national_id : '', 0.34]], row2]
-    : [[['Name', student ? student.full_name : '', 0.66], ['ID', student ? student.national_id : '', 0.34]], row2];
+  // كل خانة: [العنوان، القيمة، عرض العنوان، عرض القيمة (null = يأخذ الباقي)، نموذج؟] - العروض بوحدة تتناسب مع حجم الورقة
+  // (عرض العنوان حسب طول الكلمة، والقيمة حسب محتواها: رقم الفصل صغير، الاسم والمادة ياخذون المتبقي)
+  const u = P.infoLabelW / 21;
+  const bubblesW = 2 * P.bubble + P.bubble * 0.9 + 3 * u;
+  const L1 = rtl ? ['الصف', 'الفصل', 'المادة', 'النموذج', 'اسم الطالب', 'رقم الهوية'] : ['Grade', 'Class', 'Subject', 'Form', 'Name', 'ID'];
+  const row2 = [[L1[0], g, 12.5 * u, 23 * u], [L1[1], sec, 13 * u, 8 * u], [L1[2], subject || '', 13 * u, null]];
+  if (model !== null) row2.push([L1[3], rtl ? model : modelEn(model), 15 * u, Math.max(18 * u, opts.modelBubble ? bubblesW : 0), true]);
+  const cells = [[[L1[4], student ? student.full_name : '', 22 * u, null], [L1[5], student ? student.national_id : '', 20 * u, 30 * u]], row2];
   cells.forEach((row, ri) => {
+    const fixed = row.reduce((a, c) => a + c[2] + (c[3] || 0), 0);
+    const flexN = row.filter(c => c[3] == null).length || 1;
+    const flexW = Math.max(10, (innerW - fixed) / flexN);
     let off = 0;
     const y = P.infoTop + ri * P.infoRowH;
-    row.forEach(([label, value, frac, big]) => {
-      const w = innerW * frac;
-      h += `<div class="as-cell lbl" dir="${rtl ? 'rtl' : 'ltr'}" style="left:${mm(X(P.side + off, P.infoLabelW))}; top:${mm(y)}; width:${mm(P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${P.infoSize}pt;">${label}</div>`;
+    row.forEach(([label, value, lw, vwFixed, big]) => {
+      const vw = vwFixed == null ? flexW : vwFixed;
+      h += `<div class="as-cell lbl" dir="${rtl ? 'rtl' : 'ltr'}" style="left:${mm(X(P.side + off, lw))}; top:${mm(y)}; width:${mm(lw)}; height:${mm(P.infoRowH)}; font-size:${P.infoSize}pt;">${label}</div>`;
+      const vx = P.side + off + lw;
       if (big && opts.modelBubble) {
-        // الطالب يظلّل نموذجه: فقاعتين بمواقع ثابتة (أ ثم ب من بداية القراءة) يقرأها Remark
-        const vx = P.side + off + P.infoLabelW, vw = w - P.infoLabelW;
+        // الطالب يظلّل نموذجه: فقاعتين (أ ثم ب من بداية القراءة) في منتصف الخانة يقرأها Remark
         h += `<div class="as-cell val" style="left:${mm(X(vx, vw))}; top:${mm(y)}; width:${mm(vw)}; height:${mm(P.infoRowH)};"></div>`;
         const gap = P.bubble * 0.9, totalW = 2 * P.bubble + gap;
         const fillM = student && student.model ? student.model : null;
@@ -259,11 +262,11 @@ function buildSheetBody(opts, student, logoSrc, ox) {
           const filled = fillM && ((bi === 0 && fillM === 'أ') || (bi === 1 && fillM === 'ب'));
           h += `<div class="as-bubble${filled ? ' fill' : ''}" style="left:${mm(X(bx, P.bubble))}; top:${mm(y + (P.infoRowH - P.bubble) / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize}pt; background:#fff;">${l}</div>`;
         });
-        off += w;
-        return;
+      } else {
+        const small = vw < 12 * u;
+        h += `<div class="as-cell val" style="left:${mm(X(vx, vw))}; top:${mm(y)}; width:${mm(vw)}; height:${mm(P.infoRowH)}; font-size:${big ? P.infoSize + 5 : P.infoSize}pt;${big || small ? ' justify-content:center; text-align:center;' : ''}${big ? ' font-weight:900;' : ''}${small ? ' padding:0 0.5mm;' : ''} direction:${rtl ? 'rtl' : 'ltr'};">${escHtml(value || '')}</div>`;
       }
-      h += `<div class="as-cell val" style="left:${mm(X(P.side + off + P.infoLabelW, w - P.infoLabelW))}; top:${mm(y)}; width:${mm(w - P.infoLabelW)}; height:${mm(P.infoRowH)}; font-size:${big ? P.infoSize + 5 : P.infoSize}pt;${big ? ' font-weight:900; justify-content:center; text-align:center;' : ''} direction:${rtl ? 'rtl' : 'ltr'};">${escHtml(value || '')}</div>`;
-      off += w;
+      off += lw + vw;
     });
   });
 
