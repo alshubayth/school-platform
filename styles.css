@@ -2054,3 +2054,4 @@
 .av-link.need{ border-color:var(--status-warn); background:#FFF9EC; color:#8a6410; font-weight:600; }
 .av-note-link{ display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; }
 .av-note-link .btn-secondary{ width:auto; padding:6px 12px; font-size:12.5px; }
+.av-nofolder{ font-size:12px; color:var(--danger); background:var(--danger-light); border-radius:8px; padding:6px 10px; text-align:center; }

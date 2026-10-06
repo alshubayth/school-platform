@@ -78,7 +78,14 @@ function teachersFromSnap() {
   // معلم مربوط بحساب لكن ما عنده ولا ملف (ما يطلع بالإكسل أصلاً)
   for (const [folder] of state.map) if (!by.has(folder)) by.set(folder, { name: folder, spec: '', rows: [] });
   const rules = snap.rules || [];
-  return [...by.values()].map(t => ({ ...t, ev: evaluateTeacher(t.rows, rules), profile: state.map.get(t.name) || null }));
+  const list = [...by.values()].map(t => ({ ...t, ev: evaluateTeacher(t.rows, rules), profile: state.map.get(t.name) || null }));
+  // معلمو المنصة اللي ما لقينا لهم ولا ملف (مجلداتهم فاضية، فما تطلع بالإكسل أصلاً)
+  const linked = new Set(list.map(t => t.profile).filter(Boolean));
+  for (const p of state.staff) {
+    if (p.role !== 'teacher' || linked.has(p.id) || by.has(p.full_name)) continue;
+    list.push({ name: p.full_name, spec: '', rows: [], profile: p.id, noFolder: true, ev: evaluateTeacher([], rules) });
+  }
+  return list;
 }
 
 /* ---------- البيانات ---------- */
@@ -235,11 +242,11 @@ function teacherRow(t) {
     <div class="av-row-main">
       <button class="av-toggle" aria-expanded="${open}" title="التفاصيل">
         <span class="av-name">${esc(t.name)}</span>
-        <span class="av-spec">${esc(t.spec || '—')}${stale != null ? ` · آخر تعديل ${stale === 0 ? 'اليوم' : `قبل ${stale} يوم`}` : ' · لا توجد ملفات'}</span>
+        <span class="av-spec">${esc(t.spec || '—')}${stale != null ? ` · آخر تعديل ${stale === 0 ? 'اليوم' : `قبل ${stale} يوم`}` : t.noFolder ? '' : ' · لا توجد ملفات'}</span>
       </button>
       <div class="av-progress">${bar(ev.pct)}</div>
       <div class="av-missing">${ev.pct === 100 ? '<span class="av-chip ok">كل البنود الإلزامية مكتملة</span>' : chips}</div>
-      <select class="av-link ${t.profile ? '' : 'need'}" data-folder="${esc(t.name)}" title="ربط المجلد بحساب المعلم" aria-label="ربط ${esc(t.name)} بحساب">${staffOptions(t.profile)}</select>
+      ${t.noFolder ? '<span class="av-nofolder">لم نجد ملفات باسمه</span>' : `<select class="av-link ${t.profile ? '' : 'need'}" data-folder="${esc(t.name)}" title="ربط المجلد بحساب المعلم" aria-label="ربط ${esc(t.name)} بحساب">${staffOptions(t.profile)}</select>`}
     </div>
     ${open ? teacherDetail(t) : ''}
   </div>`;
