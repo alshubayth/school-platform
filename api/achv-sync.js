@@ -69,7 +69,8 @@ function parseWorkbook(buf) {
         data = [];
         for (const r of rows.slice(h.index + 1)) {
           const teacher = clean(r[c.teacher]), item = clean(r[c.item]);
-          if (!teacher || !item) continue;
+          // صف بدون بند وبصفر ملفات = معلم مجلده فاضي (نخليه عشان يطلع بالمنصة)
+          if (!teacher || (!item && (toNum(r[c.files]) || 0) > 0)) continue;
           const m = c.mod >= 0 ? r[c.mod] : null;
           data.push({
             spec: c.spec >= 0 ? clean(r[c.spec]) : '',
