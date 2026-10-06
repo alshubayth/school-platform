@@ -11,7 +11,7 @@ const canManage = () => isAdminOrDeputy() || isOwnerAccount;
 const norm = s => String(s || '').replace(/[ًٌٍَُِّْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
 const AUTO_SYNC_MIN = 30;
 
-let state = { source: null, snap: null, map: new Map(), staff: [], filter: { spec: '', q: '', sort: 'low', term: '' }, open: new Set(), syncing: false, missingSql: false };
+let state = { excluded: new Set(), source: null, snap: null, map: new Map(), staff: [], filter: { spec: '', q: '', sort: 'low', term: '' }, open: new Set(), syncing: false, missingSql: false };
 
 function root() { return $('achv-root'); }
 
@@ -56,45 +56,59 @@ function evaluateTeacher(rows, rules) {
   return { items, extra, req, done, pct, lastMod, missing: req.filter(x => x.status !== 'ok') };
 }
 
-// الفصول الدراسية الموجودة بالمجلدات (ف1، ف2...) - الافتراضي آخر فصل
+// الفصول الدراسية الموجودة بالمجلدات (ف1، ف2...) - الافتراضي الفصل اللي فيه أكثر ملفات
 function termsOf(rows) { return [...new Set((rows || []).map(r => r.term).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar', { numeric: true })); }
+function busiestTerm(rows) {
+  const n = new Map();
+  for (const r of rows || []) if (r.term) n.set(r.term, (n.get(r.term) || 0) + (r.files || 0));
+  return [...n].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
 function currentTerm() {
-  const terms = termsOf(state.snap && state.snap.rows);
+  const rows = state.snap && state.snap.rows;
+  const terms = termsOf(rows);
   if (!terms.length) return '';
-  if (!terms.includes(state.filter.term)) state.filter.term = terms[terms.length - 1];
+  if (!terms.includes(state.filter.term)) state.filter.term = busiestTerm(rows);
   return state.filter.term;
 }
 function teachersFromSnap() {
   const snap = state.snap || { rows: [], rules: [] };
   const by = new Map();
   const term = currentTerm();
+  // كل معلم له مجلد فيه ملفات بأي فصل يطلع، والتقييم بملفات الفصل المختار فقط
   for (const r of snap.rows || []) {
-    if (term && r.term && r.term !== term) continue;
     if (!by.has(r.teacher)) by.set(r.teacher, { name: r.teacher, spec: r.spec || '', rows: [] });
     const t = by.get(r.teacher);
-    t.rows.push(r);
     if (!t.spec && r.spec) t.spec = r.spec;
+    if (term && r.term && r.term !== term) continue;
+    t.rows.push(r);
   }
   // معلم مربوط بحساب لكن ما عنده ولا ملف (ما يطلع بالإكسل أصلاً)
   for (const [folder] of state.map) if (!by.has(folder)) by.set(folder, { name: folder, spec: '', rows: [] });
   const rules = snap.rules || [];
   const list = [...by.values()].map(t => ({ ...t, ev: evaluateTeacher(t.rows, rules), profile: state.map.get(t.name) || null }));
-  // معلمو المنصة اللي ما لقينا لهم ولا ملف (مجلداتهم فاضية، فما تطلع بالإكسل أصلاً)
+  // معلمو المنصة اللي ما لقينا لهم ولا ملف (مجلداتهم فاضية، فما تطلع بالإكسل أصلاً) - إلا المستبعدين (إداريين...)
   const linked = new Set(list.map(t => t.profile).filter(Boolean));
   for (const p of state.staff) {
-    if (p.role !== 'teacher' || linked.has(p.id) || by.has(p.full_name)) continue;
+    if (p.role !== 'teacher' || linked.has(p.id) || by.has(p.full_name) || state.excluded.has(p.id)) continue;
     list.push({ name: p.full_name, spec: '', rows: [], profile: p.id, noFolder: true, ev: evaluateTeacher([], rules) });
   }
   return list;
 }
 
+async function saveExcluded() {
+  const value = { ids: [...state.excluded] };
+  const { error } = await sb.from('school_settings').upsert({ school_id: currentSchoolId, key: 'achv_excluded', value, updated_at: new Date().toISOString() }, { onConflict: 'school_id,key' });
+  if (error) toast('تعذر الحفظ: ' + error.message, true);
+}
+
 /* ---------- البيانات ---------- */
 async function loadManagerData() {
-  const [src, snap, map, staff] = await Promise.all([
+  const [src, snap, map, staff, exc] = await Promise.all([
     sb.from('achv_sources').select('xlsx_url, updated_at').eq('school_id', currentSchoolId).maybeSingle(),
     sb.from('achv_snapshots').select('rows, rules, fetched_at').eq('school_id', currentSchoolId).maybeSingle(),
     sb.from('achv_teacher_map').select('folder_name, profile_id').eq('school_id', currentSchoolId),
     sb.from('profiles').select('id, full_name, role').eq('school_id', currentSchoolId).in('role', ['admin', 'deputy', 'teacher']).order('full_name'),
+    sb.from('school_settings').select('value').eq('school_id', currentSchoolId).eq('key', 'achv_excluded').maybeSingle(),
   ]);
   if (src.error && /achv_|does not exist|schema cache/i.test(src.error.message || '')) { state.missingSql = true; return; }
   state.missingSql = false;
@@ -102,6 +116,7 @@ async function loadManagerData() {
   state.snap = snap.data || null;
   state.map = new Map((map.data || []).filter(m => m.profile_id).map(m => [m.folder_name, m.profile_id]));
   state.staff = staff.data || [];
+  state.excluded = new Set((exc && exc.data && exc.data.value && exc.data.value.ids) || []);
 }
 
 async function syncNow(silent = false) {
@@ -207,7 +222,8 @@ function renderManager() {
       <button class="btn-secondary" id="av-remind">تذكير الناقصين</button>
       <button class="btn-secondary" id="av-print">طباعة التقرير</button>
     </div>
-    <div class="av-list">${list.length ? list.map(teacherRow).join('') : '<div class="av-empty">ما فيه نتائج.</div>'}</div>` : ''}`;
+    <div class="av-list">${list.length ? list.map(teacherRow).join('') : '<div class="av-empty">ما فيه نتائج.</div>'}</div>
+    ${state.excluded.size ? `<details class="av-excluded"><summary>المستبعدون من المتابعة (${state.excluded.size})</summary>${state.staff.filter(p => state.excluded.has(p.id)).map(p => `<div class="av-exc-row"><span>${esc(p.full_name)}</span><button class="text-action-btn av-restore" data-id="${p.id}">إرجاع</button></div>`).join('')}</details>` : ''}` : ''}`;
   bindManager();
 }
 
@@ -246,7 +262,7 @@ function teacherRow(t) {
       </button>
       <div class="av-progress">${bar(ev.pct)}</div>
       <div class="av-missing">${ev.pct === 100 ? '<span class="av-chip ok">كل البنود الإلزامية مكتملة</span>' : chips}</div>
-      ${t.noFolder ? '<span class="av-nofolder">لم نجد ملفات باسمه</span>' : `<select class="av-link ${t.profile ? '' : 'need'}" data-folder="${esc(t.name)}" title="ربط المجلد بحساب المعلم" aria-label="ربط ${esc(t.name)} بحساب">${staffOptions(t.profile)}</select>`}
+      ${t.noFolder ? `<div class="av-nofolder-box"><span class="av-nofolder">لم نجد ملفات باسمه</span><button class="text-action-btn av-exclude" data-id="${t.profile}" title="إخفاؤه من متابعة ملفات الإنجاز (إداري، مرشد طلابي...)">ليس معلمًا؟ استبعاد</button></div>` : `<select class="av-link ${t.profile ? '' : 'need'}" data-folder="${esc(t.name)}" title="ربط المجلد بحساب المعلم" aria-label="ربط ${esc(t.name)} بحساب">${staffOptions(t.profile)}</select>`}
     </div>
     ${open ? teacherDetail(t) : ''}
   </div>`;
@@ -270,6 +286,8 @@ function bindManager() {
   if (ch) ch.onclick = () => { state.source = null; renderManager(); const u = $('av-url'); if (u) u.focus(); };
   const q = $('av-q');
   if (q) q.oninput = () => { state.filter.q = q.value; const pos = q.selectionStart; renderManager(); const n = $('av-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  root().querySelectorAll('.av-exclude').forEach(b => b.onclick = async () => { state.excluded.add(b.dataset.id); await saveExcluded(); renderManager(); toast('تم استبعاده من متابعة ملفات الإنجاز'); });
+  root().querySelectorAll('.av-restore').forEach(b => b.onclick = async () => { state.excluded.delete(b.dataset.id); await saveExcluded(); renderManager(); });
   const ou = $('av-only-unlinked'); if (ou) ou.onclick = () => { state.filter.unlinked = !state.filter.unlinked; renderManager(); };
   const tm = $('av-term'); if (tm) tm.onchange = () => { state.filter.term = tm.value; renderManager(); };
   const sp = $('av-spec'); if (sp) sp.onchange = () => { state.filter.spec = sp.value; renderManager(); };
