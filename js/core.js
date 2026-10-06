@@ -75,7 +75,7 @@ const icons = {
 export const GROUPS = [
   { key: 'students', title: 'الطلاب', keys: ['weekly', 'schedule', 'followups'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>' },
-  { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'weekly-tracking', 'duty', 'substitutes', 'portal'],
+  { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'achievements', 'weekly-tracking', 'duty', 'substitutes', 'portal'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
   { key: 'exams', title: 'الاختبارات', keys: ['exams', 'tracking', 'exam-reports'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>' },
@@ -97,6 +97,7 @@ export const tiles = [
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students' },
   { key: 'exam-reports', icon: icons.examreports, title: 'تقارير الاختبارات', desc: 'تحليل نتائج الاختبارات وبنودها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green', group: 'admin' },
+  { key: 'achievements', icon: icons.files, title: 'ملفات الإنجاز', desc: 'اكتمال ملفات إنجاز المعلمين في ون درايف', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
   { key: 'substitutes', icon: icons.substitutes, title: 'جدول اليوم والبدلاء', desc: 'الغياب والاستئذان وتحريك الحصص والبدلاء', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'computerlab', icon: icons.computerlab, title: 'معمل الحاسب الآلي', desc: 'توزيع الطلاب على أجهزة المعمل وطباعة الملصقات', roles: ['admin','deputy'], color: 'diamond-teal', group: 'extra' },
@@ -261,7 +262,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-06a';
+export const ASSET_VERSION = '2026-10-06b';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -703,6 +704,7 @@ export function hideAllModules() {
   document.getElementById('admin-tasks-module').classList.add('hidden');
   document.getElementById('school-contacts-module').classList.add('hidden');
   document.getElementById('settings-module').classList.add('hidden');
+  const achv = document.getElementById('achv-module'); if (achv) achv.classList.add('hidden');
   document.getElementById('settings-open-btn').classList.remove('active');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
@@ -714,6 +716,7 @@ function renderModuleHeader(key) {
   let title = t.title;
   let desc = t.desc;
   if (key === 'duty' && currentProfile.role === 'teacher') desc = 'المناوبة المسندة لي';
+  if (key === 'achievements' && currentProfile.role === 'teacher') desc = 'بنود ملف إنجازي واكتمالها';
   if (key === 'budget') { title = budgetTileTitle(); desc = budgetTileDesc(); }
   const g = GROUPS.find(x => x.key === t.group);
   header.innerHTML = `<div class="ic-diamond ${t.color}">${t.icon}</div><div>${g ? `<div class="crumb"><a href="#/" data-crumb="home">الرئيسية</a> / <a href="#/ws/${g.key}" data-crumb="${g.key}">${g.title}</a></div>` : ''}<h2>${title}</h2><p>${desc}</p></div>`;
@@ -810,6 +813,10 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('admin-tasks-module').classList.remove('hidden');
     const { loadAdminTasksModule } = await import('./admin-tasks.js');
     loadAdminTasksModule();
+  } else if (key === 'achievements') {
+    document.getElementById('achv-module').classList.remove('hidden');
+    const { loadAchievementsModule } = await import('./achievements.js?v=' + ASSET_VERSION);
+    loadAchievementsModule();
   } else if (key === 'settings') {
     document.getElementById('settings-module').classList.remove('hidden');
     document.getElementById('settings-open-btn').classList.add('active');

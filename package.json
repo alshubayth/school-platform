@@ -3,6 +3,7 @@
   "private": true,
   "description": "منصة مُدار - خادم إشعارات الجوال (api/push.js)",
   "dependencies": {
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "xlsx": "^0.18.5"
   }
 }
