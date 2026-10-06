@@ -24,6 +24,29 @@ function downloadUrl(raw) {
   return u.toString();
 }
 
+// روابط مشاركة SharePoint تمر بعدة تحويلات وتحط كوكي دخول ضيف بالطريق - نتبعها يدويًا ونحمل الكوكيز
+async function fetchWithCookies(startUrl, deps) {
+  const jar = new Map();
+  let url = startUrl;
+  for (let i = 0; i < 10; i++) {
+    const headers = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', Accept: '*/*' };
+    if (jar.size) headers.Cookie = [...jar].map(([k, v]) => k + '=' + v).join('; ');
+    const resp = await deps.fetch(url, { redirect: 'manual', headers });
+    const sc = resp.headers.getSetCookie ? resp.headers.getSetCookie() : String(resp.headers.get('set-cookie') || '').split(/,(?=\s*[^ ;=]+=)/).filter(Boolean);
+    for (const c of sc) { const m = /^([^=;\s]+)=([^;]*)/.exec(c); if (m) jar.set(m[1], m[2]); }
+    const loc = resp.headers.get('location');
+    if (resp.status >= 300 && resp.status < 400 && loc) {
+      const next = new URL(loc, url);
+      if (next.protocol !== 'https:') throw new Error('redirect');
+      url = next.toString();
+      continue;
+    }
+    const u = new URL(url);
+    return { resp, finalUrl: u.hostname + u.pathname };
+  }
+  throw new Error('too many redirects');
+}
+
 function findHeader(rows, must) {
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const cells = (rows[i] || []).map(clean);
@@ -94,14 +117,19 @@ async function handle(body, token, deps) {
   const url = downloadUrl(src.xlsx_url);
   if (!url) return [400, { error: 'bad_url' }];
 
-  let resp;
-  try { resp = await deps.fetch(url, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0 (Mudaar)' } }); }
+  let got;
+  try { got = await fetchWithCookies(url, deps); }
   catch (e) { return [502, { error: 'download', detail: String(e.message || e) }]; }
-  if (!resp.ok) return [502, { error: 'download', status: resp.status }];
+  const { resp, finalUrl } = got;
+  if (!resp.ok) return [502, { error: 'download', status: resp.status, at: finalUrl }];
   const buf = Buffer.from(await resp.arrayBuffer());
   if (buf.length > MAX_BYTES) return [413, { error: 'too_big' }];
-  // ملف إكسل = zip يبدأ بـ PK ؛ غيره غالبًا صفحة تسجيل دخول (الرابط مو «أي شخص»)
-  if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) return [422, { error: 'not_public' }];
+  // ملف إكسل = zip يبدأ بـ PK ؛ غيره غالبًا صفحة تسجيل دخول أو صفحة عرض
+  if (buf.length < 4 || buf[0] !== 0x50 || buf[1] !== 0x4b) {
+    const txt = buf.slice(0, 4000).toString('utf8');
+    const title = (txt.match(/<title[^>]*>([^<]{0,120})/i) || [])[1] || '';
+    return [422, { error: 'not_public', at: finalUrl, type: resp.headers.get('content-type') || '', title: title.trim() }];
+  }
 
   let parsed;
   try { parsed = parseWorkbook(buf); } catch (e) { return [422, { error: 'parse' }]; }

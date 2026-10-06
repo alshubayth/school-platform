@@ -110,6 +110,8 @@ async function syncNow(silent = false) {
         download: 'تعذر تنزيل الملف من ون درايف. حاول بعد شوي.',
         auth: 'انتهت الجلسة، سجّل دخول من جديد.',
       }[out.error] || 'تعذر التحديث (' + (out.error || r.status) + ')';
+      if (out.at || out.title) console.warn('achv-sync', out);
+      if (out.error === 'not_public' && (out.at || out.title)) msg += ' [' + [out.at, out.type, out.title].filter(Boolean).join(' | ') + ']';
     }
   } catch (e) { msg = 'تعذر الاتصال بالخادم.'; }
   state.syncing = false;
