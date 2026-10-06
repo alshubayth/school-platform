@@ -103,7 +103,9 @@ function parseWorkbook(buf) {
       }
     }
   }
-  return { data, rules };
+  // ملخص الأوراق (للتشخيص لو ما لقينا الجدول)
+  const sheets = wb.SheetNames.map(n => { const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }); const first = rows.find(r => (r || []).some(v => v != null && String(v).trim())) || []; return n + ' (' + rows.length + '): ' + first.slice(0, 7).map(clean).filter(Boolean).join(' | ').slice(0, 120); });
+  return { data, rules, sheets };
 }
 
 async function handle(body, token, deps) {
@@ -136,7 +138,7 @@ async function handle(body, token, deps) {
 
   let parsed;
   try { parsed = parseWorkbook(buf); } catch (e) { return [422, { error: 'parse' }]; }
-  if (!parsed.data) return [422, { error: 'no_table' }];
+  if (!parsed.data) return [422, { error: 'no_table', sheets: parsed.sheets, bytes: buf.length }];
 
   const fetched_at = new Date().toISOString();
   const wr = await deps.fetch(`${SUPABASE_URL}/rest/v1/achv_snapshots?on_conflict=school_id`, {
