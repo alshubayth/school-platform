@@ -47,9 +47,11 @@ async function fetchWithCookies(startUrl, deps) {
   throw new Error('too many redirects');
 }
 
+// أسماء أعمدة إنجليزية بديلة (كود Power Query بدون حروف عربية)
+const HEADER_ALIAS = { spec: 'التخصص', teacher: 'المعلم', itemno: 'رقم البند', item: 'البند', files: 'عدد الملفات', modified: 'آخر تعديل' };
 function findHeader(rows, must) {
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
-    const cells = (rows[i] || []).map(clean);
+    const cells = (rows[i] || []).map(v => { const t = clean(v); return HEADER_ALIAS[t.toLowerCase()] || t; });
     if (must.every(m => cells.includes(m))) return { index: i, col: name => cells.indexOf(name) };
   }
   return null;
