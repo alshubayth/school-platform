@@ -48,7 +48,7 @@ async function fetchWithCookies(startUrl, deps) {
 }
 
 // أسماء أعمدة إنجليزية بديلة (كود Power Query بدون حروف عربية)
-const HEADER_ALIAS = { spec: 'التخصص', teacher: 'المعلم', itemno: 'رقم البند', item: 'البند', files: 'عدد الملفات', modified: 'آخر تعديل' };
+const HEADER_ALIAS = { spec: 'التخصص', teacher: 'المعلم', term: 'الفصل', itemno: 'رقم البند', item: 'البند', files: 'عدد الملفات', modified: 'آخر تعديل' };
 function findHeader(rows, must) {
   for (let i = 0; i < Math.min(rows.length, 30); i++) {
     const cells = (rows[i] || []).map(v => { const t = clean(v); return HEADER_ALIAS[t.toLowerCase()] || t; });
@@ -65,7 +65,7 @@ function parseWorkbook(buf) {
     if (!data) {
       const h = findHeader(rows, ['المعلم', 'البند', 'عدد الملفات']);
       if (h) {
-        const c = { spec: h.col('التخصص'), teacher: h.col('المعلم'), no: h.col('رقم البند'), item: h.col('البند'), files: h.col('عدد الملفات'), mod: h.col('آخر تعديل') };
+        const c = { spec: h.col('التخصص'), teacher: h.col('المعلم'), term: h.col('الفصل'), no: h.col('رقم البند'), item: h.col('البند'), files: h.col('عدد الملفات'), mod: h.col('آخر تعديل') };
         data = [];
         for (const r of rows.slice(h.index + 1)) {
           const teacher = clean(r[c.teacher]), item = clean(r[c.item]);
@@ -73,6 +73,7 @@ function parseWorkbook(buf) {
           const m = c.mod >= 0 ? r[c.mod] : null;
           data.push({
             spec: c.spec >= 0 ? clean(r[c.spec]) : '',
+            term: c.term >= 0 ? clean(r[c.term]) : '',
             teacher, item,
             no: c.no >= 0 ? toNum(r[c.no]) : null,
             files: toNum(r[c.files]) || 0,

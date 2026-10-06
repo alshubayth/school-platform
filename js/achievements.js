@@ -11,7 +11,7 @@ const canManage = () => isAdminOrDeputy() || isOwnerAccount;
 const norm = s => String(s || '').replace(/[ًٌٍَُِّْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
 const AUTO_SYNC_MIN = 30;
 
-let state = { source: null, snap: null, map: new Map(), staff: [], filter: { spec: '', q: '', sort: 'low' }, open: new Set(), syncing: false, missingSql: false };
+let state = { source: null, snap: null, map: new Map(), staff: [], filter: { spec: '', q: '', sort: 'low', term: '' }, open: new Set(), syncing: false, missingSql: false };
 
 function root() { return $('achv-root'); }
 
@@ -56,10 +56,20 @@ function evaluateTeacher(rows, rules) {
   return { items, extra, req, done, pct, lastMod, missing: req.filter(x => x.status !== 'ok') };
 }
 
+// الفصول الدراسية الموجودة بالمجلدات (ف1، ف2...) - الافتراضي آخر فصل
+function termsOf(rows) { return [...new Set((rows || []).map(r => r.term).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar', { numeric: true })); }
+function currentTerm() {
+  const terms = termsOf(state.snap && state.snap.rows);
+  if (!terms.length) return '';
+  if (!terms.includes(state.filter.term)) state.filter.term = terms[terms.length - 1];
+  return state.filter.term;
+}
 function teachersFromSnap() {
   const snap = state.snap || { rows: [], rules: [] };
   const by = new Map();
+  const term = currentTerm();
   for (const r of snap.rows || []) {
+    if (term && r.term && r.term !== term) continue;
     if (!by.has(r.teacher)) by.set(r.teacher, { name: r.teacher, spec: r.spec || '', rows: [] });
     const t = by.get(r.teacher);
     t.rows.push(r);
@@ -178,6 +188,7 @@ function renderManager() {
     ${unlinked ? `<div class="av-note">${unlinked} مجلد غير مربوط بحساب معلم، فما يوصله تذكير. اربطه من القائمة بجانب الاسم.</div>` : ''}
     <div class="av-toolbar">
       <input id="av-q" type="search" placeholder="بحث باسم المعلم" value="${esc(f.q)}">
+      ${termsOf(state.snap && state.snap.rows).length > 1 ? `<select id="av-term">${termsOf(state.snap.rows).map(x => `<option ${x === f.term ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>` : ''}
       <select id="av-spec"><option value="">كل التخصصات</option>${specs.map(s => `<option ${s === f.spec ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
       <select id="av-sort">
         <option value="low" ${f.sort === 'low' ? 'selected' : ''}>الأقل إنجازًا أولاً</option>
@@ -254,6 +265,7 @@ function bindManager() {
   if (ch) ch.onclick = () => { state.source = null; renderManager(); const u = $('av-url'); if (u) u.focus(); };
   const q = $('av-q');
   if (q) q.oninput = () => { state.filter.q = q.value; const pos = q.selectionStart; renderManager(); const n = $('av-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  const tm = $('av-term'); if (tm) tm.onchange = () => { state.filter.term = tm.value; renderManager(); };
   const sp = $('av-spec'); if (sp) sp.onchange = () => { state.filter.spec = sp.value; renderManager(); };
   const so = $('av-sort'); if (so) so.onchange = () => { state.filter.sort = so.value; renderManager(); };
   const rm = $('av-remind'); if (rm) rm.onclick = openRemind;
@@ -358,7 +370,7 @@ function printReport() {
     td.part{background:#FDF3DC} td.none{background:#FBEAE9;color:#C0453D;font-weight:700} tr.spec td{background:#EAF1FC;font-weight:700;text-align:right}
     .legend{font-size:11px;margin-top:8px;color:#444} @page{size:A4 landscape;margin:10mm}
   </style></head><body>
-  <h1>متابعة ملفات الإنجاز${state.filter.spec ? ' - ' + esc(state.filter.spec) : ''}</h1>
+  <h1>متابعة ملفات الإنجاز${state.filter.term ? ' - ' + esc(state.filter.term) : ''}${state.filter.spec ? ' - ' + esc(state.filter.spec) : ''}</h1>
   <div class="meta">${esc(printOrgName())} · آخر قراءة للملف: ${esc(fmtDT(state.snap ? state.snap.fetched_at : null))}</div>
   <table><thead><tr><th>المعلم</th>${req.map(r => `<th>${esc(r.name)}</th>`).join('')}<th>الإنجاز</th></tr></thead><tbody>
   ${(() => { let last = null; return teachers.map(t => {
@@ -385,11 +397,13 @@ async function renderTeacher() {
     el.innerHTML = '<div class="form-card av-empty">ملف إنجازك لم يُربط بحسابك بعد. يربطه الوكيل من صفحة ملفات الإنجاز.</div>';
     return;
   }
-  const ev = evaluateTeacher(data.rows || [], data.rules || []);
+  const myTerms = termsOf(data.rows);
+  const myTerm = myTerms[myTerms.length - 1] || '';
+  const ev = evaluateTeacher((data.rows || []).filter(r => !myTerm || !r.term || r.term === myTerm), data.rules || []);
   el.innerHTML = `
     <div class="form-card av-mine">
       <div class="av-mine-head">
-        <div><h3>ملف إنجازي</h3><span>آخر قراءة ${data.fetched_at ? esc(ago(data.fetched_at)) : '—'}</span></div>
+        <div><h3>ملف إنجازي${myTerm ? ' - ' + esc(myTerm) : ''}</h3><span>آخر قراءة ${data.fetched_at ? esc(ago(data.fetched_at)) : '—'}</span></div>
         <div class="av-progress big">${bar(ev.pct)}</div>
       </div>
       ${ev.missing.length ? `<div class="av-note">نأمل إكمال: ${ev.missing.map(x => esc(x.rule.name) + (x.rule.min > 1 ? ` (${x.files}/${x.rule.min})` : '')).join('، ')}</div>`
