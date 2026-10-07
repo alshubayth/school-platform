@@ -73,7 +73,7 @@ const icons = {
 // مساحات العمل: كل قسم ينتمي لمساحة وحدة، وترتيب الأقسام داخلها بحسب keys (القائمة الجانبية،
 // بطاقات مساحات العمل بالرئيسية، ومسار التنقل أعلى كل قسم). "الرئيسية" مو منها - هي عنصر مستقل.
 export const GROUPS = [
-  { key: 'students', title: 'الطلاب', keys: ['weekly', 'schedule', 'followups'],
+  { key: 'students', title: 'الطلاب', keys: ['weekly', 'schedule', 'student-lists', 'followups'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>' },
   { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'achievements', 'weekly-tracking', 'duty', 'substitutes', 'portal'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
@@ -86,6 +86,7 @@ export const GROUPS = [
 export const tiles = [
   { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal', group: 'students' },
   { key: 'schedule', icon: icons.schedule, title: 'الجدول الدراسي', desc: 'جدول الحصص لكل فصل',            roles: ['admin','deputy'], color: 'diamond-teal', group: 'admin' },
+  { key: 'student-lists', icon: icons.followups, title: 'كشوف الطلاب', desc: 'صمّم كشف رصد أو حضور أو متابعة واطبعه', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'students' },
   { key: 'followups', icon: icons.followups, title: 'كشوف متابعة الطلاب', desc: 'ملاحظات وسلوك ودرجات مشاركة/اختبارات لكل فصل', roles: ['admin','deputy'], color: 'diamond-gold', group: 'students' },
   { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
   { key: 'plan',   icon: icons.plan,   title: 'الخطة التشغيلية',    desc: 'المهام الأسبوعية والمتابعة',   roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'admin' },
@@ -262,7 +263,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-07e';
+export const ASSET_VERSION = '2026-10-07f';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -705,6 +706,7 @@ export function hideAllModules() {
   document.getElementById('school-contacts-module').classList.add('hidden');
   document.getElementById('settings-module').classList.add('hidden');
   const achv = document.getElementById('achv-module'); if (achv) achv.classList.add('hidden');
+  const slm = document.getElementById('sl-module'); if (slm) slm.classList.add('hidden');
   document.getElementById('settings-open-btn').classList.remove('active');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
@@ -815,6 +817,10 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('admin-tasks-module').classList.remove('hidden');
     const { loadAdminTasksModule } = await import('./admin-tasks.js');
     loadAdminTasksModule();
+  } else if (key === 'student-lists') {
+    document.getElementById('sl-module').classList.remove('hidden');
+    const { loadStudentListsModule } = await import('./student-lists.js?v=' + ASSET_VERSION);
+    loadStudentListsModule();
   } else if (key === 'achievements') {
     document.getElementById('achv-module').classList.remove('hidden');
     const { loadAchievementsModule } = await import('./achievements.js?v=' + ASSET_VERSION);
