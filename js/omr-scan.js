@@ -99,7 +99,7 @@ async function selectKey(id) {
   info.innerHTML = [
     `<i>${PAGE[o.size] ? esc(PAGE[o.size].label) : esc(o.size)}</i>`, `<i>${k.questions} سؤال × ${k.choices} خيارات</i>`,
     k.essay_total ? `<i>مقالي من ${k.essay_total}</i>` : '', o.modelsOn ? `<i>نموذجين (${o.modelBubble ? 'الطالب يظلّل نموذجه' : 'موزّعة من المنصة'})</i>` : '',
-    k.grade_level ? `<i>${esc(gradeLabels[k.grade_level] || k.grade_level)}</i>` : '',
+    k.grade_level ? `<i>${esc(gradeLabels[k.grade_level] || k.grade_level)}${Array.isArray(k.sections) && k.sections.length ? ' · فصل ' + esc(k.sections.join('، ')) : ''}</i>` : '',
     missing ? `<b class="omr-warn">المفتاح ناقص ${missing} إجابة</b>` : '',
   ].filter(Boolean).join('');
   await loadScans();
@@ -527,7 +527,9 @@ function reviewOne(it, next, remaining) {
     gs.addEventListener('change', () => { fillSecs(); draw(); });
     ss.addEventListener('change', draw);
     qi.addEventListener('input', draw);
-    fillSecs(); draw();
+    fillSecs();
+    if (Array.isArray(k.sections) && k.sections.length === 1 && gs.value === k.grade_level) ss.value = String(k.sections[0]);
+    draw();
   };
 
   // الإجابات

@@ -63,7 +63,7 @@ export function itemKinds({ questions, tf = 0, tfFirst = true }) {
   return Array.from({ length: n }, (_, q) => ((tfFirst ? q < t : q >= n - t) ? 'tf' : 'mcq'));
 }
 export function choicesOf(opts, q) { return itemKinds(opts)[q] === 'tf' ? 2 : opts.choices; }
-export const TF_LETTERS = { ar: ['ص', 'خ'], en: ['T', 'F'] };
+export const TF_LETTERS = { ar: ['✓', '✗'], en: ['✓', '✗'] };
 
 export function computeLayout({ size, questions, choices, essayTotal = 0, tf = 0, tfFirst = true }) {
   const P = SHEET[PAGE[size].sheet];
@@ -787,6 +787,7 @@ function keyStatusMsg(msg, isErr = false) {
 export async function fetchSavedKeys() {
   // نجرب الأعمدة الأحدث أول، ولو قاعدة البيانات أقدم نرجع للأعمدة اللي قبلها
   const colsets = [
+    'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, updated_at',
@@ -800,7 +801,7 @@ export async function fetchSavedKeys() {
     });
     if (!error) return { data: data || [], error: null };
     last = error;
-    if (!/tf_count|tf_first|models|model_map|column/i.test(error.message || '')) break;
+    if (!/tf_count|tf_first|sections|models|model_map|column/i.test(error.message || '')) break;
   }
   const missing = /answer_keys|relation|does not exist|schema cache/i.test((last && last.message) || '');
   return { data: [], error: missing ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : (last && last.message) };
@@ -818,18 +819,20 @@ async function refreshSavedKeysList() {
 
 async function saveKey() {
   const o = readOptions();
-  if (!o.title) { keyStatusMsg('اكتب عنوان الاختبار فوق (يظهر بقائمة المفاتيح وبالتقارير)', true); $('as-title').focus(); return; }
+  if (!o.title) { keyStatusMsg('اكتب عنوان الاختبار بالخطوة ١ (يظهر بقائمة المفاتيح وبالتقارير)', true); return; }
+  if (!keyGrade()) { keyStatusMsg('حدد المرحلة بالخطوة ١ قبل حفظ المفتاح', true); return; }
   if (!o.questions && !o.essayTotal) { keyStatusMsg('حدد عدد الأسئلة', true); return; }
   const prob = keyProblems();
   if (prob) { keyStatusMsg(prob + ' - كمّل المفتاح قبل الحفظ', true); return; }
   const row = {
     title: o.title, subject: o.subject || null,
-    grade_level: $('as-barcode').checked && $('as-scope').value !== 'school' ? $('as-grade').value : null,
+    grade_level: keyGrade() || null,
     size: o.size, questions: o.questions, choices: o.choices, lang: o.lang,
     essay_total: o.essayTotal || 0, answers: keyAnswers.slice(),
     updated_at: new Date().toISOString(),
   };
   if (o.tf || (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).tf_count)) { row.tf_count = o.tf; row.tf_first = o.tfFirst; }
+  if (keySections || (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).sections)) row.sections = keySections;
   if (o.modelsOn) {
     row.models = { mode: modelMode(), assign: $('as-models-assign').value, answers_b: keyAnswersB.slice(), order_b: modelMode() === 'order' ? orderB.slice() : null };
     row.model_map = modelMap;
@@ -844,7 +847,7 @@ async function saveKey() {
   $('as-key-save-btn').disabled = false;
   if (res.error) {
     const msg = res.error.message || '';
-    if (/tf_count|tf_first/i.test(msg)) { keyStatusMsg('أسئلة الصح والخطأ تحتاج تشغيل ملف sql/answer_keys_tf.sql بقاعدة البيانات أولًا', true); return; }
+    if (/tf_count|tf_first|sections/i.test(msg)) { keyStatusMsg('أسئلة الصح والخطأ تحتاج تشغيل ملف sql/answer_keys_tf.sql بقاعدة البيانات أولًا', true); return; }
     const missingCols = /models|model_map/i.test(msg);
     const missingTbl = /answer_keys|relation|does not exist|schema cache/i.test(msg);
     keyStatusMsg(missingCols ? 'ميزة النموذجين تحتاج تشغيل ملف sql/exam_models.sql بقاعدة البيانات أولًا' : missingTbl ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + msg, true);
@@ -868,6 +871,7 @@ function loadKeyIntoForm(k) {
   if (k.essay_total) $('as-essay-total').value = k.essay_total;
   if ($('as-tf')) { $('as-tf').value = k.tf_count || 0; $('as-tf-pos').value = k.tf_first === false ? 'last' : 'first'; }
   if ($('as-mcq')) $('as-mcq').value = Math.max(0, (k.questions || 0) - (k.tf_count || 0));
+  if ($('as-key-grade')) { $('as-key-grade').value = k.grade_level || ''; keySections = Array.isArray(k.sections) && k.sections.length ? k.sections.slice() : null; renderKeySecs(); }
   updateQSum();
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
   const m = k.models && k.models.mode ? k.models : null;
@@ -1036,6 +1040,39 @@ async function downloadPdf(builtOverride) {
   }
 }
 
+/* ---------- مرحلة وفصول الاختبار (تنحفظ مع المفتاح) ---------- */
+let keySections = null;   // null = كل فصول المرحلة، أو مصفوفة أرقام الفصول
+function keyGrade() { return ($('as-key-grade') || {}).value || ''; }
+function renderKeySecs() {
+  const box = $('as-key-secs'); if (!box) return;
+  const g = keyGrade();
+  if (!g) { box.innerHTML = '<span class="as-muted">اختر المرحلة أول</span>'; return; }
+  const secs = [...new Set(asStudents.filter(st => st.grade_level === g).map(st => st.class_section || 0))].sort((a, b) => a - b);
+  if (!secs.length) { box.innerHTML = '<span class="as-muted">كل فصول المرحلة</span>'; keySections = null; return; }
+  if (keySections) keySections = keySections.filter(n => secs.includes(n));
+  if (keySections && !keySections.length) keySections = null;
+  box.innerHTML = `<label class="as-ks${keySections ? '' : ' on'}"><input type="checkbox" data-ks="all"${keySections ? '' : ' checked'}>كل الفصول</label>` +
+    secs.map(n => `<label class="as-ks${keySections && keySections.includes(n) ? ' on' : ''}"><input type="checkbox" data-ks="${n}"${keySections && keySections.includes(n) ? ' checked' : ''}>${n || 'بدون'}</label>`).join('');
+  box.querySelectorAll('[data-ks]').forEach(cb => cb.addEventListener('change', () => {
+    if (cb.dataset.ks === 'all') keySections = null;
+    else {
+      const n = +cb.dataset.ks;
+      const cur = new Set(keySections || []);
+      if (cb.checked) cur.add(n); else cur.delete(n);
+      keySections = cur.size && cur.size < secs.length ? [...cur].sort((a, b) => a - b) : null;
+    }
+    renderKeySecs(); applyKeyClassToPrint();
+  }));
+}
+// خطوة الطباعة تاخذ نفس المرحلة/الفصل تلقائيًا
+function applyKeyClassToPrint() {
+  const g = keyGrade(); if (!g || !$('as-grade')) return;
+  $('as-grade').value = g;
+  if (keySections && keySections.length === 1) { $('as-scope').value = 'class'; refreshScopeControls(); $('as-section').value = String(keySections[0]); }
+  else $('as-scope').value = 'grade';
+  refreshScopeControls(); renderDistribution(); renderPreview();
+}
+
 /* ---------- خطوات التصميم: البيانات ← الأسئلة ← الإجابات ← الطباعة ← التصدير ---------- */
 let asStep = 1;
 const num = id => Math.max(0, parseInt(($(id) || {}).value, 10) || 0);
@@ -1061,6 +1098,7 @@ function updateQSum() {
   if ($('as-tf-pos')) $('as-tf-pos').closest('label').style.opacity = tf ? '1' : '0.5';
 }
 function stepError(n) {
+  if (n === 1 && !keyGrade()) return 'حدد المرحلة';
   if (n === 2) {
     const o = readOptions();
     if (!o.questions && !o.essayTotal) return 'حدد عدد الأسئلة';
@@ -1101,6 +1139,7 @@ export function initAnswerSheetCard() {
   $('as-tf').addEventListener('input', () => syncCounts('tf'));
   $('as-essay-total').addEventListener('input', updateQSum);
   $('as-essay-on').addEventListener('change', updateQSum);
+  $('as-key-grade').addEventListener('change', async () => { keySections = null; await loadAllStudents(); renderKeySecs(); applyKeyClassToPrint(); });
   showStep(1); updateQSum();
   $('as-grade').innerHTML = GRADES.map(g => `<option value="${g}">${gradeLabels[g] || g}</option>`).join('');
 
