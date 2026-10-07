@@ -57,7 +57,15 @@ export const PAGE = {
  * بدون مقالي: الأعمدة تعبّي طول الورقة (حد ٢٠ سؤال للعمود).
  * مع مقالي: الاختيار من متعدد ثابت بأعمدة ١٠ أسئلة (حد ٣ أعمدة) أعلى الورقة، وتحته منطقة المقالي
  * مقسومة بالتساوي على الأسئلة المقالية. */
-export function computeLayout({ size, questions, choices, essayTotal = 0 }) {
+// نوع كل سؤال: 'tf' (صح وخطأ - فقاعتين) أو 'mcq'. أسئلة الصح والخطأ من ضمن عدد الأسئلة، بأولها أو بآخرها
+export function itemKinds({ questions, tf = 0, tfFirst = true }) {
+  const n = Math.max(0, questions | 0), t = Math.max(0, Math.min(n, tf | 0));
+  return Array.from({ length: n }, (_, q) => ((tfFirst ? q < t : q >= n - t) ? 'tf' : 'mcq'));
+}
+export function choicesOf(opts, q) { return itemKinds(opts)[q] === 'tf' ? 2 : opts.choices; }
+export const TF_LETTERS = { ar: ['ص', 'خ'], en: ['T', 'F'] };
+
+export function computeLayout({ size, questions, choices, essayTotal = 0, tf = 0, tfFirst = true }) {
   const P = SHEET[PAGE[size].sheet];
   const availW = P.w - 2 * P.side;
   const colW = P.numW + choices * P.pitch + 2 * P.colPad;
@@ -67,14 +75,50 @@ export function computeLayout({ size, questions, choices, essayTotal = 0 }) {
     const blockW = cols * colW + (cols - 1) * gap;
     return { gap, offset: (availW - blockW) / 2 };
   };
+  // أعمدة متجانسة (بدون صح وخطأ): نفس المواقع القديمة بالضبط عشان قوالب Remark الحالية ما تتأثر
+  const uniform = (L) => {
+    L.colsList = [];
+    for (let c = 0; c < L.cols; c++) {
+      const count = Math.min(L.rows, questions - c * L.rows);
+      if (count <= 0) break;
+      L.colsList.push({ kind: 'mcq', start: c * L.rows, count, x: L.offset + c * (L.colW + L.gap), w: L.colW, nChoices: choices });
+    }
+    return L;
+  };
+  const t = Math.max(0, Math.min(questions, tf | 0));
+  const m = questions - t;
+  const tfW = P.numW + 2 * P.pitch + 2 * P.colPad;
+  // أعمدة مختلطة: أعمدة الصح والخطأ (أضيق) ثم الاختيار من متعدد (أو العكس)، بنفس عدد الأسطر
+  const mixed = (rowsCap) => {
+    let r = Math.max(1, Math.min(rowsCap, Math.max(t, m)));
+    const tc = t ? Math.ceil(t / r) : 0, mc = m ? Math.ceil(m / r) : 0;
+    r = Math.max(tc ? Math.ceil(t / tc) : 0, mc ? Math.ceil(m / mc) : 0);
+    const specs = [];
+    const pushKind = (kind, total, ncols, start) => { for (let c = 0; c < ncols; c++) specs.push({ kind, start: start + c * r, count: Math.min(r, total - c * r), w: kind === 'tf' ? tfW : colW, nChoices: kind === 'tf' ? 2 : choices }); };
+    if (tfFirst) { pushKind('tf', t, tc, 0); pushKind('mcq', m, mc, t); } else { pushKind('mcq', m, mc, 0); pushKind('tf', t, tc, m); }
+    const sumW = specs.reduce((a, c) => a + c.w, 0);
+    const n = specs.length;
+    if (sumW + (n - 1) * P.colGap > availW + 0.01) return null;
+    const gap = n > 1 ? Math.min(P.colGap * 3, (availW - sumW) / (n - 1)) : 0;
+    let x = (availW - sumW - (n - 1) * gap) / 2;
+    specs.forEach(c => { c.x = x; x += c.w + gap; });
+    return { rows: r, colsList: specs, cols: n };
+  };
 
   if (essayTotal) {
     const maxCols = Math.min(COMPACT_MAX_COLS, maxColsW);
     const maxQuestions = maxCols * COMPACT_ROWS;
-    if (questions > maxQuestions) return { ok: false, maxQuestions, error: `مع الجزء المقالي: أقصى الاختيار من متعدد ${maxQuestions} سؤال (${maxCols} أعمدة × ${COMPACT_ROWS})` };
     if (!(essayTotal >= 1 && essayTotal <= ESSAY_MAX_TOTAL)) return { ok: false, maxQuestions, error: `درجة الجزء المقالي لازم تكون من 1 إلى ${ESSAY_MAX_TOTAL}` };
-    const cols = questions ? Math.ceil(questions / COMPACT_ROWS) : 0;
-    const rows = questions ? Math.min(COMPACT_ROWS, questions) : 0;
+    let cols, rows, extra;
+    if (t) {
+      const mx = questions ? mixed(COMPACT_ROWS) : { rows: 0, colsList: [], cols: 0 };
+      if (!mx) return { ok: false, maxQuestions, error: `مع الجزء المقالي: الأسئلة ما تكفي بأعلى الورقة - قلّل عددها` };
+      cols = mx.cols; rows = mx.rows; extra = { colsList: mx.colsList, gap: 0, offset: 0 };
+    } else {
+      if (questions > maxQuestions) return { ok: false, maxQuestions, error: `مع الجزء المقالي: أقصى الاختيار من متعدد ${maxQuestions} سؤال (${maxCols} أعمدة × ${COMPACT_ROWS})` };
+      cols = questions ? Math.ceil(questions / COMPACT_ROWS) : 0;
+      rows = questions ? Math.min(COMPACT_ROWS, questions) : 0;
+    }
     const rowH = P.compactRowH;
     const mcqBottom = questions ? P.answersTop + P.colHeadH + rows * rowH + 1 : P.answersTop - P.essayGap;
     const essayTop = mcqBottom + P.essayGap;
@@ -82,12 +126,19 @@ export function computeLayout({ size, questions, choices, essayTotal = 0 }) {
     const stripH = twoRows ? P.essayStripH * 1.9 : P.essayStripH;
     const essayBoxH = P.answersBottom - essayTop;
     if (essayBoxH < P.essayMinH) return { ok: false, maxQuestions, error: 'ما بقى مساحة كافية للجزء المقالي - قلّل عدد أسئلة الاختيار من متعدد' };
-    return { ok: true, P, mode: 'essay', cols, rows, rowH, colW, ...spread(cols || 1), maxQuestions, essayTop, essayBoxH, twoRows, stripH };
+    const L = { ok: true, P, mode: 'essay', cols, rows, rowH, colW, ...spread(cols || 1), maxQuestions, essayTop, essayBoxH, twoRows, stripH };
+    return extra ? { ...L, ...extra } : uniform(L);
   }
 
   const availH = P.answersBottom - P.answersTop - P.colHeadH;
   const maxRows = Math.floor(availH / P.minRowH);
   const maxQuestions = maxColsW * maxRows;
+  if (t) {
+    const mx = mixed(Math.min(maxRows, 20)) || mixed(maxRows);
+    if (!mx) return { ok: false, maxQuestions, error: `الأسئلة ما تكفي بالورقة بهذا الحجم - قلّل عددها أو الخيارات` };
+    const rowH = Math.min(P.maxRowH, availH / mx.rows);
+    return { ok: true, P, mode: 'normal', cols: mx.cols, rows: mx.rows, rowH, colW, gap: 0, offset: 0, maxQuestions, colsList: mx.colsList };
+  }
   if (questions > maxQuestions) {
     return { ok: false, maxQuestions, error: `أقصى عدد أسئلة لهذا الحجم بـ${choices} خيارات هو ${maxQuestions} سؤال` };
   }
@@ -96,7 +147,7 @@ export function computeLayout({ size, questions, choices, essayTotal = 0 }) {
   const rows = Math.ceil(questions / cols);
   cols = Math.ceil(questions / rows);
   const rowH = Math.min(P.maxRowH, availH / rows);
-  return { ok: true, P, mode: 'normal', cols, rows, rowH, colW, ...spread(cols), maxQuestions };
+  return uniform({ ok: true, P, mode: 'normal', cols, rows, rowH, colW, ...spread(cols), maxQuestions });
 }
 
 /* ---------- Code 128 ---------- */
@@ -161,7 +212,7 @@ export function code128Svg(text, moduleMm, heightMm) {
 export function sheetGeometry(opts) {
   const { size, questions, choices } = opts;
   const essayTotal = opts.essayTotal || 0;
-  const L = computeLayout({ size, questions, choices, essayTotal });
+  const L = computeLayout({ size, questions, choices, essayTotal, tf: opts.tf || 0, tfFirst: opts.tfFirst !== false });
   if (!L.ok) throw new Error(L.error);
   const P = L.P;
   const rtl = opts.lang !== 'en';
@@ -187,17 +238,15 @@ export function sheetGeometry(opts) {
     const y = P.infoTop + P.infoRowH * 1.5;
     g.model = [0, 1].map(bi => [cx(vx + (vw - totalW) / 2 + bi * (P.bubble + gap), P.bubble), y]);
   }
-  // فقاعات الأسئلة: g.items[q][c] = [x, y]
+  // فقاعات الأسئلة: g.items[q][c] = [x, y] (سؤال الصح والخطأ فيه فقاعتين)
   g.items = [];
   const rowsTop = P.answersTop + P.colHeadH;
-  for (let c = 0; c < (questions ? L.cols : 0); c++) {
-    const colStart = L.offset + c * (L.colW + L.gap);
-    const rowsInCol = Math.min(L.rows, questions - c * L.rows);
-    for (let r = 0; r < rowsInCol; r++) {
+  (L.colsList || []).forEach(col => {
+    for (let r = 0; r < col.count; r++) {
       const yMid = rowsTop + r * L.rowH + L.rowH / 2;
-      g.items.push(Array.from({ length: choices }, (_, i) => [cx(P.side + colStart + P.colPad + P.numW + i * P.pitch + (P.pitch - P.bubble) / 2, P.bubble), yMid]));
+      g.items[col.start + r] = Array.from({ length: col.nChoices }, (_, i) => [cx(P.side + col.x + P.colPad + P.numW + i * P.pitch + (P.pitch - P.bubble) / 2, P.bubble), yMid]);
     }
-  }
+  });
   // فقاعات درجة المقالي: g.essay = [{ values, pts }] (صف واحد، أو عشرات + آحاد)
   g.essay = null;
   if (essayTotal) {
@@ -255,7 +304,7 @@ export const SHEET_STYLES = `
 function buildSheetBody(opts, student, logoSrc, ox) {
   const { size, questions, choices, lang, title, subject } = opts;
   const essayTotal = opts.essayTotal || 0;
-  const L = computeLayout({ size, questions, choices, essayTotal });
+  const L = computeLayout({ size, questions, choices, essayTotal, tf: opts.tf || 0, tfFirst: opts.tfFirst !== false });
   if (!L.ok) throw new Error(L.error);
   const P = L.P;
   const rtl = lang !== 'en';
@@ -344,34 +393,35 @@ function buildSheetBody(opts, student, logoSrc, ox) {
   </div>`;
 
   // شبكة الإجابات: كل عمود داخل إطار، فوقه شريط حروف الخيارات، وخط خفيف كل ٥ أسئلة
+  // (أعمدة الصح والخطأ فيها فقاعتين ص/خ)
   const gridTop = P.answersTop;
   const rowsTop = gridTop + P.colHeadH;
-  for (let c = 0; c < (questions ? L.cols : 0); c++) {
-    const colStart = L.offset + c * (L.colW + L.gap);
-    const rowsInCol = Math.min(L.rows, questions - c * L.rows);
-    if (rowsInCol <= 0) break;
+  const tfL = TF_LETTERS[rtl ? 'ar' : 'en'];
+  (L.colsList || []).forEach(col => {
+    const colStart = col.x, cw = col.w;
+    const lets = col.kind === 'tf' ? tfL : letters;
     const boxH = P.colHeadH + L.rows * L.rowH + 1;
-    h += `<div class="as-colbox" style="left:${mm(X(P.side + colStart, L.colW))}; top:${mm(gridTop)}; width:${mm(L.colW)}; height:${mm(boxH)};"></div>`;
-    h += `<div class="as-colhead" style="left:${mm(X(P.side + colStart, L.colW) + 0.3)}; top:${mm(gridTop + 0.3)}; width:${mm(L.colW - 0.6)}; height:${mm(P.colHeadH - 0.3)}; font-size:${P.letterSize + 0.5}pt;">`;
-    letters.forEach((letter, i) => {
+    h += `<div class="as-colbox" style="left:${mm(X(P.side + colStart, cw))}; top:${mm(gridTop)}; width:${mm(cw)}; height:${mm(boxH)};"></div>`;
+    h += `<div class="as-colhead" style="left:${mm(X(P.side + colStart, cw) + 0.3)}; top:${mm(gridTop + 0.3)}; width:${mm(cw - 0.6)}; height:${mm(P.colHeadH - 0.3)}; font-size:${P.letterSize + 0.5}pt;">`;
+    lets.forEach((letter, i) => {
       const bx = P.colPad + P.numW + i * P.pitch;
-      const left = rtl ? L.colW - bx - P.pitch : bx;
+      const left = rtl ? cw - bx - P.pitch : bx;
       h += `<span style="left:${mm(left - 0.3)}; width:${mm(P.pitch)};">${letter}</span>`;
     });
     h += `</div>`;
-    for (let r = 0; r < rowsInCol; r++) {
-      const q = c * L.rows + r + 1;
+    for (let r = 0; r < col.count; r++) {
+      const q = col.start + r + 1;
       const yTop = rowsTop + r * L.rowH;
       const yMid = yTop + L.rowH / 2;
-      if (r > 0 && r % 5 === 0) h += `<div class="as-sep5" style="left:${mm(X(P.side + colStart + 1, L.colW - 2))}; top:${mm(yTop)}; width:${mm(L.colW - 2)};"></div>`;
+      if (r > 0 && r % 5 === 0) h += `<div class="as-sep5" style="left:${mm(X(P.side + colStart + 1, cw - 2))}; top:${mm(yTop)}; width:${mm(cw - 2)};"></div>`;
       h += `<div class="as-num" style="left:${mm(X(P.side + colStart + P.colPad, P.numW))}; top:${mm(yTop)}; width:${mm(P.numW)}; height:${mm(L.rowH)}; font-size:${P.numSize}pt; direction:ltr;">${q}</div>`;
-      letters.forEach((letter, i) => {
+      lets.forEach((letter, i) => {
         const bx = P.side + colStart + P.colPad + P.numW + i * P.pitch + (P.pitch - P.bubble) / 2;
         const filled = opts.keyFill && opts.keyFill[q - 1] === i;
         h += `<div class="as-bubble${filled ? ' fill' : ''}" style="left:${mm(X(bx, P.bubble))}; top:${mm(yMid - P.bubble / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize}pt;">${letter}</div>`;
       });
     }
-  }
+  });
 
   // الجزء المقالي: إطار واحد للكتابة، وبأعلاه شريط للمعلم يظلل فيه مجموع درجة المقالي.
   // لحد ١٠ درجات: صف فقاعات واحد 0..المجموع. فوق ١٠: صفّين (عشرات 0..n و آحاد 0..9)
@@ -413,6 +463,7 @@ function buildSheetBody(opts, student, logoSrc, ox) {
 
   // تذييل: إعدادات القالب (عشان تعرف أي قالب Remark يقرأ هذي الورقة)
   const cfgParts = [PAGE[size].sheet, `${questions} ${rtl ? 'سؤال' : 'Q'}`, `${choices} ${rtl ? 'خيارات' : 'choices'}`];
+  if (opts.tf) cfgParts.push(`${rtl ? 'صح وخطأ' : 'T/F'} ${opts.tf}${opts.tfFirst === false ? (rtl ? ' (آخر)' : ' (last)') : ''}`);
   if (essayTotal) cfgParts.push(`${rtl ? 'مقالي' : 'Written'} ${essayTotal}`);
   cfgParts.push(rtl ? 'عربي' : 'EN');
   const cfg = cfgParts.map(t => `<bdi>${escHtml(t)}</bdi>`).join(' · ');
@@ -461,12 +512,14 @@ function readOptions() {
     essayTotal: $('as-essay-on').checked ? (parseInt($('as-essay-total').value, 10) || 0) : 0,
     modelsOn: $('as-models-on').checked,
     modelBubble: $('as-models-on').checked && $('as-models-assign').value === 'bubble',
+    tf: Math.max(0, Math.min(parseInt($('as-questions').value, 10) || 0, parseInt(($('as-tf') || {}).value, 10) || 0)),
+    tfFirst: !$('as-tf-pos') || $('as-tf-pos').value !== 'last',
   };
 }
 
 function updateLimitHint() {
   const o = readOptions();
-  const L = computeLayout({ size: o.size, questions: Math.max(o.essayTotal ? 0 : 1, o.questions), choices: o.choices, essayTotal: o.essayTotal || 0 });
+  const L = computeLayout({ size: o.size, questions: Math.max(o.essayTotal ? 0 : 1, o.questions), choices: o.choices, essayTotal: o.essayTotal || 0, tf: o.tf, tfFirst: o.tfFirst });
   const hint = $('as-limit-hint');
   hint.textContent = o.essayTotal
     ? `مع الأسئلة المقالية: الاختيار من متعدد بأعمدة ١٠ أسئلة، أقصاه ${L.maxQuestions} سؤال`
@@ -544,7 +597,7 @@ function paginate(students, perPage) {
 function buildAllPages() {
   const o = readOptions();
   if ((!o.questions || o.questions < 1) && !o.essayTotal) throw new Error('حدد عدد الأسئلة');
-  const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices, essayTotal: o.essayTotal });
+  const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices, essayTotal: o.essayTotal, tf: o.tf, tfFirst: o.tfFirst });
   if (!L.ok) throw new Error(L.error);
   const pg = PAGE[o.size];
   if (o.withBarcode) {
@@ -617,8 +670,11 @@ function fitArr(arr, n, max) { return Array.from({ length: n }, (_, i) => (arr[i
 function renderKeyGrid() {
   const o = readOptions();
   const n = Math.max(0, o.questions);
-  keyAnswers = fitArr(keyAnswers, n, o.choices);
-  keyAnswersB = fitArr(keyAnswersB, n, o.choices);
+  // سؤال الصح والخطأ: خيارين بس
+  const kinds = itemKinds(o);
+  const fitK = arr => fitArr(arr, n, o.choices).map((v, i) => (v != null && kinds[i] === 'tf' && v > 1 ? null : v));
+  keyAnswers = fitK(keyAnswers);
+  keyAnswersB = fitK(keyAnswersB);
   orderB = fitArr(orderB, n, n);
   const on = modelsOn();
   $('as-models-opts').classList.toggle('hidden', !on);
@@ -643,7 +699,7 @@ function renderKeyGrid() {
   grid.innerHTML = arr.map((sel, q) => `
     <div class="as-key-q" style="display:flex; align-items:center; gap:4px; background:#fff; border:1px solid var(--border); border-radius:9px; padding:4px 6px;">
       <b style="min-width:20px; font-size:12px; text-align:center;">${q + 1}</b>
-      ${letters.map((l, c) => `<button type="button" class="as-key-btn" data-q="${q}" data-c="${c}" style="width:26px; height:26px; border-radius:50%; border:1.5px solid ${sel === c ? 'var(--meadow)' : '#C9CED8'}; background:${sel === c ? 'var(--meadow)' : '#fff'}; color:${sel === c ? '#fff' : 'var(--ink)'}; font-size:12px; font-weight:700; padding:0; cursor:pointer;">${l}</button>`).join('')}
+      ${(kinds[q] === 'tf' ? TF_LETTERS[o.lang === 'en' ? 'en' : 'ar'] : letters).map((l, c) => `<button type="button" class="as-key-btn" data-q="${q}" data-c="${c}" style="width:26px; height:26px; border-radius:50%; border:1.5px solid ${sel === c ? 'var(--meadow)' : '#C9CED8'}; background:${sel === c ? 'var(--meadow)' : '#fff'}; color:${sel === c ? '#fff' : 'var(--ink)'}; font-size:12px; font-weight:700; padding:0; cursor:pointer;">${l}</button>`).join('')}
       ${ordering ? `<select class="as-ord" data-q="${q}" aria-label="رقم السؤال المقابل بالنموذج أ" title="رقمه بالنموذج أ"><option value="">=أ؟</option>${Array.from({ length: n }, (_, j) => `<option value="${j}"${orderB[q] === j ? ' selected' : ''}>أ${j + 1}</option>`).join('')}</select>` : ''}
     </div>`).join('');
   updateKeyStatus();
@@ -729,25 +785,25 @@ function keyStatusMsg(msg, isErr = false) {
 }
 
 export async function fetchSavedKeys() {
-  const { data, error } = await readScopedBySchool(scoped => {
-    let q = sb.from('answer_keys').select('id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, updated_at');
-    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-    return q.order('updated_at', { ascending: false });
-  });
-  if (error && /models|model_map/i.test(error.message || '')) {
-    // قبل تشغيل ملف SQL النموذجين: نقرأ بدون الأعمدة الجديدة
-    const r2 = await readScopedBySchool(scoped => {
-      let q = sb.from('answer_keys').select('id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, updated_at');
+  // نجرب الأعمدة الأحدث أول، ولو قاعدة البيانات أقدم نرجع للأعمدة اللي قبلها
+  const colsets = [
+    'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, updated_at',
+    'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, updated_at',
+    'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, updated_at',
+  ];
+  let last = null;
+  for (const cols of colsets) {
+    const { data, error } = await readScopedBySchool(scoped => {
+      let q = sb.from('answer_keys').select(cols);
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q.order('updated_at', { ascending: false });
     });
-    return { data: r2.data || [], error: r2.error ? r2.error.message : null };
+    if (!error) return { data: data || [], error: null };
+    last = error;
+    if (!/tf_count|tf_first|models|model_map|column/i.test(error.message || '')) break;
   }
-  if (error) {
-    const missing = /answer_keys|relation|does not exist|schema cache/i.test(error.message || '');
-    return { data: [], error: missing ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : error.message };
-  }
-  return { data: data || [], error: null };
+  const missing = /answer_keys|relation|does not exist|schema cache/i.test((last && last.message) || '');
+  return { data: [], error: missing ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : (last && last.message) };
 }
 
 async function refreshSavedKeysList() {
@@ -773,6 +829,7 @@ async function saveKey() {
     essay_total: o.essayTotal || 0, answers: keyAnswers.slice(),
     updated_at: new Date().toISOString(),
   };
+  if (o.tf || (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).tf_count)) { row.tf_count = o.tf; row.tf_first = o.tfFirst; }
   if (o.modelsOn) {
     row.models = { mode: modelMode(), assign: $('as-models-assign').value, answers_b: keyAnswersB.slice(), order_b: modelMode() === 'order' ? orderB.slice() : null };
     row.model_map = modelMap;
@@ -787,6 +844,7 @@ async function saveKey() {
   $('as-key-save-btn').disabled = false;
   if (res.error) {
     const msg = res.error.message || '';
+    if (/tf_count|tf_first/i.test(msg)) { keyStatusMsg('أسئلة الصح والخطأ تحتاج تشغيل ملف sql/answer_keys_tf.sql بقاعدة البيانات أولًا', true); return; }
     const missingCols = /models|model_map/i.test(msg);
     const missingTbl = /answer_keys|relation|does not exist|schema cache/i.test(msg);
     keyStatusMsg(missingCols ? 'ميزة النموذجين تحتاج تشغيل ملف sql/exam_models.sql بقاعدة البيانات أولًا' : missingTbl ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + msg, true);
@@ -808,6 +866,7 @@ function loadKeyIntoForm(k) {
   $('as-essay-on').checked = !!k.essay_total;
   $('as-essay-total-wrap').classList.toggle('hidden', !k.essay_total);
   if (k.essay_total) $('as-essay-total').value = k.essay_total;
+  if ($('as-tf')) { $('as-tf').value = k.tf_count || 0; $('as-tf-pos').value = k.tf_first === false ? 'last' : 'first'; }
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
   const m = k.models && k.models.mode ? k.models : null;
   $('as-models-on').checked = !!m;
@@ -822,7 +881,7 @@ function loadKeyIntoForm(k) {
 function buildKeyPages() {
   const o = readOptions();
   if ((!o.questions || o.questions < 1) && !o.essayTotal) throw new Error('حدد عدد الأسئلة');
-  const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices, essayTotal: o.essayTotal });
+  const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices, essayTotal: o.essayTotal, tf: o.tf, tfFirst: o.tfFirst });
   if (!L.ok) throw new Error(L.error);
   const missing = keyAnswers.map((v, i) => (v == null ? i + 1 : null)).filter(Boolean);
   if (missing.length) throw new Error(`حدد الإجابة الصحيحة لكل الأسئلة - الناقصة: ${missing.slice(0, 12).join('، ')}${missing.length > 12 ? '...' : ''}`);
@@ -981,7 +1040,7 @@ export function initAnswerSheetCard() {
   $('as-grade').innerHTML = GRADES.map(g => `<option value="${g}">${gradeLabels[g] || g}</option>`).join('');
 
   const refresh = () => { updateLimitHint(); refreshScopeControls(); renderDistribution(); renderPreview(); };
-  ['as-size', 'as-questions', 'as-choices', 'as-lang', 'as-title', 'as-subject'].forEach(id => {
+  ['as-size', 'as-questions', 'as-choices', 'as-lang', 'as-title', 'as-subject', 'as-tf', 'as-tf-pos'].forEach(id => {
     $(id).addEventListener('input', refresh);
     $(id).addEventListener('change', refresh);
   });
@@ -1065,8 +1124,8 @@ export function initAnswerSheetCard() {
     await refreshSavedKeysList();
     keyStatusMsg('تم حذف المفتاح');
   });
-  ['as-questions', 'as-choices', 'as-lang'].forEach(id => $(id).addEventListener('input', renderKeyGrid));
-  ['as-choices', 'as-lang'].forEach(id => $(id).addEventListener('change', renderKeyGrid));
+  ['as-questions', 'as-choices', 'as-lang', 'as-tf'].forEach(id => $(id).addEventListener('input', renderKeyGrid));
+  ['as-choices', 'as-lang', 'as-tf-pos'].forEach(id => $(id).addEventListener('change', renderKeyGrid));
   $('as-toggle-btn').addEventListener('click', () => {
     const open = $('as-body').classList.toggle('hidden') === false;
     $('as-toggle-btn').textContent = open ? 'إخفاء' : 'تصميم ورقة';

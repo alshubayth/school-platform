@@ -1,6 +1,6 @@
 import { ASSET_VERSION, sb, currentUserId, currentProfile, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, printOrgName, printLogo } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
-import { initAnswerSheetCard, fetchSavedKeys } from './answer-sheet.js';
+import { initAnswerSheetCard, fetchSavedKeys, itemKinds } from './answer-sheet.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
 
@@ -537,13 +537,23 @@ function applySavedKey(k) {
   if (k && k.models && k.models.mode) parsedData.modelKey = k; else delete parsedData.modelKey;
   if (!k) {
     delete parsedData.presetLetters;
+    if (parsedData._origItemTypes) parsedData.itemTypes = parsedData._origItemTypes.slice();
     parsedData.choiceCounts = parsedData._origChoiceCounts.slice();
     msg.textContent = '';
     renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
     return;
   }
   parsedData.presetLetters = (k.answers || []).map(i => (i == null ? null : ARABIC_LETTERS[i]));
-  parsedData.choiceCounts = parsedData._origChoiceCounts.map((c, i) => (parsedData.itemTypes[i] === 'tf' ? c : k.choices));
+  // مفتاح فيه أسئلة صح وخطأ: نوع كل سؤال وعدد خياراته من المفتاح نفسه
+  if (!parsedData._origItemTypes) parsedData._origItemTypes = (parsedData.itemTypes || []).slice();
+  if (k.tf_count && k.questions === parsedData.itemCount) {
+    const kinds = itemKinds({ questions: k.questions, tf: k.tf_count, tfFirst: k.tf_first !== false });
+    parsedData.itemTypes = kinds;
+    parsedData.choiceCounts = kinds.map(t => (t === 'tf' ? 2 : k.choices));
+  } else {
+    parsedData.itemTypes = parsedData._origItemTypes.slice();
+    parsedData.choiceCounts = parsedData._origChoiceCounts.map((c, i) => (parsedData.itemTypes[i] === 'tf' ? c : k.choices));
+  }
   const observedMax = Math.max(0, ...parsedData.students.flatMap(st => st.answers.filter(v => typeof v === 'number')));
   document.getElementById('er-reversed-order').checked = k.lang !== 'en';
   if (!document.getElementById('er-title').value.trim()) document.getElementById('er-title').value = k.title || '';

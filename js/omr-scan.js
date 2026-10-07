@@ -7,7 +7,7 @@
  * المعلم يشوف تقاريره هو بس (RLS)، والإدارة تشوف الكل ومن صحح.
  * ========================================================================= */
 import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels } from './core.js';
-import { fetchSavedKeys, sheetGeometry, PAGE } from './answer-sheet.js';
+import { fetchSavedKeys, sheetGeometry, PAGE, itemKinds, TF_LETTERS } from './answer-sheet.js';
 import { grayFromImageData, findMarkInRegion, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
 import { computeExamStats, gradeWithModels, rawFromIdx } from './exam-reports.js';
 
@@ -50,7 +50,7 @@ async function loadStudents() {
 
 function keyOpts(k) {
   const m = k.models && k.models.mode ? k.models : null;
-  return { size: k.size || 'A4', questions: k.questions, choices: k.choices, lang: k.lang || 'ar', essayTotal: k.essay_total || 0, modelsOn: !!m, modelBubble: !!(m && m.assign === 'bubble') };
+  return { size: k.size || 'A4', questions: k.questions, choices: k.choices, lang: k.lang || 'ar', essayTotal: k.essay_total || 0, modelsOn: !!m, modelBubble: !!(m && m.assign === 'bubble'), tf: k.tf_count || 0, tfFirst: k.tf_first !== false };
 }
 
 /* ---------- لوحة اختيار الاختبار والأوراق المصححة ---------- */
@@ -446,7 +446,9 @@ function openReview(items, onDone) {
 
 function reviewOne(it, next, remaining) {
   const k = S.key, o = keyOpts(k);
-  const letters = (o.lang === 'en' ? EN : AR).slice(0, k.choices);
+  const mcqLetters = (o.lang === 'en' ? EN : AR).slice(0, k.choices);
+  const kinds = itemKinds(o);
+  const lettersOf = q => (kinds[q] === 'tf' ? TF_LETTERS[o.lang === 'en' ? 'en' : 'ar'] : mcqLetters);
   const wrap = document.createElement('div');
   wrap.className = 'omr-rev-wrap';
   wrap.innerHTML = `<div class="omr-rev" role="dialog" aria-label="مراجعة الورقة">
@@ -534,7 +536,7 @@ function reviewOne(it, next, remaining) {
     $w('.omr-grid').innerHTML = it.answers.map((a, i) => {
       const ok = a != null && a >= 0 && key[i] === a;
       const cls = a === -1 || a === -2 || a == null ? 'bl' : ok ? 'ok' : 'no';
-      const txt = a === -1 || a == null ? '—' : a === -2 ? 'متعدد' : letters[a] || '?';
+      const txt = a === -1 || a == null ? '—' : a === -2 ? 'متعدد' : lettersOf(i)[a] || '?';
       return `<button type="button" class="omr-q ${cls}${it.unsure[i] ? ' un' : ''}${it.auto[i] !== a ? ' ed' : ''}" data-q="${i}"><small>${i + 1}</small><b>${txt}</b></button>`;
     }).join('');
     wrap.querySelectorAll('.omr-q').forEach(b => b.addEventListener('click', () => pickAnswer(+b.dataset.q, b)));
@@ -543,7 +545,7 @@ function reviewOne(it, next, remaining) {
     wrap.querySelectorAll('.omr-qpick').forEach(x => x.remove());
     const pop = document.createElement('div');
     pop.className = 'omr-qpick';
-    pop.innerHTML = `<b>سؤال ${q + 1}</b>` + letters.map((l, i) => `<button type="button" data-v="${i}"${it.answers[q] === i ? ' class="on"' : ''}>${l}</button>`).join('') +
+    pop.innerHTML = `<b>سؤال ${q + 1}</b>` + lettersOf(q).map((l, i) => `<button type="button" data-v="${i}"${it.answers[q] === i ? ' class="on"' : ''}>${l}</button>`).join('') +
       `<button type="button" data-v="-1"${it.answers[q] === -1 ? ' class="on"' : ''}>فاضي</button><button type="button" data-v="-2"${it.answers[q] === -2 ? ' class="on"' : ''}>متعدد</button>`;
     btn.after(pop);
     pop.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { it.answers[q] = +b.dataset.v; it.unsure[q] = false; pop.remove(); renderAll(); }));
@@ -635,12 +637,13 @@ function reportPayload(scans) {
   const k = S.key, o = keyOpts(k);
   const reversed = o.lang !== 'en';
   const n = k.questions;
-  const choiceCounts = Array(n).fill(k.choices);
-  const itemTypes = Array(n).fill(k.choices === 2 ? 'tf' : 'mcq');
-  const toRaw = a => (a == null || a === -1 ? -2 : a === -2 ? -3 : reversed ? k.choices - a : a + 1);
+  const kinds = itemKinds(o);
+  const choiceCounts = kinds.map(t => (t === 'tf' ? 2 : k.choices));
+  const itemTypes = kinds.map(t => (t === 'tf' || k.choices === 2 ? 'tf' : 'mcq'));
+  const toRawQ = (a, i) => (a == null || a === -1 ? -2 : a === -2 ? -3 : reversed ? choiceCounts[i] - a : a + 1);
   const students = scans.map(s => ({
     id: s.national_id, name: s.student_name || '', grade: gradeLabels[s.grade_level] || s.grade_level || '', section: s.class_section || '',
-    subject: k.subject || '', modelRaw: null, answers: (s.answers || []).slice(0, n).map(toRaw), essay: s.essay, model: s.model || undefined,
+    subject: k.subject || '', modelRaw: null, answers: (s.answers || []).slice(0, n).map(toRawQ), essay: s.essay, model: s.model || undefined,
   }));
   const grades = [...new Set(students.map(s => s.grade).filter(Boolean))];
   const base = {
