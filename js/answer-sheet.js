@@ -820,7 +820,7 @@ async function refreshSavedKeysList() {
 async function saveKey() {
   const o = readOptions();
   if (!o.title) { keyStatusMsg('اكتب عنوان الاختبار بالخطوة ١ (يظهر بقائمة المفاتيح وبالتقارير)', true); return; }
-  if (!keyGrade()) { keyStatusMsg('حدد المرحلة بالخطوة ١ قبل حفظ المفتاح', true); return; }
+  if (!keyClassChosen()) { keyStatusMsg('حدد المرحلة بالخطوة ١ قبل حفظ المفتاح (أو جميع المراحل)', true); return; }
   if (!o.questions && !o.essayTotal) { keyStatusMsg('حدد عدد الأسئلة', true); return; }
   const prob = keyProblems();
   if (prob) { keyStatusMsg(prob + ' - كمّل المفتاح قبل الحفظ', true); return; }
@@ -832,7 +832,9 @@ async function saveKey() {
     updated_at: new Date().toISOString(),
   };
   if (o.tf || (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).tf_count)) { row.tf_count = o.tf; row.tf_first = o.tfFirst; }
-  if (keySections || (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).sections)) row.sections = keySections;
+  // sections: { grades: [...] | null (الكل), classes: [أرقام الفصول] | null } - للمرحلة الوحدة grade_level كمان
+  const scope = keyGrades === null ? { grades: null, classes: null } : { grades: keyGrades.slice(), classes: keyGrade() ? keySections : null };
+  if (keyGrades === null || keyGrades.length !== 1 || keySections || (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).sections)) row.sections = scope;
   if (o.modelsOn) {
     row.models = { mode: modelMode(), assign: $('as-models-assign').value, answers_b: keyAnswersB.slice(), order_b: modelMode() === 'order' ? orderB.slice() : null };
     row.model_map = modelMap;
@@ -871,7 +873,12 @@ function loadKeyIntoForm(k) {
   if (k.essay_total) $('as-essay-total').value = k.essay_total;
   if ($('as-tf')) { $('as-tf').value = k.tf_count || 0; $('as-tf-pos').value = k.tf_first === false ? 'last' : 'first'; }
   if ($('as-mcq')) $('as-mcq').value = Math.max(0, (k.questions || 0) - (k.tf_count || 0));
-  if ($('as-key-grade')) { $('as-key-grade').value = k.grade_level || ''; keySections = Array.isArray(k.sections) && k.sections.length ? k.sections.slice() : null; renderKeySecs(); }
+  if ($('as-key-grades')) {
+    const sc = k.sections && typeof k.sections === 'object' && !Array.isArray(k.sections) ? k.sections : null;
+    keyGrades = sc ? (sc.grades === null ? null : (sc.grades || [])) : (k.grade_level ? [k.grade_level] : []);
+    keySections = sc && Array.isArray(sc.classes) && sc.classes.length ? sc.classes.slice() : (Array.isArray(k.sections) && k.sections.length ? k.sections.slice() : null);
+    renderKeyGrades(); loadAllStudents().then(renderKeySecs);
+  }
   updateQSum();
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
   const m = k.models && k.models.mode ? k.models : null;
@@ -1041,12 +1048,34 @@ async function downloadPdf(builtOverride) {
 }
 
 /* ---------- مرحلة وفصول الاختبار (تنحفظ مع المفتاح) ---------- */
-let keySections = null;   // null = كل فصول المرحلة، أو مصفوفة أرقام الفصول
-function keyGrade() { return ($('as-key-grade') || {}).value || ''; }
+let keySections = null;   // null = كل فصول المرحلة، أو مصفوفة أرقام الفصول (لما تكون مرحلة وحدة)
+let keyGrades = [];       // [] = ما اختار، null = جميع المراحل، أو مصفوفة مراحل
+function keyGrade() { return Array.isArray(keyGrades) && keyGrades.length === 1 ? keyGrades[0] : ''; }
+const keyClassChosen = () => keyGrades === null || keyGrades.length > 0;
+function renderKeyGrades() {
+  const box = $('as-key-grades'); if (!box) return;
+  const all = keyGrades === null;
+  box.innerHTML = `<label class="as-ks${all ? ' on' : ''}"><input type="checkbox" data-kg="all"${all ? ' checked' : ''}>جميع المراحل</label>` +
+    GRADES.map(g => { const on = !all && keyGrades.includes(g); return `<label class="as-ks${on ? ' on' : ''}"><input type="checkbox" data-kg="${g}"${on ? ' checked' : ''}>${gradeLabels[g] || g}</label>`; }).join('');
+  box.querySelectorAll('[data-kg]').forEach(cb => cb.addEventListener('change', async () => {
+    if (cb.dataset.kg === 'all') keyGrades = cb.checked ? null : [];
+    else {
+      const cur = new Set(keyGrades || []);
+      if (cb.checked) cur.add(cb.dataset.kg); else cur.delete(cb.dataset.kg);
+      keyGrades = cur.size === GRADES.length ? null : GRADES.filter(g => cur.has(g));
+    }
+    keySections = null;
+    if ($('as-step-msg')) $('as-step-msg').textContent = '';
+    renderKeyGrades();
+    await loadAllStudents();
+    renderKeySecs(); applyKeyClassToPrint();
+  }));
+}
 function renderKeySecs() {
   const box = $('as-key-secs'); if (!box) return;
   const g = keyGrade();
-  if (!g) { box.innerHTML = '<span class="as-muted">اختر المرحلة أول</span>'; return; }
+  $('as-key-secs-wrap').classList.toggle('hidden', !g);
+  if (!g) { keySections = null; return; }
   const secs = [...new Set(asStudents.filter(st => st.grade_level === g).map(st => st.class_section || 0))].sort((a, b) => a - b);
   if (!secs.length) { box.innerHTML = '<span class="as-muted">كل فصول المرحلة</span>'; keySections = null; return; }
   if (keySections) keySections = keySections.filter(n => secs.includes(n));
@@ -1066,7 +1095,9 @@ function renderKeySecs() {
 }
 // خطوة الطباعة تاخذ نفس المرحلة/الفصل تلقائيًا
 function applyKeyClassToPrint() {
-  const g = keyGrade(); if (!g || !$('as-grade')) return;
+  if (!$('as-grade') || !keyClassChosen()) return;
+  const g = keyGrade();
+  if (!g) { $('as-scope').value = 'school'; refreshScopeControls(); renderDistribution(); renderPreview(); return; }
   $('as-grade').value = g;
   if (keySections && keySections.length === 1) { $('as-scope').value = 'class'; refreshScopeControls(); $('as-section').value = String(keySections[0]); }
   else $('as-scope').value = 'grade';
@@ -1098,7 +1129,7 @@ function updateQSum() {
   if ($('as-tf-pos')) $('as-tf-pos').closest('label').style.opacity = tf ? '1' : '0.5';
 }
 function stepError(n) {
-  if (n === 1 && !keyGrade()) return 'حدد المرحلة';
+  if (n === 1 && !keyClassChosen()) return 'حدد المرحلة (أو جميع المراحل)';
   if (n === 2) {
     const o = readOptions();
     if (!o.questions && !o.essayTotal) return 'حدد عدد الأسئلة';
@@ -1139,7 +1170,7 @@ export function initAnswerSheetCard() {
   $('as-tf').addEventListener('input', () => syncCounts('tf'));
   $('as-essay-total').addEventListener('input', updateQSum);
   $('as-essay-on').addEventListener('change', updateQSum);
-  $('as-key-grade').addEventListener('change', async () => { keySections = null; await loadAllStudents(); renderKeySecs(); applyKeyClassToPrint(); });
+  renderKeyGrades();
   showStep(1); updateQSum();
   $('as-grade').innerHTML = GRADES.map(g => `<option value="${g}">${gradeLabels[g] || g}</option>`).join('');
 

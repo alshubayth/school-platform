@@ -99,7 +99,13 @@ async function selectKey(id) {
   info.innerHTML = [
     `<i>${PAGE[o.size] ? esc(PAGE[o.size].label) : esc(o.size)}</i>`, `<i>${k.questions} سؤال × ${k.choices} خيارات</i>`,
     k.essay_total ? `<i>مقالي من ${k.essay_total}</i>` : '', o.modelsOn ? `<i>نموذجين (${o.modelBubble ? 'الطالب يظلّل نموذجه' : 'موزّعة من المنصة'})</i>` : '',
-    k.grade_level ? `<i>${esc(gradeLabels[k.grade_level] || k.grade_level)}${Array.isArray(k.sections) && k.sections.length ? ' · فصل ' + esc(k.sections.join('، ')) : ''}</i>` : '',
+    (() => {
+      const sc = k.sections && typeof k.sections === 'object' && !Array.isArray(k.sections) ? k.sections : null;
+      if (sc && sc.grades === null) return '<i>جميع المراحل</i>';
+      const gs = sc && Array.isArray(sc.grades) ? sc.grades : (k.grade_level ? [k.grade_level] : []);
+      const cl = sc && Array.isArray(sc.classes) ? sc.classes : (Array.isArray(k.sections) ? k.sections : null);
+      return gs.length ? `<i>${gs.map(g => esc(gradeLabels[g] || g)).join('، ')}${cl && cl.length ? ' · فصل ' + esc(cl.join('، ')) : ''}</i>` : '';
+    })(),
     missing ? `<b class="omr-warn">المفتاح ناقص ${missing} إجابة</b>` : '',
   ].filter(Boolean).join('');
   await loadScans();
@@ -528,7 +534,8 @@ function reviewOne(it, next, remaining) {
     ss.addEventListener('change', draw);
     qi.addEventListener('input', draw);
     fillSecs();
-    if (Array.isArray(k.sections) && k.sections.length === 1 && gs.value === k.grade_level) ss.value = String(k.sections[0]);
+    const kc = k.sections && Array.isArray(k.sections.classes) ? k.sections.classes : (Array.isArray(k.sections) ? k.sections : null);
+    if (kc && kc.length === 1 && gs.value === k.grade_level) ss.value = String(kc[0]);
     draw();
   };
 

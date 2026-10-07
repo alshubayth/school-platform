@@ -1547,15 +1547,10 @@
                   <h5 class="as-step-h">بيانات الاختبار</h5>
                   <label class="as-f">عنوان الاختبار<input type="text" id="as-title" placeholder="مثال: اختبار الفترة الأولى" /></label>
                   <label class="as-f">المادة<input type="text" id="as-subject" placeholder="مثال: العلوم" /></label>
-                  <label class="as-f">المرحلة (الصف)
-                    <select id="as-key-grade">
-                      <option value="">— اختر المرحلة —</option>
-                      <option value="first_intermediate">أول متوسط</option>
-                      <option value="second_intermediate">ثاني متوسط</option>
-                      <option value="third_intermediate">ثالث متوسط</option>
-                    </select>
-                  </label>
-                  <div class="as-f" id="as-key-secs-wrap">الفصول
+                  <div class="as-f">المرحلة
+                    <div id="as-key-grades" class="as-key-secs"></div>
+                  </div>
+                  <div class="as-f hidden" id="as-key-secs-wrap">الفصول
                     <div id="as-key-secs" class="as-key-secs"><span class="as-muted">اختر المرحلة أول</span></div>
                   </div>
                   <label class="as-f">لغة الخيارات
