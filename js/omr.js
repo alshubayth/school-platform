@@ -39,7 +39,7 @@ export function shrinkGray(g, maxDim) {
 }
 
 /* ---------- علامات الزوايا ---------- */
-export function findMarkCandidates(g) {
+export function findMarkCandidates(g, opt = {}) {
   const { w, h, d } = g;
   const W1 = w + 1;
   const integ = new Float64Array(W1 * (h + 1));
@@ -48,7 +48,7 @@ export function findMarkCandidates(g) {
     for (let x = 0; x < w; x++) { row += d[y * w + x]; integ[(y + 1) * W1 + x + 1] = integ[y * W1 + x + 1] + row; }
   }
   const minDim = Math.min(w, h);
-  const r = Math.max(8, Math.round(minDim / 14));
+  const r = opt.win || Math.max(8, Math.round(minDim / 14));
   const mean = new Float32Array(w * h);
   for (let y = 0; y < h; y++) {
     const y0 = Math.max(0, y - r), y1 = Math.min(h, y + r + 1);
@@ -67,7 +67,7 @@ export function findMarkCandidates(g) {
     for (const opened of [false, true]) {
       const bin = base.slice();
       if (opened) open2(bin, w, h, Math.max(1, Math.round(minDim / 350)));
-      components(bin, w, h, minDim).forEach(c => {
+      components(bin, w, h, minDim, opt).forEach(c => {
         if (!out.some(o => Math.hypot(o.x - c.x, o.y - c.y) < Math.max(o.side, c.side) * 0.7)) out.push(c);
       });
     }
@@ -96,8 +96,8 @@ function open2(bin, w, h, rad) {
 }
 
 const ANGLES = Array.from({ length: 18 }, (_, i) => (i * 5 * Math.PI) / 180);
-function components(bin, w, h, minDim) {
-  const minSide = minDim * 0.008, maxSide = minDim * 0.075;
+function components(bin, w, h, minDim, opt = {}) {
+  const minSide = opt.minSide || minDim * 0.008, maxSide = opt.maxSide || minDim * 0.075;
   const minA = minSide * minSide, maxA = maxSide * maxSide;
   const stack = new Int32Array(w * h);
   const pix = new Int32Array(Math.ceil(maxA * 1.5) + 8);
@@ -313,7 +313,6 @@ export function locateSheet(gFull, geo, pageSize, opts = {}) {
   const small = shrinkGray(gFull, opts.detectDim || 900);
   const cands = findMarkCandidates(small);
   const quads = candidateQuads(cands, small.w, small.h);
-  if (!quads.length) return { ok: false, reason: 'marks', cands: cands.length, candPts: cands.map(c => [c.x * small.k, c.y * small.k]) };
   const layouts = layoutsFor(geo, pageSize);
   // عيّنة من الفقاعات مقسومة كتل (كل كتلة تاخذ إزاحتها الخاصة - الورقة ممكن تكون منحنية)
   const probeBlocks = [];
@@ -330,6 +329,19 @@ export function locateSheet(gFull, geo, pageSize, opts = {}) {
     return tot / Math.max(1, probeBlocks.length);
   };
   let best = null;
+  // وضع الإطار الموجّه: العلامات الأربع معروفة من المعاينة (TL TR BL BR بإحداثيات الصورة الكاملة)
+  if (opts.quad) {
+    const lay = layouts[0];
+    for (const r of [0, 2]) {
+      const dst = ROT[r].map(i => opts.quad[i]);
+      const H = homography(lay.marks, dst);
+      if (!H) continue;
+      const score = blockScore(H, 0);
+      if (!best || score > best.score) best = { score, H, layout: lay, quad: dst, rot: r };
+    }
+    if (best && best.score >= 18) return { ok: true, ...best };
+  }
+  if (!quads.length && !best) return { ok: false, reason: 'marks', cands: cands.length, candPts: cands.map(c => [c.x * small.k, c.y * small.k]) };
   for (const q of quads) {
     if (best && best.score > 35) break;   // أول اختيار (الزوايا الخارجية) واضح - ما يحتاج نجرب غيره
     const asp = quadAspect(q);

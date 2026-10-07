@@ -8,7 +8,7 @@
  * ========================================================================= */
 import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels } from './core.js';
 import { fetchSavedKeys, sheetGeometry, PAGE } from './answer-sheet.js';
-import { grayFromImageData, shrinkGray, findMarkCandidates, quickQuad, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
+import { grayFromImageData, findMarkCandidates, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
 import { computeExamStats, gradeWithModels, rawFromIdx } from './exam-reports.js';
 
 const AR = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
@@ -218,7 +218,7 @@ async function openCamera() {
     if (caps.focusMode && caps.focusMode.includes('continuous')) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
   } catch (e) {}
   try { if (navigator.wakeLock) cam.wake = await navigator.wakeLock.request('screen'); } catch (e) {}
-  msg.textContent = 'وجّه الكاميرا على الورقة حتى تظهر المربعات الأربع';
+  msg.textContent = 'قرّب الجوال لين تدخل مربعات الورقة السوداء داخل المربعات';
   cam.timer = setInterval(detectTick, 220);
 }
 
@@ -235,50 +235,93 @@ function closeCamera() {
 
 // كشف سريع (صورة صغيرة) لرسم الزوايا والالتقاط التلقائي لما تثبت الورقة
 const smallCanvas = document.createElement('canvas');
+/* إطار موجّه: ٤ مربعات ثابتة على الشاشة بمكان زوايا الورقة. المعلم يقرّب الجوال لين تدخل المربعات
+ * السوداء اللي بالورقة داخلها، وأول ما تتطابق الأربع يلتقط تلقائيًا. */
+function guideRect() {
+  const cam = S.cam;
+  const r = cam.video.getBoundingClientRect();
+  const m = S.geo.marks;   // TL TR BL BR (مم)
+  const aspect = (m[2][1] - m[0][1]) / (m[1][0] - m[0][0]);
+  let gw = r.width * 0.84, gh = gw * aspect;
+  const maxH = r.height * 0.68;
+  if (gh > maxH) { gh = maxH; gw = gh / aspect; }
+  const cx = r.width / 2, cy = r.height * 0.47;
+  const box = Math.max(54, gw * 0.17);
+  const pts = [[cx - gw / 2, cy - gh / 2], [cx + gw / 2, cy - gh / 2], [cx - gw / 2, cy + gh / 2], [cx + gw / 2, cy + gh / 2]];
+  // شاشة ← إحداثيات الفيديو (الفيديو معروض بـ object-fit: cover)
+  const vw = cam.video.videoWidth, vh = cam.video.videoHeight;
+  const sc = Math.max(r.width / vw, r.height / vh);
+  const ox = (r.width - vw * sc) / 2, oy = (r.height - vh * sc) / 2;
+  return { r, pts, box, gw, toVid: ([x, y]) => [(x - ox) / sc, (y - oy) / sc], toScr: ([x, y]) => [ox + x * sc, oy + y * sc], sc };
+}
+
 function detectTick() {
   const cam = S.cam;
   if (!cam || cam.paused || S.busy || !cam.video.videoWidth) return;
   const v = cam.video;
+  const G = guideRect();
   const scale = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight));
   const w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
   smallCanvas.width = w; smallCanvas.height = h;
   const ctx = smallCanvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(v, 0, 0, w, h);
   const g = grayFromImageData(ctx.getImageData(0, 0, w, h));
-  const cands = findMarkCandidates(g);
-  const qq = quickQuad(cands, w, h, S.geo, keyOpts(S.key).size);
-  const q = qq ? qq.map(p => [p.x / w, p.y / h]) : null;
-  drawOverlay(q);
-  if (!q) {
-    cam.hist = []; cam.seen = 0;
-    cam.msg.textContent = cands.length >= 3 ? 'قرّب الجوال وخلّ المربعات السوداء الأربع داخل الصورة' : 'وجّه الكاميرا على الورقة حتى تظهر المربعات الأربع';
+  // حجم العلامة المتوقع لو الورقة مطابقة للإطار (بكسلات الصورة المصغرة)
+  const mmToPx = (G.gw / G.sc) * scale / (S.geo.marks[1][0] - S.geo.marks[0][0]);
+  const markPx = S.geo.mark * mmToPx;
+  const cands = findMarkCandidates(g, { minSide: markPx * 0.45, maxSide: markPx * 2.2, win: Math.max(8, Math.round(markPx * 3)) });
+  const half = (G.box / 2) / G.sc * scale;   // نصف المربع الموجّه بإحداثيات الصورة المصغرة
+  const hits = G.pts.map(p => {
+    const [vx, vy] = G.toVid(p);
+    const cx = vx * scale, cy = vy * scale;
+    let best = null;
+    for (const c of cands) {
+      if (Math.abs(c.x - cx) > half || Math.abs(c.y - cy) > half) continue;
+      const d = Math.hypot(c.x - cx, c.y - cy) - c.side;   // الأقرب للمركز، والأكبر عند التساوي
+      if (!best || d < best.d) best = { d, c };
+    }
+    return best ? best.c : null;
+  });
+  // المربعات الأربع لازم تكون متقاربة بالحجم (مو نقطة صغيرة بالغلط)
+  const found = hits.filter(Boolean);
+  let ok = found.length === 4;
+  if (ok) { const a = found.map(c => c.area); ok = Math.max(...a) < Math.min(...a) * 4; }
+  drawGuide(G, hits.map(c => (c ? G.toScr([c.x / scale, c.y / scale]) : null)));
+  if (!ok) {
+    cam.match = 0;
+    cam.msg.textContent = found.length >= 2 ? `طابق المربعات الأربع (${found.length} من 4)` : 'قرّب الجوال لين تدخل مربعات الورقة السوداء داخل المربعات';
     return;
   }
-  cam.seen = (cam.seen || 0) + 1;
-  cam.hist.push(q);
-  if (cam.hist.length > 3) cam.hist.shift();
-  const steady = cam.hist.length >= 3 && cam.hist.every(h2 => h2.every(([x, y], i) => Math.hypot(x - q[i][0], y - q[i][1]) < 0.025));
-  cam.msg.textContent = steady ? 'ثابت ✓ جارٍ الالتقاط...' : 'ثبّت الجوال...';
-  // ثابت، أو الورقة ظاهرة من ثانية ونص حتى لو اليد تهتز شوي (القراءة الكاملة تتحمّل)
-  if (cam.auto && Date.now() - cam.lastShot > 1500 && (steady || cam.seen >= 7)) { cam.seen = 0; capture(false); }
+  cam.match = (cam.match || 0) + 1;
+  cam.quad = hits.map(c => [c.x / scale, c.y / scale]);   // بإحداثيات الفيديو الكاملة
+  cam.msg.textContent = 'ممتاز ✓ لا تتحرك...';
+  if (cam.auto && cam.match >= 2 && Date.now() - cam.lastShot > 1200) { cam.match = 0; capture(false); }
 }
 
-function drawOverlay(q) {
+function drawGuide(G, hits) {
   const cam = S.cam;
   const c = cam.ov.querySelector('.omr-cam-ov');
-  const r = cam.video.getBoundingClientRect();
-  c.width = r.width; c.height = r.height;
+  c.width = G.r.width; c.height = G.r.height;
   const ctx = c.getContext('2d');
   ctx.clearRect(0, 0, c.width, c.height);
-  if (!q) return;
-  // الفيديو معروض بـ object-fit: cover - نحوّل الإحداثيات النسبية لمكانها على الشاشة
-  const vw = cam.video.videoWidth, vh = cam.video.videoHeight;
-  const s = Math.max(r.width / vw, r.height / vh);
-  const ox = (r.width - vw * s) / 2, oy = (r.height - vh * s) / 2;
-  const P = q.map(([x, y]) => [ox + x * vw * s, oy + y * vh * s]);
-  ctx.strokeStyle = '#2FD27A'; ctx.lineWidth = 4; ctx.fillStyle = 'rgba(47,210,122,0.12)';
-  ctx.beginPath(); ctx.moveTo(...P[0]); ctx.lineTo(...P[1]); ctx.lineTo(...P[3]); ctx.lineTo(...P[2]); ctx.closePath(); ctx.fill(); ctx.stroke();
-  P.forEach(([x, y]) => { ctx.beginPath(); ctx.arc(x, y, 9, 0, Math.PI * 2); ctx.fillStyle = '#2FD27A'; ctx.fill(); });
+  const all = hits.every(Boolean);
+  // إطار الورقة الخفيف
+  const [tl, tr, bl, br] = G.pts;
+  ctx.strokeStyle = all ? 'rgba(47,210,122,0.9)' : 'rgba(255,255,255,0.55)';
+  ctx.lineWidth = 2; ctx.setLineDash([8, 8]);
+  ctx.strokeRect(tl[0], tl[1], tr[0] - tl[0], bl[1] - tl[1]);
+  ctx.setLineDash([]);
+  G.pts.forEach(([x, y], i) => {
+    const on = !!hits[i];
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = on ? '#2FD27A' : '#FFFFFF';
+    ctx.fillStyle = on ? 'rgba(47,210,122,0.28)' : 'rgba(255,255,255,0.08)';
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x - G.box / 2, y - G.box / 2, G.box, G.box, 10); else ctx.rect(x - G.box / 2, y - G.box / 2, G.box, G.box);
+    ctx.fill(); ctx.stroke();
+    if (on) { const [hx, hy] = hits[i]; ctx.fillStyle = '#2FD27A'; ctx.beginPath(); ctx.arc(hx, hy, 6, 0, Math.PI * 2); ctx.fill(); }
+  });
+  void br;
 }
 
 async function capture(manual) {
@@ -293,7 +336,7 @@ async function capture(manual) {
   const ctx = c.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(v, 0, 0);
   await new Promise(r => setTimeout(r, 30));
-  const results = processCanvas(c);
+  const results = processCanvas(c, manual ? null : cam.quad);
   S.busy = false;
   if (!results.ok) {
     cam.hist = [];
@@ -305,7 +348,7 @@ async function capture(manual) {
   flash(cam.ov, 'ok');
   cam.msg.textContent = 'راجع النتيجة واحفظها';
   cam.paused = true;
-  openReview(results.items, () => { if (S.cam) { S.cam.paused = false; S.cam.hist = []; S.cam.lastShot = Date.now(); S.cam.msg.textContent = 'الورقة التالية...'; const cnt = $('omr-cam-cnt'); if (cnt) cnt.textContent = S.scans.size + ' ورقة'; } });
+  openReview(results.items, () => { if (S.cam) { S.cam.paused = false; S.cam.match = 0; S.cam.lastShot = Date.now(); S.cam.msg.textContent = 'الورقة التالية...'; const cnt = $('omr-cam-cnt'); if (cnt) cnt.textContent = S.scans.size + ' ورقة'; } });
 }
 
 function flash(el, kind) {
@@ -339,10 +382,10 @@ async function processFiles(files) {
 }
 
 /* ---------- قراءة صورة ← نتائج (ورقة أو ورقتين) ---------- */
-function processCanvas(canvas) {
+function processCanvas(canvas, quad = null) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const g = grayFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
-  const loc = locateSheet(g, S.geo, keyOpts(S.key).size);
+  const loc = locateSheet(g, S.geo, keyOpts(S.key).size, quad ? { quad } : {});
   if (!loc.ok) {
     return { ok: false, msg: loc.reason === 'marks' || loc.reason === 'shape' ? 'ما لقيت المربعات الأربع - صوّر الورقة كاملة' : 'الصورة مو واضحة أو الورقة مو لهذا الاختبار' };
   }
