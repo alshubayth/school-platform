@@ -295,7 +295,6 @@ function syncGradeBoxes() {
 }
 
 function bind() {
-  const c = S.cfg;
   const on = (id, ev, fn) => { const el = $(id); if (el) el.addEventListener(ev, fn); };
   document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
     const p = PRESETS.find(x => x.key === b.dataset.preset);
@@ -327,25 +326,25 @@ function bind() {
     if (i.checked) S.sel.add(i.dataset.k); else S.sel.delete(i.dataset.k);
     syncGradeBoxes(); update();
   }));
-  on('sl-sort', 'change', e => { c.sort = e.target.value; update(); });
-  on('sl-per', 'change', e => { c.perSection = e.target.value === '1'; update(); });
-  on('sl-extra', 'input', e => { c.extraRows = Math.max(0, Math.min(40, Number(e.target.value) || 0)); update(); });
-  on('sl-title', 'input', e => { c.title = e.target.value; update(); });
-  on('sl-subject', 'input', e => { c.subject = e.target.value; update(); });
-  on('sl-term', 'input', e => { c.term = e.target.value; update(); });
-  on('sl-font', 'input', e => { c.fontSize = Math.max(7, Math.min(16, Number(e.target.value) || 11)); update(); });
-  on('sl-rowh', 'input', e => { c.rowH = Math.max(4.5, Math.min(16, Number(e.target.value) || 7.5)); update(); });
-  on('sl-logo', 'change', e => { c.showLogo = e.target.checked; update(); });
-  on('sl-teacher', 'change', e => { c.showTeacher = e.target.checked; update(); });
-  on('sl-zebra', 'change', e => { c.zebra = e.target.checked; update(); });
+  on('sl-sort', 'change', e => { S.cfg.sort = e.target.value; update(); });
+  on('sl-per', 'change', e => { S.cfg.perSection = e.target.value === '1'; update(); });
+  on('sl-extra', 'input', e => { S.cfg.extraRows = Math.max(0, Math.min(40, Number(e.target.value) || 0)); update(); });
+  on('sl-title', 'input', e => { S.cfg.title = e.target.value; update(); });
+  on('sl-subject', 'input', e => { S.cfg.subject = e.target.value; update(); });
+  on('sl-term', 'input', e => { S.cfg.term = e.target.value; update(); });
+  on('sl-font', 'input', e => { S.cfg.fontSize = Math.max(7, Math.min(16, Number(e.target.value) || 11)); update(); });
+  on('sl-rowh', 'input', e => { S.cfg.rowH = Math.max(4.5, Math.min(16, Number(e.target.value) || 7.5)); update(); });
+  on('sl-logo', 'change', e => { S.cfg.showLogo = e.target.checked; update(); });
+  on('sl-teacher', 'change', e => { S.cfg.showTeacher = e.target.checked; update(); });
+  on('sl-zebra', 'change', e => { S.cfg.zebra = e.target.checked; update(); });
   document.querySelectorAll('#sl-orient button').forEach(b => b.addEventListener('click', () => {
-    c.orientation = b.dataset.o;
+    S.cfg.orientation = b.dataset.o;
     document.querySelectorAll('#sl-orient button').forEach(x => x.classList.toggle('active', x === b));
     update();
   }));
   document.querySelectorAll('[data-sign]').forEach(i => i.addEventListener('change', () => {
     const s = i.dataset.sign;
-    c.signs = SIGN_OPTS.filter(x => (x === s ? i.checked : c.signs.includes(x)));
+    S.cfg.signs = SIGN_OPTS.filter(x => (x === s ? i.checked : S.cfg.signs.includes(x)));
     i.closest('label').classList.toggle('on', i.checked);
     update();
   }));
