@@ -8,7 +8,7 @@
  * ========================================================================= */
 import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels } from './core.js';
 import { fetchSavedKeys, sheetGeometry, PAGE } from './answer-sheet.js';
-import { grayFromImageData, shrinkGray, findMarkCandidates, candidateQuads, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
+import { grayFromImageData, shrinkGray, findMarkCandidates, quickQuad, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
 import { computeExamStats, gradeWithModels, rawFromIdx } from './exam-reports.js';
 
 const AR = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
@@ -71,9 +71,11 @@ function renderPanel() {
       <div id="omr-key-info" class="omr-key-info"></div>
       <div class="omr-actions hidden" id="omr-actions">
         <button type="button" class="btn-primary" id="omr-start">📷 ابدأ التصحيح بالكاميرا</button>
+        <label class="btn-secondary omr-file-btn">📸 صورة بكاميرا الجوال<input type="file" id="omr-shot" accept="image/*" capture="environment" hidden></label>
         <label class="btn-secondary omr-file-btn">🖼 صور من الجهاز<input type="file" id="omr-files" accept="image/*" multiple hidden></label>
       </div>
       <div class="omr-tips">
+        <b>«ابدأ التصحيح»</b> أسرع (يلتقط تلقائيًا ورقة ورا ورقة)، و<b>«صورة بكاميرا الجوال»</b> أدق لأنها بدقة الكاميرا الكاملة - استخدمها لو الباركود ما انقرأ.<br>
         <b>للحصول على قراءة دقيقة:</b> صوّر الورقة كاملة بحيث تظهر <b>المربعات السوداء الأربع</b> بالزوايا، على سطح مستوٍ وبإضاءة جيدة بدون ظل على الورقة.
         ورقة A4 بالعرض (طالبين) تقدر تصوّرها كاملة قبل القص وتنقرأ الورقتين مع بعض.
       </div>
@@ -82,6 +84,7 @@ function renderPanel() {
   $('omr-key').addEventListener('change', e => selectKey(e.target.value));
   $('omr-start').addEventListener('click', openCamera);
   $('omr-files').addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; processFiles(f); });
+  $('omr-shot').addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; processFiles(f); });
 }
 
 async function selectKey(id) {
@@ -236,22 +239,28 @@ function detectTick() {
   const cam = S.cam;
   if (!cam || cam.paused || S.busy || !cam.video.videoWidth) return;
   const v = cam.video;
-  const scale = 640 / Math.max(v.videoWidth, v.videoHeight);
+  const scale = Math.min(1, 960 / Math.max(v.videoWidth, v.videoHeight));
   const w = Math.round(v.videoWidth * scale), h = Math.round(v.videoHeight * scale);
   smallCanvas.width = w; smallCanvas.height = h;
   const ctx = smallCanvas.getContext('2d', { willReadFrequently: true });
   ctx.drawImage(v, 0, 0, w, h);
   const g = grayFromImageData(ctx.getImageData(0, 0, w, h));
   const cands = findMarkCandidates(g);
-  const quads = candidateQuads(cands, w, h);
-  const q = quads[0] ? quads[0].map(p => [p.x / w, p.y / h]) : null;
+  const qq = quickQuad(cands, w, h, S.geo, keyOpts(S.key).size);
+  const q = qq ? qq.map(p => [p.x / w, p.y / h]) : null;
   drawOverlay(q);
-  if (!q) { cam.hist = []; cam.msg.textContent = cands.length ? 'خلّ المربعات السوداء الأربع داخل الصورة' : 'وجّه الكاميرا على الورقة حتى تظهر المربعات الأربع'; return; }
+  if (!q) {
+    cam.hist = []; cam.seen = 0;
+    cam.msg.textContent = cands.length >= 3 ? 'قرّب الجوال وخلّ المربعات السوداء الأربع داخل الصورة' : 'وجّه الكاميرا على الورقة حتى تظهر المربعات الأربع';
+    return;
+  }
+  cam.seen = (cam.seen || 0) + 1;
   cam.hist.push(q);
-  if (cam.hist.length > 4) cam.hist.shift();
-  const steady = cam.hist.length >= 3 && cam.hist.every(h2 => h2.every(([x, y], i) => Math.hypot(x - q[i][0], y - q[i][1]) < 0.012));
+  if (cam.hist.length > 3) cam.hist.shift();
+  const steady = cam.hist.length >= 3 && cam.hist.every(h2 => h2.every(([x, y], i) => Math.hypot(x - q[i][0], y - q[i][1]) < 0.025));
   cam.msg.textContent = steady ? 'ثابت ✓ جارٍ الالتقاط...' : 'ثبّت الجوال...';
-  if (steady && cam.auto && Date.now() - cam.lastShot > 1500) capture(false);
+  // ثابت، أو الورقة ظاهرة من ثانية ونص حتى لو اليد تهتز شوي (القراءة الكاملة تتحمّل)
+  if (cam.auto && Date.now() - cam.lastShot > 1500 && (steady || cam.seen >= 7)) { cam.seen = 0; capture(false); }
 }
 
 function drawOverlay(q) {
@@ -288,7 +297,7 @@ async function capture(manual) {
   S.busy = false;
   if (!results.ok) {
     cam.hist = [];
-    cam.msg.textContent = manual ? results.msg : 'ثبّت الجوال...';
+    cam.msg.textContent = results.msg;
     if (manual) flash(cam.ov, 'bad');
     return;
   }
