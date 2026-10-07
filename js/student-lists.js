@@ -96,11 +96,16 @@ async function loadStudentsAndClasses() {
     const name = (currentProfile && currentProfile.full_name || '').trim();
     let mine = [];
     if (name) {
-      const { data: rows } = await readScopedBySchool(scoped => {
-        let q = sb.from('class_schedules').select('grade_level, class_section, subject_name').eq('teacher_name', name);
+      let { data: rows, error: e1 } = await readScopedBySchool(scoped => {
+        let q = sb.from('class_schedules').select('grade_level, class_section, subject_name').or(`teacher_id.eq.${currentUserId},teacher_name.eq."${name.replace(/"/g, '')}"`);
         if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
         return q;
       });
+      if (e1) ({ data: rows } = await readScopedBySchool(scoped => {
+        let q = sb.from('class_schedules').select('grade_level, class_section, subject_name').eq('teacher_name', name);
+        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+        return q;
+      }));
       (rows || []).forEach(r => {
         const c = { grade: r.grade_level, section: secNum(r.class_section) };
         const k = keyOf(c);

@@ -337,6 +337,8 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
 
 let pmTeachers = [];
 let pmAssignments = [];
+let pmSchedule = [];   // حصص الجدول الدراسي (للفصول المسندة لكل معلم)
+const pmNorm = v => String(v || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').split(/\s+/).filter(w => w && !['بن', 'ابن', 'بنت'].includes(w)).map(w => w.replace(/^ال(?=..)/, '')).join(' ');
 let pmSearch = '';
 export async function loadPermsModule() {
   const [{ data: teachers }, { data: subjects }] = await Promise.all([
@@ -401,7 +403,20 @@ async function refreshPermsList() {
     return q;
   });
   pmAssignments = assignments || [];
+  try { const { loadSchedule } = await import('./subject-sync.js'); pmSchedule = ((await loadSchedule()).data) || []; } catch (e) { pmSchedule = []; }
   renderPermsList();
+}
+
+// الفصول المسندة للمعلم من الجدول: بحسابه (teacher_id) أو باسمه
+function classesOf(t) {
+  const n = pmNorm(t.name);
+  const fl = w => { const a = w.split(' '); return a[0] + '|' + a[a.length - 1]; };
+  const same = name => { const m = pmNorm(name); return m === n || (m.split(' ').length >= 2 && fl(m) === fl(n)); };
+  const rows = pmSchedule.filter(r => r.teacher_id ? r.teacher_id === t.id : same(r.teacher_name));
+  const m = new Map();
+  rows.forEach(r => { const k = r.grade_level + '|' + (r.class_section || 0); if (!m.has(k)) m.set(k, { grade: r.grade_level, section: r.class_section || 0, n: 0, subjects: new Set() }); const c = m.get(k); c.n++; if (r.subject_name) c.subjects.add(r.subject_name); });
+  const GR = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+  return [...m.values()].sort((a, b) => GR.indexOf(a.grade) - GR.indexOf(b.grade) || a.section - b.section);
 }
 
 function renderPermsList() {
@@ -429,7 +444,8 @@ function renderPermsList() {
     return `<div class="pm-teacher ${items.length ? '' : 'is-empty'}">
       <span class="cvt-av">${escP(initials)}</span>
       <div class="pm-main"><b>${escP(t.name)}</b>
-        <div class="pm-chips">${items.length ? items.map(a => `<span class="pm-chip">${escP(a.subjects ? a.subjects.name : '-')} · ${escP((gradeLabels[a.grade_level] || '').replace(' متوسط', ''))}<button type="button" data-del="${a.id}" aria-label="حذف التخصص">✕</button></span>`).join('') : '<span class="pm-none">بدون تخصص</span>'}</div>
+        <div class="pm-line"><span class="pm-lbl">التخصص</span><div class="pm-chips">${items.length ? items.map(a => `<span class="pm-chip">${escP(a.subjects ? a.subjects.name : '-')} · ${escP((gradeLabels[a.grade_level] || '').replace(' متوسط', ''))}<button type="button" data-del="${a.id}" aria-label="حذف التخصص">✕</button></span>`).join('') : '<span class="pm-none">بدون تخصص</span>'}</div></div>
+        ${(() => { const cl = classesOf(t); return pmSchedule.length ? `<div class="pm-line"><span class="pm-lbl">الفصول المسندة</span><div class="pm-chips">${cl.length ? cl.map(c => `<span class="pm-cls" title="${escP([...c.subjects].join('، '))} · ${c.n} حصة">${escP((gradeLabels[c.grade] || '').replace(' متوسط', ''))}/${escP(c.section)}</span>`).join('') + `<span class="pm-cnt">${cl.reduce((s, c) => s + c.n, 0)} حصة</span>` : '<span class="pm-none muted">ما له حصص بالجدول</span>'}</div></div>` : ''; })()}
       </div>
       <button type="button" class="pm-plus" data-t="${t.id}" title="إضافة تخصص لهذا المعلم" aria-label="إضافة تخصص">+</button>
     </div>`;

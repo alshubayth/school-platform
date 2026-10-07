@@ -581,16 +581,23 @@ async function commitAllParsed() {
     Object.entries(cls.map).forEach(([key, val]) => {
       if (!val.subject) return;
       const [day, period] = key.split('-');
+      const rawT = (val.teacher || '').trim();
+      const tid = rawT ? teacherLinkMap.get(normalizeArText(rawT)) || null : null;
       rows.push({
         grade_level: cls.grade, class_section: cls.section,
         day_of_week: day, period_number: parseInt(period),
         subject_name: val.subject, teacher_name: resolveTeacherName(val.teacher),
+        teacher_id: tid, teacher_code: /^\d{3,}$/.test(rawT) ? rawT : null,
       });
     });
     for (let i = 0; i < rows.length; i += 200) {
       const chunk = rows.slice(i, i + 200);
       if (chunk.length === 0) continue;
-      const { error } = await writeWithSchool(extra => sb.from('class_schedules').insert(chunk.map(r => ({ ...r, ...extra }))));
+      let { error } = await writeWithSchool(extra => sb.from('class_schedules').insert(chunk.map(r => ({ ...r, ...extra }))));
+      // قبل تشغيل sql/schedule_teacher_ids.sql: نحفظ بدون عمودي الحساب والرقم الوظيفي
+      if (error && /teacher_id|teacher_code/i.test(error.message || '')) {
+        ({ error } = await writeWithSchool(extra => sb.from('class_schedules').insert(chunk.map(({ teacher_id, teacher_code, ...r }) => ({ ...r, ...extra })))));
+      }
       if (error) {
         statusEl.textContent = `تعذر حفظ ${gradeLabels[cls.grade]} - الفصل ${cls.section}: ${error.message}`;
         statusEl.style.color = 'var(--danger)';

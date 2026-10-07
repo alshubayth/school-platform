@@ -20,12 +20,20 @@ const ALIASES = { 'مهارات رقميه': ['حاسب الي', 'حاسب'], '�
 const pnorm = s => norm(s).split(' ').filter(w => w && !['بن', 'ابن', 'بنت'].includes(w)).join(' ');
 const S = { box: null, sched: [], profiles: [], subjects: [], current: [], aliases: {}, map: {}, removeKeep: new Set(), links: {}, employees: null };
 
+// الجدول مع حساب المعلم ورقمه (لو انشغل sql/schedule_teacher_ids.sql)، وإلا بالاسم بس
+export async function loadSchedule() {
+  const sel = cols => readScopedBySchool(scoped => { let q = sb.from('class_schedules').select(cols); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
+  const r = await sel('grade_level, class_section, subject_name, teacher_name, teacher_id, teacher_code');
+  if (r.error && /teacher_id|teacher_code/i.test(r.error.message || '')) return sel('grade_level, class_section, subject_name, teacher_name');
+  return r;
+}
+
 export async function openSubjectSync(box, opts = {}) {
   S.box = box;
   if (opts.onApplied) S.onApplied = opts.onApplied;
   box.innerHTML = '<p class="ss-note">جارٍ التحميل...</p>';
   const [sc, pr, su, ts, al, tl, em] = await Promise.all([
-    readScopedBySchool(scoped => { let q = sb.from('class_schedules').select('grade_level, class_section, subject_name, teacher_name'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
+    loadSchedule(),
     sb.from('profiles').select('id, full_name, role, login_email').in('role', ['teacher', 'deputy', 'admin']),
     sb.from('subjects').select('id, name'),
     readScopedBySchool(scoped => { let q = sb.from('teacher_subjects').select('id, teacher_id, subject_id, grade_level'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
@@ -64,7 +72,10 @@ function guessSubject(name) {
   return '';
 }
 
-function teacherOf(name) {
+function teacherOf(name, row = null) {
+  if (row && row.teacher_id) { const p = S.profiles.find(x => x.id === row.teacher_id); if (p) return p; }
+  if (row && row.teacher_code && S.links[row.teacher_code]) { const p = S.profiles.find(x => x.id === S.links[row.teacher_code]); if (p) return p; }
+  if (row && row.teacher_code) { const p = S.profiles.find(x => String(x.login_email || '').split('@')[0].replace(/^0+/, '') === String(row.teacher_code).replace(/^0+/, '')); if (p) return p; }
   const raw = String(name).trim();
   if (S.links[raw]) { const p = S.profiles.find(x => x.id === S.links[raw]); if (p) return p; }
   const n = pnorm(raw);
@@ -89,7 +100,7 @@ function wanted() {
   S.sched.forEach(r => {
     const sid = S.map[r.subject_name.trim()];
     if (!sid || sid === IGNORE) return;
-    const t = teacherOf(r.teacher_name);
+    const t = teacherOf(r.teacher_name, r);
     if (!t) { unlinked.set(r.teacher_name, (unlinked.get(r.teacher_name) || 0) + 1); return; }
     if (!out.has(t.id)) out.set(t.id, new Set());
     out.get(t.id).add(sid + '|' + r.grade_level);
