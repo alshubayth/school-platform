@@ -617,3 +617,49 @@ export function rectifyToCanvas(gFull, H, ox, wMm, hMm, pxPerMm, canvas) {
   ctx.putImageData(img, 0, 0);
   return ctx;
 }
+
+/* ---------- البحث عن علامة داخل مربع الإطار الموجّه ----------
+ * بدل تقسيم الصورة لمكوّنات (اللي يخرب لو العلامة لاصقة بخط مثل إطار الباركود)، ندوّر على أغمق مربع
+ * بالحجم المتوقع مقارنةً بالحلقة اللي حوله. الخط اللاصق ما يأثر إلا على جزء صغير من الحلقة. */
+export function findMarkInRegion(g, cx, cy, half, markPx) {
+  const { w, h, d } = g;
+  const x0 = Math.max(0, Math.floor(cx - half - markPx * 2)), x1 = Math.min(w, Math.ceil(cx + half + markPx * 2));
+  const y0 = Math.max(0, Math.floor(cy - half - markPx * 2)), y1 = Math.min(h, Math.ceil(cy + half + markPx * 2));
+  const W = x1 - x0, Hh = y1 - y0;
+  if (W < 8 || Hh < 8) return null;
+  const W1 = W + 1, I = new Float64Array(W1 * (Hh + 1));
+  for (let y = 0; y < Hh; y++) {
+    let row = 0;
+    for (let x = 0; x < W; x++) { row += d[(y + y0) * w + x + x0]; I[(y + 1) * W1 + x + 1] = I[y * W1 + x + 1] + row; }
+  }
+  const box = (ax, ay, bx, by) => {   // مجموع [ax,bx) × [ay,by)
+    ax = Math.max(0, ax); ay = Math.max(0, ay); bx = Math.min(W, bx); by = Math.min(Hh, by);
+    if (bx <= ax || by <= ay) return [0, 0];
+    return [I[by * W1 + bx] - I[ay * W1 + bx] - I[by * W1 + ax] + I[ay * W1 + ax], (bx - ax) * (by - ay)];
+  };
+  let best = null;
+  for (const f of [0.65, 0.8, 1, 1.2, 1.45]) {
+    const s = Math.max(3, Math.round(markPx * f)), m = Math.max(2, Math.round(s * 0.5));
+    for (let y = Math.round(cy - half - y0 - s / 2); y <= cy + half - y0 - s / 2; y++) {
+      for (let x = Math.round(cx - half - x0 - s / 2); x <= cx + half - x0 - s / 2; x++) {
+        const [si, ni] = box(x, y, x + s, y + s);
+        if (!ni) continue;
+        const [so, no] = box(x - m, y - m, x + s + m, y + s + m);
+        const ring = (so - si) / Math.max(1, no - ni), inner = si / ni;
+        const sc = ring - inner;
+        if (!best || sc > best.sc) best = { sc, x, y, s, inner, ring };
+      }
+    }
+  }
+  if (!best || best.inner > best.ring * 0.55 || best.sc < 40) return null;
+  // مركز دقيق: مركز ثقل البكسلات الغامقة داخل المربع (بهامش بسيط)
+  const t = (best.inner + best.ring) / 2, pad = Math.round(best.s * 0.25);
+  let sx = 0, sy = 0, n = 0;
+  for (let y = best.y - pad; y < best.y + best.s + pad; y++) for (let x = best.x - pad; x < best.x + best.s + pad; x++) {
+    if (x < 0 || y < 0 || x >= W || y >= Hh) continue;
+    const v = d[(y + y0) * w + x + x0];
+    if (v < t) { const wt = t - v; sx += (x + 0.5) * wt; sy += (y + 0.5) * wt; n += wt; }
+  }
+  const px = n ? sx / n : best.x + best.s / 2, py = n ? sy / n : best.y + best.s / 2;
+  return { x: px + x0, y: py + y0, side: best.s, area: best.s * best.s, contrast: best.sc };
+}

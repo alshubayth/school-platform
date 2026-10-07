@@ -8,7 +8,7 @@
  * ========================================================================= */
 import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels } from './core.js';
 import { fetchSavedKeys, sheetGeometry, PAGE } from './answer-sheet.js';
-import { grayFromImageData, findMarkCandidates, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
+import { grayFromImageData, findMarkInRegion, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
 import { computeExamStats, gradeWithModels, rawFromIdx } from './exam-reports.js';
 
 const AR = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
@@ -269,18 +269,10 @@ function detectTick() {
   // حجم العلامة المتوقع لو الورقة مطابقة للإطار (بكسلات الصورة المصغرة)
   const mmToPx = (G.gw / G.sc) * scale / (S.geo.marks[1][0] - S.geo.marks[0][0]);
   const markPx = S.geo.mark * mmToPx;
-  const cands = findMarkCandidates(g, { minSide: markPx * 0.45, maxSide: markPx * 2.2, win: Math.max(8, Math.round(markPx * 3)) });
   const half = (G.box / 2) / G.sc * scale;   // نصف المربع الموجّه بإحداثيات الصورة المصغرة
   const hits = G.pts.map(p => {
     const [vx, vy] = G.toVid(p);
-    const cx = vx * scale, cy = vy * scale;
-    let best = null;
-    for (const c of cands) {
-      if (Math.abs(c.x - cx) > half || Math.abs(c.y - cy) > half) continue;
-      const d = Math.hypot(c.x - cx, c.y - cy) - c.side;   // الأقرب للمركز، والأكبر عند التساوي
-      if (!best || d < best.d) best = { d, c };
-    }
-    return best ? best.c : null;
+    return findMarkInRegion(g, vx * scale, vy * scale, half, markPx);
   });
   // المربعات الأربع لازم تكون متقاربة بالحجم (مو نقطة صغيرة بالغلط)
   const found = hits.filter(Boolean);
