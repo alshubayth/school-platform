@@ -340,6 +340,8 @@ async function parsePdfFile(file) {
 
     const usedItems = new Set([...columnAnchorItems, ...dayAnchorItems, ...(title.items || [])]);
     const contentItems = items.filter(it => !usedItems.has(it) && ARABIC_RE.test(it.str));
+    // الرقم الوظيفي للمعلم تحت المادة (الجداول الجديدة بدل اسم المعلم): أرقام فقط ٤-١٠ خانات
+    const codeItems = items.filter(it => !usedItems.has(it) && /^\d{4,10}$/.test(translateDigits(it.str.trim())));
 
     // أقصى مسافة معقولة بين خلية ومنتصف صف يومها (نص متوسط تباعد الأيام) - لاستبعاد أي نص خارج
     // الجدول نفسه (زي تذييل الصفحة "aSc Timetables ... جدول الفصل الدراسي" اللي ينطبع أسفل كل صفحة
@@ -352,16 +354,18 @@ async function parsePdfFile(file) {
     const maxDayDist = daySpacing * 0.6;
 
     // تجميع كل خلية حسب أقرب يوم (صف)
-    const rows = {};
-    Object.keys(dayAnchors).forEach(day => { rows[day] = []; });
-    contentItems.forEach(it => {
+    const rows = {}, codeRows = {};
+    Object.keys(dayAnchors).forEach(day => { rows[day] = []; codeRows[day] = []; });
+    const nearestDay = it => {
       let bestDay = null, bestD = Infinity;
       Object.entries(dayAnchors).forEach(([day, a]) => {
         const d = Math.abs(a.y - it.y);
         if (d < bestD) { bestD = d; bestDay = day; }
       });
-      if (bestDay && bestD <= maxDayDist) rows[bestDay].push(it);
-    });
+      return bestDay && bestD <= maxDayDist ? bestDay : null;
+    };
+    contentItems.forEach(it => { const d = nearestDay(it); if (d) rows[d].push(it); });
+    codeItems.forEach(it => { const d = nearestDay(it); if (d) codeRows[d].push(it); });
 
     const classMap = {};
     let filledCount = 0;
@@ -405,6 +409,17 @@ async function parsePdfFile(file) {
         });
       });
 
+      // الرقم الوظيفي (لو موجود) يتقدّم على الاسم: مكتوب بأسفل يسار الخلية، فنحسبه للعمود اللي يبدأ منه
+      codeRows[day].forEach(it => {
+        const code = translateDigits(it.str.trim());
+        const col = byX.reduce((a, b) => (Math.abs(b.x - (it.x0 + it.x1) / 2) < Math.abs(a.x - (it.x0 + it.x1) / 2) ? b : a));
+        // حصة مزدوجة: الرقم يكون بطرف الخلية الأيسر، فنعطيه لكل حصة بنفس المادة ملاصقة له
+        const key = day + '-' + col.period;
+        if (!classMap[key]) classMap[key] = { subject: '', teacher: '' };
+        classMap[key].teacher = code;
+        classMap[key].code = true;
+      });
+
       // حصة مزدوجة (نفس المادة بحصتين متتاليتين): أحيانًا نص المعلم (لأنه أقصر من عرض الحصتين)
       // ينحسب هندسيًا بحصة وحدة بس مع إن المادة انحسبت صح بالحصتين. نعبّي الفراغ من الحصة الجارة
       // لو نفس المادة بالحصتين وواحدة بس فيها اسم معلم.
@@ -415,6 +430,14 @@ async function parsePdfFile(file) {
           if (!a.teacher && b.teacher) a.teacher = b.teacher;
           else if (!b.teacher && a.teacher) b.teacher = a.teacher;
         }
+      }
+      // رقم بخلية بدون مادة (طرف حصة مزدوجة انحسب بالعمود الجار): ننقله للحصة الجارة اللي فيها مادة
+      for (let p = 1; p <= 7; p++) {
+        const c = classMap[day + '-' + p];
+        if (!c || c.subject || !c.teacher) continue;
+        const n = [classMap[day + '-' + (p - 1)], classMap[day + '-' + (p + 1)]].find(x => x && x.subject && !x.teacher);
+        if (n) n.teacher = c.teacher;
+        delete classMap[day + '-' + p];
       }
     });
 
@@ -431,15 +454,21 @@ async function renderSummary({ classes, issues, correctedCount }) {
   const order = { first_intermediate: 0, second_intermediate: 1, third_intermediate: 2 };
   const sorted = [...classes].sort((a, b) => (order[a.grade] - order[b.grade]) || (a.section - b.section));
 
-  const { data: profiles } = await sb.from('profiles').select('id, full_name').in('role', ['teacher', 'deputy']);
+  let { data: profiles, error: pErr } = await sb.from('profiles').select('id, full_name, login_email').in('role', ['teacher', 'deputy', 'admin']);
+  if (pErr) ({ data: profiles } = await sb.from('profiles').select('id, full_name').in('role', ['teacher', 'deputy', 'admin']));
   teacherProfiles = (profiles || []).slice().sort((a, b) => a.full_name.localeCompare(b.full_name, 'ar'));
   const profileByNorm = new Map(teacherProfiles.map(p => [normalizeArText(p.full_name), p]));
+  // الرقم الوظيفي = اسم الدخول (قبل @) للحسابات اللي تدخل بالرقم الوظيفي
+  teacherProfiles.forEach(p => {
+    const local = String(p.login_email || '').split('@')[0].trim();
+    if (/^\d{3,}$/.test(local)) { profileByNorm.set(local, p); profileByNorm.set(local.replace(/^0+/, ''), p); }
+  });
 
   const distinctTeachers = collectDistinctTeacherNames(classes);
   teacherLinkMap = new Map();
   const unmatched = [];
   distinctTeachers.forEach(({ norm, raw }) => {
-    const matched = profileByNorm.get(norm) || null;
+    const matched = profileByNorm.get(norm) || profileByNorm.get(norm.replace(/^0+/, '')) || null;
     if (matched) teacherLinkMap.set(norm, matched.id);
     else unmatched.push({ norm, raw });
   });
@@ -451,12 +480,12 @@ async function renderSummary({ classes, issues, correctedCount }) {
 
   if (unmatched.length > 0) {
     html += `<div style="background:var(--sand); border-radius:10px; padding:10px 14px; margin-bottom:14px;">
-      <p style="font-size:12.5px; font-weight:700; margin-bottom:8px;">أسماء معلمين ما طابقت أي حساب مسجّل (${unmatched.length}) — اربطها بالحساب الصحيح قبل الاعتماد:</p>
+      <p style="font-size:12.5px; font-weight:700; margin-bottom:8px;">${unmatched.some(u => /^\d+$/.test(u.norm)) ? 'أرقام وظيفية أو أسماء' : 'أسماء معلمين'} ما طابقت أي حساب مسجّل (${unmatched.length}) — اربطها بالحساب الصحيح قبل الاعتماد:</p>
       ${unmatched.map(({ norm, raw }) => `
         <div class="stl-row">
           <span class="stl-name">${escHtml(raw)}</span>
           <select class="stl-select" data-norm="${escHtml(norm)}">
-            <option value="">— استخدام الاسم من الملف كما هو —</option>
+            <option value="">— ${/^\d+$/.test(norm) ? 'بدون ربط (يبقى الرقم)' : 'استخدام الاسم من الملف كما هو'} —</option>
             ${teacherProfiles.map(p => `<option value="${p.id}">${escHtml(p.full_name)}</option>`).join('')}
           </select>
         </div>`).join('')}
@@ -501,7 +530,14 @@ async function renderSummary({ classes, issues, correctedCount }) {
   el.querySelectorAll('.sc-preview-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const cls = sorted[parseInt(btn.dataset.idx)];
-      previewInGrid(cls.grade, cls.section, cls.map);
+      // المعاينة تعرض اسم المعلم المربوط بدل الرقم الوظيفي
+      const byId = new Map(teacherProfiles.map(p => [p.id, p]));
+      const map = {};
+      Object.entries(cls.map).forEach(([k, v]) => {
+        const id = v.teacher ? teacherLinkMap.get(normalizeArText(v.teacher)) : null;
+        map[k] = { ...v, teacher: id && byId.get(id) ? byId.get(id).full_name : v.teacher };
+      });
+      previewInGrid(cls.grade, cls.section, map);
     });
   });
 
