@@ -1534,52 +1534,63 @@
           <div id="as-body" class="hidden" style="margin-top:14px;">
             <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px;" class="as-grid">
               <div>
-                <div class="form-row">
-                  <input type="text" id="as-title" placeholder="عنوان الاختبار (اختياري)" />
-                  <input type="text" id="as-subject" placeholder="المادة (اختياري)" />
+                <div class="as-steps" id="as-steps" role="tablist">
+                  <button type="button" data-step="1" class="active"><i>1</i><span>بيانات الاختبار</span></button>
+                  <button type="button" data-step="2"><i>2</i><span>الأسئلة</span></button>
+                  <button type="button" data-step="3"><i>3</i><span>الإجابات</span></button>
+                  <button type="button" data-step="4"><i>4</i><span>الطباعة</span></button>
+                  <button type="button" data-step="5"><i>5</i><span>التصدير</span></button>
                 </div>
-                <div class="form-row">
-                  <label style="font-size:12.5px; font-weight:700; display:block;">عدد الأسئلة
-                    <input type="number" id="as-questions" min="0" max="150" value="20" style="margin-top:4px;" />
-                  </label>
-                  <label style="font-size:12.5px; font-weight:700; display:block;">عدد الخيارات لكل سؤال
-                    <select id="as-choices" style="margin-top:4px;">
-                      <option value="2">2 (أ ب)</option>
-                      <option value="3">3 (أ ب ج)</option>
-                      <option value="4" selected>4 (أ ب ج د)</option>
-                      <option value="5">5 (أ ب ج د هـ)</option>
-                      <option value="6">6 (أ ب ج د هـ و)</option>
-                    </select>
-                  </label>
-                </div>
-                <div class="form-row">
-                  <label style="font-size:12.5px; font-weight:700; display:block;">حجم الورقة
-                    <select id="as-size" style="margin-top:4px;">
-                      <option value="A4" selected>A4 (طالب بالصفحة)</option>
-                      <option value="A4L2">A4 بالعرض (طالبين بالصفحة - تُقص)</option>
-                      <option value="A5">A5</option>
-                    </select>
-                  </label>
-                  <label style="font-size:12.5px; font-weight:700; display:block;">لغة الخيارات
-                    <select id="as-lang" style="margin-top:4px;">
+
+                <!-- ١) بيانات الاختبار -->
+                <div class="as-step" data-step="1">
+                  <h5 class="as-step-h">بيانات الاختبار</h5>
+                  <label class="as-f">عنوان الاختبار<input type="text" id="as-title" placeholder="مثال: اختبار الفترة الأولى" /></label>
+                  <label class="as-f">المادة<input type="text" id="as-subject" placeholder="مثال: العلوم" /></label>
+                  <label class="as-f">لغة الخيارات
+                    <select id="as-lang">
                       <option value="ar" selected>عربي (أ ب ج د) - من اليمين</option>
                       <option value="en">English (A B C D) - من اليسار</option>
                     </select>
                   </label>
+                  <div class="as-load">
+                    <span>أو افتح اختبار محفوظ:</span>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                      <select id="as-saved-keys" style="flex:1; min-width:180px; margin:0;"><option value="">المفاتيح المحفوظة</option></select>
+                      <button type="button" class="btn-secondary" id="as-key-load-btn" style="width:auto; padding:8px 12px;" disabled>تحميل</button>
+                      <button type="button" class="text-action-btn" id="as-key-delete-btn" style="width:auto; padding:8px 10px; color:var(--danger) !important;" disabled>حذف</button>
+                    </div>
+                  </div>
                 </div>
-                <div class="form-row">
-                  <label style="font-size:12.5px; font-weight:700; display:block;">منها أسئلة صح وخطأ
-                    <input type="number" id="as-tf" min="0" max="150" value="0" style="margin-top:4px;" />
-                  </label>
-                  <label style="font-size:12.5px; font-weight:700; display:block;">مكان أسئلة الصح والخطأ
-                    <select id="as-tf-pos" style="margin-top:4px;">
-                      <option value="first" selected>بالبداية (أول الأسئلة)</option>
-                      <option value="last">بالنهاية (آخر الأسئلة)</option>
-                    </select>
-                  </label>
-                </div>
-                <div id="as-limit-hint" style="font-size:12px; color:var(--slate); margin:-4px 0 12px;"></div>
 
+                <!-- ٢) الأسئلة -->
+                <div class="as-step hidden" data-step="2">
+                  <h5 class="as-step-h">الأسئلة</h5>
+                  <label class="as-f">عدد الأسئلة (اختيار من متعدد + صح وخطأ)
+                    <input type="number" id="as-questions" min="0" max="150" value="20" />
+                  </label>
+                  <div class="as-split">
+                    <label class="as-f">منها اختيار من متعدد<input type="number" id="as-mcq" min="0" max="150" value="20" /></label>
+                    <label class="as-f">عدد الخيارات
+                      <select id="as-choices">
+                        <option value="2">2 (أ ب)</option>
+                        <option value="3">3 (أ ب ج)</option>
+                        <option value="4" selected>4 (أ ب ج د)</option>
+                        <option value="5">5 (أ ب ج د هـ)</option>
+                        <option value="6">6 (أ ب ج د هـ و)</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div class="as-split">
+                    <label class="as-f">ومنها صح وخطأ<input type="number" id="as-tf" min="0" max="150" value="0" /></label>
+                    <label class="as-f">مكانها
+                      <select id="as-tf-pos">
+                        <option value="first" selected>بالبداية (أول الأسئلة)</option>
+                        <option value="last">بالنهاية (آخر الأسئلة)</option>
+                      </select>
+                    </label>
+                  </div>
+                  <div id="as-q-sum" class="as-q-sum"></div>
                 <div style="background:var(--sand); border-radius:10px; padding:11px 12px; margin-bottom:12px;">
                   <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; cursor:pointer;">
                     <input type="checkbox" id="as-essay-on" style="width:auto; margin:0;" />
@@ -1592,18 +1603,16 @@
                     <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">إطار واحد للكتابة بأسفل الورقة، وفوقه فقاعات المجموع يظللها المعلم بعد التصحيح. لحد ١٠ درجات صف واحد (0 إلى الدرجة)، وأكثر من ١٠ صفّين: العشرات والآحاد (مثال: ١٥ = ظلّل ١٠ و ٥). مع المقالي يصير الاختيار من متعدد ٣ أعمدة × ١٠ بأعلى الورقة.</p>
                   </div>
                 </div>
+                  <div id="as-limit-hint" style="font-size:12px; color:var(--slate); margin:4px 0 0;"></div>
+                </div>
 
-                <div style="border:1.5px dashed var(--border); border-radius:10px; padding:11px 12px; margin-bottom:12px;">
+                <!-- ٣) الإجابات (المفتاح) -->
+                <div class="as-step hidden" data-step="3">
                   <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                    <span style="font-size:13.5px; font-weight:700;">مفتاح الإجابة (ورقة النموذج)</span>
+                    <h5 class="as-step-h" style="margin:0;">الإجابات الصحيحة (المفتاح)</h5>
                     <button type="button" class="text-action-btn" id="as-key-clear-btn" style="width:auto; padding:4px 8px; font-size:12px;">مسح</button>
                   </div>
-                  <p style="font-size:11.5px; color:var(--slate); margin:4px 0 8px;">اضغط الإجابة الصحيحة لكل سؤال واحفظ المفتاح. لما ترفع ملف Remark بالتقارير، تختار المنصة المفتاح المطابق وتطبقه تلقائيًا. وتقدر تطبع ورقة النموذج (الإجابات مظللة ورقم الهوية 0000000000) لو تحتاجها لـ Remark.</p>
-                  <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-bottom:8px;">
-                    <select id="as-saved-keys" style="flex:1; min-width:180px; margin:0;"><option value="">المفاتيح المحفوظة</option></select>
-                    <button type="button" class="btn-secondary" id="as-key-load-btn" style="width:auto; padding:8px 12px;" disabled>تحميل</button>
-                    <button type="button" class="text-action-btn" id="as-key-delete-btn" style="width:auto; padding:8px 10px; color:var(--danger) !important;" disabled>حذف</button>
-                  </div>
+                  <p style="font-size:11.5px; color:var(--slate); margin:4px 0 10px;">اضغط الإجابة الصحيحة لكل سؤال واحفظ المفتاح. لما ترفع ملف Remark أو تصحح بالجوال، يتطبق المفتاح تلقائيًا. (اختياري لو بتطبع أوراق فاضية بس)</p>
                   <div class="as-models-box">
                     <label class="as-models-on"><input type="checkbox" id="as-models-on" /> الاختبار بنموذجين (أ و ب)</label>
                     <div id="as-models-opts" class="hidden">
@@ -1632,15 +1641,23 @@
                       <p class="as-models-hint" id="as-models-hint"></p>
                     </div>
                   </div>
-                  <div id="as-key-grid" style="display:flex; flex-wrap:wrap; gap:6px; max-height:260px; overflow-y:auto;"></div>
+                  <div id="as-key-grid" style="display:flex; flex-wrap:wrap; gap:6px; max-height:300px; overflow-y:auto;"></div>
                   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
                     <button class="btn-primary" id="as-key-save-btn" style="width:auto; padding:8px 14px;">حفظ المفتاح</button>
-                    <button class="btn-secondary" id="as-key-print-btn" style="width:auto; padding:8px 14px;">طباعة ورقة النموذج</button>
-                    <button class="btn-secondary" id="as-key-pdf-btn" style="width:auto; padding:8px 14px;">تحميل PDF النموذج</button>
                     <span id="as-key-status" style="font-size:12px;"></span>
                   </div>
                 </div>
 
+                <!-- ٤) إعدادات الطباعة -->
+                <div class="as-step hidden" data-step="4">
+                  <h5 class="as-step-h">إعدادات الطباعة</h5>
+                  <label class="as-f">حجم الورقة
+                    <select id="as-size">
+                      <option value="A4" selected>A4 (طالب بالصفحة)</option>
+                      <option value="A4L2">A4 بالعرض (طالبين بالصفحة - تُقص)</option>
+                      <option value="A5">A5</option>
+                    </select>
+                  </label>
                 <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; background:var(--sand); border-radius:10px; padding:11px 12px; cursor:pointer;">
                   <input type="checkbox" id="as-barcode" style="width:auto; margin:0;" />
                   إضافة باركود باسم الطالب (ورقة خاصة لكل طالب)
@@ -1675,13 +1692,30 @@
                   </div>
                   <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">ورقة A4 بالعرض: بعد القص، حط رزمة الأنصاف اليسرى تحت رزمة الأنصاف اليمنى، وتصير الأوراق مرتبة بالتسلسل.</p>
                 </div>
-
-                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
-                  <button class="btn-primary" id="as-print-btn" style="width:auto; padding:10px 18px;">طباعة</button>
-                  <button class="btn-secondary" id="as-pdf-btn" style="width:auto; padding:10px 18px;">تحميل PDF</button>
                 </div>
-                <div id="as-status" style="font-size:12.5px; margin-top:8px;"></div>
 
+                <!-- ٥) التصدير -->
+                <div class="as-step hidden" data-step="5">
+                  <h5 class="as-step-h">التصدير</h5>
+                  <div class="as-export">
+                    <div class="as-exp-card">
+                      <b>أوراق الطلاب</b>
+                      <span id="as-exp-sum"></span>
+                      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn-primary" id="as-print-btn" style="width:auto; padding:10px 18px;">طباعة</button>
+                        <button class="btn-secondary" id="as-pdf-btn" style="width:auto; padding:10px 18px;">تحميل PDF</button>
+                      </div>
+                    </div>
+                    <div class="as-exp-card">
+                      <b>ورقة النموذج (الإجابات مظللة)</b>
+                      <span>للمسح مع أوراق الطلاب في Remark - تحتاج المفتاح مكتمل</span>
+                      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <button class="btn-secondary" id="as-key-print-btn" style="width:auto; padding:8px 14px;">طباعة النموذج</button>
+                        <button class="btn-secondary" id="as-key-pdf-btn" style="width:auto; padding:8px 14px;">PDF النموذج</button>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="as-status" style="font-size:12.5px; margin-top:8px;"></div>
                 <details style="margin-top:14px; font-size:12px; color:var(--slate); background:var(--sand); border-radius:10px; padding:10px 12px;">
                   <summary style="font-weight:700; color:var(--ink); cursor:pointer;">طريقة الإعداد ببرنامج Remark (مرة وحدة لكل إعدادات)</summary>
                   <ol style="margin:8px 18px 0; padding:0; line-height:1.9;">
@@ -1696,6 +1730,13 @@
                     <li>اطبع دايمًا بالحجم الفعلي (100%) بدون "ملاءمة للصفحة".</li>
                   </ol>
                 </details>
+                </div>
+
+                <div class="as-step-nav">
+                  <button type="button" class="btn-secondary" id="as-prev" style="width:auto; padding:9px 16px;">→ السابق</button>
+                  <span id="as-step-msg" class="as-step-msg"></span>
+                  <button type="button" class="btn-primary" id="as-next" style="width:auto; padding:9px 18px;">التالي ←</button>
+                </div>
               </div>
               <div>
                 <div style="font-size:12px; font-weight:700; color:var(--slate); margin-bottom:6px;">معاينة</div>

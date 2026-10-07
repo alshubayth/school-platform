@@ -867,6 +867,8 @@ function loadKeyIntoForm(k) {
   $('as-essay-total-wrap').classList.toggle('hidden', !k.essay_total);
   if (k.essay_total) $('as-essay-total').value = k.essay_total;
   if ($('as-tf')) { $('as-tf').value = k.tf_count || 0; $('as-tf-pos').value = k.tf_first === false ? 'last' : 'first'; }
+  if ($('as-mcq')) $('as-mcq').value = Math.max(0, (k.questions || 0) - (k.tf_count || 0));
+  updateQSum();
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
   const m = k.models && k.models.mode ? k.models : null;
   $('as-models-on').checked = !!m;
@@ -1034,13 +1036,76 @@ async function downloadPdf(builtOverride) {
   }
 }
 
+/* ---------- خطوات التصميم: البيانات ← الأسئلة ← الإجابات ← الطباعة ← التصدير ---------- */
+let asStep = 1;
+const num = id => Math.max(0, parseInt(($(id) || {}).value, 10) || 0);
+// عدد الأسئلة = اختيار من متعدد + صح وخطأ: أي خانة تتغيّر نعدّل الباقي عشان يبقى المجموع صحيح
+function syncCounts(src) {
+  let total = num('as-questions'), mcq = num('as-mcq'), tf = num('as-tf');
+  if (src === 'total') { tf = Math.min(tf, total); mcq = total - tf; }
+  else if (src === 'mcq') { if (mcq > total) { total = mcq + tf; } else tf = total - mcq; }
+  else if (src === 'tf') { if (tf > total) { total = tf + mcq; } else mcq = total - tf; }
+  $('as-questions').value = total; $('as-mcq').value = mcq; $('as-tf').value = tf;
+  updateQSum();
+}
+function updateQSum() {
+  const el = $('as-q-sum'); if (!el) return;
+  const total = num('as-questions'), mcq = num('as-mcq'), tf = num('as-tf');
+  const essay = $('as-essay-on').checked ? num('as-essay-total') : 0;
+  const parts = [];
+  if (mcq) parts.push(`${mcq} اختيار من متعدد`);
+  if (tf) parts.push(`${tf} صح وخطأ`);
+  const ok = mcq + tf === total;
+  el.innerHTML = `${parts.length ? parts.join(' + ') + ` = <b>${total} سؤال</b>` : 'ما فيه أسئلة موضوعية'}${essay ? ` · ومقالي من <b>${essay}</b>` : ''}${ok ? '' : ' <span style="color:var(--danger);">(المجموع ما يطابق)</span>'}`;
+  el.classList.toggle('bad', !ok);
+  if ($('as-tf-pos')) $('as-tf-pos').closest('label').style.opacity = tf ? '1' : '0.5';
+}
+function stepError(n) {
+  if (n === 2) {
+    const o = readOptions();
+    if (!o.questions && !o.essayTotal) return 'حدد عدد الأسئلة';
+    if (num('as-mcq') + num('as-tf') !== o.questions) return 'مجموع الاختيار من متعدد والصح والخطأ لازم يساوي عدد الأسئلة';
+    const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices, essayTotal: o.essayTotal, tf: o.tf, tfFirst: o.tfFirst });
+    if (!L.ok) return L.error;
+  }
+  return null;
+}
+function showStep(n) {
+  asStep = Math.max(1, Math.min(5, n));
+  document.querySelectorAll('#as-body .as-step').forEach(el => el.classList.toggle('hidden', +el.dataset.step !== asStep));
+  document.querySelectorAll('#as-steps button').forEach(b => { const k = +b.dataset.step; b.classList.toggle('active', k === asStep); b.classList.toggle('done', k < asStep); });
+  $('as-prev').style.visibility = asStep === 1 ? 'hidden' : 'visible';
+  $('as-next').style.visibility = asStep === 5 ? 'hidden' : 'visible';
+  $('as-step-msg').textContent = '';
+  if (asStep === 3) renderKeyGrid();
+  if (asStep === 5) {
+    const o = readOptions();
+    const n2 = o.withBarcode ? selectedStudents().length : 0;
+    $('as-exp-sum').textContent = o.withBarcode ? `${n2} ورقة باسم الطالب${PAGE[o.size].perPage === 2 ? ` (${Math.ceil(n2 / 2)} صفحة A4)` : ''}` : 'ورقة فاضية بدون أسماء - اطبع العدد اللي تحتاجه';
+  }
+}
+function goStep(n) {
+  // الانتقال لقدّام يمر على تحقق الخطوات اللي بالطريق
+  for (let k = asStep; k < n; k++) { const e = stepError(k); if (e) { showStep(k); $('as-step-msg').textContent = e; return; } }
+  showStep(n);
+}
+
 export function initAnswerSheetCard() {
   if (asInitialized) { renderPreview(); return; }
   asInitialized = true;
+  document.querySelectorAll('#as-steps button').forEach(b => b.addEventListener('click', () => goStep(+b.dataset.step)));
+  $('as-next').addEventListener('click', () => goStep(asStep + 1));
+  $('as-prev').addEventListener('click', () => showStep(asStep - 1));
+  $('as-questions').addEventListener('input', () => syncCounts('total'));
+  $('as-mcq').addEventListener('input', () => syncCounts('mcq'));
+  $('as-tf').addEventListener('input', () => syncCounts('tf'));
+  $('as-essay-total').addEventListener('input', updateQSum);
+  $('as-essay-on').addEventListener('change', updateQSum);
+  showStep(1); updateQSum();
   $('as-grade').innerHTML = GRADES.map(g => `<option value="${g}">${gradeLabels[g] || g}</option>`).join('');
 
   const refresh = () => { updateLimitHint(); refreshScopeControls(); renderDistribution(); renderPreview(); };
-  ['as-size', 'as-questions', 'as-choices', 'as-lang', 'as-title', 'as-subject', 'as-tf', 'as-tf-pos'].forEach(id => {
+  ['as-size', 'as-questions', 'as-mcq', 'as-choices', 'as-lang', 'as-title', 'as-subject', 'as-tf', 'as-tf-pos'].forEach(id => {
     $(id).addEventListener('input', refresh);
     $(id).addEventListener('change', refresh);
   });
@@ -1124,7 +1189,7 @@ export function initAnswerSheetCard() {
     await refreshSavedKeysList();
     keyStatusMsg('تم حذف المفتاح');
   });
-  ['as-questions', 'as-choices', 'as-lang', 'as-tf'].forEach(id => $(id).addEventListener('input', renderKeyGrid));
+  ['as-questions', 'as-mcq', 'as-choices', 'as-lang', 'as-tf'].forEach(id => $(id).addEventListener('input', renderKeyGrid));
   ['as-choices', 'as-lang', 'as-tf-pos'].forEach(id => $(id).addEventListener('change', renderKeyGrid));
   $('as-toggle-btn').addEventListener('click', () => {
     const open = $('as-body').classList.toggle('hidden') === false;
