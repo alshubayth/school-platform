@@ -109,7 +109,7 @@ function render() {
       <h5>١) ربط أسماء المواد بالجدول بقائمة المواد ${unmapped.length ? `<span class="ss-bad">${unmapped.length} بدون ربط</span>` : '<span class="ss-ok">✓</span>'}</h5>
       <div class="ss-map">${names.map(n => `
         <label class="ss-map-row${S.map[n] ? '' : ' miss'}"><span>${esc(n)}</span>
-          <select data-subj="${esc(n)}"><option value="">— اختر المادة —</option>${S.subjects.map(s => `<option value="${s.id}"${S.map[n] === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="${IGNORE}"${S.map[n] === IGNORE ? ' selected' : ''}>تجاهل (مو مادة تخصص)</option></select>
+          <select data-subj="${esc(n)}"><option value="">— اختر المادة —</option>${S.subjects.map(s => `<option value="${s.id}"${S.map[n] === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="${IGNORE}"${S.map[n] === IGNORE ? ' selected' : ''}>تجاهل (مو مادة تخصص)</option><option value="__new">➕ إضافة مادة جديدة...</option></select>
         </label>`).join('')}</div>
     </div>
     ${unlinked.size ? `<div class="ss-sec ss-warn"><b>${unlinked.size} معلم بالجدول ما انربط بحساب</b> (تخصصاتهم ما تتحدث): ${[...unlinked.keys()].slice(0, 12).map(esc).join('، ')}${unlinked.size > 12 ? '...' : ''}<br><small>اربطهم من «استيراد الجدول من PDF» وأعد الاعتماد، أو تأكد إن اسمهم بالجدول مطابق لاسم حسابهم.</small></div>` : ''}
@@ -129,7 +129,24 @@ function render() {
       <button type="button" class="btn-primary" id="ss-apply"${nAdd + nRem ? '' : ' disabled'}>اعتماد التغييرات</button>
       <span class="ss-note" id="ss-status">${unmapped.length ? 'المواد اللي بدون ربط ما تدخل بالحساب - اربطها أو اختر «تجاهل».' : ''}</span>
     </div>`;
-  S.box.querySelectorAll('[data-subj]').forEach(sel => sel.addEventListener('change', () => { S.map[sel.dataset.subj] = sel.value; render(); }));
+  S.box.querySelectorAll('[data-subj]').forEach(sel => sel.addEventListener('change', async () => {
+    const n = sel.dataset.subj;
+    if (sel.value === '__new') {
+      const guess = { 'حياتيه': 'المهارات الحياتية والأسرية', 'رقميه': 'المهارات الرقمية', 'فنيه': 'التربية الفنية', 'بدنيه': 'التربية البدنية' }[norm(n)] || n;
+      const name = (prompt('اسم المادة الجديدة كما تبيه يظهر بالمنصة:', guess) || '').trim();
+      if (!name) { render(); return; }
+      const { data, error } = await sb.from('subjects').insert({ name }).select('id, name').single();
+      if (error) {
+        alert(/row-level security|permission|policy/i.test(error.message || '') ? 'إضافة المواد تحتاج تشغيل ملف sql/subjects_admin.sql بقاعدة البيانات أولًا' : 'تعذر إضافة المادة: ' + error.message);
+        render(); return;
+      }
+      S.subjects.push(data);
+      S.subjects.sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+      S.map[n] = data.id;
+      render(); return;
+    }
+    S.map[n] = sel.value; render();
+  }));
   S.box.querySelectorAll('[data-rem]').forEach(cb => cb.addEventListener('change', () => { if (cb.checked) S.removeKeep.delete(cb.dataset.rem); else S.removeKeep.add(cb.dataset.rem); render(); }));
   const ap = document.getElementById('ss-apply');
   if (ap) ap.addEventListener('click', apply);
