@@ -2274,3 +2274,5 @@ body.omr-noscroll{ overflow:hidden; }
 .ss-foot{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .ss-foot .btn-primary{ width:auto; padding:10px 20px; }
 @media (max-width: 640px){ .ss-row{ flex-direction:column; } .ss-name{ min-width:0; } }
+.pm-sync{ margin-bottom:14px; }
+.pm-sync-head{ display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; }

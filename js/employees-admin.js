@@ -360,6 +360,13 @@ document.querySelectorAll('#pm-tabs button').forEach(b => b.addEventListener('cl
   document.querySelectorAll('#pm-tabs button').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('#perms-module .pm-pane').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== b.dataset.p));
 }));
+document.getElementById('pm-sync-btn').addEventListener('click', async () => {
+  const body = document.getElementById('pm-sync-body');
+  if (!body.classList.contains('hidden')) { body.classList.add('hidden'); return; }
+  body.classList.remove('hidden');
+  const { openSubjectSync } = await import('./subject-sync.js');
+  openSubjectSync(body, { onApplied: refreshPermsList });
+});
 document.getElementById('pm-search').addEventListener('input', (e) => { pmSearch = e.target.value.trim(); renderPermsList(); });
 
 document.getElementById('perm-submit').addEventListener('click', async () => {

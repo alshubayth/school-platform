@@ -14,12 +14,13 @@ const IGNORE = '__ignore';
 // تطبيع للمطابقة: بدون "ال" التعريف بأول الكلمات، والهمزات والتاء المربوطة
 const norm = s => String(s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[ًٌٍَُِّْـ]/g, '')
   .split(/\s+/).map(w => w.replace(/^ال(?=..)/, '')).join(' ').trim();
-const ALIASES = { 'اجتماعيات': 'دراسات اجتماعيه', 'اسلاميه': 'دراسات اسلاميه', 'رقميه': 'مهارات رقميه', 'حياتيه': 'مهارات حياتيه', 'انجليزي': 'لغه انجليزيه', 'حاسب': 'مهارات رقميه' };
+const ALIASES = { 'اجتماعيات': ['دراسات اجتماعيه'], 'اسلاميه': ['دراسات اسلاميه', 'تربيه اسلاميه'], 'رقميه': ['مهارات رقميه', 'حاسب'], 'حياتيه': ['مهارات حياتيه'], 'انجليزي': ['لغه انجليزيه'], 'حاسب': ['مهارات رقميه'], 'لغتي': ['لغه عربيه'], 'فنيه': ['تربيه فنيه'], 'بدنيه': ['تربيه بدنيه'], 'تفكير': ['تفكير ناقد'] };
 
 const S = { box: null, sched: [], profiles: [], subjects: [], current: [], aliases: {}, map: {}, removeKeep: new Set() };
 
-export async function openSubjectSync(box) {
+export async function openSubjectSync(box, opts = {}) {
   S.box = box;
+  if (opts.onApplied) S.onApplied = opts.onApplied;
   box.innerHTML = '<p class="ss-note">جارٍ التحميل...</p>';
   const [sc, pr, su, ts, al] = await Promise.all([
     readScopedBySchool(scoped => { let q = sb.from('class_schedules').select('grade_level, class_section, subject_name, teacher_name'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
@@ -44,12 +45,11 @@ export async function openSubjectSync(box) {
 function guessSubject(name) {
   if (S.aliases[name] !== undefined) return S.aliases[name];
   const n = norm(name);
-  const target = ALIASES[n] || n;
-  const exact = S.subjects.find(s => norm(s.name) === n || norm(s.name) === target);
+  const targets = [n, ...(ALIASES[n] || [])];
+  const exact = S.subjects.find(s => targets.includes(norm(s.name)));
   if (exact) return exact.id;
-  const cands = S.subjects.filter(s => { const m = norm(s.name); return m.includes(target) || target.includes(m) || m.includes(n); });
-  if (cands.length === 1) return cands[0].id;
-  if (cands.length > 1) return cands.sort((a, b) => a.name.length - b.name.length)[0].id;
+  const cands = S.subjects.filter(s => { const m = norm(s.name); return targets.some(t => m.includes(t) || t.includes(m)); });
+  if (cands.length) return cands.sort((a, b) => a.name.length - b.name.length)[0].id;
   return '';
 }
 
@@ -157,6 +157,7 @@ async function apply() {
   Object.entries(S.map).forEach(([n, id]) => { if (id) aliases[n] = id; });
   await writeWithSchool(extra => sb.from('school_settings').upsert({ key: 'subject_aliases', value: aliases, updated_at: new Date().toISOString(), ...extra }, { onConflict: 'school_id,key' }));
   await openSubjectSync(S.box);
+  if (S.onApplied) S.onApplied();
   const st2 = document.getElementById('ss-status');
   if (st2) st2.textContent = `تم ✓ أُضيف ${adds.length} وحُذف ${dels.length}`;
 }
