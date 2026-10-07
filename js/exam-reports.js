@@ -1,4 +1,4 @@
-import { sb, currentUserId, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, printOrgName, printLogo } from './core.js';
+import { ASSET_VERSION, sb, currentUserId, currentProfile, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, printOrgName, printLogo } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
 import { initAnswerSheetCard, fetchSavedKeys } from './answer-sheet.js';
 
@@ -318,7 +318,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
 const MODEL_A = 'أ', MODEL_B = 'ب';
 const MODE_LABELS = { choices: 'نفس الأسئلة والترتيب، الخيارات مختلفة', order: 'نفس الأسئلة بترتيب مختلف', different: 'أسئلة مختلفة' };
 // مفتاح محفوظ (فهارس: 0 = أ) ← قيم خام بنفس ترميز ملف Remark
-function rawFromIdx(idxArr, choiceCounts, reversed) {
+export function rawFromIdx(idxArr, choiceCounts, reversed) {
   return choiceCounts.map((c, i) => (idxArr && idxArr[i] != null ? valueForLetter(ARABIC_LETTERS[idxArr[i]], c, reversed) : null));
 }
 // نموذج الطالب من تظليله بالورقة: نفس ترميز الأسئلة (عربي معكوس: ٢ = أ، ١ = ب)
@@ -383,6 +383,7 @@ function renderModelSummary(parsed) {
 let parsedData = null; // { itemCount, choiceCounts, students, detectedKeyRaw, detected }
 let currentReport = null; // آخر تقرير محفوظ تم فتحه بشاشة التفاصيل
 
+const isTeacherView = () => !!(currentProfile && currentProfile.role === 'teacher');
 export async function loadExamReportsModule(sub = null) {
   document.getElementById('er-detail-view').classList.add('hidden');
   document.getElementById('er-list-view').classList.remove('hidden');
@@ -390,11 +391,23 @@ export async function loadExamReportsModule(sub = null) {
   document.getElementById('er-upload-card').classList.add('hidden');
   document.getElementById('er-file').value = '';
   parsedData = null;
-  initAnswerSheetCard();
-  if (sub === 'sheet') { setMode('sheet', false); loadSavedList(); return; }
+  // المعلم: التصحيح بالجوال وتقاريره هو بس (بدون تصميم الأوراق ورفع ملفات Remark)
+  document.getElementById('exam-reports-module').classList.toggle('er-teacher', isTeacherView());
+  if (!isTeacherView()) initAnswerSheetCard();
+  if (sub === 'sheet' && !isTeacherView()) { setMode('sheet', false); loadSavedList(); return; }
+  if (sub === 'camera') { setMode('camera', false); loadSavedList(); return; }
   setMode('reports', false);
-  await loadSavedList();
+  const n = await loadSavedList();
   if (sub && sub !== 'reports') openReport(sub);
+  else if (isTeacherView() && !n) setMode('camera', false);
+}
+
+/* ---------- التصحيح بالجوال (ملف منفصل يتحمّل عند الحاجة) ---------- */
+let cameraKeyId = null;
+async function openCameraMode() {
+  const { openOmrPanel } = await import('./omr-scan.js?v=' + ASSET_VERSION);
+  openOmrPanel({ keyId: cameraKeyId, openReport: id => { setMode('reports', false); openReport(id); } });
+  cameraKeyId = null;
 }
 
 /* ---------- وضعين: التقارير / ورقة الإجابة والمفتاح ---------- */
@@ -405,8 +418,11 @@ function setMode(mode, route = true) {
   });
   document.getElementById('er-mode-reports').classList.toggle('hidden', mode !== 'reports');
   document.getElementById('er-mode-sheet').classList.toggle('hidden', mode !== 'sheet');
+  document.getElementById('er-mode-camera').classList.toggle('hidden', mode !== 'camera');
   if (mode === 'sheet' && document.getElementById('as-body').classList.contains('hidden')) document.getElementById('as-toggle-btn').click();
-  if (route) setSubRoute(mode === 'sheet' ? 'sheet' : null, true);
+  if (mode === 'camera') openCameraMode();
+  if (mode === 'reports' && route) loadSavedList();
+  if (route) setSubRoute(mode === 'reports' ? null : mode, true);
 }
 function openUpload(open = true) {
   const card = document.getElementById('er-upload-card');
@@ -630,16 +646,38 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
 
 async function loadSavedList() {
   const listEl = document.getElementById('er-saved-list');
-  const { data, error } = await readScopedBySchool(scoped => {
+  const res = await readScopedBySchool(scoped => {
     let q = sb.from('exam_reports')
-      .select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at');
+      .select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at, created_by, source');
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q.order('created_at', { ascending: false });
   });
-  if (error) { listEl.innerHTML = '<p style="color:var(--danger); font-size:12.5px;">تعذر تحميل التقارير</p>'; return; }
+  let data = res.data, error = res.error;
+  if (error && /source/i.test(error.message || '')) {
+    // قبل تشغيل ملف sql/omr_camera.sql
+    const r2 = await readScopedBySchool(scoped => {
+      let q = sb.from('exam_reports').select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at, created_by');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('created_at', { ascending: false });
+    });
+    data = r2.data; error = r2.error;
+  }
+  if (error) { listEl.innerHTML = '<p style="color:var(--danger); font-size:12.5px;">تعذر تحميل التقارير</p>'; return 0; }
+  if (isTeacherView()) data = (data || []).filter(r => r.created_by === currentUserId);
   if (!data || data.length === 0) {
-    listEl.innerHTML = '<div class="ex-empty"><b>ما فيه تقارير محفوظة بعد</b><span>صحّح أوراق الطلاب في Remark، ثم اضغط «+ رفع نتائج اختبار» وارفع ملف الإكسل.</span></div>';
-    return;
+    listEl.innerHTML = isTeacherView()
+      ? '<div class="ex-empty"><b>ما فيه تقارير لك بعد</b><span>صحّح أوراق طلابك من تبويب «التصحيح بالجوال» ويطلع التقرير هنا تلقائيًا.</span></div>'
+      : '<div class="ex-empty"><b>ما فيه تقارير محفوظة بعد</b><span>صحّح أوراق الطلاب في Remark، ثم اضغط «+ رفع نتائج اختبار» وارفع ملف الإكسل.</span></div>';
+    return 0;
+  }
+  // مين صحح (للإدارة): أسماء أصحاب التقارير
+  const names = {};
+  if (!isTeacherView()) {
+    const ids = [...new Set(data.map(r => r.created_by).filter(Boolean))];
+    if (ids.length) {
+      const { data: profs } = await sb.from('profiles').select('id, full_name').in('id', ids);
+      (profs || []).forEach(p => { names[p.id] = p.full_name; });
+    }
   }
   const colors = [
     { bg: 'var(--teal-light)', fg: 'var(--teal)' },
@@ -661,7 +699,7 @@ async function loadSavedList() {
         <span class="erc-main">
           <b>${esc(r.title)}</b>
           <span>${meta || '&nbsp;'}</span>
-          <span class="erc-chips">${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}</span>
+          <span class="erc-chips">${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
         </span>
         <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>
       </div>`;
@@ -683,6 +721,7 @@ async function loadSavedList() {
       await loadSavedList();
     });
   });
+  return data.length;
 }
 
 async function openReport(id) {
@@ -699,6 +738,13 @@ async function openReport(id) {
   renderReportStats(data.stats);
   const ekb = document.getElementById('er-edit-key-btn');
   ekb.textContent = data.raw_data && data.raw_data.models ? '↻ إعادة التصحيح بالمفتاح المحفوظ' : '✎ تعديل مفتاح الإجابة';
+  // تقرير الجوال ينبني من الأوراق المصححة: التعديل يكون من شاشة التصحيح نفسها
+  const cam = data.source === 'camera';
+  ekb.classList.toggle('hidden', cam || isTeacherView());
+  document.getElementById('er-update-file-btn').classList.toggle('hidden', cam || isTeacherView());
+  const cc = document.getElementById('er-camera-continue');
+  cc.classList.toggle('hidden', !(cam && data.created_by === currentUserId && data.key_id));
+  cc.onclick = () => { cameraKeyId = data.key_id; document.getElementById('er-detail-view').classList.add('hidden'); document.getElementById('er-list-view').classList.remove('hidden'); setMode('camera'); };
   document.getElementById('er-editkey-card').classList.add('hidden');
   document.getElementById('er-updatefile-card').classList.add('hidden');
 }

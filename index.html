@@ -1445,6 +1445,7 @@
         <div class="seg-tabs" id="er-mode-tabs" role="tablist">
           <button type="button" role="tab" data-mode="reports" class="active">التقارير</button>
           <button type="button" role="tab" data-mode="sheet">ورقة الإجابة والمفتاح</button>
+          <button type="button" role="tab" data-mode="camera">التصحيح بالجوال</button>
         </div>
 
         <div id="er-mode-reports">
@@ -1686,6 +1687,9 @@
         </div>
 
         </div>
+
+        <!-- ===== التصحيح بكاميرا الجوال ===== -->
+        <div id="er-mode-camera" class="hidden"><div id="omr-root"></div></div>
       </div>
 
       <!-- ===== تفاصيل تقرير محدد (٦ تقارير بتبويبات) ===== -->
@@ -1704,6 +1708,7 @@
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; flex-shrink:0;">
               <button type="button" class="text-action-btn" id="er-update-file-btn" style="width:auto; padding:8px 14px;" title="ترفع ملف إكسل جديد (نفس عدد الأسئلة) وتبقى الإجابة الصحيحة كما هي">⭯ تحديث ملف الإكسل</button>
+              <button type="button" class="btn-secondary hidden" id="er-camera-continue" style="width:auto; padding:8px 14px;">📷 متابعة التصحيح بالجوال</button>
               <button type="button" class="text-action-btn" id="er-edit-key-btn" style="width:auto; padding:8px 14px;" title="تعديل الإجابة الصحيحة لكل سؤال وإعادة حساب التقارير">✎ تعديل مفتاح الإجابة</button>
             </div>
           </div>

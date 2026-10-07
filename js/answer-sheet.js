@@ -155,6 +155,66 @@ export function code128Svg(text, moduleMm, heightMm) {
   return { wMm, svg: `<svg class="as-bc" data-code="${escHtml(text)}" xmlns="http://www.w3.org/2000/svg" width="${wMm}mm" height="${heightMm}mm" viewBox="0 0 ${totalModules} 1" preserveAspectRatio="none" shape-rendering="crispEdges" style="display:block"><rect x="0" y="0" width="${totalModules}" height="1" fill="#fff"/><g fill="#000">${rects}</g></svg>` };
 }
 
+/* ---------- مواقع عناصر الورقة (للتصحيح بالكاميرا) ----------
+ * نفس معادلات buildSheetBody بالضبط، وترجع مراكز العناصر بالمليمتر من الزاوية اليسرى العليا لورقة الطالب
+ * (بدون إزاحة ox). opts: { size, questions, choices, lang, essayTotal, modelsOn, modelBubble } */
+export function sheetGeometry(opts) {
+  const { size, questions, choices } = opts;
+  const essayTotal = opts.essayTotal || 0;
+  const L = computeLayout({ size, questions, choices, essayTotal });
+  if (!L.ok) throw new Error(L.error);
+  const P = L.P;
+  const rtl = opts.lang !== 'en';
+  const X = (fromStart, width) => (rtl ? P.w - fromStart - width : fromStart);
+  const cx = (fromStart, width) => X(fromStart, width) + width / 2;
+  const innerW = P.w - 2 * P.side;
+  const g = { w: P.w, h: P.h, bubble: P.bubble, pitch: P.pitch, mark: P.mark, rowH: L.rowH };
+  const m = P.markInset + P.mark / 2;
+  g.marks = [[m, m], [P.w - m, m], [m, P.h - m], [P.w - m, P.h - m]]; // TL TR BL BR
+  g.barcode = { x: X(P.w - P.side - P.barcodeW, P.barcodeW), y: P.headTop, w: P.barcodeW, h: P.headH };
+  // فقاعات النموذج (أ، ب)
+  g.model = null;
+  if (opts.modelsOn && opts.modelBubble) {
+    const u = P.infoLabelW / 21;
+    const bubblesW = 2 * P.bubble + P.bubble * 0.9 + 3 * u;
+    const row2 = [[12.5 * u, 23 * u], [13 * u, 8 * u], [13 * u, null], [15 * u, Math.max(18 * u, bubblesW)]];
+    const fixed = row2.reduce((a, c) => a + c[0] + (c[1] || 0), 0);
+    const flexW = Math.max(10, innerW - fixed);
+    let off = 0;
+    for (let i = 0; i < 3; i++) off += row2[i][0] + (row2[i][1] == null ? flexW : row2[i][1]);
+    const vx = P.side + off + row2[3][0], vw = row2[3][1];
+    const gap = P.bubble * 0.9, totalW = 2 * P.bubble + gap;
+    const y = P.infoTop + P.infoRowH * 1.5;
+    g.model = [0, 1].map(bi => [cx(vx + (vw - totalW) / 2 + bi * (P.bubble + gap), P.bubble), y]);
+  }
+  // فقاعات الأسئلة: g.items[q][c] = [x, y]
+  g.items = [];
+  const rowsTop = P.answersTop + P.colHeadH;
+  for (let c = 0; c < (questions ? L.cols : 0); c++) {
+    const colStart = L.offset + c * (L.colW + L.gap);
+    const rowsInCol = Math.min(L.rows, questions - c * L.rows);
+    for (let r = 0; r < rowsInCol; r++) {
+      const yMid = rowsTop + r * L.rowH + L.rowH / 2;
+      g.items.push(Array.from({ length: choices }, (_, i) => [cx(P.side + colStart + P.colPad + P.numW + i * P.pitch + (P.pitch - P.bubble) / 2, P.bubble), yMid]));
+    }
+  }
+  // فقاعات درجة المقالي: g.essay = [{ values, pts }] (صف واحد، أو عشرات + آحاد)
+  g.essay = null;
+  if (essayTotal) {
+    const top = L.essayTop;
+    const rowsSpec = L.twoRows
+      ? [Array.from({ length: Math.floor(essayTotal / 10) + 1 }, (_, i) => i * 10), Array.from({ length: 10 }, (_, i) => i)]
+      : [Array.from({ length: essayTotal + 1 }, (_, i) => i)];
+    const maxN = Math.max(...rowsSpec.map(r => r.length));
+    const startOff = innerW - maxN * P.pitch - 2;
+    g.essay = rowsSpec.map((values, ri) => {
+      const yMid = top + (L.stripH / rowsSpec.length) * (ri + 0.5);
+      return { values, pts: values.map((_, i) => [cx(P.side + startOff + i * P.pitch + (P.pitch - P.bubble) / 2, P.bubble), yMid]) };
+    });
+  }
+  return g;
+}
+
 /* ---------- رسم الورقة ---------- */
 function escHtml(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

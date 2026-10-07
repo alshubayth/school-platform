@@ -95,7 +95,7 @@ export const tiles = [
   { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
   { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students' },
-  { key: 'exam-reports', icon: icons.examreports, title: 'تقارير الاختبارات', desc: 'تحليل نتائج الاختبارات وبنودها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
+  { key: 'exam-reports', icon: icons.examreports, title: 'تقارير الاختبارات', desc: 'تحليل نتائج الاختبارات وبنودها', roles: ['admin','deputy','teacher'], color: 'diamond-purple', group: 'students' },
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green', group: 'admin' },
   { key: 'achievements', icon: icons.files, title: 'ملفات الإنجاز', desc: 'اكتمال ملفات إنجاز المعلمين في ون درايف', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
@@ -114,7 +114,7 @@ export function groupTilesFor(groupKey) {
   return g ? g.keys.map(k => tiles.find(t => t.key === k)).filter(t => t && isTileAllowed(t)) : [];
 }
 export function tileTitle(t) { if (t.key === 'substitutes' && currentProfile && currentProfile.role === 'teacher') return 'جدول يومي'; return t.key === 'budget' ? budgetTileTitle() : t.title; }
-export function tileDesc(t) { if (t.key === 'substitutes' && currentProfile && currentProfile.role === 'teacher') return 'حصصي اليوم وحصص الإشغال'; return t.key === 'budget' ? budgetTileDesc() : t.desc; }
+export function tileDesc(t) { if (t.key === 'substitutes' && currentProfile && currentProfile.role === 'teacher') return 'حصصي اليوم وحصص الإشغال'; if (t.key === 'exam-reports' && currentProfile && currentProfile.role === 'teacher') return 'تصحيح أوراق الإجابة بالجوال وتقاريرها'; return t.key === 'budget' ? budgetTileDesc() : t.desc; }
 
 /* شاشة الدخول: تاريخ اليوم بالهجري والميلادي + إظهار كلمة المرور + الدخول بزر Enter */
 (function initLoginExtras() {
@@ -262,7 +262,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-06l';
+export const ASSET_VERSION = '2026-10-07a';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -717,6 +717,7 @@ function renderModuleHeader(key) {
   let desc = t.desc;
   if (key === 'duty' && currentProfile.role === 'teacher') desc = 'المناوبة المسندة لي';
   if (key === 'achievements' && currentProfile.role === 'teacher') desc = 'بنود ملف إنجازي واكتمالها';
+  if (key === 'exam-reports' && currentProfile.role === 'teacher') desc = 'تصحيح أوراق الإجابة بالجوال وتقارير اختباراتي';
   if (key === 'substitutes' && currentProfile.role === 'teacher') { title = 'جدول يومي'; desc = 'حصصي اليوم وحصص الإشغال'; }
   if (key === 'budget') { title = budgetTileTitle(); desc = budgetTileDesc(); }
   const g = GROUPS.find(x => x.key === t.group);
