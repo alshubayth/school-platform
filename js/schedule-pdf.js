@@ -589,8 +589,10 @@ async function commitAllParsed() {
     }
   }
 
-  statusEl.textContent = 'تم اعتماد كل الفصول بنجاح ✓';
+  statusEl.innerHTML = 'تم اعتماد كل الفصول بنجاح ✓ <button type="button" class="ope-link" id="sc-after-sync">تحديث تخصصات المعلمين من الجدول ←</button>';
   statusEl.style.color = 'var(--meadow)';
+  const as = document.getElementById('sc-after-sync');
+  if (as) as.addEventListener('click', openSync);
 }
 
 async function handleParseClick() {
@@ -631,3 +633,17 @@ async function handleParseClick() {
 }
 
 document.getElementById('sc-pdf-parse-btn').addEventListener('click', handleParseClick);
+
+async function openSync() {
+  const card = document.getElementById('sc-sync-card');
+  card.classList.remove('hidden');
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  const { openSubjectSync } = await import('./subject-sync.js');
+  openSubjectSync(document.getElementById('sc-sync-body'));
+}
+const syncBtn = document.getElementById('sc-sync-toggle');
+if (syncBtn) syncBtn.addEventListener('click', () => {
+  const card = document.getElementById('sc-sync-card');
+  if (!card.classList.contains('hidden')) { card.classList.add('hidden'); return; }
+  openSync();
+});

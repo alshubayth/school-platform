@@ -2243,3 +2243,34 @@ body.omr-noscroll{ overflow:hidden; }
 .sl-frame iframe{ border:0; display:block; background:#fff; }
 .sl-box input[type=checkbox]{ width:auto !important; flex:0 0 auto; margin:0; }
 .sl-box label.sl-gl{ justify-content:flex-start; }
+
+/* ===== تحديث التخصصات من الجدول ===== */
+#sc-sync-card{ margin-bottom:16px; }
+.ss-note{ font-size:12.5px; color:var(--slate); margin:0; }
+.ss-note.bad{ color:var(--danger); }
+.ss-sec{ margin-bottom:14px; }
+.ss-sec h5{ margin:0 0 8px; font-size:13.5px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.ss-ok{ color:var(--green); }
+.ss-bad{ color:var(--danger); font-size:12px; background:var(--danger-light); border-radius:99px; padding:1px 9px; }
+.ss-map{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:6px; }
+.ss-map-row{ display:flex; align-items:center; gap:8px; background:var(--sand); border-radius:10px; padding:6px 10px; font-size:13px; font-weight:700; }
+.ss-map-row.miss{ background:#FFF4E5; box-shadow:inset 0 0 0 1.5px #F2B705; }
+.ss-map-row span{ min-width:84px; }
+.ss-map-row select{ flex:1; min-width:0; padding:6px 8px; font-size:12.5px; }
+.ss-warn{ background:#FFF6D9; border-radius:10px; padding:10px 12px; font-size:12.5px; line-height:1.7; }
+.ss-sum{ font-weight:500; font-size:12.5px; color:var(--slate); }
+.ss-sum .add{ color:var(--green); } .ss-sum .rem{ color:var(--danger); }
+.ss-list{ display:flex; flex-direction:column; gap:6px; max-height:520px; overflow:auto; }
+.ss-row{ display:flex; gap:10px; align-items:flex-start; border:1px solid var(--border); border-radius:11px; padding:8px 12px; background:#fff; }
+.ss-name{ min-width:170px; font-size:13px; }
+.ss-name small{ color:var(--slate); font-weight:500; }
+.ss-chips{ display:flex; flex-wrap:wrap; gap:5px; flex:1; }
+.ss-chip{ font-size:12px; border-radius:99px; padding:3px 10px; display:inline-flex; align-items:center; gap:5px; }
+.ss-chip.add{ background:var(--green-light); color:var(--green); font-weight:700; }
+.ss-chip.keep{ background:var(--sand); color:var(--slate); }
+.ss-chip.rem{ background:var(--danger-light); color:var(--danger); font-weight:700; cursor:pointer; }
+.ss-chip.rem input{ width:auto; margin:0; }
+.ss-chip.rem.kept{ background:var(--sand); color:var(--slate); text-decoration:line-through; font-weight:500; }
+.ss-foot{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.ss-foot .btn-primary{ width:auto; padding:10px 20px; }
+@media (max-width: 640px){ .ss-row{ flex-direction:column; } .ss-name{ min-width:0; } }
