@@ -16,18 +16,22 @@ const norm = s => String(s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه'
   .split(/\s+/).map(w => w.replace(/^ال(?=..)/, '')).join(' ').trim();
 const ALIASES = { 'مهارات رقميه': ['حاسب الي', 'حاسب'], 'مهارات حياتيه': ['مهارات حياتيه واسريه'], 'اجتماعيات': ['دراسات اجتماعيه'], 'اسلاميه': ['دراسات اسلاميه', 'تربيه اسلاميه'], 'رقميه': ['حاسب الي', 'حاسب', 'مهارات رقميه'], 'حياتيه': ['مهارات حياتيه'], 'انجليزي': ['لغه انجليزيه'], 'حاسب': ['حاسب الي', 'مهارات رقميه'], 'لغتي': ['لغه عربيه'], 'فنيه': ['تربيه فنيه'], 'بدنيه': ['تربيه بدنيه'], 'تفكير': ['تفكير ناقد'] };
 
-const S = { box: null, sched: [], profiles: [], subjects: [], current: [], aliases: {}, map: {}, removeKeep: new Set() };
+// أسماء الأشخاص: بدون بن/ابن/بنت وبدون "ال" وبدون فروق الهمزات
+const pnorm = s => norm(s).split(' ').filter(w => w && !['بن', 'ابن', 'بنت'].includes(w)).join(' ');
+const S = { box: null, sched: [], profiles: [], subjects: [], current: [], aliases: {}, map: {}, removeKeep: new Set(), links: {}, employees: null };
 
 export async function openSubjectSync(box, opts = {}) {
   S.box = box;
   if (opts.onApplied) S.onApplied = opts.onApplied;
   box.innerHTML = '<p class="ss-note">جارٍ التحميل...</p>';
-  const [sc, pr, su, ts, al] = await Promise.all([
+  const [sc, pr, su, ts, al, tl, em] = await Promise.all([
     readScopedBySchool(scoped => { let q = sb.from('class_schedules').select('grade_level, class_section, subject_name, teacher_name'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
     sb.from('profiles').select('id, full_name, role, login_email').in('role', ['teacher', 'deputy', 'admin']),
     sb.from('subjects').select('id, name'),
     readScopedBySchool(scoped => { let q = sb.from('teacher_subjects').select('id, teacher_id, subject_id, grade_level'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
     readScopedBySchool(scoped => { let q = sb.from('school_settings').select('value').eq('key', 'subject_aliases'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.maybeSingle(); }),
+    readScopedBySchool(scoped => { let q = sb.from('school_settings').select('value').eq('key', 'schedule_teacher_links'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.maybeSingle(); }),
+    readScopedBySchool(scoped => { let q = sb.from('employees').select('profile_id'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
   ]);
   if (sc.error || su.error || ts.error) { box.innerHTML = `<p class="ss-note bad">تعذر التحميل: ${esc((sc.error || su.error || ts.error).message)}</p>`; return; }
   S.sched = (sc.data || []).filter(r => r.subject_name && r.teacher_name && GRADES.includes(r.grade_level));
@@ -35,6 +39,13 @@ export async function openSubjectSync(box, opts = {}) {
   S.subjects = (su.data || []).slice().sort((a, b) => a.name.localeCompare(b.name, 'ar'));
   S.current = ts.data || [];
   S.aliases = (al && al.data && al.data.value) || {};
+  S.links = (tl && tl.data && tl.data.value) || {};
+  // الحسابات اللي بقائمة الموظفين (لو القائمة مستخدمة): غيرهم = منقول/محذوف
+  const empIds = (em && !em.error && em.data) ? em.data.map(e => e.profile_id).filter(Boolean) : [];
+  // نعتمد عليها بس لو المدرسة مستخدمة قائمة الموظفين فعلًا (أغلب المعلمين مربوطين فيها)
+  const teacherIds = S.profiles.filter(p => p.role === 'teacher').map(p => p.id);
+  const linked = teacherIds.filter(id => empIds.includes(id)).length;
+  S.employees = empIds.length && linked >= teacherIds.length * 0.5 ? new Set(empIds) : null;
   if (!S.sched.length) { box.innerHTML = '<p class="ss-note">الجدول الدراسي فاضي - استورد الجدول أو عبّيه أولًا.</p>'; return; }
   S.map = {};
   [...new Set(S.sched.map(r => r.subject_name.trim()))].forEach(n => { S.map[n] = guessSubject(n); });
@@ -54,11 +65,22 @@ function guessSubject(name) {
 }
 
 function teacherOf(name) {
-  const n = norm(name);
   const raw = String(name).trim();
-  return S.profiles.find(p => norm(p.full_name) === n)
-    || (/^\d{3,}$/.test(raw) ? S.profiles.find(p => String(p.login_email || '').split('@')[0].replace(/^0+/, '') === raw.replace(/^0+/, '')) : null)
-    || null;
+  if (S.links[raw]) { const p = S.profiles.find(x => x.id === S.links[raw]); if (p) return p; }
+  const n = pnorm(raw);
+  const byName = S.profiles.filter(p => pnorm(p.full_name) === n);
+  if (byName.length === 1) return byName[0];
+  if (/^\d{3,}$/.test(raw)) {
+    const p = S.profiles.find(x => String(x.login_email || '').split('@')[0].replace(/^0+/, '') === raw.replace(/^0+/, ''));
+    if (p) return p;
+  }
+  // الاسم الأول + اسم العائلة (الجدول أحيانًا يكتب الاسم ثلاثي أو بدون اسم الأب)
+  const t = n.split(' ');
+  if (t.length >= 2) {
+    const c = S.profiles.filter(p => { const u = pnorm(p.full_name).split(' '); return u[0] === t[0] && u[u.length - 1] === t[t.length - 1]; });
+    if (c.length === 1) return c[0];
+  }
+  return null;
 }
 
 // المطلوب من الجدول: teacher_id -> Set("subject_id|grade")
@@ -89,10 +111,20 @@ function diff() {
     const add = [...want].filter(k => !haveKeys.has(k));
     const keep = have.filter(c => want.has(c.subject_id + '|' + c.grade_level));
     const remove = have.filter(c => !want.has(c.subject_id + '|' + c.grade_level));
-    if (add.length || remove.length || keep.length) rows.push({ id, name: p ? p.full_name : '(حساب غير معروف)', add, keep, remove, inSchedule: out.has(id) });
+    if (add.length || remove.length || keep.length) rows.push({ id, name: p ? p.full_name : '(حساب غير معروف)', add, keep, remove, inSchedule: out.has(id), gone: !p || (S.employees && !S.employees.has(id)) });
   });
   rows.sort((a, b) => (b.add.length + b.remove.length) - (a.add.length + a.remove.length) || a.name.localeCompare(b.name, 'ar'));
   return { rows, unlinked };
+}
+
+function staffOptions(name) {
+  const t = pnorm(name).split(' ');
+  const score = p => { const u = pnorm(p.full_name).split(' '); return t.filter(w => u.includes(w)).length; };
+  const list = S.profiles.filter(p => !S.employees || S.employees.has(p.id)).slice().sort((a, b) => score(b) - score(a) || a.full_name.localeCompare(b.full_name, 'ar'));
+  return list.map(p => `<option value="${p.id}">${esc(p.full_name)}</option>`).join('');
+}
+async function saveLinks() {
+  await writeWithSchool(extra => sb.from('school_settings').upsert({ key: 'schedule_teacher_links', value: S.links, updated_at: new Date().toISOString(), ...extra }, { onConflict: 'school_id,key' }));
 }
 
 const subjName = id => (S.subjects.find(s => s.id === id) || {}).name || '؟';
@@ -112,12 +144,17 @@ function render() {
           <select data-subj="${esc(n)}"><option value="">— اختر المادة —</option>${S.subjects.map(s => `<option value="${s.id}"${S.map[n] === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="${IGNORE}"${S.map[n] === IGNORE ? ' selected' : ''}>تجاهل (مو مادة تخصص)</option><option value="__new">➕ إضافة مادة جديدة...</option></select>
         </label>`).join('')}</div>
     </div>
-    ${unlinked.size ? `<div class="ss-sec ss-warn"><b>${unlinked.size} معلم بالجدول ما انربط بحساب</b> (تخصصاتهم ما تتحدث): ${[...unlinked.keys()].slice(0, 12).map(esc).join('، ')}${unlinked.size > 12 ? '...' : ''}<br><small>اربطهم من «استيراد الجدول من PDF» وأعد الاعتماد، أو تأكد إن اسمهم بالجدول مطابق لاسم حسابهم.</small></div>` : ''}
+    ${unlinked.size ? `<div class="ss-sec ss-warn"><h5>معلمين بالجدول ما انربطوا بحساب (${unlinked.size}) - اختر حساب كل واحد:</h5>
+      <div class="ss-map">${[...unlinked.keys()].sort((a, b) => a.localeCompare(b, 'ar')).map(t => `
+        <label class="ss-map-row miss"><span>${esc(t)}</span>
+          <select data-tlink="${esc(t)}"><option value="">— اختر الحساب —</option>${staffOptions(t)}</select>
+        </label>`).join('')}</div>
+      <small>الربط ينحفظ ويُستخدم كمان باستيراد الجدول الجاي.</small></div>` : ''}
     <div class="ss-sec">
       <h5>٢) التغييرات <span class="ss-sum"><b class="add">+${nAdd}</b> إضافة · <b class="rem">−${nRem}</b> حذف</span></h5>
       <div class="ss-list">${rows.map(r => `
         <div class="ss-row">
-          <b class="ss-name">${esc(r.name)}${r.inSchedule ? '' : ' <small>(ما له حصص بالجدول)</small>'}</b>
+          <b class="ss-name">${esc(r.name)}${r.gone ? ' <small class="ss-gone">(محذوف من قائمة الموظفين)</small>' : r.inSchedule ? '' : ' <small>(ما له حصص بالجدول)</small>'}</b>
           <div class="ss-chips">
             ${r.add.map(k => { const [sid, g] = k.split('|'); return `<span class="ss-chip add">+ ${esc(subjName(sid))} · ${esc(gShort(g))}</span>`; }).join('')}
             ${r.keep.map(c => `<span class="ss-chip keep">${esc(subjName(c.subject_id))} · ${esc(gShort(c.grade_level))}</span>`).join('')}
@@ -146,6 +183,12 @@ function render() {
       render(); return;
     }
     S.map[n] = sel.value; render();
+  }));
+  S.box.querySelectorAll('[data-tlink]').forEach(sel => sel.addEventListener('change', async () => {
+    if (!sel.value) return;
+    S.links[sel.dataset.tlink] = sel.value;
+    await saveLinks();
+    render();
   }));
   S.box.querySelectorAll('[data-rem]').forEach(cb => cb.addEventListener('change', () => { if (cb.checked) S.removeKeep.delete(cb.dataset.rem); else S.removeKeep.add(cb.dataset.rem); render(); }));
   const ap = document.getElementById('ss-apply');

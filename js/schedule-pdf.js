@@ -1,4 +1,4 @@
-import { sb, gradeLabels, currentSchoolId, writeWithSchool } from './core.js';
+import { sb, gradeLabels, currentSchoolId, writeWithSchool, readScopedBySchool } from './core.js';
 import { SCHEDULE_SUBJECTS, previewInGrid } from './schedule.js';
 import { loadPdfJs } from './lib-loader.js';
 
@@ -38,7 +38,8 @@ function filterBoilerplateItems(items) {
 
 let parsedClasses = []; // [{page, grade, section, map}]
 let teacherProfiles = [];
-let teacherLinkMap = new Map(); // اسم المعلم الخام من الملف -> id حساب المعلم المختار يدويًا (أو '' = خليه كما هو)
+let teacherLinkMap = new Map();
+let savedLinks = {}; // اسم المعلم الخام من الملف -> id حساب المعلم المختار يدويًا (أو '' = خليه كما هو)
 
 function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
 function escHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
@@ -466,9 +467,14 @@ async function renderSummary({ classes, issues, correctedCount }) {
 
   const distinctTeachers = collectDistinctTeacherNames(classes);
   teacherLinkMap = new Map();
+  // ربط محفوظ من قبل (من هنا أو من شاشة تحديث التخصصات)
+  const { data: lk } = await readScopedBySchool(scoped => { let q = sb.from('school_settings').select('value').eq('key', 'schedule_teacher_links'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.maybeSingle(); });
+  savedLinks = (lk && lk.value) || {};
+  const validIds = new Set(teacherProfiles.map(p => p.id));
   const unmatched = [];
   distinctTeachers.forEach(({ norm, raw }) => {
-    const matched = profileByNorm.get(norm) || profileByNorm.get(norm.replace(/^0+/, '')) || null;
+    const saved = savedLinks[raw] && validIds.has(savedLinks[raw]) ? { id: savedLinks[raw] } : null;
+    const matched = saved || profileByNorm.get(norm) || profileByNorm.get(norm.replace(/^0+/, '')) || null;
     if (matched) teacherLinkMap.set(norm, matched.id);
     else unmatched.push({ norm, raw });
   });
@@ -524,6 +530,10 @@ async function renderSummary({ classes, issues, correctedCount }) {
       const norm = sel.dataset.norm;
       if (sel.value) teacherLinkMap.set(norm, sel.value);
       else teacherLinkMap.delete(norm);
+      // نحفظ الربط اليدوي للمرات الجاية
+      const raw = sel.closest('.stl-row').querySelector('.stl-name').textContent;
+      if (sel.value) savedLinks[raw] = sel.value; else delete savedLinks[raw];
+      writeWithSchool(extra => sb.from('school_settings').upsert({ key: 'schedule_teacher_links', value: savedLinks, updated_at: new Date().toISOString(), ...extra }, { onConflict: 'school_id,key' }));
     });
   });
 

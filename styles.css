@@ -2276,3 +2276,6 @@ body.omr-noscroll{ overflow:hidden; }
 @media (max-width: 640px){ .ss-row{ flex-direction:column; } .ss-name{ min-width:0; } }
 .pm-sync{ margin-bottom:14px; }
 .pm-sync-head{ display:flex; justify-content:space-between; align-items:center; gap:14px; flex-wrap:wrap; }
+.ss-gone{ color:var(--danger) !important; }
+.ss-warn h5{ margin:0 0 8px; }
+.ss-warn .ss-map{ margin-bottom:6px; }

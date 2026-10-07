@@ -235,6 +235,10 @@ function renderPortalRows() {
       if (!confirm(`متأكد تبي تحذف "${emp.full_name}" من قائمة الموظفين؟ هذا يحذف سجل التقييم فقط، ولا يحذف حساب الدخول لو موجود.`)) return;
       const { error } = await sb.from('employees').delete().eq('id', emp.id);
       if (error) { alert('تعذر الحذف: ' + error.message); return; }
+      // موظف منقول: نشيل تخصصاته عشان ما يطلع بالخطة الأسبوعية ومتابعاتها
+      if (emp.profile_id && confirm(`تحذف تخصصات "${emp.full_name}" كمان؟ (لو انتقل من المدرسة)`)) {
+        await sb.from('teacher_subjects').delete().eq('teacher_id', emp.profile_id);
+      }
       await refreshPortalList();
     });
     const resetBtn = row.querySelector('.pt-reset');
