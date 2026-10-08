@@ -2514,3 +2514,14 @@ body.omr-noscroll{ overflow:hidden; }
 .ps-duty.ps-now{ background:#FDEBD6; border-color:#E07A34; box-shadow:0 2px 8px rgba(224,122,52,.2); }
 .ps-duty.ps-now .ps-time{ color:#A4501A; }
 .ps-duty .ps-tag.now{ background:#E07A34; }
+/* الميزانية: رقم البيان وتسلسله */
+.bud-stmt-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:-2px 0 12px; }
+.bud-stmt-row:has(.bud-stmt-hint:empty):has(.bud-stmt-edit[style*="none"]){ display:none; }
+.bud-stmt-hint{ font-size:12.5px; color:var(--slate); }
+.bud-stmt-hint b{ color:var(--ink); }
+.bud-stmt-edit{ display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; color:var(--ink); margin:0; }
+.bud-stmt-edit input{ width:90px !important; margin:0; }
+.bud-series{ display:inline-block; font-size:11px; font-weight:600; border-radius:999px; padding:2px 8px; margin-inline-start:4px; vertical-align:middle; }
+.bud-series.canteen{ background:#FDEFE3; color:#A4501A; }
+.bud-series.main{ background:var(--meadow-light); color:var(--meadow); }
+.budget-editing{ outline:2px solid var(--gold); outline-offset:4px; }

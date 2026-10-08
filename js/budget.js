@@ -10,6 +10,10 @@ const BENEFICIARY_ROLES = ['admin', 'deputy', 'teacher'];
 // جهة الصرف بنموذج الفاتورة مكتوبة بـ"ال" التعريف ("السلفة")، بينما نوع الإيداع بجدول
 // budget_revenues بدونها ("سلفة") - عشان يطابق شكل باقي الأنواع الرسمية بالتطبيق. هذا الربط.
 const FUNDING_TO_REVENUE_TYPE = { 'السلفة': 'سلفة', 'مدور سابق': 'مدور سابق' };
+// تسلسل أرقام البيانات: المقصف لحاله، وباقي الجهات (السلفة/المدور/أخرى) تسلسل الميزانية
+const seriesOf = source => source === 'المقصف' ? 'canteen' : 'main';
+const SERIES_LABEL = { canteen: 'تسلسل المقصف', main: 'تسلسل الميزانية' };
+let editingExpense = null; // { id, statement_number, funding_source, funding_revenue_id, total }
 
 let categoriesCache = [];
 let barChartInstance = null;
@@ -429,7 +433,31 @@ document.getElementById('budget-exp-source').addEventListener('change', (e) => {
   } else {
     batchRow.style.display = 'none';
   }
+  updateStatementHint();
 });
+
+// يوضح رقم البيان اللي بياخذه الطلب (أو التسلسل اللي بينتقل له وقت التعديل)
+async function updateStatementHint() {
+  const hint = document.getElementById('budget-exp-stmt-hint');
+  const source = document.getElementById('budget-exp-source').value;
+  if (!source) { hint.innerHTML = ''; return; }
+  const series = seriesOf(source);
+  if (editingExpense && seriesOf(editingExpense.funding_source) === series) {
+    hint.innerHTML = `${SERIES_LABEL[series]} — تقدر تغيّر الرقم من الخانة`;
+    return;
+  }
+  const { data } = await readScopedBySchool(scoped => {
+    let q = sb.from('budget_expense_requests').select('statement_number, funding_source');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q;
+  });
+  if (document.getElementById('budget-exp-source').value !== source) return;
+  const nums = (data || []).filter(r => seriesOf(r.funding_source) === series).map(r => Number(r.statement_number) || 0);
+  const next = (nums.length ? Math.max(...nums) : 0) + 1;
+  hint.innerHTML = editingExpense
+    ? `بينتقل إلى ${SERIES_LABEL[series]} ويصير رقمه <b>${next}</b>`
+    : `رقم البيان المتوقع: <b>${next}</b> (${SERIES_LABEL[series]})`;
+}
 
 /* ---------- دفعات السلفة/المدور المفتوحة (لاختيارها عند الصرف) ---------- */
 async function loadFundingBatches() {
@@ -441,13 +469,14 @@ async function loadFundingBatches() {
 function populateSourceBatchSelect(revenueType) {
   const sel = document.getElementById('budget-exp-source-batch');
   const prevVal = sel.value;
-  const open = fundingBatchesCache.filter(b => b.revenue_type === revenueType && Number(b.remaining) > 0.009);
+  const own = b => (editingExpense && editingExpense.funding_revenue_id === b.id ? editingExpense.total : 0);
+  const open = fundingBatchesCache.filter(b => b.revenue_type === revenueType && Number(b.remaining) + own(b) > 0.009);
   if (open.length === 0) {
     sel.innerHTML = `<option value="">ما فيه دفعات ${esc(revenueType)} مفتوحة حاليًا</option>`;
     return;
   }
   sel.innerHTML = '<option value="">اختر الدفعة...</option>' +
-    open.map(b => `<option value="${b.id}">${esc(b.description)} — متبقي ${fmtAmount(b.remaining)} (${fmtDate(b.revenue_date)})</option>`).join('');
+    open.map(b => `<option value="${b.id}">${esc(b.description)} — متبقي ${fmtAmount(Number(b.remaining) + own(b))} (${fmtDate(b.revenue_date)})</option>`).join('');
   if (prevVal && open.some(b => b.id === prevVal)) sel.value = prevVal;
 }
 
@@ -512,7 +541,61 @@ function resetExpenseForm() {
   document.getElementById('budget-exp-items').innerHTML = '';
   addExpenseItemRow();
   recalcExpenseTotal();
+  setExpenseEditMode(null);
 }
+
+function setExpenseEditMode(r) {
+  editingExpense = r;
+  document.getElementById('budget-exp-form-title').textContent = r ? `تعديل بيان الصرف رقم ${r.statement_number}` : 'تقديم طلب صرف (بيان صرف)';
+  document.getElementById('budget-exp-submit').textContent = r ? 'حفظ التعديل' : 'حفظ وإرسال للاعتماد';
+  document.getElementById('budget-exp-cancel-edit').style.display = r ? '' : 'none';
+  document.getElementById('budget-exp-stmt-edit').style.display = r ? 'flex' : 'none';
+  document.getElementById('budget-exp-stmt').value = r ? r.statement_number : '';
+  document.getElementById('budget-expense-form-section').classList.toggle('budget-editing', !!r);
+  document.getElementById('budget-exp-stmt-hint').innerHTML = '';
+  document.getElementById('budget-exp-error').style.display = 'none';
+}
+
+// تعبئة النموذج ببيانات طلب (بانتظار الاعتماد) عشان يتعدّل
+function startEditExpense(r, items, total) {
+  const section = document.getElementById('budget-expense-form-section');
+  section.classList.remove('hidden');
+  setExpenseEditMode({ id: r.id, statement_number: r.statement_number, funding_source: r.funding_source, funding_revenue_id: r.funding_revenue_id || null, total });
+  document.getElementById('budget-exp-category').value = r.category_id || '';
+  const benSel = document.getElementById('budget-exp-beneficiary');
+  if (r.beneficiary_name && ![...benSel.options].some(o => o.value === r.beneficiary_name)) {
+    benSel.insertAdjacentHTML('beforeend', `<option value="${esc(r.beneficiary_name)}">${esc(r.beneficiary_name)}</option>`);
+  }
+  benSel.value = r.beneficiary_name || '';
+  const srcSel = document.getElementById('budget-exp-source');
+  srcSel.value = r.funding_source || '';
+  document.getElementById('budget-exp-source-other').value = r.funding_source_other || '';
+  document.getElementById('budget-exp-source-other').style.display = r.funding_source === 'أخرى' ? 'block' : 'none';
+  const batchRow = document.getElementById('budget-exp-source-batch-row');
+  if (FUNDING_TO_REVENUE_TYPE[r.funding_source]) {
+    batchRow.style.display = 'grid';
+    populateSourceBatchSelect(FUNDING_TO_REVENUE_TYPE[r.funding_source]);
+    document.getElementById('budget-exp-source-batch').value = r.funding_revenue_id || '';
+  } else batchRow.style.display = 'none';
+  document.getElementById('budget-exp-semester').value = r.semester || '';
+  document.getElementById('budget-exp-date').value = r.request_date || todayIso();
+  const wrap = document.getElementById('budget-exp-items');
+  wrap.innerHTML = '';
+  (items.length ? items : [{}]).forEach(it => {
+    addExpenseItemRow();
+    const row = wrap.lastElementChild;
+    row.querySelector('.item-invoice-number').value = it.invoice_number || '';
+    row.querySelector('.item-invoice-date').value = it.invoice_date || '';
+    row.querySelector('.item-source').value = it.source || '';
+    row.querySelector('.item-description').value = it.description || '';
+    row.querySelector('.item-amount').value = it.amount != null ? it.amount : '';
+  });
+  recalcExpenseTotal();
+  updateStatementHint();
+  section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+document.getElementById('budget-exp-cancel-edit').addEventListener('click', () => resetExpenseForm());
 
 document.getElementById('budget-exp-add-item').addEventListener('click', addExpenseItemRow);
 
@@ -547,14 +630,49 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
     await loadFundingBatches();
     const batch = fundingBatchesCache.find(b => b.id === sourceBatchId);
     const total = items.reduce((s, it) => s + it.amount, 0);
-    if (!batch || Number(batch.remaining) < total - 0.009) {
+    const ownBack = editingExpense && editingExpense.funding_revenue_id === sourceBatchId ? editingExpense.total : 0;
+    if (!batch || Number(batch.remaining) + ownBack < total - 0.009) {
       errEl.textContent = batch
-        ? `المبلغ الإجمالي (${fmtAmount(total)}) يتجاوز المتبقي من هذه الدفعة (${fmtAmount(batch.remaining)})`
+        ? `المبلغ الإجمالي (${fmtAmount(total)}) يتجاوز المتبقي من هذه الدفعة (${fmtAmount(Number(batch.remaining) + ownBack)})`
         : 'تعذر التحقق من رصيد الدفعة - حدّث الصفحة وحاول مرة ثانية';
       errEl.style.display = 'block';
       populateSourceBatchSelect(FUNDING_TO_REVENUE_TYPE[source]);
       return;
     }
+  }
+
+  if (editingExpense) {
+    const ed = editingExpense;
+    const fields = {
+      category_id: categoryId,
+      beneficiary_name: beneficiary,
+      funding_source: source,
+      funding_source_other: source === 'أخرى' ? sourceOther : null,
+      funding_revenue_id: FUNDING_TO_REVENUE_TYPE[source] ? sourceBatchId : null,
+      semester: semester || null,
+      request_date: date,
+    };
+    // الرقم: لو بقى بنفس التسلسل ناخذ اللي بالخانة، ولو تغيّر التسلسل يتعيّن تلقائيًا بالتسلسل الجديد
+    const typed = parseInt(document.getElementById('budget-exp-stmt').value, 10);
+    const sameSeries = seriesOf(source) === seriesOf(ed.funding_source);
+    if (sameSeries) {
+      if (!typed || typed < 1) { errEl.textContent = 'اكتب رقم البيان (رقم موجب)'; errEl.style.display = 'block'; return; }
+      if (typed !== Number(ed.statement_number)) fields.statement_number = typed;
+    }
+    const { error: upErr } = await sb.from('budget_expense_requests').update(fields).eq('id', ed.id).eq('status', 'pending');
+    if (upErr) {
+      const msg = /مستخدم|duplicate|unique/i.test(upErr.message) ? `رقم البيان ${typed} مستخدم في ${SERIES_LABEL[seriesOf(source)]}` : 'تعذر الحفظ: ' + upErr.message;
+      errEl.textContent = msg; errEl.style.display = 'block'; return;
+    }
+    const { error: delErr } = await sb.from('budget_expense_items').delete().eq('request_id', ed.id);
+    if (delErr) { errEl.textContent = 'تعذر تحديث الفواتير: ' + delErr.message; errEl.style.display = 'block'; return; }
+    const { error: insErr } = await sb.from('budget_expense_items').insert(items.map(it => ({ ...it, request_id: ed.id })));
+    if (insErr) { errEl.textContent = 'تعذر حفظ الفواتير: ' + insErr.message; errEl.style.display = 'block'; return; }
+    resetExpenseForm();
+    await loadFundingBatches();
+    if (accessLevel() === 'full') { await loadBatchesLists(); await loadDashboard(); }
+    await loadExpensesList(accessLevel() === 'full');
+    return;
   }
 
   const { data: inserted, error } = await writeWithSchool(extra => sb.from('budget_expense_requests').insert({
@@ -597,7 +715,7 @@ async function loadExpensesList(canManage) {
   const { data, error } = await readScopedBySchool(scoped => {
     let query = sb.from('budget_expense_requests')
       .select(`id, statement_number, beneficiary_name, funding_source, funding_source_other,
-        semester, request_date, status, requested_by, confirmed_by, confirmed_at,
+        semester, request_date, status, requested_by, confirmed_by, confirmed_at, category_id, funding_revenue_id, school_id,
         budget_categories(name),
         requester:profiles!budget_expense_requests_requested_by_fkey(full_name),
         confirmer:profiles!budget_expense_requests_confirmed_by_fkey(full_name),
@@ -629,7 +747,7 @@ async function loadExpensesList(canManage) {
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div style="min-width:0;">
           <div style="font-weight:700; font-size:14px; margin-bottom:4px;">
-            بيان رقم ${r.statement_number} — ${esc(catName)}
+            بيان رقم ${r.statement_number}<span class="bud-series ${seriesOf(r.funding_source)}">${seriesOf(r.funding_source) === 'canteen' ? 'المقصف' : 'الميزانية'}</span> — ${esc(catName)}
             <span class="badge ${STATUS_BADGE[r.status]}">${STATUS_LABELS[r.status]}</span>
           </div>
           <div style="font-size:12.5px; color:var(--slate);">
@@ -664,8 +782,14 @@ async function loadExpensesList(canManage) {
       rejectBtn.style.cssText = 'width:auto; padding:8px 16px; background:var(--danger);';
       rejectBtn.textContent = 'رفض';
       rejectBtn.addEventListener('click', () => updateExpenseStatus(r.id, 'rejected'));
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn-primary';
+      editBtn.style.cssText = 'width:auto; padding:8px 16px; background:#fff; color:var(--ink); border:1px solid var(--border);';
+      editBtn.textContent = 'تعديل';
+      editBtn.addEventListener('click', () => startEditExpense(r, items, total));
       actions.appendChild(confirmBtn);
       actions.appendChild(rejectBtn);
+      actions.appendChild(editBtn);
     }
     if (canManage) {
       const deleteBtn = document.createElement('button');
@@ -676,6 +800,8 @@ async function loadExpensesList(canManage) {
         if (!confirm(`متأكد تبي تحذف بيان الصرف رقم ${r.statement_number}؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
         const { error } = await sb.from('budget_expense_requests').delete().eq('id', r.id);
         if (error) { alert('تعذر الحذف: ' + error.message); return; }
+        if (r.status === 'pending') await closeStatementGap(r, rows);
+        if (editingExpense && editingExpense.id === r.id) resetExpenseForm();
         await loadDashboard();
         await loadExpensesList(true);
       });
@@ -684,6 +810,21 @@ async function loadExpensesList(canManage) {
     card.appendChild(actions);
     container.appendChild(card);
   });
+}
+
+// بعد حذف بيان ما انعتمد: البيانات اللي بعده بنفس التسلسل ترجع رقم لورا (لو كلها بانتظار الاعتماد)
+// عشان ما يصير فراغ بالتسلسل. لو بعده بيان معتمد/مرفوض نخلي الأرقام مثل ما هي.
+async function closeStatementGap(deleted, rows) {
+  const series = seriesOf(deleted.funding_source);
+  const n = Number(deleted.statement_number);
+  const later = rows.filter(x => x.id !== deleted.id && seriesOf(x.funding_source) === series && Number(x.statement_number) > n
+    && (x.school_id || null) === (deleted.school_id || null))
+    .sort((a, b) => a.statement_number - b.statement_number);
+  if (!later.length || later.some(x => x.status !== 'pending')) return;
+  for (const x of later) {
+    const { error } = await sb.from('budget_expense_requests').update({ statement_number: Number(x.statement_number) - 1 }).eq('id', x.id);
+    if (error) { console.error('renumber failed', error); return; }
+  }
 }
 
 async function updateExpenseStatus(id, status) {

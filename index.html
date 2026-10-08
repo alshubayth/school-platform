@@ -1933,7 +1933,7 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
             </div>
             <div>
-              <h4>تقديم طلب صرف (بيان صرف)</h4>
+              <h4 id="budget-exp-form-title">تقديم طلب صرف (بيان صرف)</h4>
               <p>يمكن إضافة أكثر من فاتورة بنفس طلب الصرف — يُحفظ الطلب بحالة "بانتظار الاعتماد" ولا يُخصم من الميزانية إلا بعد موافقة المدير</p>
             </div>
           </div>
@@ -1953,6 +1953,10 @@
               <option value="أخرى">أخرى</option>
             </select>
             <input type="text" id="budget-exp-source-other" placeholder="اكتب جهة الصرف" style="display:none;" />
+          </div>
+          <div class="bud-stmt-row" id="budget-exp-stmt-row">
+            <span id="budget-exp-stmt-hint" class="bud-stmt-hint"></span>
+            <label id="budget-exp-stmt-edit" class="bud-stmt-edit" style="display:none;">رقم البيان <input type="number" id="budget-exp-stmt" min="1" inputmode="numeric" /></label>
           </div>
           <div class="form-row" id="budget-exp-source-batch-row" style="display:none;">
             <select id="budget-exp-source-batch">
@@ -1974,7 +1978,10 @@
           <button type="button" class="btn-primary" id="budget-exp-add-item" style="width:auto; padding:8px 14px; background:var(--slate);">+ إضافة فاتورة</button>
           <div style="text-align:left; margin-top:10px; font-weight:800; font-size:15px;">الإجمالي: <span id="budget-exp-total">0 ر.س</span></div>
 
-          <button class="btn-primary" id="budget-exp-submit" style="width:auto; padding:10px 18px; margin-top:14px;">حفظ وإرسال للاعتماد</button>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+            <button class="btn-primary" id="budget-exp-submit" style="width:auto; padding:10px 18px;">حفظ وإرسال للاعتماد</button>
+            <button type="button" class="btn-secondary" id="budget-exp-cancel-edit" style="width:auto; padding:10px 18px; display:none;">إلغاء التعديل</button>
+          </div>
           <div class="error-msg" id="budget-exp-error"></div>
         </div>
 
