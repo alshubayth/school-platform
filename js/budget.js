@@ -14,6 +14,8 @@ const FUNDING_TO_REVENUE_TYPE = { 'السلفة': 'سلفة', 'مدور سابق
 // الترتيب وسد الفراغات يصير بقاعدة البيانات (sql/budget_statement_compact.sql)
 const seriesOf = source => source === 'المقصف' ? 'canteen' : 'main';
 const SERIES_LABEL = { canteen: 'تسلسل المقصف', main: 'تسلسل المدور والسلفة' };
+const EXP_SOURCES = ['المقصف', 'مدور سابق', 'السلفة', 'أخرى'];
+let expSourceFilter = 'all';
 let editingExpense = null; // { id, statement_number, funding_source, funding_revenue_id, total }
 
 let categoriesCache = [];
@@ -736,7 +738,37 @@ async function loadExpensesList(canManage) {
   }
 
   container.innerHTML = '';
-  rows.forEach(r => {
+  // شريط جهات الصرف (الكل/المقصف/المدور/السلفة/أخرى) + تجميع الطلبات تحت كل بند
+  const srcKey = r => (EXP_SOURCES.includes(r.funding_source) ? r.funding_source : 'أخرى');
+  const counts = {}; rows.forEach(r => { counts[srcKey(r)] = (counts[srcKey(r)] || 0) + 1; });
+  if (expSourceFilter !== 'all' && !counts[expSourceFilter]) expSourceFilter = 'all';
+  const bar = document.createElement('div');
+  bar.className = 'bud-src-bar';
+  bar.innerHTML = [['all', 'الكل', rows.length], ...EXP_SOURCES.filter(k => counts[k]).map(k => [k, k, counts[k]])]
+    .map(([k, l, n]) => `<button type="button" class="bud-src-chip${expSourceFilter === k ? ' on' : ''}" data-src="${esc(k)}">${esc(l)} <span>${n}</span></button>`).join('');
+  bar.querySelectorAll('.bud-src-chip').forEach(b => b.addEventListener('click', () => { expSourceFilter = b.dataset.src; loadExpensesList(canManage); }));
+  container.appendChild(bar);
+  const shown = rows.filter(r => expSourceFilter === 'all' || srcKey(r) === expSourceFilter);
+  const groups = new Map();
+  shown.forEach(r => {
+    const k = r.budget_categories ? r.budget_categories.name : 'بدون بند';
+    if (!groups.has(k)) groups.set(k, { rows: [], total: 0, pending: 0 });
+    const g = groups.get(k); g.rows.push(r);
+    const t = (r.budget_expense_items || []).reduce((s2, it) => s2 + Number(it.amount || 0), 0);
+    if (r.status !== 'rejected') g.total += t;
+    if (r.status === 'pending') g.pending++;
+  });
+  const groupBodies = new Map();
+  [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ar')).forEach(([name, g]) => {
+    const det = document.createElement('details');
+    det.className = 'bud-cat-group';
+    det.open = true;
+    det.innerHTML = `<summary><span class="bud-cat-name">${esc(name)}</span><span class="bud-cat-meta">${g.rows.length} ${g.rows.length === 1 ? 'طلب' : g.rows.length === 2 ? 'طلبين' : g.rows.length <= 10 ? 'طلبات' : 'طلب'}${g.pending ? ` · <b class="bud-cat-pend">${g.pending} بانتظار الاعتماد</b>` : ''}</span><span class="bud-cat-total">${fmtAmount(g.total)}</span></summary><div class="bud-cat-body"></div>`;
+    container.appendChild(det);
+    groupBodies.set(name, det.querySelector('.bud-cat-body'));
+    g.rows.sort((a, b) => (seriesOf(a.funding_source) === seriesOf(b.funding_source) ? 0 : seriesOf(a.funding_source) === 'canteen' ? -1 : 1) || (Number(b.statement_number) || 0) - (Number(a.statement_number) || 0));
+  });
+  [...groups.values()].flatMap(g => g.rows).forEach(r => {
     const items = (r.budget_expense_items || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     const total = items.reduce((s, it) => s + Number(it.amount || 0), 0);
     const catName = r.budget_categories ? r.budget_categories.name : 'بدون بند';
@@ -809,7 +841,7 @@ async function loadExpensesList(canManage) {
       actions.appendChild(deleteBtn);
     }
     card.appendChild(actions);
-    container.appendChild(card);
+    groupBodies.get(catName).appendChild(card);
   });
 }
 
@@ -832,8 +864,13 @@ function renderPendingSummary(rows) {
   const tone = { 'المقصف': 'canteen', 'مدور سابق': 'carry', 'السلفة': 'advance', 'أخرى': 'other' };
   box.innerHTML = `<div class="bud-pend">
     <div class="bud-pend-head"><b>بانتظار الاعتماد</b><span>${cnt} ${cnt === 1 ? 'طلب' : cnt === 2 ? 'طلبين' : cnt <= 10 ? 'طلبات' : 'طلب'} · الإجمالي <strong>${fmtAmount(all)}</strong></span></div>
-    <div class="bud-pend-grid">${keys.map(k => `<div class="bud-pend-item ${tone[k]}"><span class="bud-pend-label">${esc(k)}</span><span class="bud-pend-amt">${fmtAmount(sums[k].total)}</span><span class="bud-pend-n">${sums[k].n} ${sums[k].n === 1 ? 'طلب' : sums[k].n === 2 ? 'طلبين' : sums[k].n <= 10 ? 'طلبات' : 'طلب'}</span></div>`).join('')}</div>
+    <div class="bud-pend-grid">${keys.map(k => `<div class="bud-pend-item ${tone[k]}" role="button" tabindex="0" data-src="${esc(k)}" title="عرض طلبات ${esc(k)}"><span class="bud-pend-label">${esc(k)}</span><span class="bud-pend-amt">${fmtAmount(sums[k].total)}</span><span class="bud-pend-n">${sums[k].n} ${sums[k].n === 1 ? 'طلب' : sums[k].n === 2 ? 'طلبين' : sums[k].n <= 10 ? 'طلبات' : 'طلب'}</span></div>`).join('')}</div>
   </div>`;
+  box.querySelectorAll('.bud-pend-item').forEach(el => {
+    const go = () => { expSourceFilter = el.dataset.src; loadExpensesList(accessLevel() === 'full'); };
+    el.addEventListener('click', go);
+    el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  });
 }
 
 async function updateExpenseStatus(id, status) {
@@ -1062,17 +1099,38 @@ async function loadDashboard() {
 }
 
 /* ---------- أرصدة الجهات: متبقي السلفة / متبقي المدور / رصيد المقصف ---------- */
-function renderSourceStats(mqasafBalance) {
+// المتبقي هنا = مبلغ الدفعات ناقص المصروف المعتمد بس. الطلبات اللي بانتظار الاعتماد ما تنخصم من اللوحة،
+// تطلع تحت الرقم كـ «محجوز» (وتبقى محسوبة وقت اختيار الدفعة بطلب صرف جديد عشان ما يصير تجاوز).
+async function renderSourceStats(mqasafBalance) {
   const el = document.getElementById('budget-source-stats');
   if (!el) return;
-  const remainingBy = (type) => fundingBatchesCache
-    .filter(b => b.revenue_type === type)
-    .reduce((s, b) => s + Math.max(0, Number(b.remaining)), 0);
+  const [{ data: revs }, { data: reqs }] = await Promise.all([
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_revenues').select('id, amount, revenue_type').in('revenue_type', ['سلفة', 'مدور سابق']);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+    readScopedBySchool(scoped => {
+      let q = sb.from('budget_expense_requests').select('status, funding_revenue_id, budget_expense_items(amount)').not('funding_revenue_id', 'is', null);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    }),
+  ]);
+  const typeOf = new Map((revs || []).map(r => [r.id, r.revenue_type]));
+  const sum = (type, status) => (reqs || []).filter(r => r.status === status && typeOf.get(r.funding_revenue_id) === type)
+    .reduce((s, r) => s + (r.budget_expense_items || []).reduce((s2, it) => s2 + Number(it.amount || 0), 0), 0);
+  const card = (type, label, color, icon) => {
+    const total = (revs || []).filter(r => r.revenue_type === type).reduce((s, r) => s + Number(r.amount || 0), 0);
+    const remaining = total - sum(type, 'confirmed');
+    const held = sum(type, 'pending');
+    const sub = held > 0.009 ? `منها ${fmtAmount(held)} محجوز لطلبات بانتظار الاعتماد` : `${openCount(type)} دفعة مفتوحة`;
+    return statCard(label, fmtAmount(Math.max(0, remaining)), color, sub, icon);
+  };
   const openCount = (type) => fundingBatchesCache.filter(b => b.revenue_type === type && Number(b.remaining) > 0.009).length;
 
   el.innerHTML =
-    statCard('متبقي السلفة', fmtAmount(remainingBy('سلفة')), 'var(--gold)', `${openCount('سلفة')} دفعة مفتوحة`, 'admin') +
-    statCard('متبقي المدور', fmtAmount(remainingBy('مدور سابق')), 'var(--teal)', `${openCount('مدور سابق')} دفعة مفتوحة`, 'carry') +
+    card('سلفة', 'متبقي السلفة', 'var(--gold)', 'admin') +
+    card('مدور سابق', 'متبقي المدور', 'var(--teal)', 'carry') +
     statCard('رصيد المقصف', fmtAmount(mqasafBalance), 'var(--green)', 'إجمالي ما دخل منه', 'revenue');
 }
 
