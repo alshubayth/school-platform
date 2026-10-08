@@ -10,9 +10,10 @@ const BENEFICIARY_ROLES = ['admin', 'deputy', 'teacher'];
 // جهة الصرف بنموذج الفاتورة مكتوبة بـ"ال" التعريف ("السلفة")، بينما نوع الإيداع بجدول
 // budget_revenues بدونها ("سلفة") - عشان يطابق شكل باقي الأنواع الرسمية بالتطبيق. هذا الربط.
 const FUNDING_TO_REVENUE_TYPE = { 'السلفة': 'سلفة', 'مدور سابق': 'مدور سابق' };
-// تسلسل أرقام البيانات: المقصف لحاله، وباقي الجهات (السلفة/المدور/أخرى) تسلسل الميزانية
+// تسلسل أرقام البيانات: المقصف لحاله، وباقي الجهات (المدور/السلفة/أخرى) تسلسل واحد.
+// الترتيب وسد الفراغات يصير بقاعدة البيانات (sql/budget_statement_compact.sql)
 const seriesOf = source => source === 'المقصف' ? 'canteen' : 'main';
-const SERIES_LABEL = { canteen: 'تسلسل المقصف', main: 'تسلسل الميزانية' };
+const SERIES_LABEL = { canteen: 'تسلسل المقصف', main: 'تسلسل المدور والسلفة' };
 let editingExpense = null; // { id, statement_number, funding_source, funding_revenue_id, total }
 
 let categoriesCache = [];
@@ -748,7 +749,7 @@ async function loadExpensesList(canManage) {
       <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:10px; flex-wrap:wrap;">
         <div style="min-width:0;">
           <div style="font-weight:700; font-size:14px; margin-bottom:4px;">
-            بيان رقم ${r.statement_number}<span class="bud-series ${seriesOf(r.funding_source)}">${seriesOf(r.funding_source) === 'canteen' ? 'المقصف' : 'الميزانية'}</span> — ${esc(catName)}
+            بيان رقم ${r.statement_number}<span class="bud-series ${seriesOf(r.funding_source)}">${esc(r.funding_source === 'أخرى' ? (r.funding_source_other || 'أخرى') : (r.funding_source || ''))}</span> — ${esc(catName)}
             <span class="badge ${STATUS_BADGE[r.status]}">${STATUS_LABELS[r.status]}</span>
           </div>
           <div style="font-size:12.5px; color:var(--slate);">
@@ -801,7 +802,6 @@ async function loadExpensesList(canManage) {
         if (!confirm(`متأكد تبي تحذف بيان الصرف رقم ${r.statement_number}؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
         const { error } = await sb.from('budget_expense_requests').delete().eq('id', r.id);
         if (error) { alert('تعذر الحذف: ' + error.message); return; }
-        if (r.status === 'pending') await closeStatementGap(r, rows);
         if (editingExpense && editingExpense.id === r.id) resetExpenseForm();
         await loadDashboard();
         await loadExpensesList(true);
@@ -834,21 +834,6 @@ function renderPendingSummary(rows) {
     <div class="bud-pend-head"><b>بانتظار الاعتماد</b><span>${cnt} ${cnt === 1 ? 'طلب' : cnt === 2 ? 'طلبين' : cnt <= 10 ? 'طلبات' : 'طلب'} · الإجمالي <strong>${fmtAmount(all)}</strong></span></div>
     <div class="bud-pend-grid">${keys.map(k => `<div class="bud-pend-item ${tone[k]}"><span class="bud-pend-label">${esc(k)}</span><span class="bud-pend-amt">${fmtAmount(sums[k].total)}</span><span class="bud-pend-n">${sums[k].n} ${sums[k].n === 1 ? 'طلب' : sums[k].n === 2 ? 'طلبين' : sums[k].n <= 10 ? 'طلبات' : 'طلب'}</span></div>`).join('')}</div>
   </div>`;
-}
-
-// بعد حذف بيان ما انعتمد: البيانات اللي بعده بنفس التسلسل ترجع رقم لورا (لو كلها بانتظار الاعتماد)
-// عشان ما يصير فراغ بالتسلسل. لو بعده بيان معتمد/مرفوض نخلي الأرقام مثل ما هي.
-async function closeStatementGap(deleted, rows) {
-  const series = seriesOf(deleted.funding_source);
-  const n = Number(deleted.statement_number);
-  const later = rows.filter(x => x.id !== deleted.id && seriesOf(x.funding_source) === series && Number(x.statement_number) > n
-    && (x.school_id || null) === (deleted.school_id || null))
-    .sort((a, b) => a.statement_number - b.statement_number);
-  if (!later.length || later.some(x => x.status !== 'pending')) return;
-  for (const x of later) {
-    const { error } = await sb.from('budget_expense_requests').update({ statement_number: Number(x.statement_number) - 1 }).eq('id', x.id);
-    if (error) { console.error('renumber failed', error); return; }
-  }
 }
 
 async function updateExpenseStatus(id, status) {
