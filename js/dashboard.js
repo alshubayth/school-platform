@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodStatus, periodTime } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodStatus, periodTime, ASSET_VERSION } from './core.js';
 
 // أسبوع المتابعة بالرئيسية = الأسبوع القادم (اللي يُفترض المعلمون يدخلون خطته خلال هذا الأسبوع)
 const planWeek = () => Math.min(40, academicWeekInfo().next);
@@ -386,13 +386,6 @@ function todayInfo() {
   return { dayKey, dateStr };
 }
 
-function thisWeekSunday() {
-  const now = new Date();
-  const sunday = new Date(now);
-  sunday.setDate(now.getDate() - now.getDay());
-  return sunday.toISOString().slice(0, 10);
-}
-
 function kpi(label, value, note = '', barPct = null, color = '') {
   return `<div class="kpi"><span class="k-label">${label}</span><span class="k-value"${color ? ` style="color:${color};"` : ''}>${value}</span>${barPct != null ? `<div class="k-bar"><div style="width:${Math.max(0, Math.min(100, barPct))}%;"></div></div>` : ''}${note ? `<span class="k-note">${note}</span>` : ''}</div>`;
 }
@@ -495,27 +488,10 @@ async function renderAdminDashboard(container) {
   let dutyMissingCount = 0;
   let dutyTodayTotal = 0;
   if (dayKey) {
-    const [{ data: fixed }, { data: weekly }, { data: attendance }] = await Promise.all([
-      readScopedBySchool(scoped => {
-        let q = sb.from('duty_roster').select('teacher_profile_id, duty_type_id').eq('kind', 'fixed').eq('day_of_week', dayKey);
-        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-        return q;
-      }),
-      readScopedBySchool(scoped => {
-        let q = sb.from('duty_roster').select('teacher_profile_id, duty_type_id').eq('kind', 'weekly').eq('day_of_week', dayKey).eq('week_start_date', thisWeekSunday());
-        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-        return q;
-      }),
-      readScopedBySchool(scoped => {
-        let q = sb.from('duty_attendance').select('teacher_profile_id, duty_type_id').eq('duty_date', dateStr);
-        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-        return q;
-      }),
-    ]);
-    const todayEntries = [...(fixed || []), ...(weekly || [])];
-    dutyTodayTotal = todayEntries.length;
-    const recordedSet = new Set((attendance || []).map(a => a.teacher_profile_id + '_' + a.duty_type_id));
-    dutyMissingCount = todayEntries.filter(e => !recordedSet.has(e.teacher_profile_id + '_' + e.duty_type_id)).length;
+    const { todayDutySummary } = await import('./duty-board.js?v=' + ASSET_VERSION);
+    const sm = await todayDutySummary(dayKey);
+    dutyTodayTotal = sm.total;
+    dutyMissingCount = sm.missing;
   }
 
   const unlinkedCount = (employeesCount || 0) - (linkedCount || 0);
@@ -797,15 +773,10 @@ async function renderCommandDashboard(container) {
 
   let dutyTotal = 0, dutyMissing = 0;
   if (dayKey) {
-    const [{ data: fixed }, { data: weekly }, { data: att }] = await Promise.all([
-      scoped('duty_roster', 'teacher_profile_id, duty_type_id', q => q.eq('kind', 'fixed').eq('day_of_week', dayKey)),
-      scoped('duty_roster', 'teacher_profile_id, duty_type_id', q => q.eq('kind', 'weekly').eq('day_of_week', dayKey).eq('week_start_date', thisWeekSunday())),
-      scoped('duty_attendance', 'teacher_profile_id, duty_type_id', q => q.eq('duty_date', dateStr)),
-    ]);
-    const entries = [...(fixed || []), ...(weekly || [])];
-    const rec = new Set((att || []).map(a => a.teacher_profile_id + '_' + a.duty_type_id));
-    dutyTotal = entries.length;
-    dutyMissing = entries.filter(e => !rec.has(e.teacher_profile_id + '_' + e.duty_type_id)).length;
+    const { todayDutySummary } = await import('./duty-board.js?v=' + ASSET_VERSION);
+    const sm = await todayDutySummary(dayKey);
+    dutyTotal = sm.total;
+    dutyMissing = sm.missing;
     if (dutyMissing > 0) { any = true; list.appendChild(attentionItem('duty', `${dutyMissing} من مناوبي اليوم بدون تسجيل حضور`, { level: 'mid', action: 'تسجيل' })); }
   }
   if (!any) list.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">كل شي محدّث، ما فيه شي يحتاج قرارك حاليًا.</div>';

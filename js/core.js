@@ -93,7 +93,7 @@ export const tiles = [
   { key: 'notes',  icon: icons.notes,  title: 'متابعة أداء الموظفين', desc: 'ملاحظات ومؤشرات وتقييم',       roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
   { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
   { key: 'perms',  icon: icons.perms,  title: 'إدارة الصلاحيات',     desc: 'إضافة مستخدمين وأدوار',        roles: ['admin'], color: 'diamond-navy', group: 'admin' },
-  { key: 'duty',   icon: icons.duty,   title: 'المناوبات اليومية',   desc: 'المناوبون وتسجيل الحضور',      roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
+  { key: 'duty',   icon: icons.duty,   title: 'المناوبات',   desc: 'توزيع المناوبات الأسبوعي والحضور',      roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
   { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
   { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students' },
   { key: 'exam-reports', icon: icons.examreports, title: 'تقارير الاختبارات', desc: 'تحليل نتائج الاختبارات وبنودها', roles: ['admin','deputy','teacher'], color: 'diamond-purple', group: 'students' },
@@ -263,7 +263,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-08a';
+export const ASSET_VERSION = '2026-10-08b';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -379,7 +379,7 @@ async function enterSchool(schoolId, school) {
   document.getElementById('school-picker-screen').classList.add('hidden');
   await Promise.all([loadAcademicCalendar(), loadSchoolBrand()]);
   finishShowingDashboard(school ? school.name : null);
-  const { renderMyDutyBanner } = await import('./duty-roster.js');
+  const { renderMyDutyBanner } = await import('./duty-board.js?v=' + ASSET_VERSION);
   renderMyDutyBanner();
 }
 
@@ -451,7 +451,7 @@ export async function loadProfileAndShowDashboard(userId) {
 
   await Promise.all([loadAcademicCalendar(), loadSchoolBrand()]);
   finishShowingDashboard(profile.schools ? profile.schools.name : null);
-  const { renderMyDutyBanner } = await import('./duty-roster.js');
+  const { renderMyDutyBanner } = await import('./duty-board.js?v=' + ASSET_VERSION);
   renderMyDutyBanner();
 }
 
@@ -813,8 +813,8 @@ export async function openTile(key, title, sub = null) {
     loadOpPlanModule();
   } else if (key === 'duty') {
     document.getElementById('duty-module').classList.remove('hidden');
-    const { loadDutyRosterModule } = await import('./duty-roster.js');
-    loadDutyRosterModule();
+    const { loadDutyBoardModule } = await import('./duty-board.js?v=' + ASSET_VERSION);
+    loadDutyBoardModule();
   } else if (key === 'exams') {
     document.getElementById('exams-module').classList.remove('hidden');
     const { loadExamsModule } = await import('./exams.js');
@@ -890,7 +890,7 @@ export async function backToTiles() {
   document.getElementById('module-header').classList.add('hidden');
   document.getElementById('tiles-view').classList.remove('hidden');
   renderDashboard();
-  const { renderMyDutyBanner } = await import('./duty-roster.js');
+  const { renderMyDutyBanner } = await import('./duty-board.js?v=' + ASSET_VERSION);
   renderMyDutyBanner();
 }
 document.getElementById('back-to-tiles').addEventListener('click', backToTiles);
