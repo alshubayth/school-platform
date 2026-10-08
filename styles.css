@@ -2507,3 +2507,10 @@ body.omr-noscroll{ overflow:hidden; }
   .db-slot-count{ margin-inline-start:0; }
 }
 @media (prefers-reduced-motion:reduce){ .db-sheet,.db-back,.db-toast,.db-cell{ transition:none; } }
+/* المناوبة داخل «جدولك اليوم» */
+.ps-duty{ background:#FDF3E7; border-inline-start:3px solid #E07A34; }
+.ps-duty .ps-txt small{ color:var(--slate); font-weight:400; }
+.ps-duty-ic{ margin-inline-end:5px; }
+.ps-duty.ps-now{ background:#FDEBD6; border-color:#E07A34; box-shadow:0 2px 8px rgba(224,122,52,.2); }
+.ps-duty.ps-now .ps-time{ color:#A4501A; }
+.ps-duty .ps-tag.now{ background:#E07A34; }

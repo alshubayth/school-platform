@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodStatus, periodTime, ASSET_VERSION } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodTime, ASSET_VERSION } from './core.js';
 
 // أسبوع المتابعة بالرئيسية = الأسبوع القادم (اللي يُفترض المعلمون يدخلون خطته خلال هذا الأسبوع)
 const planWeek = () => Math.min(40, academicWeekInfo().next);
@@ -160,31 +160,47 @@ async function loadMyTodayScheduleLines(dayKey, dateStr) {
 
 async function renderMyScheduleWidget(container, dayKey, dateStr) {
   if (!dayKey) return;
-  const lines = await loadMyTodayScheduleLines(dayKey, dateStr);
-  if (lines === null) return; // ما له حصص بالجدول الدراسي - ما نعرض الودجت
+  const [lessons, duties] = await Promise.all([
+    loadMyTodayScheduleLines(dayKey, dateStr),
+    import('./duty-board.js?v=' + ASSET_VERSION).then(m => m.myDutiesToday()).catch(() => []),
+  ]);
+  if (lessons === null && !duties.length) return; // ما له حصص ولا مناوبات - ما نعرض الودجت
   const wrap = document.getElementById('dash-my-schedule');
   if (!wrap) return;
   await loadPeriodTimes();
   const isToday = dateStr === todayInfo().dateStr;
+  // الحصص والمناوبات بقائمة وحدة مرتبة بالوقت
+  const lines = [
+    ...(lessons || []).map(l => ({ ...l, t: periodTime(l.grade, l.period) })),
+    ...duties.map(d => ({ duty: true, t: d.range, html: `<span class="ps-duty-ic" aria-hidden="true">⏱</span>مناوبة: <strong>${esc(d.post)}</strong> <small>(${esc(d.title)})</small>` })),
+  ].sort((a, b) => (a.t ? a.t.start : 9999) - (b.t ? b.t.start : 9999) || (a.duty ? 1 : 0) - (b.duty ? 1 : 0));
+  const statusOf = t => {
+    if (!t) return { status: 'later' };
+    const d = new Date(); const now = d.getHours() * 60 + d.getMinutes();
+    if (now >= t.start && now < t.end) return { status: 'now', left: t.end - now };
+    if (now >= t.end) return { status: 'past' };
+    return { status: t.start - now <= 15 ? 'soon' : 'later', inMin: t.start - now };
+  };
   const draw = () => {
     const bodyHtml = lines.length === 0
       ? '<div style="font-size:13.5px; color:var(--slate);">ما عندك حصص اليوم</div>'
       : lines.map(l => {
-        const st = isToday && !l.lost ? periodStatus(l.grade, l.period) : { status: 'later', t: periodTime(l.grade, l.period) };
+        const st = isToday && !l.lost ? statusOf(l.t) : { status: 'later' };
         const tag = st.status === 'now' ? `<span class="ps-tag now">الآن · باقي ${st.left} د</span>`
           : st.status === 'soon' ? `<span class="ps-tag soon">بعد ${st.inMin} د</span>` : '';
-        return `<div class="ps-line ps-${st.status}${l.highlighted ? ' ps-hl' : ''}"><span class="ps-time">${st.t ? st.t.label : ''}</span><span class="ps-txt">${l.html}</span>${tag}</div>`;
+        return `<div class="ps-line ps-${st.status}${l.highlighted ? ' ps-hl' : ''}${l.duty ? ' ps-duty' : ''}"><span class="ps-time">${l.t ? l.t.label : ''}</span><span class="ps-txt">${l.html}</span>${tag}</div>`;
       }).join('');
     wrap.innerHTML = `<div class="home-card"><h3>جدولك اليوم</h3>${bodyHtml}</div>`;
   };
   draw();
-  // تحديث التظليل كل دقيقة (الحصة الجارية تنتقل تلقائيًا)
+  // تحديث التظليل كل دقيقة (الحصة أو المناوبة الجارية تنتقل تلقائيًا)
   clearInterval(renderMyScheduleWidget.timer);
   if (isToday && lines.length) renderMyScheduleWidget.timer = setInterval(() => { if (document.body.contains(wrap)) draw(); else clearInterval(renderMyScheduleWidget.timer); }, 60000);
   const hero = document.getElementById('day-hero-count');
   if (hero) {
-    const n = lines.length;
-    hero.textContent = n ? `عندك ${n} ${n === 1 ? 'حصة' : n === 2 ? 'حصتين' : n <= 10 ? 'حصص' : 'حصة'} اليوم` : 'ما عندك حصص اليوم';
+    const n = (lessons || []).length, m = duties.length;
+    const dutyTxt = m ? ` و${m === 1 ? 'مناوبة' : m === 2 ? 'مناوبتين' : m + ' مناوبات'}` : '';
+    hero.textContent = n ? `عندك ${n} ${n === 1 ? 'حصة' : n === 2 ? 'حصتين' : n <= 10 ? 'حصص' : 'حصة'}${dutyTxt} اليوم` : (m ? `عندك ${m === 1 ? 'مناوبة' : m === 2 ? 'مناوبتين' : m + ' مناوبات'} اليوم` : 'ما عندك حصص اليوم');
   }
 }
 
