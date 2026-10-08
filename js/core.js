@@ -263,7 +263,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-07q';
+export const ASSET_VERSION = '2026-10-08a';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -489,6 +489,48 @@ export async function writeWithSchool(factory) {
  * الأسبوع الأول يبدأ يوم الأحد المحدد (start)، وأسابيع الإجازة (breaks: تواريخ آحادها) ما تنحسب.
  * يُحفظ بجدول school_settings (المفتاح academic_calendar)؛ لو الجدول أو الإعداد غير موجود نستخدم
  * الافتراضي: بداية العام الدراسي ١٤٤٨هـ يوم الأحد ٢٣ أغسطس ٢٠٢٦. */
+/* ===== أوقات الحصص (اليوم الدراسي) =====
+ * ١-٣ من 7:30 (45 دقيقة)، فسحة 9:45-10:15، ٤-٥، ثم الصلاة: أول وثاني بعد الخامسة (11:45-12:15)،
+ * وثالث بعد السادسة (12:30-1:00)، والسابعة للكل 1:00-1:45. المدرسة تقدر تغيّرها بـ school_settings (period_times). */
+const DEFAULT_PERIOD_TIMES = {
+  default: ['07:30-08:15', '08:15-09:00', '09:00-09:45', '10:15-11:00', '11:00-11:45', '12:15-13:00', '13:00-13:45'],
+  third_intermediate: ['07:30-08:15', '08:15-09:00', '09:00-09:45', '10:15-11:00', '11:00-11:45', '11:45-12:30', '13:00-13:45'],
+};
+let periodTimesCfg = DEFAULT_PERIOD_TIMES;
+let periodTimesLoaded = false;
+export async function loadPeriodTimes() {
+  if (periodTimesLoaded) return periodTimesCfg;
+  periodTimesLoaded = true;
+  try {
+    const { data } = await readScopedBySchool(sc => {
+      let q = sb.from('school_settings').select('value').eq('key', 'period_times');
+      if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.maybeSingle();
+    });
+    if (data && data.value && Array.isArray(data.value.default)) periodTimesCfg = data.value;
+  } catch (e) { /* الافتراضي */ }
+  return periodTimesCfg;
+}
+const toMin = t => { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0); };
+// وقت الحصة: { start, end } بالدقائق من منتصف الليل، أو null
+export function periodTime(grade, period) {
+  const list = (grade && periodTimesCfg[grade]) || periodTimesCfg.default || [];
+  const s = list[period - 1];
+  if (!s) return null;
+  const [a, b] = s.split('-');
+  return { start: toMin(a), end: toMin(b), label: '\u2066' + fmtClock(toMin(a)) + ' - ' + fmtClock(toMin(b)) + '\u2069' };
+}
+export function fmtClock(min) { const h = Math.floor(min / 60), m = min % 60; return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}`; }
+// حالة الحصة الآن: now (جارية) | soon (التالية خلال ١٥ دقيقة) | past | later
+export function periodStatus(grade, period, date = new Date()) {
+  const t = periodTime(grade, period);
+  if (!t) return { status: 'later', t: null };
+  const now = date.getHours() * 60 + date.getMinutes();
+  if (now >= t.start && now < t.end) return { status: 'now', t, left: t.end - now };
+  if (now >= t.end) return { status: 'past', t };
+  return { status: t.start - now <= 15 ? 'soon' : 'later', t, inMin: t.start - now };
+}
+
 export const DEFAULT_ACADEMIC_START = '2026-08-23';
 // noPlanWeeks: أسابيع دراسة ما فيها خطة أسبوعية (مثل الأسبوع الأول) - ما تنحسب كخطط ناقصة
 export let academicCalendar = { start: DEFAULT_ACADEMIC_START, breaks: [], noPlanWeeks: [1], saved: false };

@@ -2313,3 +2313,19 @@ body.omr-noscroll{ overflow:hidden; }
 .as-ks{ display:inline-flex; align-items:center; justify-content:center; min-width:38px; height:32px; padding:0 10px; border:1.5px solid var(--border); border-radius:9px; cursor:pointer; font-size:13px; }
 .as-ks input{ display:none; }
 .as-ks.on{ background:var(--meadow); border-color:var(--meadow); color:#fff; }
+
+/* جدولك اليوم: تظليل الحصة الجارية */
+.ps-line{ display:flex; align-items:center; gap:10px; padding:9px 12px; border-radius:10px; background:var(--sand, #F6F3EC); font-size:13.5px; margin-top:6px; border:1.5px solid transparent; transition:background .3s, opacity .3s; }
+.ps-time{ direction:ltr; unicode-bidi:isolate; font-size:11.5px; color:var(--slate, #5B6472); min-width:78px; text-align:center; font-variant-numeric:tabular-nums; flex-shrink:0; }
+.ps-txt{ flex:1; min-width:0; }
+.ps-now{ background:#E3F5EA; border-color:#2E8B57; font-weight:700; box-shadow:0 2px 8px rgba(46,139,87,.18); }
+.ps-now .ps-time{ color:#1F6A3C; font-weight:700; }
+.ps-soon{ background:#FDF6E3; border-color:#E8D29A; }
+.ps-past{ opacity:.5; }
+.ps-hl{ background:#FDEDEC; color:#9B2F28; }
+.ps-hl.ps-now{ border-color:#9B2F28; }
+.ps-tag{ font-size:11.5px; padding:3px 9px; border-radius:999px; white-space:nowrap; flex-shrink:0; }
+.ps-tag.now{ background:#2E8B57; color:#fff; animation:psPulse 2s ease-in-out infinite; }
+.ps-tag.soon{ background:#F2DFA7; color:#7A5410; }
+@keyframes psPulse{ 0%,100%{ opacity:1; } 50%{ opacity:.7; } }
+@media (max-width:520px){ .ps-line{ flex-wrap:wrap; } .ps-time{ min-width:0; } }

@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodStatus, periodTime } from './core.js';
 
 // أسبوع المتابعة بالرئيسية = الأسبوع القادم (اللي يُفترض المعلمون يدخلون خطته خلال هذا الأسبوع)
 const planWeek = () => Math.min(40, academicWeekInfo().next);
@@ -137,20 +137,20 @@ async function loadMyTodayScheduleLines(dayKey, dateStr) {
       && normalizeArText(e.subject) === normalizeArText(ls.subject) && e.period !== ls.period && !consumed.has(e.period));
     if (moved) {
       consumed.add(moved.period);
-      lines.push({ sortKey: Math.min(ls.period, moved.period), highlighted: true,
+      lines.push({ sortKey: Math.min(ls.period, moved.period), highlighted: true, grade: ls.grade, period: moved.period,
         html: `الحصة ${ls.period} — ${esc(classLabel(ls.grade, ls.section))} — ${esc(ls.subject || '-')}: <strong>تبديل إلى الحصة ${moved.period}</strong>` });
     } else {
-      lines.push({ sortKey: ls.period, highlighted: true,
+      lines.push({ sortKey: ls.period, highlighted: true, grade: ls.grade, period: ls.period, lost: true,
         html: `الحصة ${ls.period} — ${esc(classLabel(ls.grade, ls.section))} — ${esc(ls.subject || '-')}: يدرّسها الآن <strong>${esc(ls.newTeacher)}</strong> بدلاً عنك` });
     }
   });
   myEffective.forEach(e => {
     if (consumed.has(e.period)) return;
     if (e.isChange) {
-      lines.push({ sortKey: e.period, highlighted: true,
+      lines.push({ sortKey: e.period, highlighted: true, grade: e.grade, period: e.period,
         html: `الحصة ${e.period} — ${esc(classLabel(e.grade, e.section))}: <strong>${esc(e.subject || 'أشغال')}</strong> — بديل${e.note ? ' (' + esc(e.note) + ')' : ''}` });
     } else {
-      lines.push({ sortKey: e.period, highlighted: false,
+      lines.push({ sortKey: e.period, highlighted: false, grade: e.grade, period: e.period,
         html: `الحصة ${e.period} — ${esc(classLabel(e.grade, e.section))} — ${esc(e.subject || '-')}` });
     }
   });
@@ -164,10 +164,23 @@ async function renderMyScheduleWidget(container, dayKey, dateStr) {
   if (lines === null) return; // ما له حصص بالجدول الدراسي - ما نعرض الودجت
   const wrap = document.getElementById('dash-my-schedule');
   if (!wrap) return;
-  const bodyHtml = lines.length === 0
-    ? '<div style="font-size:13.5px; color:var(--slate);">ما عندك حصص اليوم</div>'
-    : lines.map(l => `<div style="padding:10px 12px; border-radius:10px; font-size:13.5px; ${l.highlighted ? 'background:#FDEDEC; color:#9B2F28; font-weight:600;' : 'background:var(--sand); color:var(--ink);'}">${l.html}</div>`).join('');
-  wrap.innerHTML = `<div class="home-card"><h3>جدولك اليوم</h3>${bodyHtml}</div>`;
+  await loadPeriodTimes();
+  const isToday = dateStr === todayInfo().dateStr;
+  const draw = () => {
+    const bodyHtml = lines.length === 0
+      ? '<div style="font-size:13.5px; color:var(--slate);">ما عندك حصص اليوم</div>'
+      : lines.map(l => {
+        const st = isToday && !l.lost ? periodStatus(l.grade, l.period) : { status: 'later', t: periodTime(l.grade, l.period) };
+        const tag = st.status === 'now' ? `<span class="ps-tag now">الآن · باقي ${st.left} د</span>`
+          : st.status === 'soon' ? `<span class="ps-tag soon">بعد ${st.inMin} د</span>` : '';
+        return `<div class="ps-line ps-${st.status}${l.highlighted ? ' ps-hl' : ''}"><span class="ps-time">${st.t ? st.t.label : ''}</span><span class="ps-txt">${l.html}</span>${tag}</div>`;
+      }).join('');
+    wrap.innerHTML = `<div class="home-card"><h3>جدولك اليوم</h3>${bodyHtml}</div>`;
+  };
+  draw();
+  // تحديث التظليل كل دقيقة (الحصة الجارية تنتقل تلقائيًا)
+  clearInterval(renderMyScheduleWidget.timer);
+  if (isToday && lines.length) renderMyScheduleWidget.timer = setInterval(() => { if (document.body.contains(wrap)) draw(); else clearInterval(renderMyScheduleWidget.timer); }, 60000);
   const hero = document.getElementById('day-hero-count');
   if (hero) {
     const n = lines.length;
@@ -369,7 +382,7 @@ function todayInfo() {
   const jsDay = now.getDay();
   const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday'];
   const dayKey = jsDay <= 4 ? dayKeys[jsDay] : null;
-  const dateStr = now.toISOString().slice(0, 10);
+  const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
   return { dayKey, dateStr };
 }
 
