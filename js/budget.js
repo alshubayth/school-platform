@@ -738,7 +738,7 @@ async function loadExpensesList(canManage) {
   }
 
   container.innerHTML = '';
-  // شريط جهات الصرف (الكل/المقصف/المدور/السلفة/أخرى) + تجميع الطلبات تحت كل بند
+  // شريط جهات الصرف (الكل/المقصف/المدور/السلفة/أخرى)
   const srcKey = r => (EXP_SOURCES.includes(r.funding_source) ? r.funding_source : 'أخرى');
   const counts = {}; rows.forEach(r => { counts[srcKey(r)] = (counts[srcKey(r)] || 0) + 1; });
   if (expSourceFilter !== 'all' && !counts[expSourceFilter]) expSourceFilter = 'all';
@@ -749,26 +749,11 @@ async function loadExpensesList(canManage) {
   bar.querySelectorAll('.bud-src-chip').forEach(b => b.addEventListener('click', () => { expSourceFilter = b.dataset.src; loadExpensesList(canManage); }));
   container.appendChild(bar);
   const shown = rows.filter(r => expSourceFilter === 'all' || srcKey(r) === expSourceFilter);
-  const groups = new Map();
-  shown.forEach(r => {
-    const k = r.budget_categories ? r.budget_categories.name : 'بدون بند';
-    if (!groups.has(k)) groups.set(k, { rows: [], total: 0, pending: 0 });
-    const g = groups.get(k); g.rows.push(r);
-    const t = (r.budget_expense_items || []).reduce((s2, it) => s2 + Number(it.amount || 0), 0);
-    if (r.status !== 'rejected') g.total += t;
-    if (r.status === 'pending') g.pending++;
-  });
-  const groupBodies = new Map();
-  [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ar')).forEach(([name, g]) => {
-    const det = document.createElement('details');
-    det.className = 'bud-cat-group';
-    det.open = true;
-    det.innerHTML = `<summary><span class="bud-cat-name">${esc(name)}</span><span class="bud-cat-meta">${g.rows.length} ${g.rows.length === 1 ? 'طلب' : g.rows.length === 2 ? 'طلبين' : g.rows.length <= 10 ? 'طلبات' : 'طلب'}${g.pending ? ` · <b class="bud-cat-pend">${g.pending} بانتظار الاعتماد</b>` : ''}</span><span class="bud-cat-total">${fmtAmount(g.total)}</span></summary><div class="bud-cat-body"></div>`;
-    container.appendChild(det);
-    groupBodies.set(name, det.querySelector('.bud-cat-body'));
-    g.rows.sort((a, b) => (seriesOf(a.funding_source) === seriesOf(b.funding_source) ? 0 : seriesOf(a.funding_source) === 'canteen' ? -1 : 1) || (Number(b.statement_number) || 0) - (Number(a.statement_number) || 0));
-  });
-  [...groups.values()].flatMap(g => g.rows).forEach(r => {
+  // متسلسلة من 1 وطالع داخل كل جهة صرف (بالكل: المقصف أول ثم باقي الجهات)
+  const ordered = shown.slice().sort((x, y) =>
+    (seriesOf(x.funding_source) === seriesOf(y.funding_source) ? 0 : seriesOf(x.funding_source) === 'canteen' ? -1 : 1)
+    || (Number(x.statement_number) || 0) - (Number(y.statement_number) || 0));
+  ordered.forEach(r => {
     const items = (r.budget_expense_items || []).slice().sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0));
     const total = items.reduce((s, it) => s + Number(it.amount || 0), 0);
     const catName = r.budget_categories ? r.budget_categories.name : 'بدون بند';
@@ -841,7 +826,7 @@ async function loadExpensesList(canManage) {
       actions.appendChild(deleteBtn);
     }
     card.appendChild(actions);
-    groupBodies.get(catName).appendChild(card);
+    container.appendChild(card);
   });
 }
 
