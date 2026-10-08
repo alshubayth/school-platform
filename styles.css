@@ -2525,3 +2525,18 @@ body.omr-noscroll{ overflow:hidden; }
 .bud-series.canteen{ background:#FDEFE3; color:#A4501A; }
 .bud-series.main{ background:var(--meadow-light); color:var(--meadow); }
 .budget-editing{ outline:2px solid var(--gold); outline-offset:4px; }
+/* الميزانية: عدّاد الطلبات بانتظار الاعتماد */
+.bud-pend{ background:var(--white); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin-bottom:14px; box-shadow:var(--shadow-sm); }
+.bud-pend-head{ display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.bud-pend-head b{ font-size:14.5px; color:var(--ink); }
+.bud-pend-head span{ font-size:13px; color:var(--slate); }
+.bud-pend-head strong{ color:var(--ink); font-size:15px; }
+.bud-pend-grid{ display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+.bud-pend-item{ border-radius:12px; padding:10px 12px; display:flex; flex-direction:column; gap:2px; border-inline-start:4px solid var(--c); background:var(--bg); }
+.bud-pend-item.canteen{ --c:#E07A34; --bg:#FDEFE3; }
+.bud-pend-item.carry{ --c:#2455A4; --bg:#EAF1FC; }
+.bud-pend-item.advance{ --c:#2E9155; --bg:#E7F5EC; }
+.bud-pend-item.other{ --c:#6249A6; --bg:#EFEBFB; }
+.bud-pend-label{ font-size:12.5px; color:var(--c); font-weight:700; }
+.bud-pend-amt{ font-size:19px; font-weight:800; color:var(--ink); font-variant-numeric:tabular-nums; }
+.bud-pend-n{ font-size:11.5px; color:var(--slate); }

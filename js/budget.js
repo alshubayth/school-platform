@@ -727,6 +727,7 @@ async function loadExpensesList(canManage) {
   });
   if (error) console.error('budget_expense_requests fetch error:', error);
   const rows = data || [];
+  renderPendingSummary(rows);
 
   if (rows.length === 0) {
     container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه طلبات صرف بعد</p></div>';
@@ -810,6 +811,29 @@ async function loadExpensesList(canManage) {
     card.appendChild(actions);
     container.appendChild(card);
   });
+}
+
+// عدّاد فوق القائمة: مجموع الطلبات اللي بانتظار الاعتماد لكل جهة صرف
+function renderPendingSummary(rows) {
+  const box = document.getElementById('budget-exp-pending-summary');
+  if (!box) return;
+  const ORDER = ['المقصف', 'مدور سابق', 'السلفة', 'أخرى'];
+  const sums = {};
+  rows.filter(r => r.status === 'pending').forEach(r => {
+    const k = ORDER.includes(r.funding_source) ? r.funding_source : 'أخرى';
+    const total = (r.budget_expense_items || []).reduce((s, it) => s + Number(it.amount || 0), 0);
+    sums[k] = sums[k] || { n: 0, total: 0 };
+    sums[k].n++; sums[k].total += total;
+  });
+  const keys = ORDER.filter(k => sums[k]);
+  if (!keys.length) { box.innerHTML = ''; return; }
+  const all = keys.reduce((s, k) => s + sums[k].total, 0);
+  const cnt = keys.reduce((s, k) => s + sums[k].n, 0);
+  const tone = { 'المقصف': 'canteen', 'مدور سابق': 'carry', 'السلفة': 'advance', 'أخرى': 'other' };
+  box.innerHTML = `<div class="bud-pend">
+    <div class="bud-pend-head"><b>بانتظار الاعتماد</b><span>${cnt} ${cnt === 1 ? 'طلب' : cnt === 2 ? 'طلبين' : cnt <= 10 ? 'طلبات' : 'طلب'} · الإجمالي <strong>${fmtAmount(all)}</strong></span></div>
+    <div class="bud-pend-grid">${keys.map(k => `<div class="bud-pend-item ${tone[k]}"><span class="bud-pend-label">${esc(k)}</span><span class="bud-pend-amt">${fmtAmount(sums[k].total)}</span><span class="bud-pend-n">${sums[k].n} ${sums[k].n === 1 ? 'طلب' : sums[k].n === 2 ? 'طلبين' : sums[k].n <= 10 ? 'طلبات' : 'طلب'}</span></div>`).join('')}</div>
+  </div>`;
 }
 
 // بعد حذف بيان ما انعتمد: البيانات اللي بعده بنفس التسلسل ترجع رقم لورا (لو كلها بانتظار الاعتماد)
