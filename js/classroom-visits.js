@@ -272,6 +272,7 @@ async function renderView() {
 /* ================= قائمة الزيارات: مجمّعة حسب المعلم ================= */
 let cvFilter = 'all';     // all | draft | unvisited
 let cvSearch = '';
+let cvSpec = '';          // فلتر التخصص ('' = الكل)
 let cvOpenTeachers = new Set();
 
 // ملخص تقديرات زيارة: كم مؤشر مميز / حقق الهدف / فرصة تحسين
@@ -308,6 +309,12 @@ async function renderList(container) {
     staff && !cvTeachers.length ? loadTeachersList() : Promise.resolve(),
   ]);
   const visits = data || [];
+  // تخصص كل معلم: من «تخصصات المعلمين» (teacher_subjects)، ولو ما له تخصص مسجل ناخذه من زياراته
+  const specMap = new Map(); // teacherId -> Set(أسماء المواد)
+  if (staff) {
+    const { data: ts } = await sb.from('teacher_subjects').select('teacher_id, subjects(name)');
+    (ts || []).forEach(r => { const n = r.subjects && r.subjects.name; if (!n || !r.teacher_id) return; if (!specMap.has(r.teacher_id)) specMap.set(r.teacher_id, new Set()); specMap.get(r.teacher_id).add(n); });
+  }
 
   // المعلم: نسجّل إنه اطّلع على زياراته المنشورة (لو عمود teacher_seen_at موجود)
   if (!staff) {
@@ -331,6 +338,22 @@ async function renderList(container) {
   const visitedIds = new Set(yearVisits.map(v => v.teacher_profile_id).filter(Boolean));
   const visitedNames = new Set(yearVisits.map(v => normalizeArName(v.teacher_name)).filter(Boolean));
   const unvisited = staff ? cvTeachers.filter(t => !visitedIds.has(t.id) && !visitedNames.has(normalizeArName(t.full_name))) : [];
+  const idByName = new Map(cvTeachers.map(t => [normalizeArName(t.full_name), t.id]));
+  const teacherIdOf = t => (t.key && !String(t.key).startsWith('name:') ? t.key : idByName.get(normalizeArName(t.name)) || null);
+  const specsOfTeacher = (id, visitsList) => {
+    const set = new Set(id && specMap.has(id) ? specMap.get(id) : []);
+    if (!set.size) (visitsList || []).forEach(v => { const x = (v.specialization || v.subject_name || '').trim(); if (x) set.add(x); });
+    return set;
+  };
+  teachers.forEach(t => { t.specs = specsOfTeacher(teacherIdOf(t), t.visits); });
+  unvisited.forEach(t => { t.specs = specsOfTeacher(t.id, []); });
+  // قائمة التخصصات مع عدد المعلمين اللي انزاروا من أصل الكل
+  const specStats = new Map();
+  const addStat = (spec, visited) => { if (!specStats.has(spec)) specStats.set(spec, { total: 0, visited: 0 }); const x = specStats.get(spec); x.total++; if (visited) x.visited++; };
+  teachers.forEach(t => t.specs.forEach(sp => addStat(sp, true)));
+  unvisited.forEach(t => t.specs.forEach(sp => addStat(sp, false)));
+  const specNames = [...specStats.keys()].sort((a, b) => a.localeCompare(b, 'ar'));
+  if (cvSpec && !specStats.has(cvSpec)) cvSpec = '';
   const monthStart = todayIso().slice(0, 8) + '01';
   const thisMonth = visits.filter(v => (v.visit_date || '') >= monthStart).length;
   const draftsAll = visits.filter(v => !v.published).length;
@@ -359,8 +382,13 @@ async function renderList(container) {
           <button type="button" data-f="draft">فيها مسودات <span class="tr-cnt">${teachers.filter(t => t.drafts).length || ''}</span></button>
           <button type="button" data-f="unvisited">ما انزاروا <span class="tr-cnt">${unvisited.length || ''}</span></button>
         </div>
+        <select id="cv-spec" class="cv-spec" aria-label="فلتر التخصص">
+          <option value="">كل التخصصات</option>
+          ${specNames.map(n => `<option value="${esc(n)}"${cvSpec === n ? ' selected' : ''}>${esc(n)} (${specStats.get(n).visited}/${specStats.get(n).total})</option>`).join('')}
+        </select>
         <input type="search" id="cv-search" class="cv-search" placeholder="ابحث باسم المعلم" value="${esc(cvSearch)}" />
-      </div>`;
+      </div>
+      <div id="cv-spec-sum"></div>`;
   } else {
     html += `<div class="cv-toolbar"><h3 class="cv-mine-title">زياراتي الصفية</h3><div id="cv-dl-status" class="cv-dl-status"></div></div>`;
   }
@@ -406,13 +434,24 @@ async function renderList(container) {
       wireRows();
       return;
     }
+    const specOk = t => !cvSpec || (t.specs && t.specs.has(cvSpec));
+    const sumEl = document.getElementById('cv-spec-sum');
+    if (sumEl) {
+      if (!cvSpec) sumEl.innerHTML = '';
+      else {
+        const st = specStats.get(cvSpec) || { total: 0, visited: 0 };
+        const missing = unvisited.filter(specOk);
+        const nVis = teachers.filter(specOk).reduce((n, t) => n + t.visits.length, 0);
+        sumEl.innerHTML = `<div class="cv-spec-sum"><div class="cvs-head"><b>${esc(cvSpec)}</b><span>انزار <strong>${st.visited}</strong> من ${st.total} ${st.total === 1 ? 'معلم' : 'معلمين'} · ${nVis} ${nVis === 1 ? 'زيارة' : nVis === 2 ? 'زيارتين' : 'زيارات'}</span>${st.total ? `<i class="cvs-bar"><i style="width:${Math.round(st.visited / st.total * 100)}%"></i></i>` : ''}</div>${missing.length ? `<div class="cvs-miss"><span>ما انزاروا:</span>${missing.map(t => `<em>${esc(t.full_name)}</em>`).join('')}</div>` : '<div class="cvs-miss done">كل معلمين هذا التخصص انزاروا ✓</div>'}</div>`;
+      }
+    }
     if (cvFilter === 'unvisited') {
-      const list = unvisited.filter(t => match(t.full_name));
+      const list = unvisited.filter(t => match(t.full_name) && specOk(t));
       board.innerHTML = list.length ? `<div class="cv-unvisited">${list.map(t => `<div class="cvu-card"><span class="cvt-av">${esc(initialsOf(t.full_name))}</span><b>${esc(t.full_name)}</b><span>ما انزار من بداية العام</span></div>`).join('')}</div>`
         : `<div class="ex-empty"><b>${unvisited.length ? 'ما فيه نتائج' : 'كل المعلمين انزاروا من بداية العام'}</b></div>`;
       return;
     }
-    let list = teachers.filter(t => match(t.name));
+    let list = teachers.filter(t => match(t.name) && specOk(t));
     if (cvFilter === 'draft') list = list.filter(t => t.drafts);
     if (!list.length) {
       board.innerHTML = `<div class="ex-empty"><b>${visits.length ? 'ما فيه نتائج' : 'ما فيه زيارات مسجلة بعد'}</b>${visits.length ? '' : '<span>اضغط «+ زيارة صفية جديدة» وسجّل أول زيارة.</span>'}</div>`;
@@ -423,7 +462,7 @@ async function renderList(container) {
       return `<div class="cv-teacher ${open ? 'open' : ''}" data-key="${esc(t.key)}">
         <button type="button" class="cvt-head">
           <span class="cvt-av">${esc(initialsOf(t.name))}</span>
-          <span class="cvt-main"><b>${esc(t.name)}</b><span>${esc(t.subjects.join('، '))}${t.last ? ` · آخر زيارة ${daysAgo(t.last)}` : ''}</span></span>
+          <span class="cvt-main"><b>${esc(t.name)}</b><span>${esc((t.specs && t.specs.size ? [...t.specs] : t.subjects).join('، '))}${t.last ? ` · آخر زيارة ${daysAgo(t.last)}` : ''}</span></span>
           <span class="cvt-tiers"><i class="t-star">⭐ ${t.tiers.star}</i><i class="t-ok">✓ ${t.tiers.ok}</i><i class="t-imp">➔ ${t.tiers.imp}</i></span>
           ${t.drafts ? `<span class="cv-st draft">${t.drafts} مسودة</span>` : ''}
           <span class="cvt-count">${t.visits.length}<small>${t.visits.length === 1 ? 'زيارة' : t.visits.length === 2 ? 'زيارتين' : 'زيارات'}</small></span>
@@ -495,6 +534,8 @@ async function renderList(container) {
   document.querySelectorAll('#cv-filter button').forEach(b => b.addEventListener('click', () => { cvFilter = b.dataset.f; renderBoard(); }));
   const search = document.getElementById('cv-search');
   if (search) search.addEventListener('input', () => { cvSearch = search.value; renderBoard(); });
+  const specSel = document.getElementById('cv-spec');
+  if (specSel) specSel.addEventListener('change', () => { cvSpec = specSel.value; if (cvSpec) cvOpenTeachers = new Set(teachers.filter(t => t.specs.has(cvSpec)).map(t => t.key)); renderBoard(); });
 
   const newBtn = document.getElementById('cv-new-btn');
   if (newBtn) newBtn.addEventListener('click', () => { cvEditingVisit = null; cvView = 'form'; renderView(); });
