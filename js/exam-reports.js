@@ -462,6 +462,33 @@ document.querySelectorAll('.er-flow-step').forEach(b => b.addEventListener('clic
   else setMode('sheet');
 }));
 
+// يكمّل اسم الطالب وصفه وفصله من طلاب المنصة برقم الهوية (لو Remark ما لقاه بقاعدة بياناته)
+async function enrichFromPlatform(parsed) {
+  const ids = [...new Set(parsed.students.map(s => String(s.id || '').trim()).filter(Boolean))];
+  const found = new Map();
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const { data } = await readScopedBySchool(scoped => {
+      let q = sb.from('students').select('national_id, full_name, grade_level, class_section').in('national_id', chunk);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    });
+    (data || []).forEach(r => found.set(String(r.national_id).trim(), r));
+  }
+  let filled = 0; const unknown = [];
+  parsed.students.forEach(s => {
+    const r = found.get(String(s.id || '').trim());
+    if (!r) { if (!s.name) unknown.push(s.id || '—'); return; }
+    let changed = false;
+    if (!s.name && r.full_name) { s.name = r.full_name; changed = true; }
+    if (!s.grade && r.grade_level) { s.grade = gradeLabels[r.grade_level] || r.grade_level; changed = true; }
+    if (!s.section && r.class_section) { s.section = String(r.class_section); changed = true; }
+    if (changed) filled++;
+  });
+  if (!parsed.detected.grade) parsed.detected.grade = mostCommon(parsed.students.map(s => s.grade).filter(Boolean)) || '';
+  return { filled, unknown };
+}
+
 document.getElementById('er-analyze-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('er-analyze-error');
   errEl.style.display = 'none';
@@ -478,12 +505,15 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
       rows = rows.concat(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
     });
     parsedData = parseSheetRows(rows);
+    const enr = await enrichFromPlatform(parsedData);
 
     const keyNote = parsedData.detectedKeyRaw
       ? ' — لقيت صف نموذج جاهز بالملف وعبّيت الإجابات منه، راجعها/عدّلها بالأسفل'
       : ' — عبّي الإجابة الصحيحة لكل سؤال بالأسفل';
     document.getElementById('er-preview-summary').innerHTML =
-      `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`;
+      `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`
+      + (enr.filled ? `<br><span style="color:#1F6A3C;">✓ كمّلت بيانات ${enr.filled} ${enr.filled === 1 ? 'طالب' : 'طلاب'} (الاسم/الصف/الفصل) من طلاب المنصة برقم الهوية</span>` : '')
+      + (enr.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${enr.unknown.length} ${enr.unknown.length === 1 ? 'رقم هوية' : 'أرقام هوية'} مو موجودة بطلاب المنصة: ${enr.unknown.slice(0, 5).map(esc).join('، ')}${enr.unknown.length > 5 ? '...' : ''}</span>` : '');
     document.getElementById('er-title').value = '';
     document.getElementById('er-subject').value = parsedData.detected.subject || '';
     document.getElementById('er-grade').value = parsedData.detected.grade || '';
@@ -840,6 +870,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       rows = rows.concat(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
     });
     const newParsed = parseSheetRows(rows);
+    await enrichFromPlatform(newParsed);
 
     const { choiceCounts: oldChoiceCounts, reversedOrder = true } = currentReport.raw_data;
     if (newParsed.itemCount !== oldChoiceCounts.length) {
