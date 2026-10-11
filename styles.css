@@ -2571,3 +2571,42 @@ body.omr-noscroll{ overflow:hidden; }
 .cvs-miss{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:12.5px; color:#A4501A; }
 .cvs-miss em{ font-style:normal; background:#FDEFE3; color:#7A4A12; border-radius:999px; padding:3px 10px; }
 .cvs-miss.done{ color:var(--status-good); }
+/* بيانات الطلاب */
+.sd{ display:flex; flex-direction:column; gap:12px; }
+.sd-bar{ background:var(--white); border:1px solid var(--border); border-radius:var(--radius); padding:14px; display:flex; flex-direction:column; gap:12px; box-shadow:var(--shadow-sm); }
+.sd-search{ display:flex; align-items:center; gap:8px; border:1.5px solid var(--border); border-radius:12px; padding:0 12px; background:var(--sand); }
+.sd-search:focus-within{ border-color:var(--meadow); background:var(--white); }
+.sd-search svg{ color:var(--slate); flex-shrink:0; }
+.sd-search input{ border:0 !important; background:transparent !important; margin:0 !important; padding:12px 0 !important; font-size:16px; box-shadow:none !important; width:100%; outline:none; }
+.sd-scope{ display:flex; flex-wrap:wrap; align-items:center; gap:8px; font-size:12.5px; color:var(--slate); }
+.sd-chips{ display:flex; flex-wrap:wrap; gap:6px; }
+.sd-chips[hidden]{ display:none; }
+.sd-chip{ border:1px solid var(--border); background:var(--white); color:var(--ink); border-radius:999px; padding:7px 13px; font:inherit; font-size:13px; cursor:pointer; min-height:36px; }
+.sd-chip i{ font-style:normal; font-size:11.5px; color:var(--slate); margin-inline-start:2px; }
+.sd-chip.on{ background:var(--ink); border-color:var(--ink); color:#fff; }
+.sd-chip.on i{ color:rgba(255,255,255,.7); }
+.sd-chip.sm{ padding:5px 11px; font-size:12.5px; min-height:32px; }
+#sd-secs:not([hidden]){ width:100%; padding-top:8px; border-top:1px dashed var(--border); }
+.sd-count{ font-size:12.5px; color:var(--slate); padding:0 4px; }
+.sd-list{ display:flex; flex-direction:column; gap:6px; }
+.sd-row{ background:var(--white); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+.sd-row.open{ border-color:var(--meadow); box-shadow:0 0 0 2px var(--meadow-light); }
+.sd-head{ width:100%; display:flex; align-items:center; gap:12px; padding:10px 14px; background:transparent; border:0; font:inherit; text-align:start; cursor:pointer; color:var(--ink); min-height:56px; }
+.sd-head:hover{ background:var(--sand); }
+.sd-av{ width:36px; height:36px; border-radius:50%; background:var(--meadow-light); color:var(--meadow); display:flex; align-items:center; justify-content:center; font-weight:800; flex-shrink:0; }
+.sd-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:1px; }
+.sd-main b{ font-size:14px; }
+.sd-main b mark{ background:#FFF1B8; color:inherit; border-radius:3px; padding:0 1px; }
+.sd-main span{ font-size:12px; color:var(--slate); }
+.sd-nid{ font-size:12.5px; color:var(--slate); direction:ltr; font-variant-numeric:tabular-nums; flex-shrink:0; }
+.sd-detail{ border-top:1px solid var(--border); padding:12px 14px 14px; background:#FBFCFE; }
+.sd-detail dl{ margin:0; display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px 18px; }
+.sd-detail dt{ font-size:11.5px; color:var(--slate); }
+.sd-detail dd{ margin:2px 0 0; font-size:14px; font-weight:600; color:var(--ink); display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.sd-detail dd.ltr{ direction:ltr; justify-content:flex-end; font-variant-numeric:tabular-nums; }
+.sd-detail dd small{ font-weight:400; color:var(--slate); }
+.sd-copy{ border:1px solid var(--border); background:var(--white); border-radius:7px; font:inherit; font-size:11.5px; padding:2px 8px; cursor:pointer; color:var(--meadow); direction:rtl; }
+.sd-actions{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+.sd-actions a{ width:auto !important; padding:8px 14px; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+.sd-more{ align-self:center; border:1px dashed var(--border); background:var(--white); border-radius:10px; padding:10px 18px; font:inherit; font-size:13px; cursor:pointer; color:var(--ink); margin-top:4px; }
+@media (max-width:520px){ .sd-nid{ display:none; } }

@@ -59,6 +59,7 @@ const icons = {
   exams: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>',
   tracking: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   schedule: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18"/><path d="M7.5 14.5h2M7.5 17.5h2M12 14.5h2M12 17.5h2M16.5 14.5h1M16.5 17.5h1"/></svg>',
+  studentData: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="10" r="2.2"/><path d="M5.2 16.5c.7-1.8 2-2.7 3.3-2.7s2.6.9 3.3 2.7M14 9h4.5M14 12.5h4.5"/></svg>',
   followups: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="7" r="3.2"/><path d="M3.5 20c1.2-3.6 4-5.3 5.5-5.3s4.3 1.7 5.5 5.3"/><path d="M16 5h5M16 9h5M15 13.5h6M15 17.5h6"/></svg>',
   budget: '<div class="ic riyal-icon" style="width:18px; height:18px;"></div>',
   visits: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M9 3h6v4H9z"/><path d="m14 9 6-6M17 3h3v3"/><path d="M7 13h6M7 17h4"/></svg>',
@@ -73,7 +74,7 @@ const icons = {
 // مساحات العمل: كل قسم ينتمي لمساحة وحدة، وترتيب الأقسام داخلها بحسب keys (القائمة الجانبية،
 // بطاقات مساحات العمل بالرئيسية، ومسار التنقل أعلى كل قسم). "الرئيسية" مو منها - هي عنصر مستقل.
 export const GROUPS = [
-  { key: 'students', title: 'الطلاب', keys: ['weekly', 'schedule', 'student-lists', 'followups'],
+  { key: 'students', title: 'الطلاب', keys: ['student-data', 'weekly', 'schedule', 'student-lists', 'followups'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>' },
   { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'achievements', 'weekly-tracking', 'duty', 'substitutes', 'portal'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
@@ -86,6 +87,7 @@ export const GROUPS = [
 export const tiles = [
   { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal', group: 'students' },
   { key: 'schedule', icon: icons.schedule, title: 'الجدول الدراسي', desc: 'جدول الحصص لكل فصل',            roles: ['admin','deputy'], color: 'diamond-teal', group: 'admin' },
+  { key: 'student-data', icon: icons.studentData, title: 'بيانات الطلاب', desc: 'ابحث عن طالب في المدرسة أو مرحلة أو فصل', roles: ['admin','deputy'], color: 'diamond-navy', group: 'students' },
   { key: 'student-lists', icon: icons.followups, title: 'كشوف الطلاب', desc: 'صمّم كشف رصد أو حضور أو متابعة واطبعه', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'students' },
   { key: 'followups', icon: icons.followups, title: 'كشوف متابعة الطلاب', desc: 'ملاحظات وسلوك ودرجات مشاركة/اختبارات لكل فصل', roles: ['admin','deputy'], color: 'diamond-gold', group: 'students' },
   { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
@@ -263,7 +265,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-11b';
+export const ASSET_VERSION = '2026-10-11c';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -603,7 +605,7 @@ export function isTileAllowed(t) {
   // فلترة حسب الخدمات المفعّلة لهذي المدرسة (المرحلة الأولى من دعم تعدد المدارس) - لو ما فيه
   // قائمة خدمات محمّلة (توافق خلفي، أو قبل تنفيذ SQL الترقية) نسمح بعرض كل شي زي ما هو
   // الإعدادات أساسية لكل مدرسة، ما تنطفي من قائمة الخدمات
-  if (t.key !== 'settings' && Array.isArray(currentSchoolModules) && !currentSchoolModules.includes(t.key)) return false;
+  if (t.key !== 'settings' && t.key !== 'student-data' && Array.isArray(currentSchoolModules) && !currentSchoolModules.includes(t.key)) return false;
   return true;
 }
 
@@ -749,6 +751,7 @@ export function hideAllModules() {
   document.getElementById('settings-module').classList.add('hidden');
   const achv = document.getElementById('achv-module'); if (achv) achv.classList.add('hidden');
   const slm = document.getElementById('sl-module'); if (slm) slm.classList.add('hidden');
+  const sdm = document.getElementById('sd-module'); if (sdm) sdm.classList.add('hidden');
   document.getElementById('settings-open-btn').classList.remove('active');
   document.getElementById('placeholder-module').classList.add('hidden');
 }
@@ -859,6 +862,10 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('admin-tasks-module').classList.remove('hidden');
     const { loadAdminTasksModule } = await import('./admin-tasks.js');
     loadAdminTasksModule();
+  } else if (key === 'student-data') {
+    document.getElementById('sd-module').classList.remove('hidden');
+    const { loadStudentDataModule } = await import('./student-data.js?v=' + ASSET_VERSION);
+    loadStudentDataModule();
   } else if (key === 'student-lists') {
     document.getElementById('sl-module').classList.remove('hidden');
     const { loadStudentListsModule } = await import('./student-lists.js?v=' + ASSET_VERSION);
