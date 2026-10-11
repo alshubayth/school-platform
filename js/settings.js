@@ -59,7 +59,7 @@ async function fetchAllStudents() {
   const out = [];
   for (let from = 0; from < 20000; from += 1000) {
     const { data, error } = await readScopedBySchool(scoped => {
-      let q = sb.from('students').select('id, national_id, grade_level, class_section, updated_at').order('id', { ascending: true }).range(from, from + 999);
+      let q = sb.from('students').select('id, national_id, full_name, grade_level, class_section, updated_at').order('id', { ascending: true }).range(from, from + 999);
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q;
     });
@@ -182,6 +182,7 @@ async function importStudentsFile() {
         return;
       }
 
+      if (!stuCache.length) stuCache = await fetchAllStudents();
       // الطالب مميّز برقم هويته داخل المدرسة (الطالب المنتقل له سجل خاص بكل مدرسة)
       const { error } = await writeWithSchool(extra => upsertSchoolKey(k => sb.from('students').upsert(students.map(s => ({ ...s, ...extra })), conflictOpt(k)),
         'school_id,national_id', 'national_id'));
@@ -189,7 +190,35 @@ async function importStudentsFile() {
 
       const known = new Set(stuCache.map(x => String(x.national_id)));
       const added = students.filter(x => !known.has(x.national_id)).length;
-      okEl.textContent = `تم استيراد ${students.length} طالب: ${added} جديد و${students.length - added} تحدّثت بياناتهم`;
+      let msg = `تم استيراد ${students.length} طالب: ${added} جديد و${students.length - added} تحدّثت بياناتهم`;
+
+      // الطلاب اللي مو موجودين بالملف (انتقلوا/انسحبوا) - بس من الصفوف اللي بالملف، عشان ملف صف واحد ما يحذف باقي الصفوف
+      const inFile = new Set(students.map(x => x.national_id));
+      const fileGrades = new Set(students.map(x => x.grade_level));
+      const missing = stuCache.filter(x => fileGrades.has(x.grade_level) && !inFile.has(String(x.national_id).trim()));
+      if (missing.length) {
+        const gradesTxt = [...fileGrades].map(g => gradeLabels[g]).join('، ');
+        const sample = missing.slice(0, 8).map(x => '• ' + (x.full_name || x.national_id)).join('\n');
+        const ok = confirm(`فيه ${missing.length} طالب مسجلين بالمنصة (${gradesTxt}) ومو موجودين بالملف:\n${sample}${missing.length > 8 ? `\n... و${missing.length - 8} غيرهم` : ''}\n\nتبي تحذفهم؟ (تنحذف معهم متابعاتهم ومقاعدهم بالمعمل ولجانهم)`);
+        if (ok) {
+          let removed = 0; const failed = [];
+          for (let i = 0; i < missing.length; i += 200) {
+            const chunk = missing.slice(i, i + 200);
+            const { error: delErr } = await sb.from('students').delete().in('id', chunk.map(x => x.id));
+            if (!delErr) { removed += chunk.length; continue; }
+            // لو فيه طالب مرتبط بسجل غياب اختبار يمنع الحذف: نحذفهم واحد واحد ونعرف مين ما انحذف
+            for (const x of chunk) {
+              const { error: e1 } = await sb.from('students').delete().eq('id', x.id);
+              if (e1) failed.push(x.full_name || x.national_id); else removed++;
+            }
+          }
+          msg += ` · حُذف ${removed} طالب مو موجودين بالملف`;
+          if (failed.length) msg += ` · ما قدرت أحذف ${failed.length} (مرتبطين بسجلات غياب اختبارات): ${failed.slice(0, 5).join('، ')}${failed.length > 5 ? '...' : ''}`;
+        } else {
+          msg += ` · ${missing.length} طالب مو موجودين بالملف تركتهم بدون حذف`;
+        }
+      }
+      okEl.textContent = msg;
       okEl.classList.remove('hidden');
       fileInput.value = '';
       await refreshStudents();
