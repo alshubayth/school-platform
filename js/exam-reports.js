@@ -84,6 +84,7 @@ function computeChoiceCounts(itemCols, dataRows, itemTypes = []) {
 // بالرقم ١ عاديًا (المواد الإنجليزية غالبًا) - الاتجاه يُحدَّد بخيار "ترتيب الاختيارات"
 // بشاشة الرفع (افتراضيًا يُخمَّن من اسم المادة)، ونفس القيمة تُحفظ مع التقرير عشان تعديل
 // المفتاح لاحقًا يستخدم نفس الاتجاه.
+function letterForRaw(value, numChoices, reversed = true) { return letterFor(value, numChoices, reversed); }
 function letterFor(value, numChoices, reversed = true) {
   if (typeof value !== 'number' || value <= 0) return null;
   const idx = reversed ? numChoices - value : value - 1;
@@ -105,6 +106,18 @@ function guessReversedOrder(subjectName) {
  * تحتوي صف "نموذج" (مفتاح إجابة) - الإجابة الصحيحة تُدخل يدويًا بعد الرفع (انظر
  * buildManualKey) - لكن لو انلقى صف مفتاح جاهز (رقم هوية/اسم كله أصفار) نستخدمه كتعبئة
  * مبدئية بس، ونستبعده من قائمة الطلاب. */
+// قيمة نصية من ملف Remark ← قيمة خام: أ=1، ب=2...، صح=1، خطأ=2، فاضي=-2، أكثر من إجابة=-3
+const TEXT_LETTERS = [['أ', 'ا', 'a', '✓', 'صح', 'صحيح', 'true', 't'], ['ب', 'b', '✗', 'خطأ', 'خطا', 'خاطئ', 'false', 'f'], ['ج', 'c'], ['د', 'd'], ['هـ', 'ه', 'e'], ['و', 'f6'], ['ز', 'g']];
+function textAnswer(v) {
+  const t = String(v).trim().toLowerCase();
+  if (!t) return null;
+  if (t === 'blank' || t === '-' || t === 'لا توجد استجابة') return -2;
+  if (/[,،]/.test(t) || t === 'multi' || t === 'متعدد') return -3;
+  const x = t.replace(/[()]/g, '').trim();
+  const idx = TEXT_LETTERS.findIndex(list => list.includes(x));
+  return idx === -1 ? null : idx + 1;
+}
+
 export function parseSheetRows(rows) {
   if (!rows || rows.length < 2) throw new Error('الملف فاضي أو ما فيه بيانات كافية');
   const header = rows[0];
@@ -129,9 +142,14 @@ export function parseSheetRows(rows) {
         const v = r[ci];
         if (v === '' || v == null) return null;
         const n = Number(v);
-        return Number.isFinite(n) ? n : null;
+        if (Number.isFinite(n)) return n;
+        return textAnswer(v);
       }),
     }));
+
+  // ملف بإجابات نصية (Remark مصدّر بالحروف: أ/ب/ج، صح/خطأ، BLANK) بدل الأرقام:
+  // القيمة = رقم الحرف + 1 بترتيب عادي (غير معكوس)
+  const textCoded = rows.slice(1).some(r => r && items.some(ci => typeof r[ci] === 'string' && r[ci].trim() && !Number.isFinite(Number(r[ci])) && textAnswer(r[ci]) !== null));
 
   const keyRows = allRows.filter(isKeyRow);
   const detectedKeyRow = keyRows[0] || null;
@@ -141,6 +159,7 @@ export function parseSheetRows(rows) {
   const choiceCounts = computeChoiceCounts(items, students.concat(detectedKeyRow ? [detectedKeyRow] : []), itemTypes);
 
   return {
+    textCoded,
     itemCount: items.length,
     choiceCounts,
     itemTypes,
@@ -217,7 +236,12 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
 
   const itemStats = [];
   let mcqSeq = 0, tfSeq = 0;
+  // أسئلة الصح والخطأ تنعرض «صح/خطأ» بدل أ/ب
+  const TF_LABEL = { 'أ': 'صح', 'ب': 'خطأ' };
+  const letterFor = (v, nc, rev) => { const l = letterForRaw(v, nc, rev); return itemTypes[curItem] === 'tf' && TF_LABEL[l] ? TF_LABEL[l] : l; };
+  let curItem = 0;
   for (let i = 0; i < itemCount; i++) {
+    curItem = i;
     const numChoices = choiceCounts[i];
     // لو الطلاب بنماذج إجابتها الصحيحة تختلف بهذا السؤال، الحروف ما تنقارن ببعض - نعرض صحيح/خطأ بس
     const keyVals = new Set(students.map(st => K(st)[i]));
@@ -464,7 +488,9 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     document.getElementById('er-subject').value = parsedData.detected.subject || '';
     document.getElementById('er-grade').value = parsedData.detected.grade || '';
     document.getElementById('er-semester').value = '';
-    document.getElementById('er-reversed-order').checked = guessReversedOrder(parsedData.detected.subject);
+    const revEl = document.getElementById('er-reversed-order');
+    revEl.checked = parsedData.textCoded ? false : guessReversedOrder(parsedData.detected.subject);
+    revEl.disabled = !!parsedData.textCoded;
     renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
     await setupSavedKeyPicker(parsedData);
     document.getElementById('er-preview-card').classList.remove('hidden');
@@ -489,7 +515,7 @@ function renderKeyForm(parsed, reversed = true) {
       <label>سؤال ${i + 1}</label>
       <select class="er-key-select" data-item="${i}">
         <option value="">اختر...</option>
-        ${options.map(o => `<option value="${o}"${o === preselect ? ' selected' : ''}>${o}</option>`).join('')}
+        ${options.map(o => `<option value="${o}"${o === preselect ? ' selected' : ''}>${(parsed.itemTypes || [])[i] === 'tf' ? ({ 'أ': 'صح ✓', 'ب': 'خطأ ✗' }[o] || o) : o}</option>`).join('')}
       </select>
     </div>`;
   }).join('')}</div>`;
@@ -531,6 +557,19 @@ async function setupSavedKeyPicker(parsed) {
   }
 }
 
+// إجابات المفتاح بترتيب أعمدة الملف: لو الملف يرتب الاختيار المتعدد والصح والخطأ بترتيب غير
+// ترتيب المفتاح (مثلاً المفتاح الصح والخطأ أول والملف آخر)، نوزّع إجابات كل نوع على أعمدته بالترتيب
+function alignKeyToFile(k, arr) {
+  if (!k || !k.tf_count || !parsedData || k.questions !== parsedData.itemCount) return arr;
+  const fileKinds = parsedData._origItemTypes || parsedData.itemTypes || [];
+  if (fileKinds.filter(t => t === 'tf').length !== k.tf_count) return arr;
+  const keyKinds = itemKinds({ questions: k.questions, tf: k.tf_count, tfFirst: k.tf_first !== false });
+  const byKind = { tf: [], mcq: [] };
+  keyKinds.forEach((t, i) => byKind[t === 'tf' ? 'tf' : 'mcq'].push(arr[i]));
+  const ptr = { tf: 0, mcq: 0 };
+  return fileKinds.map(t => { const kk = t === 'tf' ? 'tf' : 'mcq'; return byKind[kk][ptr[kk]++]; });
+}
+
 function applySavedKey(k) {
   if (!parsedData) return;
   const msg = document.getElementById('er-saved-key-msg');
@@ -543,11 +582,13 @@ function applySavedKey(k) {
     renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
     return;
   }
-  parsedData.presetLetters = (k.answers || []).map(i => (i == null ? null : ARABIC_LETTERS[i]));
+  parsedData.presetLetters = alignKeyToFile(k, k.answers || []).map(i => (i == null ? null : ARABIC_LETTERS[i]));
   // مفتاح فيه أسئلة صح وخطأ: نوع كل سؤال وعدد خياراته من المفتاح نفسه
   if (!parsedData._origItemTypes) parsedData._origItemTypes = (parsedData.itemTypes || []).slice();
   if (k.tf_count && k.questions === parsedData.itemCount) {
-    const kinds = itemKinds({ questions: k.questions, tf: k.tf_count, tfFirst: k.tf_first !== false });
+    const fileKinds = parsedData._origItemTypes;
+    const kinds = fileKinds.filter(t => t === 'tf').length === k.tf_count ? fileKinds.slice()
+      : itemKinds({ questions: k.questions, tf: k.tf_count, tfFirst: k.tf_first !== false });
     parsedData.itemTypes = kinds;
     parsedData.choiceCounts = kinds.map(t => (t === 'tf' ? 2 : k.choices));
   } else {
@@ -555,7 +596,7 @@ function applySavedKey(k) {
     parsedData.choiceCounts = parsedData._origChoiceCounts.map((c, i) => (parsedData.itemTypes[i] === 'tf' ? c : k.choices));
   }
   const observedMax = Math.max(0, ...parsedData.students.flatMap(st => st.answers.filter(v => typeof v === 'number')));
-  document.getElementById('er-reversed-order').checked = k.lang !== 'en';
+  document.getElementById('er-reversed-order').checked = parsedData.textCoded ? false : k.lang !== 'en';
   if (!document.getElementById('er-title').value.trim()) document.getElementById('er-title').value = k.title || '';
   if (!document.getElementById('er-subject').value.trim() && k.subject) document.getElementById('er-subject').value = k.subject;
   renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
@@ -593,8 +634,8 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     const reversedOrder = document.getElementById('er-reversed-order').checked;
     const g = gradeWithModels({
       parsed: parsedData,
-      keyA: rawFromIdx(k.answers, parsedData.choiceCounts, reversedOrder),
-      keyB: rawFromIdx(k.models.answers_b, parsedData.choiceCounts, reversedOrder),
+      keyA: rawFromIdx(alignKeyToFile(k, k.answers), parsedData.choiceCounts, reversedOrder),
+      keyB: rawFromIdx(alignKeyToFile(k, k.models.answers_b), parsedData.choiceCounts, reversedOrder),
       mode: k.models.mode, orderB: k.models.order_b, reversedOrder, keyId: k.id,
       modelOf: st => { const id = String(st.id || '').trim(); return fileModel(st, reversedOrder) || map[id] || picks[id] || MODEL_A; },
     });
