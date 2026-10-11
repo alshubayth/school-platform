@@ -1358,6 +1358,13 @@
 
           <div id="er-preview-card" class="hidden" style="margin-top:18px; padding-top:16px; border-top:1px dashed var(--border);">
             <div id="er-preview-summary" style="font-size:13px; margin-bottom:12px;"></div>
+            <div class="er-type-row" role="radiogroup" aria-label="نوع الاختبار">
+              <span>نوع الاختبار:</span>
+              <select id="er-type" style="width:auto; margin:0;">
+                <option value="diagnostic">تشخيصي</option>
+                <option value="periodic">فتري (تصدير النتائج والغياب)</option>
+              </select>
+            </div>
             <div class="form-row">
               <input type="text" id="er-title" placeholder="عنوان التقرير (مثال: رياضيات - ثاني متوسط - الفترة الأولى)" />
               <input type="text" id="er-subject" placeholder="المادة" />

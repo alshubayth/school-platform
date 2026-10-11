@@ -50,6 +50,7 @@ export function detectColumns(headerRow) {
     else if (col.section == null && c === 'الفصل') col.section = idx;
     else if (col.subject == null && c.includes('اسم') && c.includes('ماد')) col.subject = idx;
     else if (col.model == null && (c === 'النموذج' || c === 'نموذج' || /^(form|version|model)$/i.test(c))) col.model = idx;
+    else if (col.essay == null && (c.includes('مقالي') || c.includes('مقال'))) col.essay = idx;
     else if (c.includes('صح') && c.includes('خطأ')) { items.push(idx); itemTypes.push('tf'); }
     else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال') || /متعدد\s*\d+$/.test(c)) { items.push(idx); itemTypes.push('mcq'); }
   });
@@ -137,6 +138,7 @@ export function parseSheetRows(rows) {
       section: col.section != null ? String(r[col.section] == null ? '' : r[col.section]).trim() : '',
       subject: col.subject != null ? String(r[col.subject] == null ? '' : r[col.subject]).trim() : '',
       // النموذج اللي ظلّله الطالب بورقته (لو الملف فيه عمود "النموذج") - قيمة خام مثل الأسئلة
+      essay: col.essay != null && r[col.essay] !== '' && r[col.essay] != null && Number.isFinite(Number(r[col.essay])) ? Number(r[col.essay]) : null,
       modelRaw: col.model != null && r[col.model] !== '' && r[col.model] != null && Number.isFinite(Number(r[col.model])) ? Number(r[col.model]) : null,
       answers: items.map(ci => {
         const v = r[ci];
@@ -159,6 +161,7 @@ export function parseSheetRows(rows) {
   const choiceCounts = computeChoiceCounts(items, students.concat(detectedKeyRow ? [detectedKeyRow] : []), itemTypes);
 
   return {
+    hasEssay: col.essay != null,
     textCoded,
     itemCount: items.length,
     choiceCounts,
@@ -606,12 +609,14 @@ function applySavedKey(k) {
   if (k && k.models && k.models.mode) parsedData.modelKey = k; else delete parsedData.modelKey;
   if (!k) {
     delete parsedData.presetLetters;
+    parsedData.essayMax = null;
     if (parsedData._origItemTypes) parsedData.itemTypes = parsedData._origItemTypes.slice();
     parsedData.choiceCounts = parsedData._origChoiceCounts.slice();
     msg.textContent = '';
     renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
     return;
   }
+  parsedData.essayMax = Number(k.essay_total) || null;
   parsedData.presetLetters = alignKeyToFile(k, k.answers || []).map(i => (i == null ? null : ARABIC_LETTERS[i]));
   // مفتاح فيه أسئلة صح وخطأ: نوع كل سؤال وعدد خياراته من المفتاح نفسه
   if (!parsedData._origItemTypes) parsedData._origItemTypes = (parsedData.itemTypes || []).slice();
@@ -669,7 +674,9 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
       mode: k.models.mode, orderB: k.models.order_b, reversedOrder, keyId: k.id,
       modelOf: st => { const id = String(st.id || '').trim(); return fileModel(st, reversedOrder) || map[id] || picks[id] || MODEL_A; },
     });
-    const { error } = await writeWithSchool(extra => sb.from('exam_reports').insert({
+    g.raw_data.essayMax = essayMaxOf(parsedData);
+    g.raw_data.hasEssay = !!parsedData.hasEssay;
+    const { error } = await insertReport({
       title,
       subject_name: document.getElementById('er-subject').value.trim() || null,
       grade_level: document.getElementById('er-grade').value.trim() || null,
@@ -678,8 +685,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
       students_count: parsedData.students.length,
       key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data,
       created_by: currentUserId,
-      ...extra,
-    }));
+    });
     if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
     parsedData = null;
     document.getElementById('er-preview-card').classList.add('hidden');
@@ -700,7 +706,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   const keyRaw = buildManualKey(letterSelections, parsedData.choiceCounts, reversedOrder);
 
   const stats = computeExamStats({ ...parsedData, keyRaw, reversedOrder });
-  const { error } = await writeWithSchool(extra => sb.from('exam_reports').insert({
+  const { error } = await insertReport({
     title,
     subject_name: document.getElementById('er-subject').value.trim() || null,
     grade_level: document.getElementById('er-grade').value.trim() || null,
@@ -712,10 +718,9 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     // نحفظ إجابات الطلاب الخام كمان (مو بس النتيجة المحسوبة) عشان لو المدير احتاج يعدّل
     // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية - وكذلك اتجاه
     // ترميز الاختيارات المستخدم عشان تعديل المفتاح لاحقًا يفهم نفس الحروف صح
-    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder },
+    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder, essayMax: essayMaxOf(parsedData), hasEssay: !!parsedData.hasEssay },
     created_by: currentUserId,
-    ...extra,
-  }));
+  });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
   parsedData = null;
@@ -725,15 +730,38 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   await loadSavedList();
 });
 
+// درجة المقالي العظمى: من المفتاح المحفوظ، وإلا أعلى درجة بالملف
+function essayMaxOf(parsed) {
+  if (!parsed.hasEssay) return null;
+  if (parsed.essayMax) return parsed.essayMax;
+  const vals = parsed.students.map(s => s.essay).filter(v => typeof v === 'number');
+  return vals.length ? Math.max(...vals) : null;
+}
+// حفظ تقرير مع نوع الاختبار (تشخيصي/فتري) - لو عمود exam_type ما انضاف بقاعدة البيانات نحفظ بدونه
+async function insertReport(row) {
+  const exam_type = document.getElementById('er-type') ? document.getElementById('er-type').value : 'diagnostic';
+  let res = await writeWithSchool(extra => sb.from('exam_reports').insert({ ...row, exam_type, ...extra }));
+  if (res.error && /exam_type/i.test(res.error.message || '')) res = await writeWithSchool(extra => sb.from('exam_reports').insert({ ...row, ...extra }));
+  return res;
+}
+
 async function loadSavedList() {
   const listEl = document.getElementById('er-saved-list');
   const res = await readScopedBySchool(scoped => {
     let q = sb.from('exam_reports')
-      .select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at, created_by, source');
+      .select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at, created_by, source, exam_type');
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q.order('created_at', { ascending: false });
   });
   let data = res.data, error = res.error;
+  if (error && /exam_type/i.test(error.message || '')) {
+    const r1 = await readScopedBySchool(scoped => {
+      let q = sb.from('exam_reports').select('id, title, subject_name, grade_level, semester, item_count, students_count, created_at, created_by, source');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('created_at', { ascending: false });
+    });
+    data = r1.data; error = r1.error;
+  }
   if (error && /source/i.test(error.message || '')) {
     // قبل تشغيل ملف sql/omr_camera.sql
     const r2 = await readScopedBySchool(scoped => {
@@ -780,7 +808,8 @@ async function loadSavedList() {
         <span class="erc-main">
           <b>${esc(r.title)}</b>
           <span>${meta || '&nbsp;'}</span>
-          <span class="erc-chips">${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
+          <span class="erc-chips">${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : ''}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
+          ${r.exam_type === 'periodic' ? `<span class="erc-actions"><button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button></span>` : ''}
         </span>
         <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>
       </div>`;
@@ -790,10 +819,20 @@ async function loadSavedList() {
 
   listEl.querySelectorAll('[data-id]').forEach(card => {
     card.addEventListener('click', (e) => {
-      if (e.target.closest('.er-delete-btn')) return;
+      if (e.target.closest('.er-delete-btn') || e.target.closest('.erc-act')) return;
       openReport(card.dataset.id);
     });
   });
+  listEl.querySelectorAll('.er-export-btn').forEach(btn => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const t = btn.textContent; btn.disabled = true; btn.textContent = 'جارٍ التجهيز...';
+    try { await exportPeriodicResults(btn.dataset.rid); } catch (err) { alert('تعذر التصدير: ' + (err.message || err)); }
+    btn.disabled = false; btn.textContent = t;
+  }));
+  listEl.querySelectorAll('.er-absence-btn').forEach(btn => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try { await showAbsence(btn.dataset.rid); } catch (err) { alert('تعذر عرض الغياب: ' + (err.message || err)); }
+  }));
   listEl.querySelectorAll('.er-delete-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
@@ -1603,3 +1642,132 @@ async function drawBarChart(canvasId, labels, data, label, opts = {}) {
     console.error('chart error:', e);
   }
 }
+
+
+/* =========================================================================
+ * الاختبارات الفترية: تصدير النتائج (إكسل) + الغياب لكل فصل
+ * الدرجة: كل سؤال اختيار متعدد أو صح وخطأ = درجة، والمقالي بدرجته من الملف.
+ * الغائب = طالب بالمنصة بنفس المرحلة والفصل اللي فيهم طلاب بالملف، وما له ورقة بالملف.
+ * ========================================================================= */
+const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
+
+async function loadPeriodicData(reportId) {
+  const { data: rep, error } = await sb.from('exam_reports').select('id, title, subject_name, key_raw, raw_data').eq('id', reportId).single();
+  if (error || !rep) throw new Error('تعذر تحميل التقرير');
+  const rd = rep.raw_data || {};
+  const types = rd.itemTypes || [];
+  const studs = rd.students || [];
+  const scored = studs.map(st => {
+    const key = st.key || rep.key_raw || [];
+    let mcq = 0, tf = 0;
+    (st.answers || []).forEach((v, i) => {
+      if (v == null || v !== key[i]) return;
+      if (types[i] === 'tf') tf++; else mcq++;
+    });
+    const essay = typeof st.essay === 'number' ? st.essay : null;
+    return { id: String(st.id || '').trim(), name: st.name || '', grade: st.grade || '', section: st.section || '', mcq, tf, essay };
+  });
+  // المرحلة والفصل الرسميين من طلاب المنصة (برقم الهوية)
+  const ids = scored.map(x => x.id).filter(Boolean);
+  const plat = new Map();
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200);
+    const { data } = await readScopedBySchool(scoped => {
+      let q = sb.from('students').select('national_id, full_name, grade_level, class_section').in('national_id', chunk);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    });
+    (data || []).forEach(r => plat.set(String(r.national_id).trim(), r));
+  }
+  scored.forEach(x => {
+    const p = plat.get(x.id);
+    x.gl = p ? p.grade_level : null;
+    if (p) { x.name = x.name || p.full_name; x.section = String(p.class_section || x.section || ''); x.grade = gradeLabels[p.grade_level] || x.grade; }
+  });
+  // الغياب: طلاب نفس الفصول بالمنصة اللي ما لهم ورقة
+  const pairs = new Set(scored.filter(x => x.gl && x.section).map(x => x.gl + '|' + Number(x.section)));
+  const grades = [...new Set(scored.map(x => x.gl).filter(Boolean))];
+  const present = new Set(ids);
+  let absent = [];
+  if (grades.length) {
+    const all = [];
+    for (let from = 0; from < 20000; from += 1000) {
+      const { data } = await readScopedBySchool(scoped => {
+        let q = sb.from('students').select('national_id, full_name, grade_level, class_section').in('grade_level', grades).order('full_name').range(from, from + 999);
+        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+        return q;
+      });
+      all.push(...(data || []));
+      if (!data || data.length < 1000) break;
+    }
+    absent = all.filter(p => pairs.has(p.grade_level + '|' + Number(p.class_section)) && !present.has(String(p.national_id).trim()))
+      .map(p => ({ id: String(p.national_id).trim(), name: p.full_name, gl: p.grade_level, grade: gradeLabels[p.grade_level] || '', section: String(p.class_section), absent: true }));
+  }
+  const nMcq = types.filter(t => t !== 'tf').length, nTf = types.filter(t => t === 'tf').length;
+  const hasEssay = rd.hasEssay || scored.some(x => x.essay != null);
+  return { rep, scored, absent, nMcq, nTf, hasEssay, essayMax: rd.essayMax || null };
+}
+
+const bySection = (a, b) => (GRADE_ORDER.indexOf(a.gl) - GRADE_ORDER.indexOf(b.gl)) || (Number(a.section) || 0) - (Number(b.section) || 0) || String(a.name).localeCompare(String(b.name), 'ar');
+
+async function exportPeriodicResults(reportId) {
+  const d = await loadPeriodicData(reportId);
+  await loadXLSX();
+  const hMcq = `الاختيار من متعدد (من ${d.nMcq})`;
+  const hTf = `صح وخطأ (من ${d.nTf})`;
+  const hEs = `المقالي${d.essayMax ? ` (من ${d.essayMax})` : ''}`;
+  const full = d.nMcq + d.nTf + (d.essayMax || 0);
+  const hTot = `المجموع${full ? ` (من ${full})` : ''}`;
+  const rows = [...d.scored, ...d.absent].sort(bySection).map(x => {
+    const r = { 'رقم الهوية': x.id, 'الاسم': x.name, 'المرحلة': x.grade, 'الفصل': x.section ? Number(x.section) || x.section : '' };
+    if (x.absent) {
+      if (d.nMcq) r[hMcq] = '';
+      if (d.nTf) r[hTf] = '';
+      if (d.hasEssay) r[hEs] = '';
+      r[hTot] = 'غائب';
+      return r;
+    }
+    if (d.nMcq) r[hMcq] = x.mcq;
+    if (d.nTf) r[hTf] = x.tf;
+    if (d.hasEssay) r[hEs] = x.essay == null ? '' : x.essay;
+    r[hTot] = x.mcq + x.tf + (x.essay || 0);
+    return r;
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({ wch: k === 'الاسم' ? 38 : k === 'رقم الهوية' ? 14 : Math.max(10, k.length + 2) }));
+  const wb = XLSX.utils.book_new();
+  wb.Workbook = { Views: [{ RTL: true }] };
+  XLSX.utils.book_append_sheet(wb, ws, 'النتائج');
+  const safe = String(d.rep.title || 'نتائج').replace(/[\\/:*?"<>|]+/g, ' ').trim();
+  XLSX.writeFile(wb, `${safe} - النتائج.xlsx`);
+}
+
+async function showAbsence(reportId) {
+  const d = await loadPeriodicData(reportId);
+  const groups = new Map();
+  const key = x => x.gl + '|' + Number(x.section);
+  d.scored.filter(x => x.gl).forEach(x => { if (!groups.has(key(x))) groups.set(key(x), { gl: x.gl, section: x.section, present: 0, absent: [] }); groups.get(key(x)).present++; });
+  d.absent.forEach(x => { if (!groups.has(key(x))) groups.set(key(x), { gl: x.gl, section: x.section, present: 0, absent: [] }); groups.get(key(x)).absent.push(x); });
+  const list = [...groups.values()].sort(bySection);
+  const total = d.absent.length;
+  const unknown = d.scored.filter(x => !x.gl).length;
+  const back = document.createElement('div');
+  back.className = 'er-abs-back';
+  back.innerHTML = `<div class="er-abs" role="dialog" aria-modal="true" aria-label="الغياب">
+    <div class="er-abs-h"><div><b>الغياب — ${esc(d.rep.title)}</b><span>${total} ${total === 1 ? 'غائب' : 'غائبين'} من ${total + d.scored.length - unknown} طالب</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+    <div class="er-abs-body">
+      ${list.map(g => `<details class="er-abs-sec"${g.absent.length ? '' : ' disabled'}>
+        <summary><span class="er-abs-name">${esc(SHORT_GRADE[g.gl] || gradeLabels[g.gl] || '')} ${esc(g.section)}</span><span class="er-abs-n${g.absent.length ? '' : ' zero'}">غياب ${g.absent.length}</span><span class="er-abs-of">من ${g.present + g.absent.length}</span></summary>
+        ${g.absent.length ? `<ol>${g.absent.map(x => `<li><span>${esc(x.name)}</span><small>${esc(x.id)}</small></li>`).join('')}</ol>` : ''}
+      </details>`).join('') || '<p class="er-abs-empty">ما قدرت أحدد فصول الطلاب - تأكد إن أرقام الهوية بالملف موجودة بطلاب المنصة</p>'}
+      ${unknown ? `<p class="er-abs-note">${unknown} طالب بالملف أرقامهم مو موجودة بطلاب المنصة، فما انحسبوا بالفصول</p>` : ''}
+    </div>
+  </div>`;
+  document.body.appendChild(back);
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  back.addEventListener('click', e => { if (e.target === back) close(); });
+  back.querySelector('.er-abs-x').onclick = close;
+}
+const SHORT_GRADE = { first_intermediate: 'أول', second_intermediate: 'ثاني', third_intermediate: 'ثالث' };
