@@ -210,7 +210,7 @@ function firstPageHtml(paper, perm, student, opts) {
   h += `<div class="qp-instr" style="left:${mm(P.side)}; top:${mm(P.instrTop)}; width:${mm(P.innerW)}; height:${mm(P.instrH)};">اقرأ كل سؤال، ثم ظلّل الإجابة الصحيحة في «نموذج الإجابة» أسفل الصفحة — إجابة واحدة لكل سؤال${perm.q.length ? ` · عدد الأسئلة ${perm.q.length}` : ''}</div>`;
   h += `<div class="qp-qarea" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm(P.qBottom - P.qTop)};"></div>`;
   h += gridHtml(paper, perm, opts.key);
-  h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر · A4</div>`;
+  h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر</div>`;
   return h + `</div>`;
 }
 
@@ -234,6 +234,7 @@ const FLOW_SCRIPT = `(function(){
     area.style.setProperty('--qfs', fs + 'pt'); area.style.setProperty('--ofs', (fs - 0.4) + 'pt');
     var tmp = document.createElement('div'); tmp.innerHTML = stu.querySelector('template.qp-blocks').innerHTML;
     var blocks = Array.prototype.slice.call(tmp.children), pages = 1, last = stu.querySelector('.qp-first');
+    if (window.QP_SINGLE) { blocks.forEach(function(b){ area.appendChild(b); }); return area.scrollHeight > area.clientHeight + 0.5 ? 2 : 1; }
     blocks.forEach(function(b){
       area.appendChild(b);
       if (area.scrollHeight > area.clientHeight + 0.5 && area.children.length > 1) {
@@ -248,18 +249,41 @@ const FLOW_SCRIPT = `(function(){
   }
   document.querySelectorAll('.qp-stu').forEach(function(stu){
     var base = fill(stu, 10), best = 10, bestPages = base;
-    for (var f = 9.5; bestPages > 1 && f >= 7.5; f -= 0.5) { var pg = fill(stu, f); if (pg < bestPages) { best = f; bestPages = pg; } }
+    var minF = window.QP_SINGLE ? 6.5 : 7.5;
+    for (var f = 9.5; bestPages > 1 && f >= minF; f -= 0.5) { var pg = fill(stu, f); if (pg < bestPages) { best = f; bestPages = pg; } }
+    if (window.QP_SINGLE && bestPages > 1) best = minF;
     fill(stu, best);
+    if (window.QP_SINGLE && bestPages > 1) stu.querySelector('.qp-first .qp-qarea').style.outline = '0.8mm solid #e00';
   });
-  var n = document.querySelectorAll('.qp-page').length; var c = document.getElementById('qp-count'); if (c) c.textContent = n;
+  var n = document.querySelectorAll('.qp-sheet2').length || document.querySelectorAll('.qp-page').length; var c = document.getElementById('qp-count'); if (c) c.textContent = n;
 })();`;
 
-function openPrintWindow(win, title, bundlesHtml, note) {
+// A4 بالعرض: ورقتين A5 (نفس تصميم A4 مصغّر بنسبة ١/√٢ بالضبط) مع خط قص بالنص - الطالب الأول يمين
+const TWO_UP_STYLES = `
+  @page { size:A4 landscape; margin:0; }
+  .qp-sheet2 { position:relative; width:297mm; height:210mm; overflow:hidden; background:#fff; page-break-after:always; break-after:page; }
+  .qp-sheet2:last-child { page-break-after:auto; break-after:auto; }
+  .qp-slot { position:absolute; top:0; width:148.5mm; height:210mm; overflow:hidden; }
+  .qp-slot .qp-stu { position:absolute; top:0; right:0; width:210mm; height:297mm; transform:scale(0.70711); transform-origin:top right; }
+  .qp-slot .qp-page { margin:0 !important; box-shadow:none !important; page-break-after:auto; break-after:auto; }
+  .qp-cut { position:absolute; left:148.5mm; top:0; bottom:0; width:0; border-left:0.3mm dashed #888; }
+  .qp-cut span { position:absolute; left:-2.4mm; font-size:10pt; color:#666; }
+  @media screen { .qp-sheet2 { margin:0 auto 8mm; box-shadow:0 2px 14px rgba(0,0,0,.18); } }
+`;
+function openPrintWindow(win, title, bundles, note, layout = 'A4') {
+  const two = layout === 'A4L2';
+  let body = bundles.join('');
+  if (two) {
+    body = '';
+    for (let i = 0; i < bundles.length; i += 2) {
+      body += `<div class="qp-sheet2"><div class="qp-slot" style="right:0;">${bundles[i]}</div>${bundles[i + 1] ? `<div class="qp-slot" style="left:0;">${bundles[i + 1]}</div>` : ''}<div class="qp-cut"><span style="top:3mm;">✂</span><span style="bottom:3mm;">✂</span></div></div>`;
+    }
+  }
   win.document.open();
-  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAPER_STYLES}</style></head><body>
-    <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> صفحة</span><button onclick="window.print()">🖨️ طباعة</button></div>
-    ${bundlesHtml}
-    <script>${FLOW_SCRIPT}<\/script></body></html>`);
+  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAPER_STYLES}${two ? TWO_UP_STYLES : ''}</style></head><body>
+    <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> ${two ? 'ورقة A4 بالعرض' : 'صفحة'}</span><button onclick="window.print()">🖨️ طباعة</button></div>
+    ${body}
+    <script>window.QP_SINGLE = ${two ? 'true' : 'false'};${FLOW_SCRIPT}<\/script></body></html>`);
   win.document.close();
   win.focus();
 }
@@ -339,7 +363,7 @@ let papers = [];
 let cur = null;          // الورقة المفتوحة
 let dirty = false;
 let studentsList = null;
-let scope = { grade: '', sections: new Set() };
+let scope = { grade: '', sections: new Set(), layout: (() => { try { return localStorage.getItem('qp-layout') || 'A4'; } catch (_) { return 'A4'; } })() };
 
 function blankPaper() {
   return { id: null, title: '', subject: '', grade_level: '', questions: [], settings: { shuffleQ: true, shuffleOpts: true, order: 'mcq' }, perms: {} };
@@ -418,7 +442,8 @@ function renderEditor() {
         </div>
         <div class="form-card qp-remark">
           <h4>قالب Remark (مرة وحدة)</h4>
-          <p>«نموذج الإجابة» أسفل الصفحة الأولى بنفس المكان بكل الأوراق: <b>${G_COLS} أعمدة × ${G_ROWS} أسئلة</b>، وبكل سطر <b>${SLOTS} دوائر</b> (أ ب ج من اليمين). عرّف قالب Remark واحد: الباركود ← StudentID، والشبكة ← ${CAP} سؤال اختيار متعدد. نفس القالب يقرأ كل الاختبارات.</p>
+          <p>«نموذج الإجابة» أسفل الصفحة بنفس المكان بكل الأوراق: <b>${G_COLS} أعمدة × ${G_ROWS} أسئلة</b>، وبكل سطر <b>${SLOTS} دوائر</b> (أ ب ج من اليمين). عرّف قالب Remark واحد: الباركود ← StudentID، والشبكة ← ${CAP} سؤال اختيار متعدد. نفس القالب يقرأ كل الاختبارات.</p>
+          <p>لو طبعت A4 بالعرض (طالبين)، قص الورقة من النص، وكل نص يصير ورقة A5 بنفس التصميم مصغّر - عرّف له قالب A5 مستقل.</p>
           
           <p>ارفع ملف النتائج من «التقارير ← رفع نتائج اختبار»، والمنصة تعرف إنه ورقة أسئلة من الباركود وتصحح كل طالب على نموذجه.</p>
         </div>
@@ -659,7 +684,8 @@ async function renderPrint() {
   box.innerHTML = `
     <label class="as-f">الصف<select id="qp-pr-grade"><option value="">اختر الصف</option>${GRADES.map(x => `<option value="${x}"${g === x ? ' selected' : ''}>${gradeLabels[x]}</option>`).join('')}</select></label>
     ${g ? `<div class="qp-secs">${secs.map(n => `<button type="button" class="sd-chip sm${scope.sections.has(n) ? ' on' : ''}" data-s="${n}">فصل ${n}</button>`).join('')}</div><p class="qp-note">${scope.sections.size ? '' : 'كل الفصول — '}اضغط على فصل لتحديده.</p>` : ''}
-    <div class="qp-pr-sum">${chosen.length ? `<b>${chosen.length}</b> طالب — ورقة لكل طالب` : 'اختر الصف'}</div>
+    <label class="as-f">حجم الطباعة<select id="qp-pr-layout"><option value="A4"${scope.layout !== 'A4L2' ? ' selected' : ''}>A4 بالطول (طالب بالورقة)</option><option value="A4L2"${scope.layout === 'A4L2' ? ' selected' : ''}>A4 بالعرض (طالبين + علامة قص)</option></select></label>
+    <div class="qp-pr-sum">${chosen.length ? (scope.layout === 'A4L2' ? `<b>${chosen.length}</b> طالب — <b>${Math.ceil(chosen.length / 2)}</b> ورقة A4 بالعرض` : `<b>${chosen.length}</b> طالب — ورقة لكل طالب`) : 'اختر الصف'}</div>
     <div class="qp-pr-btns">
       <button type="button" class="btn-primary" id="qp-print-st" style="width:auto; padding:10px 16px;" ${chosen.length ? '' : 'disabled'}>🖨️ أوراق الطلاب</button>
       <button type="button" class="btn-secondary" id="qp-print-key" style="width:auto; padding:10px 14px;">نسخة المعلم</button>
@@ -667,6 +693,7 @@ async function renderPrint() {
     </div>
     <div id="qp-pr-msg" class="qp-status"></div>`;
   $('qp-pr-grade').onchange = e => { scope.grade = e.target.value; scope.sections = new Set(); renderPrint(); };
+  $('qp-pr-layout').onchange = e => { scope.layout = e.target.value; try { localStorage.setItem('qp-layout', scope.layout); } catch (_) { /* التخزين غير متاح */ } renderPrint(); };
   box.querySelectorAll('.qp-secs button').forEach(b => b.onclick = () => { const n = Number(b.dataset.s); if (scope.sections.has(n)) scope.sections.delete(n); else scope.sections.add(n); renderPrint(); });
   $('qp-print-st').onclick = () => printStudents(false);
   $('qp-preview').onclick = () => printStudents(true);
@@ -698,7 +725,7 @@ async function printStudents(previewOnly) {
   if (!win) { msg.textContent = 'اسمح بالنوافذ المنبثقة للطباعة'; msg.className = 'qp-status warn'; return; }
   win.document.write('<p style="font:16px Tahoma; padding:30px; text-align:center;" dir="rtl">جارٍ تجهيز الأوراق...</p>');
   const p = cur;
-  const targets = previewOnly ? list.slice(0, 1) : list;
+  const targets = previewOnly ? list.slice(0, scope.layout === 'A4L2' ? 2 : 1) : list;
   if (!previewOnly) {
     // نحفظ خريطة كل طالب قبل الطباعة (اللي انطبع له قبل يبقى على نفس ورقته)
     const sig = structSig(p);
@@ -709,12 +736,12 @@ async function printStudents(previewOnly) {
     if (!(await savePaper(true))) { win.close(); msg.textContent = 'تعذر حفظ ربط الأوراق بالطلاب - ما انطبعت'; msg.className = 'qp-status warn'; return; }
     msg.textContent = `تم ربط ${targets.length} ورقة بالطلاب وحفظها ✓`; msg.className = 'qp-status ok';
   }
-  const html = targets.map(st => {
+  const bundles = targets.map(st => {
     const id = String(st.national_id).trim();
     const perm = (!previewOnly && p.perms[id]) || makePerm({ ...p, id: p.id || 'preview' }, id);
     return studentBundle(p, perm, st, {});
-  }).join('');
-  openPrintWindow(win, `${p.title} — أوراق الطلاب`, html, previewOnly ? 'معاينة ورقة أول طالب (ما انحفظت)' : `${targets.length} طالب`);
+  });
+  openPrintWindow(win, `${p.title} — أوراق الطلاب`, bundles, previewOnly ? 'معاينة (ما انحفظت)' : `${targets.length} طالب`, scope.layout);
 }
 
 function printKey() {
@@ -723,5 +750,5 @@ function printKey() {
   if (prob) { msg.textContent = prob; msg.className = 'qp-status warn'; return; }
   const win = window.open('', '_blank');
   if (!win) return;
-  openPrintWindow(win, `${cur.title} — نسخة المعلم`, studentBundle(cur, identityPerm(cur), null, { key: true }), 'نسخة المعلم بالترتيب الأصلي والإجابات مظللة');
+  openPrintWindow(win, `${cur.title} — نسخة المعلم`, [studentBundle(cur, identityPerm(cur), null, { key: true })], 'نسخة المعلم بالترتيب الأصلي والإجابات مظللة', scope.layout);
 }
