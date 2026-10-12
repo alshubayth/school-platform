@@ -470,7 +470,23 @@ async function enrichFromPlatform(parsed) {
   const { studentsById } = await import('./students-cache.js?v=' + ASSET_VERSION);
   let found = new Map();
   try { found = await studentsById(); } catch (e) { /* بدون تكميل */ }
-  let filled = 0; const unknown = [];
+  let filled = 0; const unknown = []; const fixedIds = [];
+  // رقم هوية انقرأ غلط من الباركود (رقم زايد/ناقص/مختلف): لو فيه طالب واحد بس بالمنصة
+  // رقمه يختلف بخانة وحدة وما له ورقة بالملف، نصحح الرقم له
+  const inFile = new Set(parsed.students.map(s => String(s.id || '').trim()));
+  const oneEdit = (a, b) => {
+    if (a === b || Math.abs(a.length - b.length) > 1) return false;
+    if (a.length === b.length) { let d = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i] && ++d > 1) return false; return d === 1; }
+    const [l, sh] = a.length > b.length ? [a, b] : [b, a];
+    for (let i = 0; i < l.length; i++) if (l.slice(0, i) + l.slice(i + 1) === sh) return true;
+    return false;
+  };
+  parsed.students.forEach(s => {
+    const id = String(s.id || '').trim();
+    if (!id || found.has(id) || !/^\d{8,12}$/.test(id)) return;
+    const cands = [...found.keys()].filter(k => !inFile.has(k) && oneEdit(id, k));
+    if (cands.length === 1) { fixedIds.push(id + ' ← ' + cands[0]); s.id = cands[0]; inFile.add(cands[0]); }
+  });
   parsed.students.forEach(s => {
     const r = found.get(String(s.id || '').trim());
     if (!r) { if (!s.name) unknown.push(s.id || '—'); return; }
@@ -481,7 +497,7 @@ async function enrichFromPlatform(parsed) {
     if (changed) filled++;
   });
   if (!parsed.detected.grade) parsed.detected.grade = mostCommon(parsed.students.map(s => s.grade).filter(Boolean)) || '';
-  return { filled, unknown };
+  return { filled, unknown, fixedIds };
 }
 
 document.getElementById('er-analyze-btn').addEventListener('click', async () => {
@@ -508,6 +524,7 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     document.getElementById('er-preview-summary').innerHTML =
       `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`
       + (enr.filled ? `<br><span style="color:#1F6A3C;">✓ كمّلت بيانات ${enr.filled} ${enr.filled === 1 ? 'طالب' : 'طلاب'} (الاسم/الصف/الفصل) من طلاب المنصة برقم الهوية</span>` : '')
+      + (enr.fixedIds && enr.fixedIds.length ? `<br><span style="color:#1F6A3C;">✓ صححت ${enr.fixedIds.length === 1 ? 'رقم هوية انقرأ غلط من الباركود' : enr.fixedIds.length + ' أرقام هوية انقرأت غلط من الباركود'}: ${enr.fixedIds.map(esc).join('، ')}</span>` : '')
       + (enr.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${enr.unknown.length} ${enr.unknown.length === 1 ? 'رقم هوية' : 'أرقام هوية'} مو موجودة بطلاب المنصة: ${enr.unknown.slice(0, 5).map(esc).join('، ')}${enr.unknown.length > 5 ? '...' : ''}</span>` : '');
     document.getElementById('er-title').value = '';
     document.getElementById('er-subject').value = parsedData.detected.subject || '';
