@@ -2669,3 +2669,14 @@ body.omr-noscroll{ overflow:hidden; }
 .er-man-foot{ border-top:1px solid var(--border); padding:10px 14px; display:flex; justify-content:flex-end; }
 .er-man-foot .btn-primary{ width:auto; padding:10px 18px; }
 .omr-manual-btn{ width:auto; }
+.erc-act.er-addsheet-btn{ background:var(--meadow-light); border-color:#C9D9F2; color:var(--meadow); }
+.er-res{ width:min(720px,100%); }
+.er-res-t{ width:100%; border-collapse:collapse; font-size:13px; border-top:1px solid var(--border); }
+.er-res-t th{ background:#FBFCFE; color:var(--slate); font-weight:600; font-size:12px; padding:7px 8px; text-align:start; }
+.er-res-t td{ padding:7px 8px; border-top:1px solid #F0F1F4; }
+.er-res-t td:first-child,.er-res-t th:first-child{ width:34px; color:var(--slate); text-align:center; }
+.er-res-t tr.weak td{ background:#FFF6F5; }
+.er-res-t tr.weak td b{ color:var(--danger); }
+.er-res-t tr.abs td{ color:var(--slate); background:#F6F7F9; }
+.er-res-t tr.abs td:last-child{ color:var(--danger); font-weight:700; }
+.erc-act.er-results-btn{ background:var(--purple-light); border-color:#D8CFF2; color:var(--purple); }

@@ -820,7 +820,7 @@ async function loadSavedList() {
           <b>${esc(r.title)}</b>
           <span>${meta || '&nbsp;'}</span>
           <span class="erc-chips">${isTeacherView() && r.created_by !== currentUserId ? '<i class="erc-shared">من الإدارة</i>' : ''}${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : ''}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
-          ${r.exam_type === 'periodic' ? `<span class="erc-actions"><button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button></span>` : ''}
+          ${r.exam_type === 'periodic' || r.source !== 'camera' ? `<span class="erc-actions">${r.exam_type === 'periodic' ? `<button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-results-btn" data-rid="${r.id}">استعراض النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button>` : ''}${r.source !== 'camera' ? `<button type="button" class="erc-act er-addsheet-btn" data-rid="${r.id}">➕ ورقة طالب</button>` : ''}</span>` : ''}
         </span>
         ${!isTeacherView() || r.created_by === currentUserId ? `<button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>` : ''}
       </div>`;
@@ -839,6 +839,16 @@ async function loadSavedList() {
     const t = btn.textContent; btn.disabled = true; btn.textContent = 'جارٍ التجهيز...';
     try { await exportPeriodicResults(btn.dataset.rid); } catch (err) { alert('تعذر التصدير: ' + (err.message || err)); }
     btn.disabled = false; btn.textContent = t;
+  }));
+  listEl.querySelectorAll('.er-addsheet-btn').forEach(btn => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const { data: rep, error } = await sb.from('exam_reports').select('*').eq('id', btn.dataset.rid).single();
+    if (error || !rep) { alert('تعذر فتح التقرير'); return; }
+    openManualSheet(rep, () => loadSavedList());
+  }));
+  listEl.querySelectorAll('.er-results-btn').forEach(btn => btn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    try { await showResults(btn.dataset.rid); } catch (err) { alert('تعذر عرض النتائج: ' + (err.message || err)); }
   }));
   listEl.querySelectorAll('.er-absence-btn').forEach(btn => btn.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -874,7 +884,7 @@ async function openReport(id) {
   document.getElementById('er-update-file-btn').classList.toggle('hidden', cam || isTeacherView());
   const asb = document.getElementById('er-add-sheet-btn');
   if (asb) {
-    asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students) || (isTeacherView() && data.created_by !== currentUserId));
+    asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students));
     asb.onclick = () => openManualSheet(data);
   }
   const cc = document.getElementById('er-camera-continue');
@@ -1719,9 +1729,19 @@ async function loadPeriodicData(reportId) {
     absent = all.filter(p => pairs.has(p.grade_level + '|' + Number(p.class_section)) && !present.has(String(p.national_id).trim()))
       .map(p => ({ id: String(p.national_id).trim(), name: p.full_name, gl: p.grade_level, grade: gradeLabels[p.grade_level] || '', section: String(p.class_section), absent: true }));
   }
+  // المعلم: فصوله بس
+  let scoredF = scored, absentF = absent;
+  if (isTeacherView()) {
+    const { myTeachingScope, inMyClasses } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
+    const sc = await myTeachingScope();
+    if (sc.classes.length || sc.grades.size) {
+      scoredF = scored.filter(x => x.gl && inMyClasses(sc, x.gl, x.section));
+      absentF = absent.filter(x => inMyClasses(sc, x.gl, x.section));
+    }
+  }
   const nMcq = types.filter(t => t !== 'tf').length, nTf = types.filter(t => t === 'tf').length;
   const hasEssay = rd.hasEssay || scored.some(x => x.essay != null);
-  return { rep, scored, absent, nMcq, nTf, hasEssay, essayMax: rd.essayMax || null };
+  return { rep, scored: scoredF, absent: absentF, nMcq, nTf, hasEssay, essayMax: rd.essayMax || null };
 }
 
 const bySection = (a, b) => (GRADE_ORDER.indexOf(a.gl) - GRADE_ORDER.indexOf(b.gl)) || (Number(a.section) || 0) - (Number(b.section) || 0) || String(a.name).localeCompare(String(b.name), 'ar');
@@ -1793,7 +1813,7 @@ const SHORT_GRADE = { first_intermediate: 'أول', second_intermediate: 'ثان
  * إضافة ورقة طالب يدويًا لتقرير مرفوع (Remark): تختار الطالب وتظلل إجاباته
  * والتقرير ينحسب من جديد. المعلم يختار من طلاب فصوله بس.
  * ========================================================================= */
-async function openManualSheet(rep) {
+async function openManualSheet(rep, onDone) {
   const rd = rep.raw_data || {};
   const n = rep.item_count || (rd.choiceCounts || []).length;
   const counts = rd.choiceCounts || [];
@@ -1911,9 +1931,57 @@ async function openManualSheet(rep) {
       const stats = computeExamStats({ itemCount: n, keyRaw: rep.key_raw, choiceCounts: counts, students: list, reversedOrder: reversed, itemTypes: types });
       upd = { stats, raw_data: { ...rd, students: list }, students_count: list.length };
     }
-    const { error } = await sb.from('exam_reports').update(upd).eq('id', rep.id);
+    let error;
+    if (!isTeacherView() || rep.created_by === currentUserId) ({ error } = await sb.from('exam_reports').update(upd).eq('id', rep.id));
+    else {
+      // المعلم على تقرير الإدارة: يضيف ورقة طالب واحدة بس (دالة بقاعدة البيانات)
+      const saved = (upd.raw_data.students || []).find(s2 => String(s2.id).trim() === row.id) || row;
+      ({ error } = await sb.rpc('exam_report_put_sheet', { p_report: rep.id, p_student: saved, p_stats: upd.stats }));
+    }
     if (error) { btn.disabled = false; btn.textContent = 'حفظ الورقة وإعادة حساب التقرير'; alert('تعذر الحفظ: ' + error.message); return; }
     close();
-    openReport(rep.id);
+    if (onDone) onDone(); else openReport(rep.id);
   };
+}
+
+
+// استعراض النتائج: الفصول، وداخل كل فصل الطلاب ومجموع درجاتهم (الغائب مكتوب غائب)
+async function showResults(reportId) {
+  const d = await loadPeriodicData(reportId);
+  const full = d.nMcq + d.nTf + (d.essayMax || 0);
+  const totalOfX = x => x.mcq + x.tf + (x.essay || 0);
+  const groups = new Map();
+  const key = x => (x.gl || '?') + '|' + (Number(x.section) || 0);
+  [...d.scored, ...d.absent].forEach(x => {
+    if (!groups.has(key(x))) groups.set(key(x), { gl: x.gl, section: x.section, rows: [] });
+    groups.get(key(x)).rows.push(x);
+  });
+  const list = [...groups.values()].sort(bySection);
+  const fmtN = n => (Math.round(n * 10) / 10).toString();
+  const back = document.createElement('div');
+  back.className = 'er-abs-back';
+  back.innerHTML = `<div class="er-abs er-res" role="dialog" aria-modal="true" aria-label="النتائج">
+    <div class="er-abs-h"><div><b>النتائج — ${esc(d.rep.title)}</b><span>${d.scored.length} طالب${full ? ` · الدرجة من ${full}` : ''}${d.absent.length ? ` · ${d.absent.length} غائب` : ''}</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+    <div class="er-abs-body">
+      ${list.map((g, gi) => {
+        const pres = g.rows.filter(x => !x.absent);
+        const avg = pres.length ? pres.reduce((a, x) => a + totalOfX(x), 0) / pres.length : 0;
+        const rows = g.rows.slice().sort((a, b) => (a.absent - b.absent) || (b.absent ? 0 : totalOfX(b) - totalOfX(a)) || String(a.name).localeCompare(String(b.name), 'ar'));
+        return `<details class="er-abs-sec"${gi === 0 ? ' open' : ''}>
+          <summary><span class="er-abs-name">${g.gl ? esc((SHORT_GRADE[g.gl] || gradeLabels[g.gl] || '') + ' ' + (g.section || '')) : 'غير محدد الفصل'}</span><span class="er-abs-of">${pres.length} طالب · المتوسط ${fmtN(avg)}${full ? ' / ' + full : ''}</span></summary>
+          <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th></tr></thead><tbody>
+          ${rows.map((x, i) => x.absent
+            ? `<tr class="abs"><td>${i + 1}</td><td>${esc(x.name)}</td><td colspan="${(d.nMcq ? 1 : 0) + (d.nTf ? 1 : 0) + (d.hasEssay ? 1 : 0) + 1}">غائب</td></tr>`
+            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${x.mcq}</td>` : ''}${d.nTf ? `<td>${x.tf}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td></tr>`).join('')}
+          </tbody></table>
+        </details>`;
+      }).join('') || '<p class="er-abs-empty">ما فيه نتائج</p>'}
+    </div>
+  </div>`;
+  document.body.appendChild(back);
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  back.addEventListener('click', e => { if (e.target === back) close(); });
+  back.querySelector('.er-abs-x').onclick = close;
 }
