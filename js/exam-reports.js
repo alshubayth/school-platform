@@ -419,6 +419,7 @@ export async function loadExamReportsModule(sub = null) {
   initAnswerSheetCard();
   if (sub === 'sheet') { setMode('sheet', false); loadSavedList(); return; }
   if (sub === 'camera') { setMode('camera', false); loadSavedList(); return; }
+  if (sub === 'paper') { setMode('paper', false); loadSavedList(); return; }
   setMode('reports', false);
   const n = await loadSavedList();
   if (sub && sub !== 'reports') openReport(sub);
@@ -442,6 +443,8 @@ function setMode(mode, route = true) {
   document.getElementById('er-mode-reports').classList.toggle('hidden', mode !== 'reports');
   document.getElementById('er-mode-sheet').classList.toggle('hidden', mode !== 'sheet');
   document.getElementById('er-mode-camera').classList.toggle('hidden', mode !== 'camera');
+  document.getElementById('er-mode-paper').classList.toggle('hidden', mode !== 'paper');
+  if (mode === 'paper') import('./question-paper.js?v=' + ASSET_VERSION).then(m => m.openQuestionPapers());
   if (mode === 'sheet' && document.getElementById('as-body').classList.contains('hidden')) document.getElementById('as-toggle-btn').click();
   if (mode === 'camera') openCameraMode();
   if (mode === 'reports' && route) loadSavedList();
@@ -512,25 +515,40 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
       rows = rows.concat(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
     });
     parsedData = parseSheetRows(rows);
+    const { applyPaperToParsed } = await import('./question-paper.js?v=' + ASSET_VERSION);
+    const paperRes = await applyPaperToParsed(parsedData);
     const enr = await enrichFromPlatform(parsedData);
 
-    const keyNote = parsedData.detectedKeyRaw
+    const keyNote = paperRes
+      ? ` — ورقة أسئلة «${esc(paperRes.paper.title)}»: كل طالب تصحح على نموذجه، والمفتاح من الورقة`
+      : parsedData.detectedKeyRaw
       ? ' — لقيت صف نموذج جاهز بالملف وعبّيت الإجابات منه، راجعها/عدّلها بالأسفل'
       : ' — عبّي الإجابة الصحيحة لكل سؤال بالأسفل';
     document.getElementById('er-preview-summary').innerHTML =
       `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`
       + (enr.filled ? `<br><span style="color:#1F6A3C;">✓ كمّلت بيانات ${enr.filled} ${enr.filled === 1 ? 'طالب' : 'طلاب'} (الاسم/الصف/الفصل) من طلاب المنصة برقم الهوية</span>` : '')
       + (enr.fixedIds && enr.fixedIds.length ? `<br><span style="color:#1F6A3C;">✓ صححت ${enr.fixedIds.length === 1 ? 'رقم هوية انقرأ غلط من الباركود' : enr.fixedIds.length + ' أرقام هوية انقرأت غلط من الباركود'}: ${enr.fixedIds.map(esc).join('، ')}</span>` : '')
+      + (paperRes && paperRes.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.unknown.length} ورقة ما انربطت بطالب (ما انطبعت له من المنصة أو تغيّرت الورقة بعد الطباعة): ${paperRes.unknown.slice(0, 5).map(esc).join('، ')}</span>` : '')
+      + (paperRes && paperRes.missingPages.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.missingPages.length} طالب ناقصهم صفحة أو أكثر بالملف (أسئلتها تنحسب بدون إجابة): ${paperRes.missingPages.slice(0, 5).map(esc).join('، ')}${paperRes.missingPages.length > 5 ? '...' : ''}</span>` : '')
       + (enr.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${enr.unknown.length} ${enr.unknown.length === 1 ? 'رقم هوية' : 'أرقام هوية'} مو موجودة بطلاب المنصة: ${enr.unknown.slice(0, 5).map(esc).join('، ')}${enr.unknown.length > 5 ? '...' : ''}</span>` : '');
     document.getElementById('er-title').value = '';
     document.getElementById('er-subject').value = parsedData.detected.subject || '';
     document.getElementById('er-grade').value = parsedData.detected.grade || '';
     document.getElementById('er-semester').value = '';
     const revEl = document.getElementById('er-reversed-order');
-    revEl.checked = parsedData.textCoded ? false : guessReversedOrder(parsedData.detected.subject);
-    revEl.disabled = !!parsedData.textCoded;
+    revEl.checked = parsedData.textCoded || paperRes ? false : guessReversedOrder(parsedData.detected.subject);
+    revEl.disabled = !!parsedData.textCoded || !!paperRes;
     renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
-    await setupSavedKeyPicker(parsedData);
+    if (paperRes) {
+      if (!document.getElementById('er-title').value.trim()) document.getElementById('er-title').value = paperRes.paper.title || '';
+      const ks = document.getElementById('er-saved-key');
+      ks.innerHTML = `<option value="">ورقة الأسئلة: ${esc(paperRes.paper.title)}</option>`;
+      ks.disabled = true;
+      document.getElementById('er-saved-key-msg').textContent = 'المفتاح مأخوذ من ورقة الأسئلة ✓ راجعه واضغط «حفظ التقرير»';
+    } else {
+      document.getElementById('er-saved-key').disabled = false;
+      await setupSavedKeyPicker(parsedData);
+    }
     document.getElementById('er-preview-card').classList.remove('hidden');
     document.getElementById('er-preview-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
   } catch (e) {
@@ -723,7 +741,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     // نحفظ إجابات الطلاب الخام كمان (مو بس النتيجة المحسوبة) عشان لو المدير احتاج يعدّل
     // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية - وكذلك اتجاه
     // ترميز الاختيارات المستخدم عشان تعديل المفتاح لاحقًا يفهم نفس الحروف صح
-    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder, essayMax: essayMaxOf(parsedData), hasEssay: !!parsedData.hasEssay },
+    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder, essayMax: essayMaxOf(parsedData), hasEssay: !!parsedData.hasEssay, ...(parsedData.paper ? { paper: parsedData.paper } : {}) },
     created_by: currentUserId,
   });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
@@ -954,6 +972,8 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       rows = rows.concat(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }));
     });
     const newParsed = parseSheetRows(rows);
+    const { applyPaperToParsed } = await import('./question-paper.js?v=' + ASSET_VERSION);
+    await applyPaperToParsed(newParsed);
     await enrichFromPlatform(newParsed);
 
     const { choiceCounts: oldChoiceCounts, reversedOrder = true } = currentReport.raw_data;
@@ -1002,7 +1022,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
     }
     const newKeyRaw = buildManualKey(letters, newParsed.choiceCounts, reversedOrder);
     const stats = computeExamStats({ ...newParsed, keyRaw: newKeyRaw, reversedOrder });
-    const newRawData = { students: newParsed.students, choiceCounts: newParsed.choiceCounts, itemTypes: newParsed.itemTypes, reversedOrder };
+    const newRawData = { ...currentReport.raw_data, students: newParsed.students, choiceCounts: newParsed.choiceCounts, itemTypes: newParsed.itemTypes, reversedOrder };
 
     const { error } = await sb.from('exam_reports').update({
       item_count: newParsed.itemCount,
