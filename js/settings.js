@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, effectiveRoleForTiles, upsertSchoolKey, conflictOpt } from './core.js';
+import { sb, currentUserId, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, effectiveRoleForTiles, upsertSchoolKey, conflictOpt, ASSET_VERSION } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 /* ===== صفحة الإعدادات: هوية المدرسة، الطلاب، التقويم، بيانات التواصل، المستخدمين =====
@@ -219,6 +219,7 @@ async function importStudentsFile() {
         }
       }
       okEl.textContent = msg;
+      import('./students-cache.js?v=' + ASSET_VERSION).then(m => m.invalidateStudents()).catch(() => {});
       okEl.classList.remove('hidden');
       fileInput.value = '';
       await refreshStudents();

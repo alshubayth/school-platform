@@ -467,17 +467,9 @@ document.querySelectorAll('.er-flow-step').forEach(b => b.addEventListener('clic
 
 // يكمّل اسم الطالب وصفه وفصله من طلاب المنصة برقم الهوية (لو Remark ما لقاه بقاعدة بياناته)
 async function enrichFromPlatform(parsed) {
-  const ids = [...new Set(parsed.students.map(s => String(s.id || '').trim()).filter(Boolean))];
-  const found = new Map();
-  for (let i = 0; i < ids.length; i += 200) {
-    const chunk = ids.slice(i, i + 200);
-    const { data } = await readScopedBySchool(scoped => {
-      let q = sb.from('students').select('national_id, full_name, grade_level, class_section').in('national_id', chunk);
-      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-      return q;
-    });
-    (data || []).forEach(r => found.set(String(r.national_id).trim(), r));
-  }
+  const { studentsById } = await import('./students-cache.js?v=' + ASSET_VERSION);
+  let found = new Map();
+  try { found = await studentsById(); } catch (e) { /* بدون تكميل */ }
   let filled = 0; const unknown = [];
   parsed.students.forEach(s => {
     const r = found.get(String(s.id || '').trim());
@@ -853,11 +845,15 @@ async function loadSavedList() {
   }));
   listEl.querySelectorAll('.er-results-btn').forEach(btn => btn.addEventListener('click', async (e) => {
     e.stopPropagation();
+    const t = btn.textContent; btn.disabled = true; btn.textContent = 'جارٍ التحميل...';
     try { await showResults(btn.dataset.rid); } catch (err) { alert('تعذر عرض النتائج: ' + (err.message || err)); }
+    btn.disabled = false; btn.textContent = t;
   }));
   listEl.querySelectorAll('.er-absence-btn').forEach(btn => btn.addEventListener('click', async (e) => {
     e.stopPropagation();
+    const t = btn.textContent; btn.disabled = true; btn.textContent = 'جارٍ التحميل...';
     try { await showAbsence(btn.dataset.rid); } catch (err) { alert('تعذر عرض الغياب: ' + (err.message || err)); }
+    btn.disabled = false; btn.textContent = t;
   }));
   listEl.querySelectorAll('.er-delete-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
@@ -1687,8 +1683,14 @@ async function drawBarChart(canvasId, labels, data, label, opts = {}) {
  * ========================================================================= */
 const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 
+const periodicCache = new Map(); // reportId -> نتيجة loadPeriodicData (تنمسح لما تنضاف ورقة)
 async function loadPeriodicData(reportId) {
-  const { data: rep, error } = await sb.from('exam_reports').select('id, title, subject_name, key_raw, raw_data').eq('id', reportId).single();
+  if (periodicCache.has(reportId)) return periodicCache.get(reportId);
+  const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
+  const [{ data: rep, error }, platList] = await Promise.all([
+    sb.from('exam_reports').select('id, title, subject_name, key_raw, raw_data').eq('id', reportId).single(),
+    allStudents().catch(() => []),
+  ]);
   if (error || !rep) throw new Error('تعذر تحميل التقرير');
   const rd = rep.raw_data || {};
   const types = rd.itemTypes || [];
@@ -1704,17 +1706,7 @@ async function loadPeriodicData(reportId) {
     return { id: String(st.id || '').trim(), name: st.name || '', grade: st.grade || '', section: st.section || '', mcq, tf, essay };
   });
   // المرحلة والفصل الرسميين من طلاب المنصة (برقم الهوية)
-  const ids = scored.map(x => x.id).filter(Boolean);
-  const plat = new Map();
-  for (let i = 0; i < ids.length; i += 200) {
-    const chunk = ids.slice(i, i + 200);
-    const { data } = await readScopedBySchool(scoped => {
-      let q = sb.from('students').select('national_id, full_name, grade_level, class_section').in('national_id', chunk);
-      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-      return q;
-    });
-    (data || []).forEach(r => plat.set(String(r.national_id).trim(), r));
-  }
+  const plat = new Map(platList.map(p => [String(p.national_id).trim(), p]));
   scored.forEach(x => {
     const p = plat.get(x.id);
     x.gl = p ? p.grade_level : null;
@@ -1722,23 +1714,9 @@ async function loadPeriodicData(reportId) {
   });
   // الغياب: طلاب نفس الفصول بالمنصة اللي ما لهم ورقة
   const pairs = new Set(scored.filter(x => x.gl && x.section).map(x => x.gl + '|' + Number(x.section)));
-  const grades = [...new Set(scored.map(x => x.gl).filter(Boolean))];
-  const present = new Set(ids);
-  let absent = [];
-  if (grades.length) {
-    const all = [];
-    for (let from = 0; from < 20000; from += 1000) {
-      const { data } = await readScopedBySchool(scoped => {
-        let q = sb.from('students').select('national_id, full_name, grade_level, class_section').in('grade_level', grades).order('full_name').range(from, from + 999);
-        if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-        return q;
-      });
-      all.push(...(data || []));
-      if (!data || data.length < 1000) break;
-    }
-    absent = all.filter(p => pairs.has(p.grade_level + '|' + Number(p.class_section)) && !present.has(String(p.national_id).trim()))
-      .map(p => ({ id: String(p.national_id).trim(), name: p.full_name, gl: p.grade_level, grade: gradeLabels[p.grade_level] || '', section: String(p.class_section), absent: true }));
-  }
+  const present = new Set(scored.map(x => x.id));
+  const absent = platList.filter(p => pairs.has(p.grade_level + '|' + Number(p.class_section)) && !present.has(String(p.national_id).trim()))
+    .map(p => ({ id: String(p.national_id).trim(), name: p.full_name, gl: p.grade_level, grade: gradeLabels[p.grade_level] || '', section: String(p.class_section), absent: true }));
   // المعلم: فصوله بس
   let scoredF = scored, absentF = absent;
   if (isTeacherView()) {
@@ -1751,7 +1729,9 @@ async function loadPeriodicData(reportId) {
   }
   const nMcq = types.filter(t => t !== 'tf').length, nTf = types.filter(t => t === 'tf').length;
   const hasEssay = rd.hasEssay || scored.some(x => x.essay != null);
-  return { rep, scored: scoredF, absent: absentF, nMcq, nTf, hasEssay, essayMax: rd.essayMax || null };
+  const out = { rep, scored: scoredF, absent: absentF, nMcq, nTf, hasEssay, essayMax: rd.essayMax || null };
+  periodicCache.set(reportId, out);
+  return out;
 }
 
 const bySection = (a, b) => (GRADE_ORDER.indexOf(a.gl) - GRADE_ORDER.indexOf(b.gl)) || (Number(a.section) || 0) - (Number(b.section) || 0) || String(a.name).localeCompare(String(b.name), 'ar');
@@ -1835,11 +1815,8 @@ async function openManualSheet(rep, onDone) {
   // الطلاب
   let students = [];
   {
-    const { data } = await readScopedBySchool(scoped => {
-      let q = sb.from('students').select('national_id, full_name, grade_level, class_section');
-      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-      return q;
-    });
+    const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
+    const data = await allStudents();
     students = (data || []).filter(x => x.national_id);
     if (isTeacherView()) {
       const { myTeachingScope, inMyClasses } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
@@ -1956,6 +1933,7 @@ async function openManualSheet(rep, onDone) {
       ({ error } = await sb.rpc('exam_report_put_sheet', { p_report: rep.id, p_student: saved, p_stats: upd.stats }));
     }
     if (error) { btn.disabled = false; btn.textContent = 'حفظ الورقة وإعادة حساب التقرير'; alert('تعذر الحفظ: ' + error.message); return; }
+    periodicCache.delete(rep.id);
     close();
     if (onDone) onDone(); else openReport(rep.id);
   };
