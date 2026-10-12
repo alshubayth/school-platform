@@ -2643,3 +2643,5 @@ body.omr-noscroll{ overflow:hidden; }
 .er-res-t tr.abs td:last-child{ color:var(--danger); font-weight:700; }
 .erc-act.er-results-btn{ background:var(--purple-light); border-color:#D8CFF2; color:var(--purple); }
 .er-abs-body > *{ flex-shrink:0; }
+.cv-type-card .seg-tabs{display:inline-flex}
+.cv-type-hint{font-size:12px;color:var(--slate);margin:8px 0 0}

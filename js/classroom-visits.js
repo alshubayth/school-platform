@@ -226,6 +226,217 @@ const OPTION_COMMENTS = {
   28: ['تميزكم في تنويع أساليب التقويم وأدواته وتوظيف التطبيقات والبرامج الإلكترونية ساهم في إيجاد بيئة تعلم فاعلة.', '', 'تنويع أساليب التقويم وأدواته يسهم في إيجاد بيئة تعلم فاعلة ويحسن من نواتج التعلم.', ''], // تنويع أساليب التقويم وأدواته (شفهي، كتابي الكتروني)
 };
 
+/* ---------- نموذج الزيارة الصفية للتربية البدنية ----------
+ * بنود النموذج الرسمي للتربية البدنية (الفصل الدراسي الأول 1447هـ)، بنفس منطق النموذج العام:
+ * الخيار الأول = مميز، الثاني = حقق الهدف، ما بعده = فرصة تحسين، والأخير = لم يتم التقييم.
+ * المفاتيح تبدأ بـ p (p12، p14 ...) عشان ما تتداخل مع مؤشرات النموذج العام، ومنها نعرف نوع الزيارة. */
+const PE = (label, options, comments) => ({ label, options: [...options, `لم يتم تقييم ${label.replace(/[:.]$/, '')}.`], comments: [...comments, ''] });
+const PE_INDICATORS = {
+  p12: PE('موافقة الإعداد للخطة الدراسية', [
+    'الإعداد مكتمل بطريقة مميزة، وموافق للخطة الدراسية، ويراعي الإمكانات المتاحة وظروف الملعب.',
+    'الإعداد مكتمل وموافق للخطة الدراسية.',
+    'الإعداد مكتمل وغير موافق للخطة الدراسية.',
+    'الإعداد غير مكتمل العناصر.',
+    'لم يتم إعداد الدرس.',
+  ], ['تميزكم في الإعداد ومراعاة الإمكانات المتاحة كان له بالغ الأثر في تنظيم الدرس وسلامة تنفيذه.', '',
+    'الالتزام بالخطة الدراسية يمكّن المعلم من إعطاء كل مهارة حقها من التعلم والتدريب.',
+    'استكمال عناصر الإعداد يمكّن المعلم من التخطيط الجيد لمجريات الدرس.',
+    'إعداد الدرس خطة منظمة يسير عليها المعلم مع طلابه لتحقيق أهداف التعلم.']),
+  p14: PE('تحديد الأهداف وشموليتها', [
+    'الأهداف محددة، وشاملة للجوانب المهارية والمعرفية والوجدانية، ويمكن قياسها.',
+    'الأهداف محددة وشاملة ويمكن قياسها.',
+    'الأهداف محددة وشاملة ولا يمكن قياسها.',
+    'الأهداف محددة وغير شاملة.',
+    'الأهداف غير موجودة.',
+  ], ['تميزكم في تحديد أهداف شاملة للجوانب المهارية والمعرفية والوجدانية انعكس إيجابًا على تعلم الطلاب.', '',
+    'قابلية الأهداف للقياس تمكّن المعلم من الحكم على مدى إتقان الطلاب للمهارة.',
+    'شمولية الأهداف للجوانب المهارية والمعرفية والوجدانية تحقق التعلم المتكامل.',
+    'تحديد الأهداف هو الخطوة الأساسية التي يبني عليها المعلم سير الدرس.']),
+  p16: PE('تحديد الاستراتيجيات المطبقة', [
+    'أساليب التدريس محددة، ومتنوعة، ومناسبة لطبيعة المهارة، ويمكن تنفيذها في الملعب.',
+    'أساليب التدريس محددة، ومناسبة لطبيعة المهارة، ويمكن تنفيذها.',
+    'أساليب التدريس محددة، وغير مناسبة لطبيعة المهارة.',
+    'أساليب التدريس غير محددة.',
+  ], ['تميزكم في تنويع أساليب التدريس بما يناسب طبيعة المهارة أسهم في رفع جودة التعلم ومتعته.', '',
+    'اختيار أسلوب التدريس المناسب لطبيعة المهارة يسهم في تحقيق أهداف الدرس.',
+    'تحديد أساليب التدريس أثناء الإعداد يوضح أدوار المعلم والطالب في تحقيق أهداف الدرس.']),
+  p18: PE('التزام الطلاب بالزي الرياضي الكامل', [
+    'جميع الطلاب ملتزمون بالزي الرياضي الكامل، مع متابعة المعلم وتعزيزه لذلك.',
+    'جميع الطلاب ملتزمون بالزي الرياضي الكامل.',
+    'معظم الطلاب ملتزمون بالزي الرياضي الكامل.',
+    'عدد كبير من الطلاب غير ملتزمين بالزي الرياضي.',
+  ], ['تميزكم في متابعة التزام الطلاب بالزي الرياضي وتعزيزه يعكس الانضباط ويحقق السلامة أثناء الأداء.', '',
+    'متابعة التزام جميع الطلاب بالزي الرياضي تحقق الانضباط وتسهم في سلامتهم أثناء الأداء.',
+    'الالتزام بالزي الرياضي الكامل شرط أساسي لسلامة الطلاب وحسن أدائهم الحركي.']),
+  p20: PE('الإحماء', [
+    'إحماء عام وخاص مرتبط بمهارة الدرس، متدرج الشدة، وبزمن مناسب، ومشوق.',
+    'إحماء عام وخاص مرتبط بمهارة الدرس، وبزمن مناسب.',
+    'إحماء عام فقط غير مرتبط بمهارة الدرس.',
+    'إحماء بزمن أو شدة غير مناسبين.',
+    'لا يوجد إحماء.',
+  ], ['تميزكم في تنفيذ إحماء متدرج ومرتبط بالمهارة أسهم في تهيئة الطلاب بدنيًا ونفسيًا ووقايتهم من الإصابات.', '',
+    'ربط الإحماء الخاص بمهارة الدرس يهيئ العضلات العاملة للأداء الصحيح.',
+    'مناسبة زمن الإحماء وشدته تحقق التهيئة البدنية دون إجهاد الطلاب.',
+    'الإحماء ضرورة لتهيئة الطلاب ووقايتهم من الإصابات قبل الأداء.']),
+  p22: PE('التمرينات البدنية', [
+    'تمرينات بدنية متنوعة تخدم مهارة الدرس، مؤداة بشكل صحيح، ومتدرجة في الشدة والتكرار.',
+    'تمرينات بدنية تخدم مهارة الدرس، ومؤداة بشكل صحيح.',
+    'تمرينات بدنية لا تخدم مهارة الدرس.',
+    'تمرينات بدنية مؤداة بشكل غير صحيح.',
+    'لا توجد تمرينات بدنية.',
+  ], ['تميزكم في اختيار تمرينات بدنية متنوعة ومتدرجة تخدم المهارة أسهم في رفع اللياقة البدنية للطلاب.', '',
+    'اختيار تمرينات بدنية تخدم مهارة الدرس يرفع كفاءة أداء الطلاب لها.',
+    'متابعة الأداء الصحيح للتمرينات يحقق الفائدة منها ويقي من الإصابات.',
+    'التمرينات البدنية جزء أساسي في تنمية عناصر اللياقة البدنية المرتبطة بالمهارة.']),
+  p24: PE('الإعلان عن أهداف الدرس', [
+    'الأهداف معلنة للطلاب بوضوح، ومرتبطة بالمهارة، وتمت مناقشتها معهم.',
+    'الأهداف معلنة للطلاب بوضوح، ومرتبطة بالمهارة.',
+    'الأهداف معلنة بشكل غير واضح.',
+    'الأهداف غير معلنة.',
+  ], ['تميزكم في إعلان الأهداف ومناقشتها مع الطلاب أسهم في توجيه جهدهم وزيادة دافعيتهم.', '',
+    'وضوح الأهداف المعلنة يساعد الطلاب على معرفة المطلوب منهم في الدرس.',
+    'معرفة الطلاب بأهداف الدرس تزيد فرص التعلم وتوجه جهودهم.']),
+  p26: PE('خطوات شرح المهارة', [
+    'الشرح واضح ومتسلسل ومختصر، مع نموذج عملي صحيح وإبراز النقاط الفنية للمهارة.',
+    'الشرح واضح ومتسلسل، مع نموذج عملي صحيح.',
+    'الشرح واضح دون نموذج عملي.',
+    'الشرح غير واضح أو غير متسلسل.',
+  ], ['تميزكم في شرح المهارة وتقديم نموذج عملي صحيح مع إبراز نقاطها الفنية أسهم في سرعة إتقان الطلاب لها.', '',
+    'تقديم نموذج عملي صحيح للمهارة يرسّخ الصورة الحركية الصحيحة لدى الطلاب.',
+    'الشرح الواضح والمتسلسل للمهارة يسهّل على الطلاب فهمها وأداءها.']),
+  p28: PE('خطوات تطبيق المهارة', [
+    'تطبيق متدرج من السهل إلى الصعب، بمشاركة جميع الطلاب، مع تصحيح الأخطاء الفنية أثناء الأداء.',
+    'تطبيق متدرج بمشاركة جميع الطلاب.',
+    'تطبيق بمشاركة بعض الطلاب.',
+    'تطبيق غير متدرج ولا يحقق هدف المهارة.',
+  ], ['تميزكم في التطبيق المتدرج وتصحيح الأخطاء الفنية أثناء الأداء أسهم في إتقان الطلاب للمهارة.', '',
+    'إتاحة فرصة التطبيق لجميع الطلاب تحقق العدالة في فرص التعلم وتسرّع إتقان المهارة.',
+    'التدرج في تطبيق المهارة من السهل إلى الصعب يحقق الإتقان ويقلل الأخطاء.']),
+  p30: PE('التقدم بالخبرة', [
+    'تقدم بالخبرة متدرج ومناسب لمستويات الطلاب، ويربط المهارة بمواقف اللعب الفعلية.',
+    'تقدم بالخبرة متدرج ومناسب لمستويات الطلاب.',
+    'تقدم بالخبرة غير متدرج.',
+    'لا يوجد تقدم بالخبرة.',
+  ], ['تميزكم في التقدم بالخبرة وربط المهارة بمواقف اللعب الفعلية أسهم في انتقال أثر التعلم.', '',
+    'التدرج في التقدم بالخبرة يناسب مستويات الطلاب ويبني على ما تعلموه.',
+    'التقدم بالخبرة ينقل الطالب من الأداء البسيط إلى توظيف المهارة في مواقف اللعب.']),
+  p32: PE('فاعلية الأنشطة الصفية', [
+    'أنشطة متنوعة ومشوقة، يتفاعل فيها جميع الطلاب إيجابيًا، وتعزز التعلم التعاوني وروح الفريق.',
+    'أنشطة يتفاعل فيها معظم الطلاب إيجابيًا.',
+    'أنشطة يتفاعل فيها بعض الطلاب.',
+    'أنشطة غير فاعلة.',
+  ], ['تميزكم في تنويع الأنشطة وتعزيز روح الفريق أسهم في تفاعل جميع الطلاب وتحقيق أهداف الدرس.', '',
+    'تفعيل دور جميع الطلاب في الأنشطة ينمي قدراتهم ويحقق أهداف الدرس.',
+    'فاعلية الأنشطة تنعكس إيجابًا على دافعية الطلاب وأدائهم.']),
+  p34: PE('ملاءمة طريقة التدريس لتحقيق الأهداف', [
+    'طريقة التدريس مناسبة لطبيعة المهارة ومستوى الطلاب، ومنفذة بشكل يراعي الأمن والسلامة، ومشوقة.',
+    'طريقة التدريس مناسبة لطبيعة المهارة، ومنفذة بشكل يراعي الأمن والسلامة.',
+    'طريقة التدريس مناسبة، ومنفذة بشكل لا يراعي الأمن والسلامة.',
+    'طريقة التدريس غير مناسبة لطبيعة المهارة.',
+  ], ['تميزكم في اختيار طريقة تدريس مناسبة ومشوقة تراعي الأمن والسلامة أسهم في تحقيق أهداف الدرس.', '',
+    'مراعاة الأمن والسلامة عند تنفيذ طريقة التدريس تحمي الطلاب وتضمن استمرار التعلم.',
+    'اختيار طريقة التدريس المناسبة لطبيعة المهارة يحقق أهداف الدرس.']),
+  p36: PE('فاعلية الأدوات الرياضية في تحقيق أهداف التعلم', [
+    'أدوات كافية لعدد الطلاب، وآمنة، ومرتبطة بالمهارة، وموظفة بشكل مبتكر.',
+    'أدوات كافية لعدد الطلاب، وآمنة، ومرتبطة بالمهارة.',
+    'أدوات غير كافية لعدد الطلاب.',
+    'أدوات غير مناسبة أو غير آمنة.',
+    'لا توجد أدوات رياضية.',
+  ], ['تميزكم في توظيف الأدوات الرياضية بشكل مبتكر أسهم في زيادة فرص الممارسة وبقاء أثر التعلم.', '',
+    'كفاية الأدوات لعدد الطلاب تزيد زمن الممارسة الفعلية لكل طالب.',
+    'سلامة الأدوات ومناسبتها للمهارة شرط أساسي لأمن الطلاب وتحقيق الأهداف.',
+    'توفير الأدوات الرياضية المناسبة ضرورة لتعلم المهارة وممارستها.']),
+  p38: PE('إغلاق الدرس (التهدئة، ملخص الدرس)', [
+    'تهدئة مناسبة يعقبها ملخص للدرس يربط النقاط الفنية للمهارة، مع تحديد مهام للطلاب.',
+    'تهدئة مناسبة يعقبها ملخص للدرس.',
+    'تهدئة دون ملخص للدرس، أو ملخص دون تهدئة.',
+    'إغلاق الدرس بزمن غير مناسب.',
+    'لا يوجد إغلاق للدرس.',
+  ], ['تميزكم في إغلاق الدرس بالتهدئة والتلخيص وتحديد المهام أسهم في ترسيخ المهارة وعودة الطلاب للحالة الطبيعية.', '',
+    'الجمع بين التهدئة وتلخيص الدرس يعيد الطلاب للحالة الطبيعية ويرسّخ النقاط الفنية للمهارة.',
+    'تخصيص زمن مناسب لإغلاق الدرس يسهم في تنظيم إجراءات التعلم.',
+    'إغلاق الدرس بالتهدئة والتلخيص يسهم في ترسيخ التعلم وسلامة الطلاب.']),
+  p40: PE('تهيئة البيئة الصفية بما يتناسب مع الدرس', [
+    'الملعب والأدوات مجهزة قبل بدء الدرس، والبيئة آمنة ومنظمة ومحفزة للتعلم.',
+    'الملعب والأدوات مجهزة قبل بدء الدرس، والبيئة آمنة ومنظمة.',
+    'البيئة منظمة مع ملاحظات على الأمن والسلامة.',
+    'الملعب والأدوات غير مجهزة.',
+  ], ['تميزكم في تجهيز الملعب والأدوات وتهيئة بيئة آمنة ومحفزة أسهم في استثمار وقت الدرس وسلامة الطلاب.', '',
+    'مراعاة متطلبات الأمن والسلامة في بيئة الدرس تحمي الطلاب من الإصابات.',
+    'تجهيز الملعب والأدوات قبل بدء الدرس يوفر الوقت ويسهم في تحقيق الأهداف.']),
+  p42: PE('إشراك جميع الطلاب في فعاليات الدرس', [
+    'جميع الطلاب مشاركون بفاعلية، مع توظيف الطلاب غير القادرين على الأداء في أدوار مساندة.',
+    'جميع الطلاب مشاركون في فعاليات الدرس.',
+    'معظم الطلاب مشاركون في فعاليات الدرس.',
+    'مشاركة الطلاب محدودة.',
+  ], ['تميزكم في إشراك جميع الطلاب وتوظيف غير القادرين على الأداء في أدوار مساندة حقق العدالة في فرص التعلم.', '',
+    'إشراك جميع الطلاب في فعاليات الدرس يحقق العدالة في فرص التعلم والممارسة.',
+    'زيادة مشاركة الطلاب ترفع زمن التعلم الفعلي وتحقق أهداف الدرس.']),
+  p44: PE('توظيف مهارات التواصل بفاعلية مع الطلاب', [
+    'التواصل يتسم بالوضوح والاحترام، مع توظيف الصافرة والإشارات بفاعلية، وتحفيز الطلاب وتشجيعهم.',
+    'التواصل يتسم بالوضوح والاحترام، مع توظيف الصافرة والإشارات بفاعلية.',
+    'التواصل يتسم بالوضوح والاحترام.',
+    'التواصل ضعيف.',
+  ], ['تميزكم في التواصل مع الطلاب وتحفيزهم أسهم في إدارة الدرس بفاعلية ورفع دافعيتهم.', '',
+    'توظيف الصافرة والإشارات المتفق عليها يسهّل إدارة الطلاب في الملعب.',
+    'التواصل الفعال مع الطلاب يحقق الانضباط ويسهم في تحقيق أهداف التعلم.']),
+  p46: PE('إدارة وقت التعلم بكفاءة', [
+    'الوقت موزع بشكل مناسب على أجزاء الدرس، مع استثمار وقت الحصة كاملًا في النشاط الحركي.',
+    'الوقت موزع بشكل مناسب على أجزاء الدرس.',
+    'الوقت موزع بشكل غير مناسب على أجزاء الدرس.',
+    'هدر واضح في وقت التعلم.',
+  ], ['تميزكم في إدارة وقت الحصة واستثماره في النشاط الحركي أسهم في زيادة زمن التعلم الفعلي.', '',
+    'توزيع الوقت بشكل مناسب على أجزاء الدرس يسهم في تحقيق أهدافها.',
+    'الحد من هدر الوقت يزيد زمن الممارسة الفعلية للطلاب.']),
+  p48: PE('مراعاة الفروق الفردية بين الطلاب', [
+    'تمارين وأنشطة بمستويات متدرجة تناسب قدرات جميع الطلاب، مع دعم الطلاب الأقل مستوى.',
+    'تمارين وأنشطة بمستويات متدرجة تناسب قدرات الطلاب.',
+    'تمارين وأنشطة بمستوى واحد لجميع الطلاب.',
+    'لم تتم مراعاة الفروق الفردية.',
+  ], ['تميزكم في مراعاة الفروق الفردية ودعم الطلاب الأقل مستوى حقق العدالة في فرص التعلم.', '',
+    'تقديم تمارين بمستويات متدرجة يتيح لكل طالب التقدم وفق قدراته.',
+    'مراعاة الفروق الفردية تسهم في مشاركة جميع الطلاب وتحقيق أهداف التعلم.']),
+  p50: PE('توثيق التقويم في سجلات المتابعة', [
+    'سجل المتابعة مفعل في مراحل التقويم المختلفة، ويوظَّف في تحفيز الطلاب وتحسين أدائهم المهاري.',
+    'سجل المتابعة مفعل في مراحل التقويم المختلفة.',
+    'سجل المتابعة مفعل جزئيًا.',
+    'سجل المتابعة غير مفعل.',
+  ], ['تميزكم في تفعيل سجل المتابعة وتوظيفه في تحفيز الطلاب أسهم في تحسين أدائهم المهاري.', '',
+    'تفعيل سجل المتابعة في جميع مراحل التقويم يعطي صورة دقيقة عن مستوى كل طالب.',
+    'توثيق التقويم في سجل المتابعة يسهم في تحسين نواتج التعلم.']),
+  p52: PE('متابعة المهام الأدائية', [
+    'المهام الأدائية محددة ومتابعة، مع تقديم تغذية راجعة فردية للطلاب.',
+    'المهام الأدائية محددة ومتابعة.',
+    'المهام الأدائية محددة وغير متابعة.',
+    'لا توجد مهام أدائية.',
+  ], ['تميزكم في متابعة المهام الأدائية وتقديم تغذية راجعة فردية أسهم في تحسين مستوى الطلاب.', '',
+    'متابعة المهام الأدائية تضمن تحقيق الهدف منها وتحسين أداء الطلاب.',
+    'تحديد مهام أدائية يعزز ممارسة الطلاب للمهارة خارج الدرس.']),
+};
+const PE_SECTIONS = [
+  { title: 'التخطيط للتدريس', nums: ['p12', 'p14', 'p16'] },
+  { title: 'إجراءات وأنشطة الدرس', nums: ['p18', 'p20', 'p22', 'p24', 'p26', 'p28', 'p30', 'p32', 'p34', 'p36', 'p38'] },
+  { title: 'إدارة الصف', nums: ['p40', 'p42', 'p44', 'p46'] },
+  { title: 'التقويم', nums: ['p48', 'p50', 'p52'] },
+];
+const PE_STRATEGIES = [
+  'الأسلوب الأمري', 'الأسلوب التدريبي', 'الأسلوب التبادلي', 'أسلوب فحص الذات', 'أسلوب الاحتواء (التضمين)',
+  'الاكتشاف الموجه', 'حل المشكلات', 'التعلم التعاوني', 'التعلم باللعب', 'المنافسة',
+  'التدريب الدائري (المحطات)', 'النمذجة', 'المعلم الصغير', 'الألعاب الصغيرة', 'التعلم بالأقران',
+];
+Object.entries(PE_INDICATORS).forEach(([k, v]) => { INDICATORS[k] = { label: v.label, options: v.options }; OPTION_COMMENTS[k] = v.comments; });
+
+// نوع النموذج: 'pe' للتربية البدنية، 'general' للعام
+const isPeSubject = s => /بدني|تربيه رياضيه/.test(String(s || '').replace(/ة/g, 'ه').replace(/[أإآ]/g, 'ا'));
+function visitFormType(v) {
+  if (!v) return 'general';
+  const keys = Object.keys(v.ratings || {});
+  if (keys.length) return keys.some(k => k.startsWith('p')) ? 'pe' : 'general';
+  return isPeSubject(v.subject_name) || isPeSubject(v.specialization) ? 'pe' : 'general';
+}
+const sectionsOf = type => (type === 'pe' ? PE_SECTIONS : SECTIONS);
+const strategiesOf = type => (type === 'pe' ? PE_STRATEGIES : STRATEGIES);
+
 // تقدير كل خيار حسب ترتيبه (مطابق لملف "بنود الزيارات" الرسمي المعتمد):
 // فهرس 0 = مميز، فهرس 1 = حقق الهدف، كل الفهارس من 2 حتى ما قبل الأخير = فرصة تحسين، والفهرس الأخير دايمًا "لم يتم تقييم..." ولا ياخذ تقدير
 // الرموز مطابقة للنموذج الرسمي المعتمد: ✓ = حقق الهدف، ➔ = فرصة تحسين، ⭐ = مميز
@@ -576,6 +787,8 @@ async function renderForm(container, existing) {
   const isEdit = !!existing;
   cvEditingId = isEdit ? existing.id : null;
   if (isEdit) { cvGrade = existing.grade_level; cvSection = existing.class_section; }
+  cvFormType = visitFormType(existing);
+  cvFormTypeManual = isEdit;
 
   container.innerHTML = `
     <div style="margin-bottom:14px; display:flex; justify-content:space-between; align-items:center;">
@@ -627,14 +840,18 @@ async function renderForm(container, existing) {
       <input type="text" id="cv-visit-purpose" placeholder="الهدف من الزيارة" value="${esc(existing?.visit_purpose || '')}" />
     </div>
 
+    <div class="form-card cv-type-card">
+      <h4>نموذج الزيارة</h4>
+      <div class="seg-tabs" id="cv-form-type" role="group" aria-label="نوع نموذج الزيارة">
+        <button type="button" data-t="general">النموذج العام</button>
+        <button type="button" data-t="pe">التربية البدنية</button>
+      </div>
+      <p class="cv-type-hint" id="cv-type-hint"></p>
+    </div>
+
     <div class="form-card">
       <h4>الاستراتيجيات المطبقة</h4>
-      <div id="cv-strategies" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:8px;">
-        ${STRATEGIES.map(s => `
-          <label style="font-size:12.5px; display:flex; align-items:center; gap:6px; font-weight:400;">
-            <input type="checkbox" class="cv-strategy-cb" value="${esc(s)}" style="width:auto; margin:0;"${existing?.strategies?.includes(s) ? ' checked' : ''} /> ${esc(s)}
-          </label>`).join('')}
-      </div>
+      <div id="cv-strategies" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(180px,1fr)); gap:8px;"></div>
       <div style="margin-top:10px; display:flex; align-items:center; gap:8px;">
         <label style="font-size:12.5px; display:flex; align-items:center; gap:6px; font-weight:400;">
           <input type="checkbox" id="cv-strategy-other-cb" style="width:auto; margin:0;"${existing?.strategies_other ? ' checked' : ''} /> إجابة أخرى
@@ -643,42 +860,18 @@ async function renderForm(container, existing) {
       </div>
     </div>
 
-    ${SECTIONS.map(sec => `
-      <div class="form-card">
-        <h4>${esc(sec.title)}</h4>
-        ${sec.nums.map(num => {
-          const currentVal = existing?.ratings?.[num] || '';
-          const tier = currentVal ? tierForOption(num, currentVal) : null;
-          // لو الزيارة قديمة (قبل تفعيل التعليقات الرسمية لكل خيار) وما فيها ملاحظة محفوظة، نقترح التعليق الرسمي المقابل لنفس الخيار
-          let currentRec = existing?.recommendations?.[num] || '';
-          if (!currentRec && tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز')) {
-            const idx = INDICATORS[num].options.indexOf(currentVal);
-            currentRec = (OPTION_COMMENTS[num] || [])[idx] || '';
-          }
-          const showRec = tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز');
-          const recPlaceholder = tier && tier.label === 'مميز' ? 'ملاحظة تميز (تظهر عند اختيار «مميز»)' : 'التوصية (تظهر عند اختيار «فرصة تحسين»)';
-          return `
-          <div style="margin-bottom:14px;">
-            <label style="font-size:13px; color:var(--navy); display:block; margin-bottom:6px; font-weight:700;">${num}. ${esc(INDICATORS[num].label)}</label>
-            <select class="cv-rating-select" data-indicator="${num}">
-              <option value="">اختر التقييم</option>
-              ${INDICATORS[num].options.map(o => `<option value="${esc(o)}"${o === currentVal ? ' selected' : ''}>${esc(o)}</option>`).join('')}
-            </select>
-            <div class="cv-rec-wrap" data-indicator="${num}" style="margin-top:6px; ${showRec ? '' : 'display:none;'}">
-              <input type="text" class="cv-rec-input" data-indicator="${num}" placeholder="${esc(recPlaceholder)}" value="${esc(currentRec)}" style="font-size:12.5px;" />
-            </div>
-          </div>`;
-        }).join('')}
-      </div>`).join('')}
+    <div id="cv-indicators"></div>
 
     <div class="form-card">
       <h4>بيانات ختامية</h4>
+      <div id="cv-upgrade-wrap">
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">ارتقاء (رياضيات - لغتي)</label>
       <div style="display:flex; gap:16px; margin-bottom:14px;">
         ${['يوجد', 'لا يوجد', 'لا ينطبق'].map(v => `
           <label style="font-size:13px; display:flex; align-items:center; gap:6px; font-weight:400;">
             <input type="radio" name="cv-upgrade" value="${v}" style="width:auto;"${existing?.upgrade_math_lughati === v ? ' checked' : ''} /> ${v}
           </label>`).join('')}
+      </div>
       </div>
       <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">داعم (مجتمعات التعلم المهنية - علاج التعثر)</label>
       <div style="display:flex; gap:16px; margin-bottom:14px;">
@@ -707,6 +900,7 @@ async function renderForm(container, existing) {
   document.getElementById('cv-back-list-btn').addEventListener('click', () => { cvEditingVisit = null; cvView = 'list'; renderView(); });
   document.getElementById('cv-visit-date').value = existing?.visit_date || todayIso();
 
+  setFormType(cvFormType, existing);
   renderGradeTabs();
   await refreshSectionOptions();
   await loadTeachersList();
@@ -720,26 +914,98 @@ async function renderForm(container, existing) {
   document.getElementById('cv-day-select').addEventListener('change', updateSlotInfo);
   document.getElementById('cv-period-select').addEventListener('change', updateSlotInfo);
 
-  // إظهار/إخفاء حقل "الملاحظة/التوصية" وتعبئته تلقائيًا (من النموذج الرسمي) لما يتغيّر التقييم إلى "مميز" أو "فرصة تحسين"
-  container.querySelectorAll('.cv-rating-select').forEach(sel => {
+  // نوع النموذج: من الزيارة نفسها لو تعديل، وإلا من مادة الحصة المختارة (يقدر الزائر يغيّره)
+  document.querySelectorAll('#cv-form-type button').forEach(b => b.addEventListener('click', () => {
+    cvFormTypeManual = true;
+    setFormType(b.dataset.t, existing);
+  }));
+
+  document.getElementById('cv-save-btn').addEventListener('click', saveVisit);
+}
+
+let cvFormType = 'general';
+let cvFormTypeManual = false;
+
+// يرسم بنود التقييم والاستراتيجيات حسب نوع النموذج (عام / تربية بدنية)
+function setFormType(type, existing) {
+  const prevType = cvFormType;
+  const stratBox = document.getElementById('cv-strategies');
+  const indBox = document.getElementById('cv-indicators');
+  if (!stratBox || !indBox) return;
+  // نحتفظ بالاستراتيجيات المختارة لو كانت موجودة بالقائمة الجديدة
+  const picked = stratBox.children.length
+    ? new Set([...stratBox.querySelectorAll('.cv-strategy-cb:checked')].map(cb => cb.value))
+    : new Set(existing?.strategies || []);
+  // والتقييمات المختارة لو ما تغيّر النوع
+  const keepRatings = {};
+  const keepRecs = {};
+  if (prevType === type) indBox.querySelectorAll('.cv-rating-select').forEach(sel => { if (sel.value) keepRatings[sel.dataset.indicator] = sel.value; });
+  if (prevType === type) indBox.querySelectorAll('.cv-rec-input').forEach(i => { if (i.value) keepRecs[i.dataset.indicator] = i.value; });
+  cvFormType = type;
+
+  document.querySelectorAll('#cv-form-type button').forEach(b => { const on = b.dataset.t === type; b.classList.toggle('active', on); b.setAttribute('aria-pressed', on); });
+  const hint = document.getElementById('cv-type-hint');
+  if (hint) hint.textContent = type === 'pe'
+    ? 'نموذج التربية البدنية: بنود خاصة بالإحماء وشرح المهارة وتطبيقها والأدوات الرياضية.'
+    : 'النموذج العام المعتمد لجميع التخصصات.';
+  const up = document.getElementById('cv-upgrade-wrap');
+  if (up) up.style.display = type === 'pe' ? 'none' : '';
+
+  stratBox.innerHTML = strategiesOf(type).map(s => `
+    <label style="font-size:12.5px; display:flex; align-items:center; gap:6px; font-weight:400;">
+      <input type="checkbox" class="cv-strategy-cb" value="${esc(s)}" style="width:auto; margin:0;"${picked.has(s) ? ' checked' : ''} /> ${esc(s)}
+    </label>`).join('');
+
+  const sameAsExisting = existing && visitFormType(existing) === type;
+  let n = 0;
+  indBox.innerHTML = sectionsOf(type).map(sec => `
+    <div class="form-card">
+      <h4>${esc(sec.title)}</h4>
+      ${sec.nums.map(num => {
+        n++;
+        const currentVal = keepRatings[num] || (sameAsExisting ? existing.ratings?.[num] : '') || '';
+        const tier = currentVal ? tierForOption(num, currentVal) : null;
+        let currentRec = keepRecs[num] || (sameAsExisting ? existing.recommendations?.[num] : '') || '';
+        if (!currentRec && tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز')) {
+          const idx = INDICATORS[num].options.indexOf(currentVal);
+          currentRec = (OPTION_COMMENTS[num] || [])[idx] || '';
+        }
+        const showRec = tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز');
+        const recPlaceholder = tier && tier.label === 'مميز' ? 'ملاحظة تميز (تظهر عند اختيار «مميز»)' : 'التوصية (تظهر عند اختيار «فرصة تحسين»)';
+        const label = type === 'pe' ? n : num;
+        return `
+        <div style="margin-bottom:14px;">
+          <label style="font-size:13px; color:var(--navy); display:block; margin-bottom:6px; font-weight:700;">${label}. ${esc(INDICATORS[num].label)}</label>
+          <select class="cv-rating-select" data-indicator="${num}">
+            <option value="">اختر التقييم</option>
+            ${INDICATORS[num].options.map(o => { const t = tierForOption(num, o); return `<option value="${esc(o)}"${o === currentVal ? ' selected' : ''}>${t ? t.symbol + ' ' : ''}${esc(o)}</option>`; }).join('')}
+          </select>
+          <div class="cv-rec-wrap" data-indicator="${num}" style="margin-top:6px; ${showRec ? '' : 'display:none;'}">
+            <input type="text" class="cv-rec-input" data-indicator="${num}" placeholder="${esc(recPlaceholder)}" value="${esc(currentRec)}" style="font-size:12.5px;" />
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+
+  // إظهار/إخفاء حقل "الملاحظة/التوصية" وتعبئته تلقائيًا لما يتغيّر التقييم إلى "مميز" أو "فرصة تحسين"
+  indBox.querySelectorAll('.cv-rating-select').forEach(sel => {
     sel.addEventListener('change', () => {
       const num = sel.dataset.indicator;
-      const wrap = container.querySelector(`.cv-rec-wrap[data-indicator="${num}"]`);
-      const input = container.querySelector(`.cv-rec-input[data-indicator="${num}"]`);
+      const wrap = indBox.querySelector(`.cv-rec-wrap[data-indicator="${num}"]`);
+      const input = indBox.querySelector(`.cv-rec-input[data-indicator="${num}"]`);
       const tier = sel.value ? tierForOption(num, sel.value) : null;
       if (tier && (tier.label === 'فرصة تحسين' || tier.label === 'مميز')) {
         wrap.style.display = '';
         input.placeholder = tier.label === 'مميز' ? 'ملاحظة تميز (تظهر عند اختيار «مميز»)' : 'التوصية (تظهر عند اختيار «فرصة تحسين»)';
         const idx = INDICATORS[num].options.indexOf(sel.value);
         const suggested = (OPTION_COMMENTS[num] || [])[idx] || '';
-        if (!input.value && suggested) input.value = suggested;
+        const known = Object.values(OPTION_COMMENTS[num] || []).includes(input.value);
+        if ((!input.value || known) && suggested) input.value = suggested;
       } else {
         wrap.style.display = 'none';
       }
     });
   });
-
-  document.getElementById('cv-save-btn').addEventListener('click', saveVisit);
 }
 
 function renderGradeTabs() {
@@ -812,6 +1078,7 @@ function updateSlotInfo() {
     return;
   }
   infoEl.innerHTML = `المادة: <b>${esc(cell.subject)}</b> — المعلم المسجّل بالجدول: <b>${esc(cell.teacher || '-')}</b>`;
+  if (!cvFormTypeManual) { const t = isPeSubject(cell.subject) ? 'pe' : 'general'; if (t !== cvFormType) setFormType(t, null); }
 
   // محاولة ربط تلقائي بين اسم المعلم المكتوب بجدول الحصص وحساب معلم فعلي على النظام
   // (الاسم بجدول الحصص نص حر ممكن ما يطابق حرفيًا اسم الحساب، فهذا الربط ضروري حتى يقدر المعلم يشوف زيارته)
@@ -884,7 +1151,7 @@ async function saveVisit() {
     strategies_other: strategiesOther || null,
     ratings,
     recommendations,
-    upgrade_math_lughati: upgradeEl ? upgradeEl.value : null,
+    upgrade_math_lughati: cvFormType === 'pe' ? null : (upgradeEl ? upgradeEl.value : null),
     support_plc: supportEl ? supportEl.value : null,
     positive_aspects: document.getElementById('cv-positive').value.trim() || null,
     improvement_mentioned_above: document.getElementById('cv-improve-above').checked,
@@ -992,7 +1259,7 @@ function buildVisitReportDoc(v) {
   const sectionsHtml = `
     <table class="ratings">
       <tbody>
-        ${SECTIONS.map(sec => sectionHtml(sec.title) + sec.nums.map(rowHtml).join('')).join('')}
+        ${sectionsOf(visitFormType(v)).map(sec => sectionHtml(sec.title) + sec.nums.map(rowHtml).join('')).join('')}
       </tbody>
     </table>`;
 
@@ -1010,7 +1277,7 @@ function buildVisitReportDoc(v) {
     <div class="header">
       <div class="logo-side">${logoHtml}</div>
       <div class="titles">
-        <h1>تقرير زيارة صفية</h1>
+        <h1>تقرير زيارة صفية${visitFormType(v) === 'pe' ? ' — التربية البدنية' : ''}</h1>
         <p class="dept">${esc(printOrgName())}</p>
       </div>
       <div class="logo-side"></div>
@@ -1028,7 +1295,7 @@ function buildVisitReportDoc(v) {
 
     ${sectionsHtml}
 
-    <div class="extra-box"><span class="lbl">ارتقاء (رياضيات - لغتي):</span>${esc(v.upgrade_math_lughati || '-')}</div>
+    ${visitFormType(v) === 'pe' ? '' : `<div class="extra-box"><span class="lbl">ارتقاء (رياضيات - لغتي):</span>${esc(v.upgrade_math_lughati || '-')}</div>`}
     <div class="extra-box"><span class="lbl">داعم (مجتمعات التعلم المهنية - علاج التعثر):</span>${esc(v.support_plc || '-')}</div>
     <div class="extra-box positive"><span class="lbl">الجوانب الإيجابية:</span>${esc(v.positive_aspects || '-')}</div>
     <div class="extra-box improve"><span class="lbl">فرص التحسين:</span>${esc(improvementText)}</div>
