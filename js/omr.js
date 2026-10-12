@@ -268,19 +268,6 @@ export function candidateQuads(cands, imgW, imgH) {
   return quads;
 }
 
-// للمعاينة الحية: أفضل رباعي يطابق نسبة أبعاد الورقة (أي اتجاه) وأحجام علاماته متناسقة
-export function quickQuad(cands, imgW, imgH, geo, pageSize) {
-  const asps = layoutsFor(geo, pageSize).map(l => (l.marks[2][1] - l.marks[0][1]) / (l.marks[1][0] - l.marks[0][0]));
-  let best = null;
-  for (const q of candidateQuads(cands, imgW, imgH)) {
-    const a = quadAspect(q);
-    if (!asps.some(t => Math.min(Math.abs(Math.log(a / t)), Math.abs(Math.log(1 / a / t))) < 0.35)) continue;
-    const [tl, tr, bl, br] = q;
-    const area = Math.abs((tr.x - tl.x) * (bl.y - tl.y) - (tr.y - tl.y) * (bl.x - tl.x));
-    if (!best || area > best.area) best = { q, area };
-  }
-  return best ? best.q : null;
-}
 
 // وضوح إطارات الفقاعات عند المواقع المتوقعة (للتأكد من الاتجاه والمحاذاة)
 function ringContrast(g, H, pts, rad, dx = 0, dy = 0) {

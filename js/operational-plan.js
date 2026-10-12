@@ -4,7 +4,7 @@ import { sb, currentUserId, currentProfile, gradeLabels,
 import { loadXLSX } from './lib-loader.js';
 
 /* ================= الخطة التشغيلية ================= */
-function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 // نفس فكرة الحماية بـ setupCollapsible بملف core.js: لو عنصر بالصفحة مفقود (نسخة index.html
 // ما تحدّثت مع هذا الملف) نتجاهل ربط الحدث بهدوء بدل ما نرمي خطأ يوقف تحميل باقي الوحدة كاملة.
 function onEl(id, event, handler) {

@@ -67,11 +67,7 @@ async function loadPermsSection() {
   });
 }
 
-function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s == null ? '' : String(s);
-  return d.innerHTML;
-}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 document.getElementById('wt-perm-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('wt-perm-error');

@@ -42,7 +42,7 @@ let teacherLinkMap = new Map();
 let savedLinks = {}; // اسم المعلم الخام من الملف -> id حساب المعلم المختار يدويًا (أو '' = خليه كما هو)
 
 function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
-function escHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 // كل أسماء المعلمين المختلفة (بعد تطبيع بسيط) اللي طلعت بأي خلية بأي فصل بالملف كامل
 function collectDistinctTeacherNames(classes) {

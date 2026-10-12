@@ -516,11 +516,7 @@ async function saveWeeklyPlan(errEl, lessons) {
   setTimeout(() => { successEl.style.display = 'none'; }, 3500);
 }
 
-function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s == null ? '' : String(s);
-  return d.innerHTML;
-}
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 async function refreshWeeklyList() {
   const grade = document.getElementById('weekly-grade').value;
@@ -641,8 +637,8 @@ function renderPlanEditMode(card, p) {
     <h4 style="color:var(--meadow); margin:0 0 10px;">${esc(p.subjects ? p.subjects.name : '')} — تعديل (بواسطة الإدارة)</h4>
     <div class="edit-lessons-container"></div>
     <span class="text-action-btn edit-add-lesson-btn" style="display:inline-block; margin-bottom:14px;">+ إضافة درس</span>
-    <textarea class="edit-tasks" rows="2" placeholder="المهام الأدائية">${p.performance_tasks || ''}</textarea>
-    <textarea class="edit-homework" rows="2" placeholder="الواجبات" ${p.no_homework ? 'disabled' : ''}>${p.homework || ''}</textarea>
+    <textarea class="edit-tasks" rows="2" placeholder="المهام الأدائية">${esc(p.performance_tasks || '')}</textarea>
+    <textarea class="edit-homework" rows="2" placeholder="الواجبات" ${p.no_homework ? 'disabled' : ''}>${esc(p.homework || '')}</textarea>
     <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; color:var(--ink); margin-bottom:14px; cursor:pointer;">
       <input type="checkbox" class="edit-no-homework" ${p.no_homework ? 'checked' : ''} style="width:auto; margin:0;" />
       لا يوجد واجب هذا الأسبوع لهذه المادة
@@ -654,7 +650,7 @@ function renderPlanEditMode(card, p) {
     <div class="edit-test-sections-wrap ${p.has_test ? '' : 'hidden'}" style="background:var(--sand); border-radius:10px; padding:10px 12px; margin-bottom:14px;">
       <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول اللي عليها الاختبار. اتركها كلها فاضية = الاختبار على كل الفصول.</p>
       <div class="edit-test-sections-list" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
-      <textarea class="edit-test-note" placeholder="ملاحظة عن الاختبار (مثال: من صفحة ١٠ إلى ١٥ في الكتاب، أو من ورقة العمل المرفقة)" rows="2" style="margin:10px 0 0;">${p.test_note || ''}</textarea>
+      <textarea class="edit-test-note" placeholder="ملاحظة عن الاختبار (مثال: من صفحة ١٠ إلى ١٥ في الكتاب، أو من ورقة العمل المرفقة)" rows="2" style="margin:10px 0 0;">${esc(p.test_note || '')}</textarea>
     </div>
     <div class="error-msg edit-error"></div>
     <button class="btn-primary edit-save-btn" style="width:auto; padding:10px 18px;">حفظ التعديل</button>

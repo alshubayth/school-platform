@@ -1304,7 +1304,7 @@ function contactActionsHtml(c) {
   return html;
 }
 function escAttr(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
-function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 async function loadContactList() {
   const container = document.getElementById('contact-list');

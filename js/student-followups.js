@@ -2,7 +2,7 @@ import { sb, currentUserId, gradeLabels, backToTiles, currentSchoolId, readScope
 
 document.getElementById('back-to-tiles-12').addEventListener('click', backToTiles);
 
-function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function onEl(id, event, handler) {
   const el = document.getElementById(id);
   if (!el) { console.warn('student-followups: عنصر مفقود بالصفحة', id); return; }

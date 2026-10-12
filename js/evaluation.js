@@ -1,6 +1,6 @@
 import { sb, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo } from './core.js';
 
-function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function initials(name) { return (name || '').trim().split(/\s+/).slice(0, 2).map(w => w[0]).join(''); }
 function todayIso() {
   const d = new Date();

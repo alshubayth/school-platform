@@ -27,7 +27,6 @@ export let myBudgetAccess = null;
 export function setMyBudgetAccess(v) { myBudgetAccess = v; }
 // هل عند المعلم صلاحية ممنوحة من المدير/الوكيل لرؤية "متابعة الخطة الأسبوعية"؟ (المدير/الوكيل يشوفونه دائمًا بحكم دورهم)
 export let hasWeeklyTrackingAccess = false;
-export function setWeeklyTrackingAccess(v) { hasWeeklyTrackingAccess = v; }
 export const isAdminOrDeputy = () => ['admin','deputy'].includes(currentProfile.role);
 export const isStaff = () => ['admin','deputy','teacher'].includes(currentProfile.role);
 export function setupCollapsible(toggleId, bodyId, chevronId) {
@@ -265,7 +264,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-12g';
+export const ASSET_VERSION = '2026-10-12h';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -343,7 +342,7 @@ export async function loadSchoolModulesForCurrent() {
   currentSchoolModules = (error || !data) ? null : data.filter(r => r.enabled).map(r => r.module_key);
 }
 
-function escHtml(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function escHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 async function showSchoolPicker() {
   document.getElementById('login-screen').classList.add('hidden');
@@ -465,9 +464,11 @@ sb.auth.getSession().then(({ data }) => { if (data.session) loadProfileAndShowDa
  * تُستخدم بكل الملفات اللي تحتاج تفلتر قراءة/كتابة جدول بعمود school_id، مع نفس منطق التوافق
  * الخلفي: لو الفلترة فشلت (عمود school_id لسا ما انضاف بقاعدة البيانات) نعيد المحاولة بدونها
  * عشان القسم يستمر يشتغل بمدرسة وحدة قبل تنفيذ SQL الترقية. */
+const isMissingSchoolCol = e => e && (e.code === '42703' || e.code === 'PGRST204' || /school_id/i.test(e.message || ''));
 export async function readScopedBySchool(factory) {
   let res = await factory(true);
-  if (res.error && currentSchoolId) res = await factory(false);
+  // نرجع بدون فلتر المدرسة بس لو الجدول ما فيه عمود school_id (مو لأي خطأ: شبكة/صلاحية)
+  if (res.error && currentSchoolId && isMissingSchoolCol(res.error)) res = await factory(false);
   return res;
 }
 /* upsert بمفتاح تعارض يشمل المدرسة (عشان مدرستين ما تتصادم بياناتهم)، ولو قاعدة البيانات لسا على
@@ -483,7 +484,7 @@ export const conflictOpt = key => (key ? { onConflict: key } : undefined);
 export async function writeWithSchool(factory) {
   const extra = currentSchoolId ? { school_id: currentSchoolId } : {};
   let res = await factory(extra);
-  if (res.error && currentSchoolId) res = await factory({});
+  if (res.error && currentSchoolId && isMissingSchoolCol(res.error)) res = await factory({});
   return res;
 }
 
@@ -523,15 +524,6 @@ export function periodTime(grade, period) {
   return { start: toMin(a), end: toMin(b), label: '\u2066' + fmtClock(toMin(a)) + ' - ' + fmtClock(toMin(b)) + '\u2069' };
 }
 export function fmtClock(min) { const h = Math.floor(min / 60), m = min % 60; return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}`; }
-// حالة الحصة الآن: now (جارية) | soon (التالية خلال ١٥ دقيقة) | past | later
-export function periodStatus(grade, period, date = new Date()) {
-  const t = periodTime(grade, period);
-  if (!t) return { status: 'later', t: null };
-  const now = date.getHours() * 60 + date.getMinutes();
-  if (now >= t.start && now < t.end) return { status: 'now', t, left: t.end - now };
-  if (now >= t.end) return { status: 'past', t };
-  return { status: t.start - now <= 15 ? 'soon' : 'later', t, inMin: t.start - now };
-}
 
 export const DEFAULT_ACADEMIC_START = '2026-08-23';
 // noPlanWeeks: أسابيع دراسة ما فيها خطة أسبوعية (مثل الأسبوع الأول) - ما تنحسب كخطط ناقصة
@@ -638,7 +630,6 @@ export function renderNav(){
   });
   setActiveNavByKey(activeRouteKey || 'home');
 }
-export function setActiveNav(el){ if (el && el.dataset && el.dataset.key) setActiveNavByKey(el.dataset.key); }
 // الزر النشط: الرئيسية، أو مساحة العمل نفسها، أو مساحة العمل اللي ينتمي لها القسم المفتوح
 export function setActiveNavByKey(key){
   let navKey = 'home';

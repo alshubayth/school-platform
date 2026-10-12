@@ -119,12 +119,12 @@ async function refreshTeams() {
   staffCache.forEach(p => {
     const rowK = document.createElement('label');
     rowK.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 2px; cursor:pointer;';
-    rowK.innerHTML = `<input type="checkbox" class="kontrol-check" value="${p.id}" style="width:auto; margin:0;" ${kontrolIds.includes(p.id) ? 'checked' : ''}/> ${p.full_name}`;
+    rowK.innerHTML = `<input type="checkbox" class="kontrol-check" value="${p.id}" style="width:auto; margin:0;" ${kontrolIds.includes(p.id) ? 'checked' : ''}/> ${esc(p.full_name)}`;
     kontrolList.appendChild(rowK);
 
     const rowT = document.createElement('label');
     rowT.style.cssText = 'display:flex; align-items:center; gap:8px; font-size:13px; padding:4px 2px; cursor:pointer;';
-    rowT.innerHTML = `<input type="checkbox" class="tadqeeq-check" value="${p.id}" style="width:auto; margin:0;" ${tadqeeqIds.includes(p.id) ? 'checked' : ''}/> ${p.full_name}`;
+    rowT.innerHTML = `<input type="checkbox" class="tadqeeq-check" value="${p.id}" style="width:auto; margin:0;" ${tadqeeqIds.includes(p.id) ? 'checked' : ''}/> ${esc(p.full_name)}`;
     tadqeeqList.appendChild(rowT);
   });
 }
@@ -438,12 +438,14 @@ async function renderAbsenceSection(container, assignment) {
   container.querySelector('.tra-save').addEventListener('click', async (e) => {
     const btn = e.currentTarget; btn.disabled = true;
     const checkedIds = Array.from(container.querySelectorAll('.absence-check:checked')).map(c => c.value);
-    await sb.from('exam_student_absences').delete().eq('assignment_id', assignment.id);
-    if (checkedIds.length > 0) {
+    const { error: delErr } = await sb.from('exam_student_absences').delete().eq('assignment_id', assignment.id);
+    let insErr = null;
+    if (!delErr && checkedIds.length > 0) {
       const rows = checkedIds.map(sid => ({ assignment_id: assignment.id, student_id: sid, recorded_by: currentUserId }));
-      await writeWithSchool(extra => sb.from('exam_student_absences').insert(rows.map(r => ({ ...r, ...extra }))));
+      ({ error: insErr } = await writeWithSchool(extra => sb.from('exam_student_absences').insert(rows.map(r => ({ ...r, ...extra })))));
     }
     btn.disabled = false;
+    if (delErr || insErr) { alert('تعذر حفظ الغياب: ' + (delErr || insErr).message); return; }
     absenceCounts[assignment.id] = checkedIds.length;
     document.getElementById('trd-abs-cnt').textContent = checkedIds.length || '';
     const msg = container.querySelector('.tra-msg'); msg.textContent = 'تم حفظ الغياب'; setTimeout(() => { msg.textContent = ''; }, 2000);

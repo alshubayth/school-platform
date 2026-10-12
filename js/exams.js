@@ -360,7 +360,7 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
 
   const { data } = await readScopedBySchool(scoped => {
     let query = sb.from('students').select('id, full_name, national_id, grade_level')
-      .or(`full_name.ilike.%${q}%,national_id.ilike.%${q}%`);
+      .or(`full_name.ilike.%${q.replace(/[,()%*\\]/g, ' ')}%,national_id.ilike.%${q.replace(/[,()%*\\]/g, ' ')}%`);
     if (scoped && currentSchoolId) query = query.eq('school_id', currentSchoolId);
     return query.order('full_name').limit(15);
   });
@@ -373,8 +373,8 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
     const row = document.createElement('div');
     row.className = 'emp-row';
     row.innerHTML = `
-      <div class="info"><div class="name">${s.full_name}</div>
-      <div class="title">${gradeLabels[s.grade_level] || ''} · ${s.national_id}</div></div>
+      <div class="info"><div class="name">${escHtml(s.full_name)}</div>
+      <div class="title">${gradeLabels[s.grade_level] || ''} · ${escHtml(s.national_id)}</div></div>
       <button class="text-action-btn add-special-btn">إضافة للجنة الخاصة</button>`;
     row.querySelector('.add-special-btn').addEventListener('click', async () => {
       const conditionNote = prompt('الحالة (مثل: صعوبات تعلم، توحد، إعاقة حركية) — اختياري:', '');
@@ -409,11 +409,11 @@ async function refreshSpecialList() {
     const row = document.createElement('div');
     row.className = 'emp-row';
     const conditionHtml = m.condition_note
-      ? `<span style="font-size:11.5px; background:var(--sand); color:var(--ink); padding:3px 10px; border-radius:20px; font-weight:600;">${m.condition_note}</span>`
+      ? `<span style="font-size:11.5px; background:var(--sand); color:var(--ink); padding:3px 10px; border-radius:20px; font-weight:600;">${escHtml(m.condition_note)}</span>`
       : '';
     row.innerHTML = `
-      <div class="info"><div class="name">${m.students ? m.students.full_name : '-'} ${conditionHtml}</div>
-      <div class="title">${m.students ? (gradeLabels[m.students.grade_level] || '') : ''} · ${m.students ? m.students.national_id : ''}</div></div>
+      <div class="info"><div class="name">${m.students ? escHtml(m.students.full_name) : '-'} ${conditionHtml}</div>
+      <div class="title">${m.students ? (gradeLabels[m.students.grade_level] || '') : ''} · ${m.students ? escHtml(m.students.national_id) : ''}</div></div>
       <button class="text-action-btn edit-condition-btn">تعديل الحالة</button>
       <button class="text-action-btn" style="color:var(--danger) !important;">حذف</button>`;
     row.querySelector('.edit-condition-btn').addEventListener('click', async () => {
@@ -503,7 +503,8 @@ document.getElementById('exam-generate-btn').addEventListener('click', async () 
     });
   });
 
-  await sb.from('exam_committee_assignments').delete().eq('period_id', currentPeriodId);
+  const { error: delErr } = await sb.from('exam_committee_assignments').delete().eq('period_id', currentPeriodId);
+  if (delErr) { errEl.textContent = 'تعذر الحفظ: ' + delErr.message; errEl.style.display = 'block'; return; }
   const { error } = await writeWithSchool(extra => sb.from('exam_committee_assignments').insert(assignments.map(a => ({ ...a, ...extra }))));
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
 
@@ -610,8 +611,8 @@ function committeeInnerHtml(num, rows) {
     return `
     <tr${gradeClass}>
       <td>${i + 1}</td>
-      <td>${r.students ? r.students.national_id : ''}</td>
-      <td class="name-cell">${r.students ? r.students.full_name : ''}</td>
+      <td>${r.students ? escHtml(r.students.national_id) : ''}</td>
+      <td class="name-cell">${r.students ? escHtml(r.students.full_name) : ''}</td>
       <td>${r.students ? (gradeLabels[r.students.grade_level] || '') : ''}</td>
       <td>${r.seat_number}</td>
       <td></td>
@@ -661,7 +662,7 @@ const PRINT_STYLES = `
 
 function openPrintWindow(win, title, innerHtml) {
   win.document.write(`
-    <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${title}</title>
+    <html dir="rtl" lang="ar"><head><meta charset="UTF-8"><title>${escHtml(title)}</title>
     <style>${PRINT_STYLES}</style></head><body>${innerHtml}</body></html>`);
   win.document.close();
   const logoSrc = printLogo();
@@ -713,11 +714,11 @@ function classSheetInnerHtml(title, rows) {
   const tableRows = rows.map((r, i) => `
     <tr>
       <td>${i + 1}</td>
-      <td>${r.national_id}</td>
-      <td class="name-cell">${r.full_name}</td>
+      <td>${escHtml(r.national_id)}</td>
+      <td class="name-cell">${escHtml(r.full_name)}</td>
       <td>${r.seat_number}</td>
-      <td>${r.committee_label}</td>
-      <td>${r.location || '-'}</td>
+      <td>${escHtml(r.committee_label)}</td>
+      <td>${escHtml(r.location || '-')}</td>
     </tr>`).join('');
 
   return `
@@ -809,8 +810,8 @@ function specialConditionsInnerHtml(rows) {
   const tableRows = rows.map((r, i) => `
     <tr>
       <td>${i + 1}</td>
-      <td>${r.national_id}</td>
-      <td class="name-cell">${r.full_name}</td>
+      <td>${escHtml(r.national_id)}</td>
+      <td class="name-cell">${escHtml(r.full_name)}</td>
       <td>${r.grade_label}</td>
       <td>${r.seat_number}</td>
       <td>${r.condition_note || '-'}</td>
@@ -876,7 +877,7 @@ function committeeRosterInnerHtml(rows, totals) {
   const tableRows = rows.map(r => `
     <tr>
       <td class="name-cell">${r.label}</td>
-      <td>${r.location || '-'}</td>
+      <td>${escHtml(r.location || '-')}</td>
       <td>${r.first}</td>
       <td>${r.second}</td>
       <td>${r.third}</td>
@@ -1038,8 +1039,8 @@ function studentLabelHtml(r) {
         <div class="label-tag">${r.committee_label}</div>
         <div class="label-title">بيانات الطالب</div>
         <div class="label-body">
-          <div class="label-row"><span class="lbl">اسم الطالب : </span>${r.full_name}</div>
-          <div class="label-row"><span class="lbl">رقم الهوية : </span><span class="val-green">${r.national_id}</span></div>
+          <div class="label-row"><span class="lbl">اسم الطالب : </span>${escHtml(r.full_name)}</div>
+          <div class="label-row"><span class="lbl">رقم الهوية : </span><span class="val-green">${escHtml(r.national_id)}</span></div>
           <div class="label-row"><span class="lbl">رقم الجلوس : </span><span class="val-red">${r.seat_number}</span>&nbsp;&nbsp;&nbsp;<span class="lbl">الصف : </span>${r.grade_label}</div>
         </div>
       </div>

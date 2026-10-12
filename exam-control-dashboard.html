@@ -152,7 +152,7 @@ async function refreshDashboard() {
     card.innerHTML = `
       <div class="head">
         <div>
-          <h3>${a.subjects ? a.subjects.name : ''}</h3>
+          <h3>${a.subjects ? String(a.subjects.name).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])) : ''}</h3>
           <div class="grade">${gradeLabels[a.grade_level] || ''}</div>
         </div>
         <div class="pct" style="color:${progressColor(pct)};">${pct}%</div>

@@ -488,8 +488,6 @@ export function buildPrintPage(opts, studentsOnPage, logoSrc) {
   return h + `</div>`;
 }
 
-// توافق مع الاستدعاءات السابقة
-export function buildSheetPage(opts, student, logoSrc) { return buildPrintPage(opts, student ? [student] : [], logoSrc); }
 
 /* =========================================================================
  * واجهة المستخدم (داخل قسم تقارير الاختبارات)

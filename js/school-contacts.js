@@ -10,7 +10,7 @@ let selectedType = 'call';
 let editingId = null;
 let contactsCache = [];
 
-function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 export async function loadSchoolContactsModule() {
   renderTypeGrid();

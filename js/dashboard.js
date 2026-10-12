@@ -15,7 +15,7 @@ async function readWeeklyPlansScoped(weekNumber) {
   return res;
 }
 
-function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function normalizeArText(s) { return String(s || '').trim().replace(/\s+/g, ' '); }
 function classLabel(grade, section) { return `${gradeLabels[grade] || grade} - الفصل ${section}`; }
 
@@ -639,7 +639,7 @@ async function renderTeacherDashboard(container) {
 
   if (missingAssignments.length > 0) {
     any = true;
-    const names = missingAssignments.map(a => a.subjects ? a.subjects.name : '').filter(Boolean).join('، ');
+    const names = missingAssignments.map(a => a.subjects ? esc(a.subjects.name) : '').filter(Boolean).join('، ');
     list.appendChild(attentionItem('weekly', `لسا ما سلّمت خطة الأسبوع ${planWeek()} لـ: ${names}`, { level: 'high', action: 'تسليم الخطة', primary: true }));
   } else if ((assignments || []).length > 0) {
     any = true;
@@ -679,7 +679,7 @@ async function renderCommandDashboard(container) {
   const { dayKey, dateStr } = todayInfo();
   const monthStart = dateStr.slice(0, 8) + '01';
   const lm = new Date(dateStr + 'T00:00:00'); lm.setDate(1); lm.setMonth(lm.getMonth() - 1);
-  const lastMonthStart = lm.toISOString().slice(0, 10);
+  const lastMonthStart = toIsoDate(lm);
   const scoped = (table, cols, build) => readScopedBySchool(sc => {
     let q = sb.from(table).select(cols);
     if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId);

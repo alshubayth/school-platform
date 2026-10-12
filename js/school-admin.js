@@ -8,7 +8,7 @@ import { sb, tiles } from './core.js';
 // كل مفتاح خدمة ممكن تفعيله/تعطيله لمدرسة = نفس "key" بقائمة tiles، ما عدا تبويب إدارة المدارس نفسه
 const TOGGLABLE_MODULES = tiles.filter(t => !['schools-admin', 'settings', 'perms', 'school-contacts'].includes(t.key));
 
-function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 
 export async function loadSchoolAdminModule() {
   document.getElementById('sa-add-error').style.display = 'none';

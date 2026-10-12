@@ -1,4 +1,5 @@
 import { sb, gradeLabels, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, upsertSchoolKey, conflictOpt } from './core.js';
+const escSel = v => String(v == null ? '' : v).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 document.getElementById('back-to-tiles-11').addEventListener('click', backToTiles);
 
@@ -211,7 +212,7 @@ function subjectOptionsHtml(selected) {
   });
   // لو المادة المحفوظة مو من القائمة المعروفة (تمت إضافتها يدويًا)، نضيفها كخيار برضو
   if (selected && !SCHEDULE_SUBJECTS.includes(selected)) {
-    html += `<option value="${selected}" selected>${selected}</option>`;
+    html += `<option value="${escSel(selected)}" selected>${escSel(selected)}</option>`;
   }
   return html;
 }
