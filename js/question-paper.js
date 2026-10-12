@@ -18,7 +18,7 @@ import { code128Svg } from './answer-sheet.js';
 const AR = ['أ', 'ب', 'ج'];
 const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 const SLOTS = 3;              // دوائر كل سطر بشبكة التظليل (أ ب ج)
-const G_COLS = 3, G_ROWS = 10;
+const G_COLS = 2, G_ROWS = 5;
 const CAP = G_COLS * G_ROWS;  // أقصى عدد أسئلة
 
 /* ---------- أبعاد الصفحة الأولى (مم) - ثابتة لكل الأوراق ---------- */
@@ -28,8 +28,8 @@ const P = {
   infoTop: 27, infoRowH: 6.6, barcodeW: 56, barModule: 0.36, barH: 10,
   instrTop: 48.5, instrH: 6,
   qTop: 57,
-  gridTitleH: 6.5, gridHeadH: 5, gridRowH: 5.5, gridBottomY: 280,
-  gNumW: 12, gPitch: 8.2, gBubble: 4.9, gPad: 2.5,
+  gridTitleH: 7, gridHeadH: 6.5, gridRowH: 9.5, gridBottomY: 281,
+  gNumW: 16, gPitch: 13, gBubble: 7.2, gPad: 4,
 };
 P.gridTop = P.gridBottomY - (P.gridTitleH + 2 + P.gridHeadH + G_ROWS * P.gridRowH);
 P.gridRowsTop = P.gridTop + P.gridTitleH + 2 + P.gridHeadH;
@@ -37,7 +37,8 @@ P.gridBottom = P.gridRowsTop + G_ROWS * P.gridRowH;
 P.qBottom = P.gridTop - 4;
 P.gColW = P.gNumW + SLOTS * P.gPitch + 2 * P.gPad;
 P.innerW = P.w - 2 * P.side;
-P.gGap = (P.innerW - G_COLS * P.gColW) / (G_COLS - 1);
+P.gGap = Math.min(16, (P.innerW - G_COLS * P.gColW) / Math.max(1, G_COLS - 1));
+P.gOff = (P.innerW - G_COLS * P.gColW - (G_COLS - 1) * P.gGap) / 2; // توسيط الشبكة
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -106,10 +107,10 @@ const PAPER_STYLES = `
   .qb-o.correct .l { background:#1d3557; color:#fff; }
   .qp-grid-title { position:absolute; display:flex; align-items:center; justify-content:center; gap:3mm; background:#1d3557; color:#fff; font-weight:900; font-size:10.5pt; border-radius:1.6mm; }
   .qp-gbox { position:absolute; border:0.35mm solid #1d3557; border-radius:1.8mm; overflow:hidden; background:#fff; }
-  .qp-ghead { position:absolute; background:#1d3557; color:#fff; font-weight:700; font-size:8pt; display:flex; align-items:center; justify-content:center; }
-  .qp-gnum { position:absolute; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:9pt; background:#eef1f6; color:#1d3557; direction:ltr; }
+  .qp-ghead { position:absolute; background:#1d3557; color:#fff; font-weight:700; font-size:9.5pt; display:flex; align-items:center; justify-content:center; }
+  .qp-gnum { position:absolute; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:12pt; background:#eef1f6; color:#1d3557; direction:ltr; }
   .qp-grule { position:absolute; height:0; border-top:0.2mm solid #d3dae5; }
-  .qp-bubble { position:absolute; border:0.3mm solid #222; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#8a8a8a; font-weight:700; line-height:1; font-size:7pt; background:#fff; }
+  .qp-bubble { position:absolute; border:0.3mm solid #222; border-radius:50%; display:flex; align-items:center; justify-content:center; color:#8a8a8a; font-weight:700; line-height:1; font-size:10pt; background:#fff; }
   .qp-bubble.fill { background:#000; color:#000; border-color:#000; }
   .qp-foot { position:absolute; text-align:center; font-size:6.8pt; color:#6a7486; }
   .qp-ex { display:inline-block; width:3.4mm; height:3.4mm; border:0.3mm solid #000; border-radius:50%; vertical-align:middle; margin:0 0.8mm; }
@@ -151,7 +152,7 @@ function gridHtml(paper, perm, key) {
   let h = `<div class="qp-grid-title" style="left:${mm(P.side)}; top:${mm(P.gridTop)}; width:${mm(P.innerW)}; height:${mm(P.gridTitleH)};">نموذج الإجابة <span style="font-weight:400; font-size:8.5pt;">ظلّل دائرة واحدة لكل سؤال تظليلًا كاملًا <span class="qp-ex fill" style="border-color:#fff; background:#fff;"></span></span></div>`;
   const top = P.gridTop + P.gridTitleH + 2;
   for (let c = 0; c < G_COLS; c++) {
-    const x = P.w - P.side - (c + 1) * P.gColW - c * P.gGap; // العمود الأول يمين
+    const x = P.w - P.side - P.gOff - (c + 1) * P.gColW - c * P.gGap; // العمود الأول يمين
     const boxH = P.gridHeadH + G_ROWS * P.gridRowH;
     h += `<div class="qp-gbox" style="left:${mm(x)}; top:${mm(top)}; width:${mm(P.gColW)}; height:${mm(boxH)};"></div>`;
     h += `<div class="qp-ghead" style="left:${mm(x + P.gColW - P.gNumW)}; top:${mm(top)}; width:${mm(P.gNumW)}; height:${mm(P.gridHeadH)};">السؤال</div>`;
@@ -246,8 +247,9 @@ const FLOW_SCRIPT = `(function(){
     return pages;
   }
   document.querySelectorAll('.qp-stu').forEach(function(stu){
-    var fs = 10, pages = fill(stu, fs);
-    while (pages > 1 && fs > 8.5) { var p2 = fill(stu, fs - 0.5); if (p2 < pages) { fs -= 0.5; pages = p2; } else { fill(stu, fs); break; } }
+    var base = fill(stu, 10), best = 10, bestPages = base;
+    for (var f = 9.5; bestPages > 1 && f >= 7.5; f -= 0.5) { var pg = fill(stu, f); if (pg < bestPages) { best = f; bestPages = pg; } }
+    fill(stu, best);
   });
   var n = document.querySelectorAll('.qp-page').length; var c = document.getElementById('qp-count'); if (c) c.textContent = n;
 })();`;
@@ -417,7 +419,7 @@ function renderEditor() {
         <div class="form-card qp-remark">
           <h4>قالب Remark (مرة وحدة)</h4>
           <p>«نموذج الإجابة» أسفل الصفحة الأولى بنفس المكان بكل الأوراق: <b>${G_COLS} أعمدة × ${G_ROWS} أسئلة</b>، وبكل سطر <b>${SLOTS} دوائر</b> (أ ب ج من اليمين). عرّف قالب Remark واحد: الباركود ← StudentID، والشبكة ← ${CAP} سؤال اختيار متعدد. نفس القالب يقرأ كل الاختبارات.</p>
-          <p>لو الأسئلة ما كفتها الصفحة الأولى تكمل بصفحة ثانية: اطبع على الوجهين، والماسح يقرأ الوجه الأمامي بس.</p>
+          
           <p>ارفع ملف النتائج من «التقارير ← رفع نتائج اختبار»، والمنصة تعرف إنه ورقة أسئلة من الباركود وتصحح كل طالب على نموذجه.</p>
         </div>
       </div>
