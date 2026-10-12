@@ -1897,7 +1897,7 @@ async function openManualSheet(rep, onDone) {
       const q = normAr(pq.value);
       const rows = students.filter(x => (!pg.value || x.grade_level === pg.value) && (!ps.value || String(x.class_section) === ps.value) && (!q || normAr(x.full_name).includes(q) || String(x.national_id).includes(q)))
         .sort((a, b) => (have.has(String(a.national_id).trim()) - have.has(String(b.national_id).trim())) || String(a.full_name).localeCompare(String(b.full_name), 'ar')).slice(0, 60);
-      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? ' · له ورقة بالتقرير (الحفظ يستبدلها)' : ''}</small></button>`; }).join('') || '<span class="omr-empty">ما فيه نتائج</span>';
+      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? ' · له ورقة بالتقرير (الحفظ يستبدلها)' : ''}</small></button>`; }).join('') || `<span class="omr-empty">${students.length ? 'ما فيه نتائج' : 'ما فيه طلاب متاحين لك - تأكد إن تخصصاتك مسجلة في «تخصصات المعلمين» أو إن حصصك موجودة بالجدول الدراسي'}</span>`;
       list.querySelectorAll('button').forEach(b => b.onclick = () => { st.student = students.find(x => String(x.national_id) === b.dataset.id); renderSt(); });
     };
     pg.onchange = () => { fill(); draw(); }; ps.onchange = draw; pq.oninput = draw;
