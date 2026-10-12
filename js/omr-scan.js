@@ -6,7 +6,7 @@
  * والتقرير (exam_reports) ينبني منها بنفس صيغة تقارير Remark عشان كل التحليلات تشتغل.
  * المعلم يشوف تقاريره هو بس (RLS)، والإدارة تشوف الكل ومن صحح.
  * ========================================================================= */
-import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels } from './core.js';
+import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels, ASSET_VERSION } from './core.js';
 import { fetchSavedKeys, sheetGeometry, PAGE, itemKinds, TF_LETTERS } from './answer-sheet.js';
 import { grayFromImageData, findMarkInRegion, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
 import { computeExamStats, gradeWithModels, rawFromIdx } from './exam-reports.js';
@@ -46,6 +46,16 @@ async function loadStudents() {
   });
   S.students = (data || []).filter(s => s.national_id);
   S.byId = new Map(S.students.map(s => [String(s.national_id).trim(), s]));
+  // المعلم يختار من طلاب فصوله بس (الباركود يتعرف على أي طالب بالمدرسة)
+  S.pickable = S.students;
+  if (currentProfile && currentProfile.role === 'teacher') {
+    try {
+      const { myTeachingScope, inMyClasses } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
+      const sc = await myTeachingScope();
+      const mine = S.students.filter(s => inMyClasses(sc, s.grade_level, s.class_section));
+      if (mine.length) S.pickable = mine;
+    } catch (e) { /* نخلي الكل */ }
+  }
 }
 
 function keyOpts(k) {
@@ -57,7 +67,7 @@ function keyOpts(k) {
 function renderPanel() {
   const root = $('omr-root');
   if (!S.keys.length) {
-    root.innerHTML = `<div class="ex-empty"><b>ما فيه مفاتيح إجابة محفوظة</b><span>التصحيح بالجوال يحتاج مفتاح الاختبار محفوظ من «ورقة الإجابة والمفتاح»${currentProfile && currentProfile.role === 'teacher' ? ' - اطلبه من الإدارة' : ''}.</span></div>`;
+    root.innerHTML = `<div class="ex-empty"><b>ما فيه مفاتيح إجابة محفوظة</b><span>التصحيح بالجوال يحتاج مفتاح الاختبار محفوظ من «ورقة الإجابة والمفتاح»${currentProfile && currentProfile.role === 'teacher' ? ' - تقدر تسويه من تبويب «ورقة الإجابة والمفتاح» أو تطلبه من الإدارة' : ''}.</span></div>`;
     return;
   }
   root.innerHTML = `
@@ -73,6 +83,7 @@ function renderPanel() {
         <button type="button" class="btn-primary" id="omr-start">📷 ابدأ التصحيح بالكاميرا</button>
         <label class="btn-secondary omr-file-btn">📸 صورة بكاميرا الجوال<input type="file" id="omr-shot" accept="image/*" capture="environment" hidden></label>
         <label class="btn-secondary omr-file-btn">🖼 صور من الجهاز<input type="file" id="omr-files" accept="image/*" multiple hidden></label>
+        <button type="button" class="btn-secondary omr-manual-btn" id="omr-manual">✍️ إدخال ورقة يدويًا</button>
       </div>
       <div class="omr-tips">
         <b>«ابدأ التصحيح»</b> أسرع (يلتقط تلقائيًا ورقة ورا ورقة)، و<b>«صورة بكاميرا الجوال»</b> أدق لأنها بدقة الكاميرا الكاملة - استخدمها لو الباركود ما انقرأ.<br>
@@ -83,6 +94,11 @@ function renderPanel() {
     <div id="omr-scans"></div>`;
   $('omr-key').addEventListener('change', e => selectKey(e.target.value));
   $('omr-start').addEventListener('click', openCamera);
+  $('omr-manual').addEventListener('click', () => {
+    if (!S.key) return;
+    const n = S.key.questions;
+    openReview([{ student: null, barcode: null, manual: true, answers: Array(n).fill(-1), auto: Array(n).fill(-1), unsure: Array(n).fill(false), essay: null, model: null, modelUnsure: false, thumb: null }]);
+  });
   $('omr-files').addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; processFiles(f); });
   $('omr-shot').addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; processFiles(f); });
 }
@@ -153,7 +169,7 @@ function renderScans() {
       ${list.length ? `<div class="omr-secs">${Object.entries(bySec).map(([k, n]) => `<i>${esc(k.trim() || 'بدون فصل')}: ${n}</i>`).join('')}</div>` : ''}
       ${list.length ? `<div class="omr-list">${list.map(s => `
         <div class="omr-row" data-id="${esc(s.national_id)}" role="button" tabindex="0">
-          <span class="omr-row-main"><b>${esc(s.student_name || s.national_id)}</b><small>${esc((gradeLabels[s.grade_level] || s.grade_level || '').replace(' متوسط', ''))} ${esc(s.class_section || '')}${s.model ? ` · نموذج ${esc(s.model)}` : ''}${s.flags && s.flags.edited ? ' · عُدّلت يدويًا' : ''}</small></span>
+          <span class="omr-row-main"><b>${esc(s.student_name || s.national_id)}</b><small>${esc((gradeLabels[s.grade_level] || s.grade_level || '').replace(' متوسط', ''))} ${esc(s.class_section || '')}${s.model ? ` · نموذج ${esc(s.model)}` : ''}${s.flags && s.flags.manual ? ' · إدخال يدوي' : s.flags && s.flags.edited ? ' · عُدّلت يدويًا' : ''}</small></span>
           <span class="omr-score">${scoreText(s)}</span>
           <button type="button" class="omr-del" data-id="${esc(s.national_id)}" aria-label="حذف الورقة" title="حذف">✕</button>
         </div>`).join('')}</div>` : '<p class="omr-empty">ما صححت أي ورقة لهذا الاختبار بعد.</p>'}
@@ -473,7 +489,7 @@ function reviewOne(it, next, remaining) {
     </div>
     <div class="omr-rev-foot">
       <button type="button" class="btn-primary omr-save">✓ حفظ${remaining ? ' والتالي' : ''}</button>
-      <button type="button" class="text-action-btn omr-skip">${it.saved ? 'إلغاء' : 'تجاهل الورقة'}</button>
+      <button type="button" class="text-action-btn omr-skip">${it.saved || it.manual ? 'إلغاء' : 'تجاهل الورقة'}</button>
     </div>
   </div>`;
   (S.cam ? S.cam.ov : document.body).appendChild(wrap);
@@ -490,7 +506,7 @@ function reviewOne(it, next, remaining) {
       ? `<b>${esc(st.full_name || ('رقم الهوية ' + st.national_id))}</b><span>${esc(gradeLabels[st.grade_level] || st.grade_level || '')} ${esc(st.class_section || '')}${it.barcode && !it.saved ? ' · من الباركود ✓' : ''}</span>
          ${it.saved ? '' : '<button type="button" class="ope-link omr-change-st">تغيير</button>'}
          ${dup ? `<div class="omr-dup">سبق تصحيح ورقته (${scoreText(dup)}) - الحفظ يستبدلها</div>` : ''}`
-      : `<b class="omr-warn">${it.barcode ? `رقم الهوية ${esc(it.barcode)} مو موجود بقائمة طلابك` : 'ما انقرأ الباركود'} - اختر الطالب:</b>
+      : `<b class="${it.manual ? '' : 'omr-warn'}">${it.manual ? 'إدخال يدوي - اختر الطالب وظلّل إجاباته بالضغط على كل سؤال' : it.barcode ? `رقم الهوية ${esc(it.barcode)} مو موجود بقائمة طلابك` : 'ما انقرأ الباركود'}${it.manual ? '' : ' - اختر الطالب:'}</b>
          ${it.barcode && /^\d{6,}$/.test(it.barcode) ? `<button type="button" class="ope-link omr-use-id">أو احفظها برقم الهوية فقط</button>` : ''}${pickerHtml()}`;
     if (!st) bindPicker();
     const ui = $w('.omr-use-id');
@@ -499,7 +515,7 @@ function reviewOne(it, next, remaining) {
     if (ch) ch.addEventListener('click', () => { it.student = null; renderStudent(); });
   };
   const pickerHtml = () => {
-    const grades = [...new Set(S.students.map(s => s.grade_level))].filter(Boolean);
+    const grades = [...new Set((S.pickable || S.students).map(s => s.grade_level))].filter(Boolean);
     const g0 = k.grade_level && grades.includes(k.grade_level) ? k.grade_level : '';
     return `<div class="omr-pick">
       <div class="omr-pick-row">
@@ -513,12 +529,12 @@ function reviewOne(it, next, remaining) {
   const bindPicker = () => {
     const gs = $w('.omr-pick-g'), ss = $w('.omr-pick-s'), qi = $w('.omr-pick-q'), list = $w('.omr-pick-list');
     const fillSecs = () => {
-      const secs = [...new Set(S.students.filter(s => !gs.value || s.grade_level === gs.value).map(s => s.class_section).filter(v => v != null))].sort((a, b) => a - b);
+      const secs = [...new Set((S.pickable || S.students).filter(s => !gs.value || s.grade_level === gs.value).map(s => s.class_section).filter(v => v != null))].sort((a, b) => a - b);
       ss.innerHTML = '<option value="">كل الفصول</option>' + secs.map(n => `<option value="${n}">${n}</option>`).join('');
     };
     const draw = () => {
       const q = normAr(qi.value);
-      const rows = S.students.filter(s => (!gs.value || s.grade_level === gs.value) && (!ss.value || String(s.class_section) === ss.value)
+      const rows = (S.pickable || S.students).filter(s => (!gs.value || s.grade_level === gs.value) && (!ss.value || String(s.class_section) === ss.value)
         && (!q || normAr(s.full_name).includes(q) || String(s.national_id).includes(q)))
         .sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), 'ar')).slice(0, 60);
       list.innerHTML = rows.map(s => `<button type="button" data-id="${esc(s.national_id)}"><b>${esc(s.full_name)}</b><small>${esc((gradeLabels[s.grade_level] || '').replace(' متوسط', ''))} ${esc(s.class_section || '')}${S.scans.has(String(s.national_id).trim()) ? ' · مصحح ✓' : ''}</small></button>`).join('')
@@ -623,7 +639,7 @@ async function saveScan(it) {
     key_id: k.id, national_id: id, student_name: st.full_name || null, grade_level: st.grade_level || null,
     class_section: st.class_section != null ? String(st.class_section) : null, model: it.model || null,
     answers: it.answers, essay: k.essay_total ? (it.essay == null ? 0 : it.essay) : null, score: scoreOf(it.answers, it.model),
-    flags: { unsure: it.unsure, edited: it.answers.some((a, i) => a !== it.auto[i]) || (it.saved && it.saved.flags && it.saved.flags.edited) || false },
+    flags: { unsure: it.unsure, manual: !!it.manual || !!(it.saved && it.saved.flags && it.saved.flags.manual), edited: it.answers.some((a, i) => a !== it.auto[i]) || (it.saved && it.saved.flags && it.saved.flags.edited) || false },
     scanned_by: currentUserId, scanned_at: new Date().toISOString(),
   };
   // أول ورقة: ننشئ التقرير

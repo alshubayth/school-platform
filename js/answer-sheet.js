@@ -9,7 +9,7 @@
  * الباركود: Code 128 لرقم هوية الطالب (أرقام فقط) - نولّده هنا مباشرة كـ SVG (بدون مكتبات خارجية)
  * عشان يطلع حاد بالطباعة. ترميز Code C (رقمين بكل رمز) لو عدد الأرقام زوجي، وإلا Code B.
  * ========================================================================= */
-import { sb, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo } from './core.js';
+import { sb, gradeLabels, currentProfile, currentUserId, currentSchoolId, readScopedBySchool, writeWithSchool, printOrgName, printLogo } from './core.js';
 
 const AR_LETTERS = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
 const EN_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -784,9 +784,11 @@ function keyStatusMsg(msg, isErr = false) {
   el.style.color = isErr ? 'var(--danger)' : 'var(--slate)';
 }
 
+const isTeacherRole = () => !!(currentProfile && currentProfile.role === 'teacher');
 export async function fetchSavedKeys() {
   // نجرب الأعمدة الأحدث أول، ولو قاعدة البيانات أقدم نرجع للأعمدة اللي قبلها
   const colsets = [
+    'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, created_by, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, updated_at',
@@ -844,6 +846,10 @@ async function saveKey() {
   $('as-key-save-btn').disabled = true;
   keyStatusMsg('جارٍ الحفظ...');
   let res;
+  // المعلم ما يعدّل مفتاح غيره: ينحفظ كنسخة له
+  const curKey = currentKeyId ? savedKeys.find(k => k.id === currentKeyId) : null;
+  const notMine = !!(curKey && isTeacherRole() && curKey.created_by && curKey.created_by !== currentUserId);
+  if (notMine) currentKeyId = null;
   if (currentKeyId) res = await sb.from('answer_keys').update(row).eq('id', currentKeyId).select('id').single();
   else res = await writeWithSchool(extra => sb.from('answer_keys').insert({ ...row, ...extra }).select('id').single());
   $('as-key-save-btn').disabled = false;
@@ -858,7 +864,7 @@ async function saveKey() {
   currentKeyId = res.data.id;
   setStatus('');
   await refreshSavedKeysList();
-  keyStatusMsg(`تم حفظ المفتاح "${o.title}" ✓ - لما ترفع ملف Remark بالتقارير ينطبق تلقائيًا`);
+  keyStatusMsg(notMine ? `المفتاح الأصلي من الإدارة، فانحفظ "${o.title}" كنسخة خاصة فيك ✓` : `تم حفظ المفتاح "${o.title}" ✓ - لما ترفع ملف Remark بالتقارير ينطبق تلقائيًا`);
 }
 
 function loadKeyIntoForm(k) {
@@ -1252,7 +1258,9 @@ export function initAnswerSheetCard() {
   });
   $('as-key-delete-btn').addEventListener('click', async () => {
     const k = savedKeys.find(x => x.id === $('as-saved-keys').value);
-    if (!k || !confirm(`حذف المفتاح "${k.title}" نهائيًا؟`)) return;
+    if (!k) return;
+    if (isTeacherRole() && k.created_by && k.created_by !== currentUserId) { keyStatusMsg('هذا المفتاح من الإدارة - تقدر تحذف مفاتيحك أنت بس', true); return; }
+    if (!confirm(`حذف المفتاح "${k.title}" نهائيًا؟`)) return;
     const { error } = await sb.from('answer_keys').delete().eq('id', k.id);
     if (error) { keyStatusMsg('تعذر الحذف: ' + error.message, true); return; }
     if (currentKeyId === k.id) currentKeyId = null;

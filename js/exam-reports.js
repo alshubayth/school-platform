@@ -420,8 +420,8 @@ export async function loadExamReportsModule(sub = null) {
   parsedData = null;
   // المعلم: التصحيح بالجوال وتقاريره هو بس (بدون تصميم الأوراق ورفع ملفات Remark)
   document.getElementById('exam-reports-module').classList.toggle('er-teacher', isTeacherView());
-  if (!isTeacherView()) initAnswerSheetCard();
-  if (sub === 'sheet' && !isTeacherView()) { setMode('sheet', false); loadSavedList(); return; }
+  initAnswerSheetCard();
+  if (sub === 'sheet') { setMode('sheet', false); loadSavedList(); return; }
   if (sub === 'camera') { setMode('camera', false); loadSavedList(); return; }
   setMode('reports', false);
   const n = await loadSavedList();
@@ -772,7 +772,18 @@ async function loadSavedList() {
     data = r2.data; error = r2.error;
   }
   if (error) { listEl.innerHTML = '<p style="color:var(--danger); font-size:12.5px;">تعذر تحميل التقارير</p>'; return 0; }
-  if (isTeacherView()) data = (data || []).filter(r => r.created_by === currentUserId);
+  // المعلم: تقاريره + تقارير مواده وصفوفه
+  if (isTeacherView()) {
+    const { myTeachingScope, subjectMatches, gradeFromText } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
+    const sc = await myTeachingScope();
+    data = (data || []).filter(r => {
+      if (r.created_by === currentUserId) return true;
+      if (!sc.subjects.length) return false;
+      if (!sc.subjects.some(sj => subjectMatches(r.subject_name || r.title, sj) || subjectMatches(r.title, sj))) return false;
+      const g = gradeFromText(r.grade_level) || gradeFromText(r.title);
+      return !g || sc.grades.has(g);
+    });
+  }
   if (!data || data.length === 0) {
     listEl.innerHTML = isTeacherView()
       ? '<div class="ex-empty"><b>ما فيه تقارير لك بعد</b><span>صحّح أوراق طلابك من تبويب «التصحيح بالجوال» ويطلع التقرير هنا تلقائيًا.</span></div>'
@@ -808,10 +819,10 @@ async function loadSavedList() {
         <span class="erc-main">
           <b>${esc(r.title)}</b>
           <span>${meta || '&nbsp;'}</span>
-          <span class="erc-chips">${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : ''}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
+          <span class="erc-chips">${isTeacherView() && r.created_by !== currentUserId ? '<i class="erc-shared">من الإدارة</i>' : ''}${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : ''}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
           ${r.exam_type === 'periodic' ? `<span class="erc-actions"><button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button></span>` : ''}
         </span>
-        <button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>
+        ${!isTeacherView() || r.created_by === currentUserId ? `<button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>` : ''}
       </div>`;
     }).join('')}
   </div>`;
@@ -855,18 +866,23 @@ async function openReport(id) {
   document.getElementById('er-detail-title').textContent = data.title;
   document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`;
   showErTab('dist');
-  renderReportStats(data.stats);
   const ekb = document.getElementById('er-edit-key-btn');
   ekb.textContent = data.raw_data && data.raw_data.models ? '↻ إعادة التصحيح بالمفتاح المحفوظ' : '✎ تعديل مفتاح الإجابة';
   // تقرير الجوال ينبني من الأوراق المصححة: التعديل يكون من شاشة التصحيح نفسها
   const cam = data.source === 'camera';
   ekb.classList.toggle('hidden', cam || isTeacherView());
   document.getElementById('er-update-file-btn').classList.toggle('hidden', cam || isTeacherView());
+  const asb = document.getElementById('er-add-sheet-btn');
+  if (asb) {
+    asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students) || (isTeacherView() && data.created_by !== currentUserId));
+    asb.onclick = () => openManualSheet(data);
+  }
   const cc = document.getElementById('er-camera-continue');
   cc.classList.toggle('hidden', !(cam && data.created_by === currentUserId && data.key_id));
   cc.onclick = () => { cameraKeyId = data.key_id; document.getElementById('er-detail-view').classList.add('hidden'); document.getElementById('er-list-view').classList.remove('hidden'); setMode('camera'); };
   document.getElementById('er-editkey-card').classList.add('hidden');
   document.getElementById('er-updatefile-card').classList.add('hidden');
+  renderReportStats(data.stats);
 }
 
 /* ---------- تحديث ملف الإكسل لتقرير محفوظ - يبقي الإجابة الصحيحة كما هي ---------- */
@@ -1771,3 +1787,133 @@ async function showAbsence(reportId) {
   back.querySelector('.er-abs-x').onclick = close;
 }
 const SHORT_GRADE = { first_intermediate: 'أول', second_intermediate: 'ثاني', third_intermediate: 'ثالث' };
+
+
+/* =========================================================================
+ * إضافة ورقة طالب يدويًا لتقرير مرفوع (Remark): تختار الطالب وتظلل إجاباته
+ * والتقرير ينحسب من جديد. المعلم يختار من طلاب فصوله بس.
+ * ========================================================================= */
+async function openManualSheet(rep) {
+  const rd = rep.raw_data || {};
+  const n = rep.item_count || (rd.choiceCounts || []).length;
+  const counts = rd.choiceCounts || [];
+  const types = rd.itemTypes || [];
+  const reversed = rd.reversedOrder !== false;
+  const hasEssay = !!rd.hasEssay;
+  const models = rd.models || null;
+  const have = new Set((rd.students || []).map(st => String(st.id || '').trim()));
+  // الطلاب
+  let students = [];
+  {
+    const { data } = await readScopedBySchool(scoped => {
+      let q = sb.from('students').select('national_id, full_name, grade_level, class_section');
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    });
+    students = (data || []).filter(x => x.national_id);
+    if (isTeacherView()) {
+      const { myTeachingScope, inMyClasses } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
+      const sc = await myTeachingScope();
+      students = students.filter(x => inMyClasses(sc, x.grade_level, x.class_section));
+    }
+  }
+  const gradesInReport = new Set((rd.students || []).map(st => {
+    const p = students.find(x => String(x.national_id).trim() === String(st.id).trim()); return p && p.grade_level;
+  }).filter(Boolean));
+  const st = { student: null, answers: Array(n).fill(null), essay: null, model: 'أ' };
+  const lettersOf = i => (types[i] === 'tf' ? ['صح', 'خطأ'] : ARABIC_LETTERS.slice(0, counts[i] || 4));
+  const back = document.createElement('div');
+  back.className = 'er-abs-back';
+  back.innerHTML = `<div class="er-abs er-man" role="dialog" aria-modal="true" aria-label="إضافة ورقة طالب">
+    <div class="er-abs-h"><div><b>إضافة ورقة طالب يدويًا</b><span>${esc(rep.title)} · ${n} سؤال</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+    <div class="er-abs-body">
+      <div class="er-man-st"></div>
+      ${models ? `<div class="er-man-model"><span>النموذج:</span><button type="button" data-m="أ" class="on">أ</button><button type="button" data-m="ب">ب</button></div>` : ''}
+      <div class="er-man-qs">${Array.from({ length: n }, (_, i) => `<div class="er-man-q" data-q="${i}"><small>${i + 1}</small>${lettersOf(i).map((l, j) => `<button type="button" data-v="${j}">${esc(l)}</button>`).join('')}</div>`).join('')}</div>
+      ${hasEssay ? `<label class="er-man-essay">درجة المقالي <input type="number" min="0" step="0.5" inputmode="decimal"${rd.essayMax ? ` max="${rd.essayMax}"` : ''}>${rd.essayMax ? ` / ${rd.essayMax}` : ''}</label>` : ''}
+      <div class="er-man-sum"></div>
+    </div>
+    <div class="er-man-foot"><button type="button" class="btn-primary er-man-save">حفظ الورقة وإعادة حساب التقرير</button></div>
+  </div>`;
+  document.body.appendChild(back);
+  const $b = sel => back.querySelector(sel);
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  $b('.er-abs-x').onclick = close;
+
+  const renderSt = () => {
+    const box = $b('.er-man-st');
+    if (st.student) {
+      const x = st.student;
+      box.innerHTML = `<div class="er-man-chosen"><b>${esc(x.full_name)}</b><span>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')} · ${esc(x.national_id)}</span><button type="button" class="ope-link">تغيير</button></div>`;
+      box.querySelector('button').onclick = () => { st.student = null; renderSt(); };
+      return;
+    }
+    const grades = [...new Set(students.map(x => x.grade_level))].filter(Boolean);
+    const g0 = gradesInReport.size === 1 ? [...gradesInReport][0] : '';
+    box.innerHTML = `<div class="er-man-pick"><div class="er-man-row"><select class="pg"><option value="">كل الصفوف</option>${grades.map(g => `<option value="${g}"${g === g0 ? ' selected' : ''}>${esc(gradeLabels[g] || g)}</option>`).join('')}</select><select class="ps"><option value="">كل الفصول</option></select></div>
+      <input type="search" class="pq" placeholder="ابحث بالاسم أو رقم الهوية"><div class="er-man-list"></div></div>`;
+    const pg = box.querySelector('.pg'), ps = box.querySelector('.ps'), pq = box.querySelector('.pq'), list = box.querySelector('.er-man-list');
+    const fill = () => { const secs = [...new Set(students.filter(x => !pg.value || x.grade_level === pg.value).map(x => x.class_section).filter(v => v != null))].sort((a, b) => a - b); ps.innerHTML = '<option value="">كل الفصول</option>' + secs.map(v => `<option value="${v}">${v}</option>`).join(''); };
+    const draw = () => {
+      const q = normAr(pq.value);
+      const rows = students.filter(x => (!pg.value || x.grade_level === pg.value) && (!ps.value || String(x.class_section) === ps.value) && (!q || normAr(x.full_name).includes(q) || String(x.national_id).includes(q)))
+        .sort((a, b) => (have.has(String(a.national_id).trim()) - have.has(String(b.national_id).trim())) || String(a.full_name).localeCompare(String(b.full_name), 'ar')).slice(0, 60);
+      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? ' · له ورقة بالتقرير (الحفظ يستبدلها)' : ''}</small></button>`; }).join('') || '<span class="omr-empty">ما فيه نتائج</span>';
+      list.querySelectorAll('button').forEach(b => b.onclick = () => { st.student = students.find(x => String(x.national_id) === b.dataset.id); renderSt(); });
+    };
+    pg.onchange = () => { fill(); draw(); }; ps.onchange = draw; pq.oninput = draw;
+    fill(); draw();
+  };
+  const keyFor = () => (models && st.model === 'ب' && models.keyB ? models.keyB : (models ? models.keyA : rep.key_raw)) || [];
+  const toRaw = (i, j) => (j == null ? -2 : reversed ? (counts[i] || 4) - j : j + 1);
+  const renderSum = () => {
+    const key = keyFor();
+    let ok = 0, blank = 0;
+    st.answers.forEach((j, i) => { if (j == null) blank++; else if (toRaw(i, j) === key[i]) ok++; });
+    $b('.er-man-sum').innerHTML = `<b>${ok}</b> / ${n} صحيحة${blank ? ` · ${blank} بدون إجابة` : ''}${hasEssay && st.essay != null ? ` · مقالي ${st.essay}` : ''}`;
+    back.querySelectorAll('.er-man-q').forEach(row => {
+      const i = +row.dataset.q;
+      row.querySelectorAll('button').forEach(b => {
+        const j = +b.dataset.v;
+        b.classList.toggle('on', st.answers[i] === j);
+        b.classList.toggle('key', toRaw(i, j) === key[i]);
+      });
+    });
+  };
+  back.querySelectorAll('.er-man-q button').forEach(b => b.onclick = () => { const i = +b.closest('.er-man-q').dataset.q, j = +b.dataset.v; st.answers[i] = st.answers[i] === j ? null : j; renderSum(); });
+  back.querySelectorAll('.er-man-model button').forEach(b => b.onclick = () => { st.model = b.dataset.m; back.querySelectorAll('.er-man-model button').forEach(x => x.classList.toggle('on', x === b)); renderSum(); });
+  const ei = $b('.er-man-essay input');
+  if (ei) ei.oninput = () => { st.essay = ei.value === '' ? null : Number(ei.value); renderSum(); };
+  renderSt(); renderSum();
+
+  $b('.er-man-save').onclick = async () => {
+    if (!st.student) { alert('اختر الطالب أولًا'); return; }
+    const btn = $b('.er-man-save'); btn.disabled = true; btn.textContent = 'جارٍ الحفظ...';
+    const x = st.student;
+    const row = {
+      id: String(x.national_id).trim(), name: x.full_name, grade: gradeLabels[x.grade_level] || '', section: String(x.class_section || ''),
+      subject: rep.subject_name || '', modelRaw: null, answers: st.answers.map((j, i) => toRaw(i, j)), essay: st.essay, manual: true,
+    };
+    if (models) row.model = st.model;
+    const list = (rd.students || []).filter(s2 => String(s2.id).trim() !== row.id).map(s2 => { const { key, ...rest } = s2; return rest; });
+    list.push(row);
+    let upd;
+    if (models) {
+      const g = gradeWithModels({
+        parsed: { itemCount: n, choiceCounts: counts, itemTypes: types, students: list },
+        keyA: models.keyA, keyB: models.keyB, mode: models.mode, orderB: models.orderB, reversedOrder: reversed, keyId: models.keyId,
+        modelOf: s2 => s2.model || 'أ',
+      });
+      upd = { stats: g.stats, raw_data: { ...rd, ...g.raw_data }, students_count: list.length };
+    } else {
+      const stats = computeExamStats({ itemCount: n, keyRaw: rep.key_raw, choiceCounts: counts, students: list, reversedOrder: reversed, itemTypes: types });
+      upd = { stats, raw_data: { ...rd, students: list }, students_count: list.length };
+    }
+    const { error } = await sb.from('exam_reports').update(upd).eq('id', rep.id);
+    if (error) { btn.disabled = false; btn.textContent = 'حفظ الورقة وإعادة حساب التقرير'; alert('تعذر الحفظ: ' + error.message); return; }
+    close();
+    openReport(rep.id);
+  };
+}
