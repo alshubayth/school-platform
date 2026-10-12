@@ -264,7 +264,10 @@ const TWO_UP_STYLES = `
   .qp-sheet2 { position:relative; width:297mm; height:210mm; overflow:hidden; background:#fff; page-break-after:always; break-after:page; }
   .qp-sheet2:last-child { page-break-after:auto; break-after:auto; }
   .qp-slot { position:absolute; top:0; width:148.5mm; height:210mm; overflow:hidden; }
-  .qp-slot .qp-stu { position:absolute; top:0; right:0; width:210mm; height:297mm; transform:scale(0.70711); transform-origin:top right; }
+  /* zoom (مو transform): المتصفح يرتّب الورقة بحجمها المصغّر فعليًا، فما تنقص عند الطباعة */
+  .qp-slot .qp-stu { position:absolute; top:0; right:0; width:210mm; height:297mm; zoom:0.70711; }
+  @supports not (zoom: 1) { .qp-slot .qp-stu { zoom:normal; transform:scale(0.70711); transform-origin:top right; } }
+  .qp-slot .qp-page { overflow:hidden; }
   .qp-slot .qp-page { margin:0 !important; box-shadow:none !important; page-break-after:auto; break-after:auto; }
   .qp-cut { position:absolute; left:148.5mm; top:0; bottom:0; width:0; border-left:0.3mm dashed #888; }
   .qp-cut span { position:absolute; left:-2.4mm; font-size:10pt; color:#666; }
