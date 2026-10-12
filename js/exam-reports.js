@@ -842,9 +842,14 @@ async function loadSavedList() {
   }));
   listEl.querySelectorAll('.er-addsheet-btn').forEach(btn => btn.addEventListener('click', async (e) => {
     e.stopPropagation();
-    const { data: rep, error } = await sb.from('exam_reports').select('*').eq('id', btn.dataset.rid).single();
-    if (error || !rep) { alert('تعذر فتح التقرير'); return; }
-    openManualSheet(rep, () => loadSavedList());
+    if (btn.disabled) return;
+    const t = btn.textContent; btn.disabled = true; btn.textContent = 'جارٍ الفتح...';
+    try {
+      const { data: rep, error } = await sb.from('exam_reports').select('*').eq('id', btn.dataset.rid).single();
+      if (error || !rep) throw new Error(error ? error.message : 'التقرير غير موجود');
+      await openManualSheet(rep, () => loadSavedList());
+    } catch (err) { alert('تعذر فتح إضافة الورقة: ' + (err.message || err)); }
+    btn.disabled = false; btn.textContent = t;
   }));
   listEl.querySelectorAll('.er-results-btn').forEach(btn => btn.addEventListener('click', async (e) => {
     e.stopPropagation();
@@ -885,7 +890,12 @@ async function openReport(id) {
   const asb = document.getElementById('er-add-sheet-btn');
   if (asb) {
     asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students));
-    asb.onclick = () => openManualSheet(data);
+    asb.onclick = async () => {
+      if (asb.disabled) return;
+      const t = asb.textContent; asb.disabled = true; asb.textContent = 'جارٍ الفتح...';
+      try { await openManualSheet(data); } catch (err) { alert('تعذر فتح إضافة الورقة: ' + (err.message || err)); }
+      asb.disabled = false; asb.textContent = t;
+    };
   }
   const cc = document.getElementById('er-camera-continue');
   cc.classList.toggle('hidden', !(cam && data.created_by === currentUserId && data.key_id));
@@ -1834,7 +1844,14 @@ async function openManualSheet(rep, onDone) {
     if (isTeacherView()) {
       const { myTeachingScope, inMyClasses } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
       const sc = await myTeachingScope();
-      students = students.filter(x => inMyClasses(sc, x.grade_level, x.class_section));
+      const mine = students.filter(x => inMyClasses(sc, x.grade_level, x.class_section));
+      // لو ما انعرفت فصوله من الجدول: طلاب صفوف التقرير
+      if (mine.length) students = mine;
+      else {
+        const ids = new Set((rd.students || []).map(st => String(st.id || '').trim()));
+        const gs = new Set(students.filter(x => ids.has(String(x.national_id).trim())).map(x => x.grade_level));
+        students = students.filter(x => gs.has(x.grade_level));
+      }
     }
   }
   const gradesInReport = new Set((rd.students || []).map(st => {
