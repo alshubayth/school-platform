@@ -1983,7 +1983,7 @@ async function showResults(reportId) {
       ${list.map((g, gi) => {
         const pres = g.rows.filter(x => !x.absent);
         const avg = pres.length ? pres.reduce((a, x) => a + totalOfX(x), 0) / pres.length : 0;
-        const rows = g.rows.slice().sort((a, b) => (a.absent - b.absent) || (b.absent ? 0 : totalOfX(b) - totalOfX(a)) || String(a.name).localeCompare(String(b.name), 'ar'));
+        const rows = g.rows.slice().sort((a, b) => ((a.absent ? 1 : 0) - (b.absent ? 1 : 0)) || (a.absent ? 0 : totalOfX(b) - totalOfX(a)) || String(a.name).localeCompare(String(b.name), 'ar'));
         return `<details class="er-abs-sec"${gi === 0 ? ' open' : ''}>
           <summary><span class="er-abs-name">${g.gl ? esc((SHORT_GRADE[g.gl] || gradeLabels[g.gl] || '') + ' ' + (g.section || '')) : 'غير محدد الفصل'}</span><span class="er-abs-of">${pres.length} طالب · المتوسط ${fmtN(avg)}${full ? ' / ' + full : ''}</span></summary>
           <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th></tr></thead><tbody>

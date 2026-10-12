@@ -2680,3 +2680,4 @@ body.omr-noscroll{ overflow:hidden; }
 .er-res-t tr.abs td{ color:var(--slate); background:#F6F7F9; }
 .er-res-t tr.abs td:last-child{ color:var(--danger); font-weight:700; }
 .erc-act.er-results-btn{ background:var(--purple-light); border-color:#D8CFF2; color:var(--purple); }
+.er-abs-body > *{ flex-shrink:0; }
