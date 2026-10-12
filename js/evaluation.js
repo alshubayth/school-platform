@@ -35,16 +35,18 @@ async function refreshAll() {
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q.order('full_name');
     }),
-    sb.from('perf_criteria').select('id, name, sort_order, weight').order('sort_order'),
-    sb.from('perf_details').select('id, criterion_id, name, weight_type, weight_value, active').order('created_at'),
-    sb.from('perf_settings').select('academic_year').eq('id', 1).maybeSingle(),
+    // معايير التقييم: لكل مدرسة نسختها (ولو قاعدة البيانات لسا قبل التقسيم نقرأ المشتركة)
+    readScopedBySchool(scoped => { let q = sb.from('perf_criteria').select('id, name, sort_order, weight'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.order('sort_order'); }),
+    readScopedBySchool(scoped => { let q = sb.from('perf_details').select('id, criterion_id, name, weight_type, weight_value, active'); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.order('created_at'); }),
+    readScopedBySchool(scoped => { let q = sb.from('perf_settings').select('id, academic_year'); q = scoped && currentSchoolId ? q.eq('school_id', currentSchoolId) : q.eq('id', 1); return q.maybeSingle(); }),
     readScopedBySchool(scoped => {
       let q = sb.from('class_schedules').select('teacher_name');
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q;
     }),
     readScopedBySchool(scoped => {
-      let q = sb.from('duty_roster').select('teacher_profile_id');
+      // المناوبات الأسبوعية (القسم الجديد)
+      let q = sb.from('duty_plan').select('teacher_profile_id:teacher_id');
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q;
     }),
@@ -500,7 +502,10 @@ document.getElementById('perf-year-save').addEventListener('click', async () => 
   }
   errEl.style.display = 'none';
   const { data: userData } = await sb.auth.getUser();
-  const { error } = await sb.from('perf_settings').update({ academic_year: value, updated_by: userData.user.id, updated_at: new Date().toISOString() }).eq('id', 1);
+  const row = { academic_year: value, updated_by: userData.user.id, updated_at: new Date().toISOString() };
+  let error;
+  if (settings && settings.id) ({ error } = await sb.from('perf_settings').update(row).eq('id', settings.id));
+  else ({ error } = await writeWithSchool(extra => sb.from('perf_settings').insert({ ...row, ...extra })));
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
   await refreshAll();
 });
@@ -622,7 +627,7 @@ function renderCriteriaSettings() {
       if (!name) { errEl.textContent = 'اكتب اسم البند'; errEl.style.display = 'block'; return; }
       if (!weightValue || weightValue <= 0) { errEl.textContent = 'اكتب قيمة أكبر من صفر'; errEl.style.display = 'block'; return; }
       errEl.style.display = 'none';
-      const { error } = await sb.from('perf_details').insert({ criterion_id: critId, name, weight_type: typeSelect.value, weight_value: weightValue, active: true });
+      const { error } = await writeWithSchool(extra => sb.from('perf_details').insert({ criterion_id: critId, name, weight_type: typeSelect.value, weight_value: weightValue, active: true, ...extra }));
       if (error) { errEl.textContent = 'حدث خطأ: ' + error.message; errEl.style.display = 'block'; return; }
       await refreshAll();
     });
