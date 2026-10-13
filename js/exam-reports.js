@@ -1722,7 +1722,7 @@ async function loadPeriodicData(reportId) {
   const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
   const [{ data: rep, error }, platList] = await Promise.all([
     sb.from('exam_reports').select('id, title, subject_name, key_raw, raw_data').eq('id', reportId).single(),
-    allStudents().catch(() => []),
+    allStudents().catch(e => { throw new Error('تعذر تحميل بيانات الطلاب، حدّث الصفحة وحاول مرة ثانية' + (e && e.message ? ` (${e.message})` : '')); }),
   ]);
   if (error || !rep) throw new Error('تعذر تحميل التقرير');
   const rd = rep.raw_data || {};
