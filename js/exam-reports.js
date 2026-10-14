@@ -914,6 +914,7 @@ async function openReport(id) {
   const cam = data.source === 'camera';
   ekb.classList.toggle('hidden', cam || isTeacherView());
   document.getElementById('er-update-file-btn').classList.toggle('hidden', cam || isTeacherView());
+  document.getElementById('er-append-file-btn').classList.toggle('hidden', cam || isTeacherView());
   const asb = document.getElementById('er-add-sheet-btn');
   if (asb) {
     asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students));
@@ -932,8 +933,24 @@ async function openReport(id) {
   renderReportStats(data.stats);
 }
 
-/* ---------- تحديث ملف الإكسل لتقرير محفوظ - يبقي الإجابة الصحيحة كما هي ---------- */
-document.getElementById('er-update-file-btn').addEventListener('click', () => {
+/* ---------- تحديث ملف الإكسل لتقرير محفوظ - يبقي الإجابة الصحيحة كما هي ----------
+ * وضعين: 'replace' الملف الجديد يحل محل كل الطلاب، و'append' طلاب الملف ينضافون للموجودين
+ * (اللي له ورقة بالتقرير ورجع بالملف الجديد تتحدّث ورقته). */
+let updMode = 'replace';
+const UPD_TEXT = {
+  replace: ['تحديث ملف الإكسل', 'ارفع ملف إكسل جديد بنفس عدد الأسئلة (مثلاً بيانات طلاب محدّثة أو فصل إضافي) - الإجابة الصحيحة لكل سؤال تبقى كما هي، والملف الجديد يحل محل كل الطلاب الحاليين.', 'تحديث'],
+  append: ['إضافة طلاب من ملف', 'ارفع ملف Remark فيه الطلاب اللي صححتهم بعدين (نفس الاختبار ونفس عدد الأسئلة). ينضافون للطلاب الموجودين بالتقرير، ولو فيه طالب له ورقة قبل تتحدّث ورقته بالجديدة. الإجابة الصحيحة تبقى كما هي.', 'إضافة للتقرير'],
+};
+function openUpdateCard(mode) {
+  updMode = mode;
+  const [h, p, b] = UPD_TEXT[mode];
+  document.getElementById('er-updatefile-h').textContent = h;
+  document.getElementById('er-updatefile-p').textContent = p;
+  document.getElementById('er-updatefile-confirm').textContent = b;
+}
+document.getElementById('er-append-file-btn').addEventListener('click', () => { openUpdateCard('append'); openUpdateCardBody(); });
+document.getElementById('er-update-file-btn').addEventListener('click', () => { openUpdateCard('replace'); openUpdateCardBody(); });
+function openUpdateCardBody() {
   if (!currentReport) return;
   document.getElementById('er-editkey-card').classList.add('hidden');
   const errEl = document.getElementById('er-updatefile-error');
@@ -945,7 +962,7 @@ document.getElementById('er-update-file-btn').addEventListener('click', () => {
   }
   document.getElementById('er-updatefile-card').classList.remove('hidden');
   document.getElementById('er-updatefile-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
-});
+}
 
 document.getElementById('er-updatefile-cancel').addEventListener('click', () => {
   document.getElementById('er-updatefile-card').classList.add('hidden');
@@ -983,6 +1000,21 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       return;
     }
 
+    // إضافة: نفس ترميز التقرير الحالي، والطلاب = الموجودين (إلا اللي رجعوا بالملف) + طلاب الملف
+    let appendNote = '';
+    if (updMode === 'append') {
+      const idOf = st => String(st.id || '').trim();
+      newParsed.choiceCounts = oldChoiceCounts.slice();
+      if (Array.isArray(currentReport.raw_data.itemTypes) && currentReport.raw_data.itemTypes.length === oldChoiceCounts.length) newParsed.itemTypes = currentReport.raw_data.itemTypes.slice();
+      const oldStudents = currentReport.raw_data.students || [];
+      const oldIds = new Set(oldStudents.map(idOf).filter(Boolean));
+      const newIds = new Set(newParsed.students.map(idOf).filter(Boolean));
+      const added = newParsed.students.filter(st => !oldIds.has(idOf(st))).length;
+      const updated = newParsed.students.length - added;
+      newParsed.students = oldStudents.filter(st => !newIds.has(idOf(st))).concat(newParsed.students);
+      appendNote = `تمت الإضافة ✓ ${added} طالب جديد${updated ? `، و${updated} ${updated === 1 ? 'طالب تحدّثت ورقته' : 'طلاب تحدّثت أوراقهم'}` : ''} — مجموع الطلاب الآن ${newParsed.students.length}`;
+    }
+
     if (currentReport.raw_data.models) {
       const m = currentReport.raw_data.models;
       const key = await fetchKeyById(m.keyId);
@@ -1008,6 +1040,8 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       document.getElementById('er-detail-sub').textContent = `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'} — ${currentReport.students_count} طالب`;
       renderReportStats(g.stats);
       document.getElementById('er-updatefile-card').classList.add('hidden');
+      periodicCache.delete(currentReport.id);
+      if (appendNote) alert(appendNote);
       return;
     }
 
@@ -1037,6 +1071,8 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
     document.getElementById('er-detail-sub').textContent = `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'} — ${currentReport.students_count} طالب`;
     renderReportStats(stats);
     document.getElementById('er-updatefile-card').classList.add('hidden');
+    periodicCache.delete(currentReport.id);
+    if (appendNote) alert(appendNote);
   } catch (e) {
     errEl.textContent = e.message || 'تعذر قراءة الملف';
     errEl.style.display = 'block';
