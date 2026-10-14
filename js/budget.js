@@ -173,7 +173,7 @@ async function loadCategories() {
         if (accessLevel() === 'full') await loadDashboard();
       });
       row.querySelector('.cat-delete-btn').addEventListener('click', async () => {
-        if (!confirm(`متأكد تبي تحذف بند "${c.name}"؟ الطلبات السابقة المرتبطة به بتصير بدون بند.`)) return;
+        if (!confirm(`هل أنت متأكد من حذف البند "${c.name}"؟ ستصبح الطلبات السابقة المرتبطة به بلا بند.`)) return;
         const { error } = await sb.from('budget_categories').delete().eq('id', c.id);
         if (error) {
           alert('تعذر حذف البند: ' + error.message);
@@ -228,7 +228,7 @@ async function loadPermsSection() {
   const list = document.getElementById('budget-perms-list');
   list.innerHTML = '';
   if (!perms || perms.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:16px;"><p>ما فيه صلاحيات ممنوحة بعد (غير المدير)</p></div>';
+    list.innerHTML = '<div class="placeholder" style="padding:16px;"><p>لا توجد صلاحيات ممنوحة بعد (غير المدير)</p></div>';
     return;
   }
   perms.forEach(p => {
@@ -255,12 +255,12 @@ document.getElementById('budget-perm-submit').addEventListener('click', async ()
   const errEl = document.getElementById('budget-perm-error');
   errEl.style.display = 'none';
   const profileId = document.getElementById('budget-perm-employee').value;
-  if (!profileId) { errEl.textContent = 'اختر موظف أولاً'; errEl.style.display = 'block'; return; }
+  if (!profileId) { errEl.textContent = 'اختر موظف أولًا'; errEl.style.display = 'block'; return; }
   const level = document.getElementById('budget-perm-level').value;
 
   const { error } = await writeWithSchool(extra => sb.from('budget_permissions').insert({ profile_id: profileId, level, granted_by: currentUserId, ...extra }));
   if (error) {
-    errEl.textContent = error.message.includes('duplicate') ? 'هذا الموظف عنده صلاحية بالقسم بالفعل — احذفها من القائمة تحت لو تبي تغيّرها' : 'حدث خطأ: ' + error.message;
+    errEl.textContent = error.message.includes('duplicate') ? 'لدى هذا الموظف صلاحية في القسم بالفعل — احذفها من القائمة أدناه إن أردت تغييرها' : 'حدث خطأ: ' + error.message;
     errEl.style.display = 'block';
     await loadPermsSection(); // نحدّث القائمة عشان تنعكس الحالة الفعلية بقاعدة البيانات
     return;
@@ -326,7 +326,7 @@ document.getElementById('budget-rev-submit').addEventListener('click', async () 
     const spent = batch ? batch.spent : 0;
     if (spent > 0.009) {
       if (type === 'مقصف') {
-        errEl.textContent = `ما تقدر تحوّلها لمقصف - عليها صرف مرتبط بقيمة ${fmtAmount(spent)}. احذف الفواتير المرتبطة بها أولاً لو تبي تغيّر نوعها`;
+        errEl.textContent = `لا يمكن تحويلها إلى المقصف - يوجد عليها صرف مرتبط بقيمة ${fmtAmount(spent)}. احذف الفواتير المرتبطة بها أولًا إن أردت تغيير نوعها`;
         errEl.style.display = 'block';
         return;
       }
@@ -373,7 +373,7 @@ async function loadRevenuesList() {
   revenuesListCache = data || [];
 
   if (revenuesListCache.length === 0) {
-    listEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">ما فيه إيداعات مسجّلة بعد</p>';
+    listEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">لا توجد إيداعات مسجّلة بعد</p>';
     return;
   }
 
@@ -404,14 +404,14 @@ async function loadRevenuesList() {
       if (!r) return;
       const batch = batchesDetailedCache.find(b => b.id === r.id);
       if (batch && batch.spent > 0.009) {
-        alert(`ما تقدر تحذف هذا الإيداع - عليه صرف مرتبط بقيمة ${fmtAmount(batch.spent)}. احذف الفواتير المرتبطة به أولاً`);
+        alert(`لا يمكن حذف هذا الإيداع - يوجد عليه صرف مرتبط بقيمة ${fmtAmount(batch.spent)}. احذف الفواتير المرتبطة به أولًا`);
         return;
       }
-      if (!confirm(`متأكد تبي تحذف الإيداع "${r.description}" (${fmtAmount(r.amount)})؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
+      if (!confirm(`هل أنت متأكد من حذف الإيداع "${r.description}" (${fmtAmount(r.amount)})؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
       const { error } = await sb.from('budget_revenues').delete().eq('id', r.id);
       if (error) {
         alert(error.message.includes('foreign key') || error.message.includes('violates')
-          ? 'ما تقدر تحذف هذا الإيداع - فيه فواتير صرف مرتبطة به'
+          ? 'لا يمكن حذف هذا الإيداع - توجد فواتير صرف مرتبطة به'
           : 'تعذر الحذف: ' + error.message);
         return;
       }
@@ -446,7 +446,7 @@ async function updateStatementHint() {
   if (!source) { hint.innerHTML = ''; return; }
   const series = seriesOf(source);
   if (editingExpense && seriesOf(editingExpense.funding_source) === series) {
-    hint.innerHTML = `${SERIES_LABEL[series]} — تقدر تغيّر الرقم من الخانة`;
+    hint.innerHTML = `${SERIES_LABEL[series]} — يمكنك تغيير الرقم من الخانة`;
     return;
   }
   const { data } = await readScopedBySchool(scoped => {
@@ -475,7 +475,7 @@ function populateSourceBatchSelect(revenueType) {
   const own = b => (editingExpense && editingExpense.funding_revenue_id === b.id ? editingExpense.total : 0);
   const open = fundingBatchesCache.filter(b => b.revenue_type === revenueType && Number(b.remaining) + own(b) > 0.009);
   if (open.length === 0) {
-    sel.innerHTML = `<option value="">ما فيه دفعات ${esc(revenueType)} مفتوحة حاليًا</option>`;
+    sel.innerHTML = `<option value="">لا توجد دفعات ${esc(revenueType)} مفتوحة حاليًا</option>`;
     return;
   }
   sel.innerHTML = '<option value="">اختر الدفعة...</option>' +
@@ -620,7 +620,7 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
   if (!beneficiary) { errEl.textContent = 'اختر الموظف (يُصرف لـ)'; errEl.style.display = 'block'; return; }
   if (!source) { errEl.textContent = 'اختر جهة الصرف'; errEl.style.display = 'block'; return; }
   if (source === 'أخرى' && !sourceOther) { errEl.textContent = 'اكتب جهة الصرف'; errEl.style.display = 'block'; return; }
-  if (FUNDING_TO_REVENUE_TYPE[source] && !sourceBatchId) { errEl.textContent = 'اختر الدفعة اللي تصرف منها'; errEl.style.display = 'block'; return; }
+  if (FUNDING_TO_REVENUE_TYPE[source] && !sourceBatchId) { errEl.textContent = 'اختر الدفعة التي تصرف منها'; errEl.style.display = 'block'; return; }
   if (!semester) { errEl.textContent = 'اختر الفصل الدراسي'; errEl.style.display = 'block'; return; }
   if (items.length === 0) { errEl.textContent = 'أضف فاتورة واحدة على الأقل'; errEl.style.display = 'block'; return; }
   for (const it of items) {
@@ -637,7 +637,7 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
     if (!batch || Number(batch.remaining) + ownBack < total - 0.009) {
       errEl.textContent = batch
         ? `المبلغ الإجمالي (${fmtAmount(total)}) يتجاوز المتبقي من هذه الدفعة (${fmtAmount(Number(batch.remaining) + ownBack)})`
-        : 'تعذر التحقق من رصيد الدفعة - حدّث الصفحة وحاول مرة ثانية';
+        : 'تعذر التحقق من رصيد الدفعة - حدّث الصفحة وحاول مرة أخرى';
       errEl.style.display = 'block';
       populateSourceBatchSelect(FUNDING_TO_REVENUE_TYPE[source]);
       return;
@@ -733,7 +733,7 @@ async function loadExpensesList(canManage) {
   renderPendingSummary(rows);
 
   if (rows.length === 0) {
-    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه طلبات صرف بعد</p></div>';
+    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>لا توجد طلبات صرف بعد</p></div>';
     return;
   }
 
@@ -816,7 +816,7 @@ async function loadExpensesList(canManage) {
       deleteBtn.style.cssText = 'width:auto; padding:8px 16px; background:#fff; color:var(--danger); border:1px solid var(--danger);';
       deleteBtn.textContent = 'حذف';
       deleteBtn.addEventListener('click', async () => {
-        if (!confirm(`متأكد تبي تحذف بيان الصرف رقم ${r.statement_number}؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
+        if (!confirm(`هل أنت متأكد من حذف بيان الصرف رقم ${r.statement_number}؟ هذا الإجراء لا يمكن التراجع عنه.`)) return;
         const { error } = await sb.from('budget_expense_requests').delete().eq('id', r.id);
         if (error) { alert('تعذر الحذف: ' + error.message); return; }
         if (editingExpense && editingExpense.id === r.id) resetExpenseForm();
@@ -859,7 +859,7 @@ function renderPendingSummary(rows) {
 }
 
 async function updateExpenseStatus(id, status) {
-  if (status === 'rejected' && !confirm('متأكد تبي ترفض طلب الصرف هذا؟')) return;
+  if (status === 'rejected' && !confirm('هل أنت متأكد من رفض طلب الصرف هذا؟')) return;
   await sb.from('budget_expense_requests').update({
     status, confirmed_by: currentUserId, confirmed_at: new Date().toISOString(),
   }).eq('id', id);
@@ -1116,7 +1116,7 @@ async function renderSourceStats(mqasafBalance) {
   el.innerHTML =
     card('سلفة', 'متبقي السلفة', 'var(--gold)', 'admin') +
     card('مدور سابق', 'متبقي المدور', 'var(--teal)', 'carry') +
-    statCard('رصيد المقصف', fmtAmount(mqasafBalance), 'var(--green)', 'إجمالي ما دخل منه', 'revenue');
+    statCard('رصيد المقصف', fmtAmount(mqasafBalance), 'var(--green)', 'إجمالي الوارد منه', 'revenue');
 }
 
 /* ---------- نصيب الإدارة + المدوَّر (تُحسب آخر كل فصل دراسي) ----------
@@ -1165,7 +1165,7 @@ async function loadShareSection() {
   const listEl = document.getElementById('budget-share-closures-list');
   if (listEl) {
     if (closureList.length === 0) {
-      listEl.innerHTML = '<p style="font-size:12px; color:var(--slate); margin:8px 0 0;">ما فيه فصل مُقفل بعد</p>';
+      listEl.innerHTML = '<p style="font-size:12px; color:var(--slate); margin:8px 0 0;">لا يوجد فصل مُقفل بعد</p>';
     } else {
       listEl.innerHTML = closureList.map(c => `
         <div style="display:flex; justify-content:space-between; align-items:center; font-size:12.5px; padding:8px 0; border-bottom:1px solid #ECEAE1;">
@@ -1209,7 +1209,7 @@ document.getElementById('budget-share-close-submit') && document.getElementById(
   errEl.style.display = 'none';
   const semester = document.getElementById('budget-share-close-semester').value;
   if (!semester) {
-    errEl.textContent = 'اختر الفصل الدراسي المراد إقفاله أولاً';
+    errEl.textContent = 'اختر الفصل الدراسي المراد إقفاله أولًا';
     errEl.style.display = 'block';
     return;
   }
@@ -1326,11 +1326,11 @@ async function loadBatchesLists() {
   };
 
   openEl.innerHTML = open.length === 0
-    ? '<p style="font-size:12px; color:var(--slate);">ما فيه دفعات سلفة أو مدور مفتوحة حاليًا</p>'
+    ? '<p style="font-size:12px; color:var(--slate);">لا توجد دفعات سلفة أو مدور مفتوحة حاليًا</p>'
     : open.map(batchRow).join('');
   if (closedEl) {
     closedEl.innerHTML = closed.length === 0
-      ? '<p style="font-size:12px; color:var(--slate);">ما فيه دفعات مقفلة بعد</p>'
+      ? '<p style="font-size:12px; color:var(--slate);">لا توجد دفعات مقفلة بعد</p>'
       : closed.map(batchRow).join('');
   }
 

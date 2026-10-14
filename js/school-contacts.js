@@ -135,7 +135,7 @@ async function refreshContactsList() {
   list.innerHTML = '';
   if (contactsCache.length === 0) {
     setScFormOpen(true);
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه بيانات تواصل مضافة بعد - أضف أول بطاقة من الأعلى</p></div>';
+    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>لا توجد بيانات تواصل مضافة بعد - أضف أول بطاقة من الأعلى</p></div>';
     return;
   }
 
@@ -196,7 +196,7 @@ function buildContactTile(c) {
   });
 
   tile.querySelector('.sc-delete-btn').addEventListener('click', async () => {
-    if (!confirm('حذف بطاقة التواصل هذي؟')) return;
+    if (!confirm('حذف بطاقة التواصل هذه؟')) return;
     await sb.from('school_contacts').delete().eq('id', c.id);
     if (editingId === c.id) resetForm();
     await refreshContactsList();

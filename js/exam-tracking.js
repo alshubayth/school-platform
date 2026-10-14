@@ -166,7 +166,7 @@ document.getElementById('exam-track-add-btn').addEventListener('click', async ()
     ...extra,
   }));
   if (error) {
-    errEl.textContent = error.message.includes('duplicate') ? 'هذي المادة/المرحلة مضافة مسبقًا لهذه الفترة' : 'تعذرت الإضافة: ' + error.message;
+    errEl.textContent = error.message.includes('duplicate') ? 'هذه المادة/المرحلة مضافة مسبقًا لهذه الفترة' : 'تعذرت الإضافة: ' + error.message;
     errEl.style.display = 'block';
     return;
   }
@@ -269,14 +269,14 @@ function renderBoard() {
   const k = (label, value, note = '', color = '', bar = null) => `<div class="kpi"><span class="k-label">${label}</span><span class="k-value"${color ? ` style="color:${color};"` : ''}>${value}</span>${bar != null ? `<div class="k-bar"><div style="width:${bar}%;"></div></div>` : ''}${note ? `<span class="k-note">${note}</span>` : ''}</div>`;
   document.getElementById('tr-kpis').innerHTML = totalAll ? [
     k('سير الفترة', pct + '%', `${totalAll} مادة`, '', pct),
-    k('تحتاج إجراءك', mineAll, mineAll ? 'اضغط «تحتاج إجرائي»' : 'ما عليك شي حاليًا', mineAll ? '#C0453D' : ''),
+    k('تحتاج إجراءك', mineAll, mineAll ? 'اضغط «تحتاج إجرائي»' : 'لا توجد مهام مطلوبة منك حاليًا', mineAll ? '#C0453D' : ''),
     k('مواد مغلقة', `${closedAll} / ${totalAll}`, 'وصلت المرحلة 12'),
     k('غياب مسجّل', absAll, 'طالب في كل المواد'),
   ].join('') : '';
 
   const list = document.getElementById('exam-tracking-list');
   if (!assignmentsCache.length) {
-    list.innerHTML = `<div class="ex-empty"><b>ما فيه مواد مضافة لهذي الفترة</b><span>${isAdminOrDeputy() ? 'اضغط «إعداد الفترة» وأضف كل مادة ومعلمها المسؤول.' : 'المدير أو الوكيل يضيف المواد من «إعداد الفترة».'}</span></div>`;
+    list.innerHTML = `<div class="ex-empty"><b>لا توجد مواد مضافة لهذه الفترة</b><span>${isAdminOrDeputy() ? 'اضغط «إعداد الفترة» وأضف كل مادة ومعلمها المسؤول.' : 'المدير أو الوكيل يضيف المواد من «إعداد الفترة».'}</span></div>`;
     return;
   }
   let rows = all;
@@ -285,7 +285,7 @@ function renderBoard() {
   else if (filterMode === 'closed') rows = rows.filter(x => x.st.closed);
   rows.sort((x, y) => (y.st.mine - x.st.mine) || (x.st.done - y.st.done) || String(x.a.subjects ? x.a.subjects.name : '').localeCompare(String(y.a.subjects ? y.a.subjects.name : ''), 'ar'));
   if (!rows.length) {
-    const msg = { mine: 'ما فيه مراحل بانتظار اعتمادك الحين', active: 'كل المواد مغلقة', closed: 'ما فيه مواد مغلقة بعد', all: 'ما فيه مواد' }[filterMode];
+    const msg = { mine: 'لا توجد مراحل بانتظار اعتمادك الآن', active: 'كل المواد مغلقة', closed: 'لا توجد مواد مغلقة بعد', all: 'لا توجد مواد' }[filterMode];
     list.innerHTML = `<div class="ex-empty"><b>${msg}</b></div>`;
     return;
   }
@@ -403,7 +403,7 @@ async function renderAbsenceSection(container, assignment) {
   const filtered = (assignedStudents || []).filter(r => r.students && r.students.grade_level === assignment.grade_level);
   filtered.sort((x, y) => (x.is_special - y.is_special) || ((x.committee_number || 0) - (y.committee_number || 0)) || ((x.seat_number || 0) - (y.seat_number || 0)));
   if (!filtered.length) {
-    container.innerHTML = '<div class="ex-empty"><b>ما فيه طلاب موزعين من هذي المرحلة</b><span>ولّد التوزيع من قسم «الاختبارات» أول.</span></div>';
+    container.innerHTML = '<div class="ex-empty"><b>لا يوجد طلاب موزعون من هذه المرحلة</b><span>ولّد التوزيع من قسم «الاختبارات» أولًا.</span></div>';
     return;
   }
   const groups = new Map();

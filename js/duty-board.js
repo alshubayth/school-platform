@@ -29,7 +29,7 @@ export const SLOTS = [
   { key: 'break', title: 'الفسحة', time: '09:45-10:15', c: '#B45F1E', bg: '#FDEFE3' },
   { key: 'prayer1', title: 'الصلاة — الجماعة الأولى', note: 'أول وثاني متوسط', time: '11:45-12:15', c: '#1F7A45', bg: '#E7F5EC' },
   { key: 'prayer2', title: 'الصلاة — الجماعة الثانية', note: 'ثالث متوسط', time: '12:30-13:00', c: '#5A3E9E', bg: '#EFEBFB' },
-  { key: 'dismissal', title: 'الانصراف', note: 'لين تطلع الحافلات', time: '13:45-14:15', c: '#8A3A30', bg: '#FBEAE9' },
+  { key: 'dismissal', title: 'الانصراف', note: 'حتى تغادر الحافلات', time: '13:45-14:15', c: '#8A3A30', bg: '#FBEAE9' },
 ];
 const SLOT = Object.fromEntries(SLOTS.map(s => [s.key, s]));
 export function slotRange(key) {
@@ -130,7 +130,7 @@ const clashText = cl => cl.map(p => `حصة ${p.period}${p.grade ? ' ' + (gradeL
 async function assign(postId, days, teacherId) {
   const rows = days.map(d => ({ post_id: postId, day_of_week: d, teacher_id: teacherId, updated_at: new Date().toISOString() }));
   const { error } = await writeWithSchool(extra => sb.from('duty_plan').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'post_id,day_of_week' }));
-  if (error) { toast('ما انحفظ: ' + error.message, true); return false; }
+  if (error) { toast('لم يُحفظ: ' + error.message, true); return false; }
   days.forEach(d => {
     const c = cellOf(postId, d);
     if (c) c.teacher_id = teacherId; else S.plan.push({ id: 'tmp' + Math.random(), post_id: postId, day_of_week: d, teacher_id: teacherId });
@@ -139,7 +139,7 @@ async function assign(postId, days, teacherId) {
 }
 async function unassign(postId, days) {
   const { error } = await sb.from('duty_plan').delete().eq('post_id', postId).in('day_of_week', days);
-  if (error) { toast('ما انحذف: ' + error.message, true); return false; }
+  if (error) { toast('لم يُحذف: ' + error.message, true); return false; }
   S.plan = S.plan.filter(x => !(x.post_id === postId && days.includes(x.day_of_week)));
   return true;
 }
@@ -163,7 +163,7 @@ export async function loadDutyBoardModule() {
   root.innerHTML = '<div class="db-loading">جاري التحميل...</div>';
   await loadData();
   if (S.missing) {
-    root.innerHTML = `<div class="db-empty"><b>قسم المناوبات الجديد يحتاج تجهيز قاعدة البيانات</b><span>${isManager() ? 'شغّل الملف sql/duty_v2.sql في Supabase مرة وحدة ثم حدّث الصفحة.' : 'تواصل مع الإدارة.'}</span></div>`;
+    root.innerHTML = `<div class="db-empty"><b>قسم المناوبات الجديد يحتاج تجهيز قاعدة البيانات</b><span>${isManager() ? 'شغّل الملف sql/duty_v2.sql في Supabase مرة واحدة ثم حدّث الصفحة.' : 'تواصل مع الإدارة.'}</span></div>`;
     return;
   }
   if (!S.loaded) { S.day = window.innerWidth < 700 ? (todayKey() || 'sunday') : 'all'; S.loaded = true; }
@@ -210,7 +210,7 @@ function fairnessHtml() {
     <div class="db-fair-item"><b>${filled}<small>/${cells}</small></b><span>خانة معبّأة</span><i class="db-bar"><i style="width:${pct}%"></i></i></div>
     <div class="db-fair-item"><b>${avg.toFixed(1)}</b><span>متوسط المناوبات للمعلم</span></div>
     <div class="db-fair-item"><b>${max}</b><span>أعلى عدد عند معلم</span></div>
-    <button type="button" class="db-fair-item db-fair-empty${empty ? ' warn' : ''}"><b>${empty}</b><span>${empty ? 'معلم بدون مناوبة ←' : 'كل المعلمين عندهم مناوبات'}</span></button>
+    <button type="button" class="db-fair-item db-fair-empty${empty ? ' warn' : ''}"><b>${empty}</b><span>${empty ? 'معلم بدون مناوبة ←' : 'لدى جميع المعلمين مناوبات'}</span></button>
   </div>`;
 }
 
@@ -235,7 +235,7 @@ function renderBoard(body, readOnly) {
       if (!c) return `<td><button type="button" class="db-cell empty" data-post="${p.id}" data-day="${d}" ${readOnly ? 'disabled' : ''} aria-label="إسناد ${esc(p.name)} يوم ${DAY_LABEL[d]}">${readOnly ? '—' : '＋'}</button></td>`;
       const cl = t ? periodClash(t.id, d, s.key) : [];
       const nm = t ? (single ? t.full_name : shortName(t.full_name)) : 'حساب محذوف';
-      return `<td><button type="button" class="db-cell filled${cl.length ? ' clash' : ''}${c.teacher_id === currentUserId ? ' me' : ''}" data-post="${p.id}" data-day="${d}" ${readOnly ? 'disabled' : ''} title="${esc(t ? t.full_name : '')}${cl.length ? ' — عنده ' + esc(clashText(cl)) : ''}">${esc(nm)}${cl.length ? '<i class="db-dot" aria-hidden="true"></i>' : ''}</button></td>`;
+      return `<td><button type="button" class="db-cell filled${cl.length ? ' clash' : ''}${c.teacher_id === currentUserId ? ' me' : ''}" data-post="${p.id}" data-day="${d}" ${readOnly ? 'disabled' : ''} title="${esc(t ? t.full_name : '')}${cl.length ? ' — لديه ' + esc(clashText(cl)) : ''}">${esc(nm)}${cl.length ? '<i class="db-dot" aria-hidden="true"></i>' : ''}</button></td>`;
     }).join('')}</tr>`).join('');
     return `<section class="db-slot" style="--c:${s.c};--bg:${s.bg}">
       <header class="db-slot-h"><span class="db-slot-t">${esc(s.title)}</span><span class="db-slot-time">${r.label}</span>${s.note ? `<span class="db-slot-note">${esc(s.note)}</span>` : ''}<span class="db-slot-count${fill === total ? ' full' : ''}">${fill}/${total}</span></header>
@@ -243,8 +243,8 @@ function renderBoard(body, readOnly) {
     </section>`;
   }).join('');
   body.innerHTML = `${dayChips(S.day)}
-    ${readOnly ? '' : '<div class="db-hint">اضغط أي خانة واختر المعلم. <span class="db-dot inline"></span> = المعلم عنده حصة بنفس الوقت.</div>'}
-    ${sections || '<div class="db-empty">ما فيه مواقع مفعّلة. أضفها من تبويب «المواقع».</div>'}`;
+    ${readOnly ? '' : '<div class="db-hint">اضغط أي خانة واختر المعلم. <span class="db-dot inline"></span> = لدى المعلم حصة في الوقت نفسه.</div>'}
+    ${sections || '<div class="db-empty">لا توجد مواقع مفعّلة. أضفها من تبويب «المواقع».</div>'}`;
   body.querySelectorAll('.db-daybar .db-chip').forEach(b => b.onclick = () => { S.day = b.dataset.day; renderBoard(body, readOnly); });
   if (!readOnly) body.querySelectorAll('.db-cell').forEach(b => b.onclick = () => openTeacherPicker(b.dataset.post, b.dataset.day));
 }
@@ -314,13 +314,13 @@ function openTeacherPicker(postId, day) {
         const tags = [];
         if (isCur) tags.push('<span class="db-tag cur">المناوب الحالي</span>');
         busy.forEach(([d, x]) => tags.push(`<span class="db-tag busy">مناوب في «${esc((postById(x.post_id) || {}).name || '')}»${multi ? ' ' + DAY_LABEL[d] : ''}</span>`));
-        clash.forEach(([d, c]) => tags.push(`<span class="db-tag clash">عنده ${esc(clashText(c))}${multi ? ' ' + DAY_LABEL[d] : ''}</span>`));
+        clash.forEach(([d, c]) => tags.push(`<span class="db-tag clash">لديه ${esc(clashText(c))}${multi ? ' ' + DAY_LABEL[d] : ''}</span>`));
         return `<button type="button" class="db-trow${isCur ? ' cur' : ''}" data-id="${t.id}" ${rank === 4 ? 'disabled' : ''} role="option">
           <span class="db-tname">${esc(t.full_name)}</span>
           <span class="db-load${load === 0 ? ' zero' : ''}" title="عدد مناوباته بالأسبوع">${load}</span>
           ${tags.length ? `<span class="db-tags">${tags.join('')}</span>` : ''}
         </button>`;
-      }).join('') || '<div class="db-empty sm">ما فيه نتائج</div>';
+      }).join('') || '<div class="db-empty sm">لا توجد نتائج</div>';
       list.querySelectorAll('.db-trow').forEach(b => b.onclick = async () => {
         const tid = b.dataset.id;
         const okDays = days.filter(d => !busyElsewhere(tid, d, post.slot, postId));
@@ -330,7 +330,7 @@ function openTeacherPicker(postId, day) {
         if (await assign(postId, okDays, tid)) {
           closeSheet(); refresh();
           const t = teacherById(tid);
-          toast(`${shortName(t.full_name)} ← ${post.name}${okDays.length > 1 ? ` (${okDays.length} أيام)` : ''}${skipped.length ? ` · ما انحط ${skipped.map(d => DAY_LABEL[d]).join('، ')} لأنه مناوب بموقع ثاني` : ''}`);
+          toast(`${shortName(t.full_name)} ← ${post.name}${okDays.length > 1 ? ` (${okDays.length} أيام)` : ''}${skipped.length ? ` · لم يُحدَّد ${skipped.map(d => DAY_LABEL[d]).join('، ')} لأنه مناوب بموقع ثاني` : ''}`);
         } else b.disabled = false;
       });
     };
@@ -352,7 +352,7 @@ function renderTeacherTab(body) {
     <aside class="db-tside">
       <input type="search" class="db-search" id="db-tq" placeholder="ابحث عن معلم..." value="${esc(S.tFilter)}" autocomplete="off">
       <label class="db-check"><input type="checkbox" id="db-tempty" ${S.tOnlyEmpty ? 'checked' : ''}> بدون مناوبات فقط</label>
-      <div class="db-tside-list">${list.map(t => { const n = loadOf(t.id); return `<button type="button" class="db-tside-row${S.selTeacher === t.id ? ' on' : ''}" data-id="${t.id}"><span>${esc(t.full_name)}</span><span class="db-load${n === 0 ? ' zero' : ''}">${n}</span></button>`; }).join('') || '<div class="db-empty sm">ما فيه معلمين</div>'}</div>
+      <div class="db-tside-list">${list.map(t => { const n = loadOf(t.id); return `<button type="button" class="db-tside-row${S.selTeacher === t.id ? ' on' : ''}" data-id="${t.id}"><span>${esc(t.full_name)}</span><span class="db-load${n === 0 ? ' zero' : ''}">${n}</span></button>`; }).join('') || '<div class="db-empty sm">لا يوجد معلمون</div>'}</div>
     </aside>
     <div class="db-tmain" id="db-tmain"></div>
   </div>`;
@@ -368,7 +368,7 @@ function renderTeacherTab(body) {
 
 function renderTeacherGrid(box) {
   const t = S.selTeacher && teacherById(S.selTeacher);
-  if (!t) { box.innerHTML = '<div class="db-empty">اختر معلم من القائمة عشان تسند له مناوباته</div>'; return; }
+  if (!t) { box.innerHTML = '<div class="db-empty">اختر معلمًا من القائمة لتسند إليه مناوباته</div>'; return; }
   const slots = SLOTS.filter(s => activePosts(s.key).length);
   const n = loadOf(t.id);
   const periods = (S.sched.get(t.id) || []).length;
@@ -378,7 +378,7 @@ function renderTeacherGrid(box) {
     ${slots.map(s => `<tr style="--c:${s.c};--bg:${s.bg}"><th class="db-post slot"><span>${esc(s.title)}</span><small>${slotRange(s.key).label}</small></th>${DAYS.map(([d]) => {
       const mine = S.plan.find(x => x.teacher_id === t.id && x.day_of_week === d && (postById(x.post_id) || {}).slot === s.key);
       const cl = periodClash(t.id, d, s.key);
-      return `<td><button type="button" class="db-cell ${mine ? 'filled slotc' : 'empty'}${cl.length ? ' clash' : ''}" data-slot="${s.key}" data-day="${d}" title="${cl.length ? 'عنده ' + esc(clashText(cl)) : ''}">${mine ? esc(postById(mine.post_id).name) : (cl.length ? `<small class="db-cl">${esc(clashText(cl))}</small>` : '＋')}${mine && cl.length ? '<i class="db-dot" aria-hidden="true"></i>' : ''}</button></td>`;
+      return `<td><button type="button" class="db-cell ${mine ? 'filled slotc' : 'empty'}${cl.length ? ' clash' : ''}" data-slot="${s.key}" data-day="${d}" title="${cl.length ? 'لديه ' + esc(clashText(cl)) : ''}">${mine ? esc(postById(mine.post_id).name) : (cl.length ? `<small class="db-cl">${esc(clashText(cl))}</small>` : '＋')}${mine && cl.length ? '<i class="db-dot" aria-hidden="true"></i>' : ''}</button></td>`;
     }).join('')}</tr>`).join('')}
     </tbody></table></div>
   </div>`;
@@ -405,14 +405,14 @@ function openPostPicker(tid, slotKey, day) {
       const days = DAYS.map(([k]) => k).filter(k => sel.has(k));
       const multi = days.length > 1;
       const cl = days.map(d => [d, periodClash(tid, d, slotKey)]).filter(x => x[1].length);
-      el.querySelector('.db-clash-note').innerHTML = cl.length ? `<div class="db-warn">⚠ عنده ${cl.map(([d, c]) => esc(clashText(c)) + (multi ? ' ' + DAY_LABEL[d] : '')).join('، ')} بنفس الوقت</div>` : '';
+      el.querySelector('.db-clash-note').innerHTML = cl.length ? `<div class="db-warn">⚠ لديه ${cl.map(([d, c]) => esc(clashText(c)) + (multi ? ' ' + DAY_LABEL[d] : '')).join('، ')} في الوقت نفسه</div>` : '';
       el.querySelector('.db-plist').innerHTML = activePosts(slotKey).map(p => {
         const holders = days.map(d => [d, cellOf(p.id, d)]).filter(([, c]) => c && c.teacher_id !== tid);
         const isMine = days.every(d => (cellOf(p.id, d) || {}).teacher_id === tid);
         const who = holders.length ? holders.map(([d, c]) => { const h = teacherById(c.teacher_id); return `${esc(shortName(h ? h.full_name : '—'))}${multi ? ' (' + DAY_LABEL[d] + ')' : ''}`; }).join('، ') : '';
         return `<button type="button" class="db-prow${isMine ? ' on' : ''}${holders.length ? ' taken' : ''}" data-post="${p.id}">
           <span class="db-pname">${esc(p.name)}</span>
-          <span class="db-pwho">${isMine ? '✓ مسندة له' : holders.length ? 'بدل: ' + who : 'فاضية'}</span>
+          <span class="db-pwho">${isMine ? '✓ مسندة له' : holders.length ? 'بدل: ' + who : 'شاغرة'}</span>
         </button>`;
       }).join('');
       el.querySelector('[data-act="clear"]').hidden = !days.some(d => mineOn(d));
@@ -444,7 +444,7 @@ function refresh() {
 
 /* ---------- تبويب «المواقع» ---------- */
 function renderPostsTab(body) {
-  body.innerHTML = `<div class="db-hint">كل موقع مربوط بوقت. الموقع الموقوف ما يظهر بالجدول (وتبقى إسناداته محفوظة لو رجّعته).</div>
+  body.innerHTML = `<div class="db-hint">كل موقع مرتبط بوقت. الموقع الموقوف لا يظهر في الجدول (وتبقى إسناداته محفوظة إذا أعدت تفعيله).</div>
     ${SLOTS.map(s => {
       const posts = S.posts.filter(p => p.slot === s.key);
       return `<section class="db-slot" style="--c:${s.c};--bg:${s.bg}">
@@ -468,11 +468,11 @@ function renderPostsTab(body) {
     inp.onchange = async () => {
       const name = inp.value.trim(); if (!name) { inp.value = p.name; return; }
       const { error } = await sb.from('duty_posts').update({ name }).eq('id', p.id);
-      if (error) toast('ما انحفظ', true); else { p.name = name; toast('انحفظ الاسم'); }
+      if (error) toast('لم يُحفظ', true); else { p.name = name; toast('حُفظ الاسم'); }
     };
     row.querySelector('input[type=checkbox]').onchange = async e => {
       const { error } = await sb.from('duty_posts').update({ active: e.target.checked }).eq('id', p.id);
-      if (error) { toast('ما انحفظ', true); e.target.checked = !e.target.checked; return; }
+      if (error) { toast('لم يُحفظ', true); e.target.checked = !e.target.checked; return; }
       p.active = e.target.checked; row.classList.toggle('off', !p.active);
     };
     row.querySelectorAll('[data-act=up],[data-act=down]').forEach(b => b.onclick = async () => {
@@ -495,9 +495,9 @@ function renderPostsTab(body) {
         return;
       }
       const { error } = await sb.from('duty_posts').delete().eq('id', p.id);
-      if (error) { toast('ما انحذف', true); return; }
+      if (error) { toast('لم يُحذف', true); return; }
       S.posts = S.posts.filter(x => x.id !== p.id); S.plan = S.plan.filter(x => x.post_id !== p.id);
-      renderPostsTab(body); toast('انحذف الموقع');
+      renderPostsTab(body); toast('حُذف الموقع');
     };
   });
   body.querySelectorAll('.db-padd').forEach(f => f.onsubmit = async e => {
@@ -506,18 +506,18 @@ function renderPostsTab(body) {
     const slot = f.dataset.slot;
     const maxSort = Math.max(0, ...S.posts.filter(p => p.slot === slot).map(p => p.sort || 0));
     const { data, error } = await writeWithSchool(extra => sb.from('duty_posts').insert({ slot, name, sort: maxSort + 1, active: true, ...extra }).select('id, slot, name, sort, active'));
-    if (error) { toast('ما انضاف: ' + error.message, true); return; }
+    if (error) { toast('لم يُضف: ' + error.message, true); return; }
     S.posts.push(...(data || [])); S.posts.sort((x, y) => (x.sort || 0) - (y.sort || 0));
-    renderPostsTab(body); toast('انضاف الموقع');
+    renderPostsTab(body); toast('أُضيف الموقع');
   });
-  $('db-restore').onclick = async () => { const n = await seedPosts(true); renderPostsTab(body); toast(n ? `انضاف ${n} موقع` : 'كل المواقع الافتراضية موجودة'); };
+  $('db-restore').onclick = async () => { const n = await seedPosts(true); renderPostsTab(body); toast(n ? `أُضيف ${n} موقع` : 'كل المواقع الافتراضية موجودة'); };
 }
 
 /* ---------- المعلم: مناوباتي ---------- */
 function renderMine(body) {
   const mine = S.plan.filter(x => x.teacher_id === currentUserId && postById(x.post_id) && postById(x.post_id).active);
   const tk = todayKey();
-  if (!mine.length) { body.innerHTML = '<div class="db-empty">ما عندك مناوبات مسندة حاليًا</div>'; return; }
+  if (!mine.length) { body.innerHTML = '<div class="db-empty">لا توجد لديك مناوبات مسندة حاليًا</div>'; return; }
   body.innerHTML = `<div class="db-mine">${DAYS.map(([d, l]) => {
     const items = mine.filter(x => x.day_of_week === d).map(x => postById(x.post_id))
       .sort((a, b) => SLOTS.findIndex(s => s.key === a.slot) - SLOTS.findIndex(s => s.key === b.slot));
@@ -548,7 +548,7 @@ export async function renderMyDutyBanner() {
   try { list = await myDutiesToday(); } catch (e) { return; }
   if (!list.length) return;
   banner.innerHTML = `<div class="db-banner"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-    <span><strong>اليوم عندك مناوبة:</strong> ${list.map(d => `${esc(d.post)} <small>(${esc(d.title)} ${d.range ? d.range.label : ''})</small>`).join('، ')}</span></div>`;
+    <span><strong>لديك اليوم مناوبة:</strong> ${list.map(d => `${esc(d.post)} <small>(${esc(d.title)} ${d.range ? d.range.label : ''})</small>`).join('، ')}</span></div>`;
 }
 
 // للوحة الإدارة: عدد مناوبات اليوم (الحضور يجي بالمرحلة الثانية)

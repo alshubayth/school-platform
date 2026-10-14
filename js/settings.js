@@ -88,17 +88,17 @@ async function refreshStudents() {
     <div class="st-kpi main"><b>${total}</b><span>طالب${lastTxt ? ` · آخر تحديث ${lastTxt}` : ''}</span></div>
     ${GRADES.map(g => { const n = [...byGrade.get(g).values()].reduce((a, b) => a + b, 0); return `<div class="st-kpi"><b>${n}</b><span>${gradeLabels[g]} · ${sectionsCount(g)} فصول</span></div>`; }).join('')}`;
   const wrap = $('st-stu-sections');
-  if (!total) { wrap.innerHTML = '<div class="ex-empty"><b>ما فيه طلاب بعد</b><span>ارفع ملف الطلاب من نور، والفصول تنحسب منه تلقائيًا</span></div>'; return; }
+  if (!total) { wrap.innerHTML = '<div class="ex-empty"><b>لا يوجد طلاب بعد</b><span>ارفع ملف الطلاب من نظام نور، وستُحتسب الفصول منه تلقائيًا</span></div>'; return; }
   wrap.innerHTML = GRADES.map(g => {
     const m = byGrade.get(g);
     const secs = [...m.entries()].filter(([k]) => k > 0).sort((a, b) => a[0] - b[0]);
     const none = m.get(0) || 0;
     return `<div class="st-grade">
       <div class="st-grade-h"><b>${gradeLabels[g]}</b><span>${arSections(secs.length)}</span></div>
-      <div class="st-secs">${secs.length ? secs.map(([k, n]) => `<span class="st-sec"><b>${k}</b>${n} طالب</span>`).join('') : '<span class="st-hint">ما فيه طلاب</span>'}
+      <div class="st-secs">${secs.length ? secs.map(([k, n]) => `<span class="st-sec"><b>${k}</b>${n} طالب</span>`).join('') : '<span class="st-hint">لا يوجد طلاب</span>'}
       ${none ? `<span class="st-sec warn"><b>؟</b>${none} بدون فصل</span>` : ''}</div>
     </div>`;
-  }).join('') + (noSection ? '<p class="st-help warn">فيه طلاب بدون رقم فصل بالملف، فما يطلعون في كشوف الفصول. تأكد من عمود "الفصل" بملف نور وارفعه مرة ثانية.</p>' : '');
+  }).join('') + (noSection ? '<p class="st-help warn">يوجد في الملف طلاب بدون رقم فصل، فلن يظهروا في كشوف الفصول. تأكد من عمود "الفصل" في ملف نور وارفعه مرة أخرى.</p>' : '');
 }
 function arSections(n) { return n === 0 ? 'بدون فصول' : n === 1 ? 'فصل واحد' : n === 2 ? 'فصلان' : n <= 10 ? `${n} فصول` : `${n} فصلًا`; }
 
@@ -117,7 +117,7 @@ async function importStudentsFile() {
   errEl.style.display = 'none';
   okEl.classList.add('hidden');
   const file = fileInput.files[0];
-  if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
+  if (!file) { errEl.textContent = 'اختر ملف إكسل أولًا'; errEl.style.display = 'block'; return; }
 
   await loadXLSX();
   const reader = new FileReader();
@@ -150,7 +150,7 @@ async function importStudentsFile() {
         }
       }
       if (headerIdx === -1) {
-        errEl.textContent = 'ما لقيت عمود "اسم الطالب" بالملف، تأكد من شكل الملف';
+        errEl.textContent = 'لم يُعثر في الملف على عمود "اسم الطالب"، تأكد من تنسيق الملف';
         errEl.style.display = 'block';
         return;
       }
@@ -177,7 +177,7 @@ async function importStudentsFile() {
       }
 
       if (students.length === 0) {
-        errEl.textContent = 'ما لقيت أي صفوف طلاب صالحة بالملف';
+        errEl.textContent = 'لم يُعثر في الملف على أي صفوف طلاب صالحة';
         errEl.style.display = 'block';
         return;
       }
@@ -199,7 +199,7 @@ async function importStudentsFile() {
       if (missing.length) {
         const gradesTxt = [...fileGrades].map(g => gradeLabels[g]).join('، ');
         const sample = missing.slice(0, 8).map(x => '• ' + (x.full_name || x.national_id)).join('\n');
-        const ok = confirm(`فيه ${missing.length} طالب مسجلين بالمنصة (${gradesTxt}) ومو موجودين بالملف:\n${sample}${missing.length > 8 ? `\n... و${missing.length - 8} غيرهم` : ''}\n\nتبي تحذفهم؟ (تنحذف معهم متابعاتهم ومقاعدهم بالمعمل ولجانهم)`);
+        const ok = confirm(`فيه ${missing.length} طالب مسجلين بالمنصة (${gradesTxt}) ومو موجودين بالملف:\n${sample}${missing.length > 8 ? `\n... و${missing.length - 8} غيرهم` : ''}\n\nهل تريد حذفهم؟ (ستُحذف معهم متابعاتهم ومقاعدهم في المعمل ولجانهم)`);
         if (ok) {
           let removed = 0; const failed = [];
           for (let i = 0; i < missing.length; i += 200) {
@@ -212,10 +212,10 @@ async function importStudentsFile() {
               if (e1) failed.push(x.full_name || x.national_id); else removed++;
             }
           }
-          msg += ` · حُذف ${removed} طالب مو موجودين بالملف`;
-          if (failed.length) msg += ` · ما قدرت أحذف ${failed.length} (مرتبطين بسجلات غياب اختبارات): ${failed.slice(0, 5).join('، ')}${failed.length > 5 ? '...' : ''}`;
+          msg += ` · حُذف ${removed} طالب غير موجودين في الملف`;
+          if (failed.length) msg += ` · تعذّر حذف ${failed.length} (مرتبطين بسجلات غياب اختبارات): ${failed.slice(0, 5).join('، ')}${failed.length > 5 ? '...' : ''}`;
         } else {
-          msg += ` · ${missing.length} طالب مو موجودين بالملف تركتهم بدون حذف`;
+          msg += ` · ${missing.length} طالب غير موجودين في الملف أُبقوا دون حذف`;
         }
       }
       okEl.textContent = msg;

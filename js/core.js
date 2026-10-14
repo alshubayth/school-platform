@@ -106,7 +106,7 @@ export const tiles = [
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold', group: 'extra' },
   { key: 'schools-admin', icon: icons.perms, title: 'إدارة المدارس والخدمات', desc: 'إضافة مدرسة جديدة وتفعيل خدماتها', roles: ['owner'], color: 'diamond-navy', group: 'admin' },
   { key: 'admin-tasks', icon: icons.admintasks, title: 'المهام الإدارية', desc: 'مهام كل أسبوع ومسؤول تنفيذها وحالتها', roles: ['admin','deputy'], color: 'diamond-purple', group: 'admin' },
-  { key: 'school-contacts', icon: icons.contacts, title: 'بيانات التواصل', desc: 'أرقام تواصل المدرسة اللي تظهر لولي الأمر', roles: ['admin','deputy'], color: 'diamond-green', group: 'admin' },
+  { key: 'school-contacts', icon: icons.contacts, title: 'بيانات التواصل', desc: 'أرقام تواصل المدرسة التي تظهر لولي الأمر', roles: ['admin','deputy'], color: 'diamond-green', group: 'admin' },
   { key: 'settings', icon: icons.settings, title: 'الإعدادات', desc: 'بيانات المدرسة والطلاب والتقويم والحسابات', roles: ['admin','deputy'], color: 'diamond-navy' },
 ];
 // مساحة العمل لكل قسم تُستمد من GROUPS (مصدر واحد للترتيب والتجميع)
@@ -193,12 +193,12 @@ document.getElementById('reset-submit-btn').addEventListener('click', async () =
   successEl.style.display = 'none';
 
   if (!rawInput || !oldPassword || !newPassword || !newPasswordConfirm) {
-    errEl.textContent = 'عبّي كل الحقول أولاً';
+    errEl.textContent = 'عبّئ جميع الحقول أولًا';
     errEl.style.display = 'block';
     return;
   }
   if (newPassword.length < 6) {
-    errEl.textContent = 'كلمة المرور الجديدة لازم تكون 6 أحرف على الأقل';
+    errEl.textContent = 'يجب أن تتكون كلمة المرور الجديدة من 6 أحرف على الأقل';
     errEl.style.display = 'block';
     return;
   }
@@ -208,7 +208,7 @@ document.getElementById('reset-submit-btn').addEventListener('click', async () =
     return;
   }
   if (newPassword === oldPassword) {
-    errEl.textContent = 'كلمة المرور الجديدة لازم تختلف عن الحالية';
+    errEl.textContent = 'يجب أن تختلف كلمة المرور الجديدة عن الحالية';
     errEl.style.display = 'block';
     return;
   }
@@ -264,7 +264,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-14a';
+export const ASSET_VERSION = '2026-10-14b';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -357,7 +357,7 @@ async function showSchoolPicker() {
     return;
   }
   if (!schools || !schools.length) {
-    list.innerHTML = '<p style="text-align:center; color:var(--slate); grid-column:1/-1;">ما فيه أي مدرسة مضافة بعد.</p>';
+    list.innerHTML = '<p style="text-align:center; color:var(--slate); grid-column:1/-1;">لا توجد أي مدرسة مضافة بعد.</p>';
     return;
   }
   list.innerHTML = schools.map(s => `

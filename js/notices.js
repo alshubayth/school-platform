@@ -108,7 +108,7 @@ async function renderInbox() {
   setHead('التنبيهات', false); loading();
   await loadInbox(); updateBadge();
   if (tableMissing) { body().innerHTML = missingMsg; return; }
-  if (!inbox.length) { body().innerHTML = '<div class="nt-empty">ما عندك تنبيهات</div>'; return; }
+  if (!inbox.length) { body().innerHTML = '<div class="nt-empty">لا توجد لديك تنبيهات</div>'; return; }
   body().innerHTML = `<div class="nt-list">${inbox.map(n => {
     const status = n.response_type === 'none' ? '' : n.me.responded_at ? '<span class="nt-chip ok">تم الرد</span>' : '<span class="nt-chip wait">بانتظار ردك</span>';
     return `<button type="button" class="nt-item${!n.me.read_at ? ' unread' : ''}" data-id="${esc(n.id)}">
@@ -132,10 +132,10 @@ async function renderDetail(id) {
   const opts = Array.isArray(n.options) ? n.options : [];
   let resp = '';
   if (n.response_type === 'choice') {
-    resp = `<div class="nt-resp"><div class="nt-resp-h">${n.me.responded_at ? 'ردك (تقدر تغيّره):' : 'اختر ردك:'}</div>
+    resp = `<div class="nt-resp"><div class="nt-resp-h">${n.me.responded_at ? 'ردك (يمكنك تغييره):' : 'اختر ردك:'}</div>
       <div class="nt-choices">${opts.map((o, i) => `<button type="button" class="nt-choice${n.me.response_choice === i ? ' on' : ''}" data-i="${i}">${esc(o)}</button>`).join('')}</div></div>`;
   } else if (n.response_type === 'text') {
-    resp = `<div class="nt-resp"><div class="nt-resp-h">${n.me.responded_at ? 'ردك (تقدر تعدّله):' : 'اكتب ردك:'}</div>
+    resp = `<div class="nt-resp"><div class="nt-resp-h">${n.me.responded_at ? 'ردك (يمكنك تعديله):' : 'اكتب ردك:'}</div>
       <textarea id="nt-reply" rows="3" maxlength="1000">${esc(n.me.response_text || '')}</textarea>
       <button type="button" class="btn-primary" id="nt-send-reply">إرسال الرد</button></div>`;
   }
@@ -159,7 +159,7 @@ async function renderDetail(id) {
   const sendBtn = $('nt-send-reply');
   if (sendBtn) sendBtn.addEventListener('click', async () => {
     const t = $('nt-reply').value.trim();
-    if (!t) { msg('اكتب ردك أول'); return; }
+    if (!t) { msg('اكتب ردك أولًا'); return; }
     sendBtn.disabled = true;
     const { data, error } = await sb.rpc('notice_respond', { p_notice: n.id, p_text: t, p_choice: null });
     sendBtn.disabled = false;
@@ -222,7 +222,7 @@ async function renderCompose() {
   const renderPeople = () => {
     const term = $('nt-search').value.trim();
     const list = staff.filter(p => !term || p.full_name.includes(term));
-    $('nt-people').innerHTML = list.map(p => `<label class="nt-person${picked.has(p.id) ? ' on' : ''}"><input type="checkbox" value="${esc(p.id)}" ${picked.has(p.id) ? 'checked' : ''}/><span>${esc(p.full_name)}</span><small>${esc(roleLabels[p.role] || '')}</small></label>`).join('') || '<div class="nt-empty sm">ما فيه نتائج</div>';
+    $('nt-people').innerHTML = list.map(p => `<label class="nt-person${picked.has(p.id) ? ' on' : ''}"><input type="checkbox" value="${esc(p.id)}" ${picked.has(p.id) ? 'checked' : ''}/><span>${esc(p.full_name)}</span><small>${esc(roleLabels[p.role] || '')}</small></label>`).join('') || '<div class="nt-empty sm">لا توجد نتائج</div>';
     $('nt-count').textContent = picked.size ? `المختارين: ${picked.size}` : 'ما اخترت أحد';
   };
   renderPeople();
@@ -273,8 +273,8 @@ async function renderCompose() {
     btn.disabled = false; btn.textContent = 'إرسال التنبيه';
     if (error) {
       const m = error.message || '';
-      if (/not allowed/i.test(m)) return msg('ما عندك صلاحية الإرسال لهذي المدرسة');
-      if (/no recipients/i.test(m)) return msg('المستلمين المختارين مو من موظفين هذي المدرسة');
+      if (/not allowed/i.test(m)) return msg('ليست لديك صلاحية الإرسال إلى هذه المدرسة');
+      if (/no recipients/i.test(m)) return msg('المستلمون المختارون ليسوا من موظفي هذه المدرسة');
       return msg('تعذّر الإرسال: ' + m + (error.code ? ' (' + error.code + ')' : ''));
     }
     openPanel('sent');
@@ -289,7 +289,7 @@ async function renderSent() {
   if (currentSchoolId) q = q.eq('school_id', currentSchoolId);
   const { data: notices, error } = await q;
   if (error) { body().innerHTML = missingMsg; return; }
-  if (!notices || !notices.length) { body().innerHTML = '<div class="nt-empty">ما أرسلت تنبيهات بعد<br><button type="button" class="btn-primary" id="nt-go-new" style="margin-top:12px">+ تنبيه جديد</button></div>'; $('nt-go-new').addEventListener('click', () => openPanel('compose')); return; }
+  if (!notices || !notices.length) { body().innerHTML = '<div class="nt-empty">لم ترسل تنبيهات بعد<br><button type="button" class="btn-primary" id="nt-go-new" style="margin-top:12px">+ تنبيه جديد</button></div>'; $('nt-go-new').addEventListener('click', () => openPanel('compose')); return; }
   const { data: recs } = await sb.from('staff_notice_recipients').select('notice_id, read_at, responded_at').in('notice_id', notices.map(n => n.id));
   const stat = {};
   (recs || []).forEach(r => { const s = stat[r.notice_id] = stat[r.notice_id] || { all: 0, read: 0, resp: 0 }; s.all++; if (r.read_at) s.read++; if (r.responded_at) s.resp++; });
@@ -328,7 +328,7 @@ async function renderSentDetail(id) {
     }).join('');
   } else if (n.response_type === 'text') {
     const who = rows.filter(r => r.responded_at);
-    results = who.length ? who.map(r => `<div class="nt-reply"><b>${esc(r.name)}</b><p>${esc(r.response_text)}</p></div>`).join('') : '<div class="nt-empty sm">ما فيه ردود بعد</div>';
+    results = who.length ? who.map(r => `<div class="nt-reply"><b>${esc(r.name)}</b><p>${esc(r.response_text)}</p></div>`).join('') : '<div class="nt-empty sm">لا توجد ردود بعد</div>';
   }
   const pending = rows.filter(r => n.response_type === 'none' ? !r.read_at : !r.responded_at);
   body().innerHTML = `<article class="nt-detail">
@@ -341,7 +341,7 @@ async function renderSentDetail(id) {
         ${n.response_type !== 'none' ? `<div><b>${resp}</b><span>ردّوا</span></div>` : ''}
       </div>
       ${results ? `<h4>الردود</h4>${results}` : ''}
-      <h4>${n.response_type === 'none' ? 'ما اطلعوا' : 'ما ردّوا'} (${pending.length})</h4>
+      <h4>${n.response_type === 'none' ? 'ما اطلعوا' : 'لم يردّوا'} (${pending.length})</h4>
       <div class="nt-names">${names(pending)}</div>
       <div class="nt-actions">
         ${pending.length ? `<button type="button" class="btn-primary" id="nt-remind">تذكير ${pending.length === 1 ? 'المتبقي' : 'المتبقين'}</button>` : ''}
@@ -355,7 +355,7 @@ async function renderSentDetail(id) {
     rb.disabled = true;
     const { data, error } = await sb.rpc('notice_remind', { p_notice: n.id });
     if (error || data < 0) { rb.disabled = false; msg('تعذّر إرسال التذكير'); return; }
-    msg(`تم إرسال تذكير لـ ${data} ✓ (يوصل اللي مفعّلين إشعارات الجوال، والباقي يشوفونه بالجرس)`);
+    msg(`تم إرسال تذكير لـ ${data} ✓ (يصل إلى من فعّلوا إشعارات الجوال، ويطّلع عليه الباقون من الجرس)`);
   });
   const del = $('nt-del');
   del.addEventListener('click', async () => {

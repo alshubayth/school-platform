@@ -79,7 +79,7 @@ async function refreshForDate() {
   $('dd-dayname').textContent = new Date(subDate + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
   if (!dk) {
     schedule = []; baseMap = new Map(); changes = new Map(); statuses = [];
-    $('dd-grid').innerHTML = '<tbody><tr><td class="dd-off">هذا اليوم إجازة أسبوعية، ما فيه جدول حصص</td></tr></tbody>';
+    $('dd-grid').innerHTML = '<tbody><tr><td class="dd-off">هذا اليوم إجازة أسبوعية، ولا يوجد فيه جدول حصص</td></tr></tbody>';
     $('dd-stats').innerHTML = '';
     renderStatusList(); renderCellPanel(); renderMine();
     return;
@@ -173,7 +173,7 @@ function renderGrid() {
       </td>`;
     }).join('')}</tr>`;
   }).join('');
-  $('dd-grid').innerHTML = classes.length ? head + '<tbody>' + body + '</tbody>' : '<tbody><tr><td class="dd-off">ما فيه جدول حصص بالمنصة. أضفه من قسم «الجدول الدراسي» أول.</td></tr></tbody>';
+  $('dd-grid').innerHTML = classes.length ? head + '<tbody>' + body + '</tbody>' : '<tbody><tr><td class="dd-off">لا يوجد جدول حصص في المنصة. أضفه من قسم «الجدول الدراسي» أولًا.</td></tr></tbody>';
   if (manage) wireGrid();
 }
 
@@ -194,7 +194,7 @@ function renderStats() {
   $('dd-stats').innerHTML = `
     <span class="ds ds-all"><b>${statuses.length}</b> حالة اليوم</span>
     <span class="ds ds-late"><b>${affected}</b> حصة متأثرة</span>
-    <span class="ds ${unresolved ? 'ds-absent' : 'ds-present'}"><b>${unresolved}</b> ${unresolved ? 'تحتاج حل' : 'كلها محلولة'}</span>
+    <span class="ds ${unresolved ? 'ds-absent' : 'ds-present'}"><b>${unresolved}</b> ${unresolved ? 'تحتاج حل' : 'جميعها محلولة'}</span>
     ${conflicts ? `<span class="ds ds-absent"><b>${conflicts}</b> ${conflicts === 1 ? 'معلم في مكانين' : 'تعارض'}</span>` : ''}
     <span class="ds"><b>${nChanges}</b> خانة متغيّرة</span>`;
 }
@@ -208,9 +208,9 @@ function renderStatusList() {
   list.innerHTML = statuses.length ? statuses.map(s => {
     const kind = s.kind || 'absent';
     const lessons = PERIODS.filter(p => teacherOut(s.teacher_name, p) && classes.some(c => { const b = baseMap.get(keyOf(c.grade, c.section, p)); return b && norm(b.teacher_name) === norm(s.teacher_name); })).length;
-    const txt = kind === 'absent' ? 'غائب اليوم' : kind === 'leave' ? `مستأذن من الحصة ${s.from_period}` : `متأخر لين الحصة ${s.from_period}`;
+    const txt = kind === 'absent' ? 'غائب اليوم' : kind === 'leave' ? `مستأذن من الحصة ${s.from_period}` : `متأخر حتى الحصة ${s.from_period}`;
     return `<div class="dd-st st-${kind}"><span class="dd-st-main"><b>${esc(s.teacher_name)}</b><span>${txt}${lessons ? ` · ${lessons} ${lessons <= 2 ? 'حصة' : lessons <= 10 ? 'حصص' : 'حصة'} متأثرة` : ''}</span></span><button type="button" data-id="${s.id}" aria-label="حذف">✕</button></div>`;
-  }).join('') : '<p class="dd-empty-panel">ما فيه غياب أو استئذان مسجّل لهذا اليوم.</p>';
+  }).join('') : '<p class="dd-empty-panel">لا توجد غياب أو استئذان مسجّل لهذا اليوم.</p>';
   list.querySelectorAll('button[data-id]').forEach(b => b.addEventListener('click', async () => {
     await sb.from('daily_teacher_absences').delete().eq('id', b.dataset.id);
     statuses = statuses.filter(s => String(s.id) !== String(b.dataset.id));
@@ -231,7 +231,7 @@ $('dd-st-add').addEventListener('click', async () => {
   let res = await writeWithSchool(extra => sb.from('daily_teacher_absences').insert({ ...row, ...extra }).select('*').single());
   if (res.error && /kind|from_period|column/i.test(res.error.message || '')) {
     statusColumnsOk = false;
-    if (kind !== 'absent') { err.textContent = 'تسجيل الاستئذان والتأخير يحتاج تشغيل ملف sql/daily_status.sql مرة وحدة. سجّلته الحين كغياب.'; err.style.display = 'block'; }
+    if (kind !== 'absent') { err.textContent = 'يتطلب تسجيل الاستئذان والتأخير تشغيل ملف sql/daily_status.sql مرة واحدة. سُجّل الآن غيابًا.'; err.style.display = 'block'; }
     res = await writeWithSchool(extra => sb.from('daily_teacher_absences').insert({ absence_date: subDate, teacher_name: name, created_by: currentUserId, ...extra }).select('*').single());
   }
   if (res.error) { err.textContent = 'تعذّرت الإضافة: ' + res.error.message; err.style.display = 'block'; return; }
@@ -246,7 +246,7 @@ function renderCellPanel() {
   const card = $('dd-cell-card');
   if (!selectedKey) {
     card.classList.remove('sheet-open');
-    panel.innerHTML = '<p class="dd-empty-panel">اضغط أي خانة في الجدول عشان تشوف خياراتها والمعلمين الفاضيين في حصتها.</p>';
+    panel.innerHTML = '<p class="dd-empty-panel">اضغط أي خانة في الجدول لعرض خياراتها والمعلمين المتاحين في حصتها.</p>';
     return;
   }
   card.classList.add('sheet-open');
@@ -259,20 +259,20 @@ function renderCellPanel() {
   panel.innerHTML = `
     <div class="dcp-head">
       <div><b>${esc(classLabel(g, sec))} · الحصة ${p}</b>
-      <span>${e ? (e.free ? esc(e.note || 'فراغ') : `${esc(e.subject)} · ${esc(e.teacher)}`) : 'ما فيه حصة'}</span>
+      <span>${e ? (e.free ? esc(e.note || 'فراغ') : `${esc(e.subject)} · ${esc(e.teacher)}`) : 'لا توجد حصة'}</span>
       ${e && e.changed && base ? `<span class="dcp-base">الأصل: ${esc(base.subject_name)} · ${esc(norm(base.teacher_name))}</span>` : ''}</div>
       <button type="button" class="dcp-close" id="dcp-close" aria-label="إغلاق">✕</button>
     </div>
-    ${out ? `<div class="dcp-warn">${esc(e.teacher)} ${out} في هذي الحصة</div>` : ''}
-    ${conf ? `<div class="dcp-warn">${esc(e.teacher)} عنده خانة ثانية في نفس الحصة</div>` : ''}
+    ${out ? `<div class="dcp-warn">${esc(e.teacher)} ${out} في هذه الحصة</div>` : ''}
+    ${conf ? `<div class="dcp-warn">${esc(e.teacher)} لديه خانة أخرى في الحصة نفسها</div>` : ''}
     <div class="dcp-actions">
       <button type="button" class="btn-primary" id="dcp-swap">تبديل مع خانة ثانية…</button>
       ${e && !e.free ? '<button type="button" class="btn-secondary" id="dcp-free">فراغ / نشاط</button>' : ''}
-      ${e && e.changed ? '<button type="button" class="btn-secondary" id="dcp-revert">رجّعها للأصل</button>' : ''}
+      ${e && e.changed ? '<button type="button" class="btn-secondary" id="dcp-revert">أعدها إلى الأصل</button>' : ''}
     </div>
     <label class="dcp-note">ملاحظة على الخانة<input type="text" id="dcp-note-input" value="${esc(e && e.changed ? e.note : '')}" placeholder="مثال: نشاط في المصادر" /></label>
-    <h5>الفاضيين في الحصة ${p} <span>(الأقل انتظار هذا الأسبوع أول)</span></h5>
-    <div class="dcp-free">${free.length ? free.map(f => `<button type="button" class="dcp-t" draggable="true" data-t="${esc(f.name)}"><b>${esc(f.name)}</b><span>${f.today} ${f.today <= 2 ? 'حصة' : 'حصص'} اليوم · ${f.week} انتظار هذا الأسبوع</span></button>`).join('') : '<p class="dd-empty-panel">ما فيه معلم فاضي في هذي الحصة.</p>'}</div>`;
+    <h5>الفاضيين في الحصة ${p} <span>(الأقل انتظارًا هذا الأسبوع أولًا)</span></h5>
+    <div class="dcp-free">${free.length ? free.map(f => `<button type="button" class="dcp-t" draggable="true" data-t="${esc(f.name)}"><b>${esc(f.name)}</b><span>${f.today} ${f.today <= 2 ? 'حصة' : 'حصص'} اليوم · ${f.week} انتظار هذا الأسبوع</span></button>`).join('') : '<p class="dd-empty-panel">لا يوجد معلم متاح في هذه الحصة.</p>'}</div>`;
   $('dcp-close').addEventListener('click', () => { selectedKey = null; renderGrid(); renderCellPanel(); });
   $('dcp-swap').addEventListener('click', () => { swapFrom = selectedKey; selectedKey = null; updateSwapBar(); renderGrid(); renderCellPanel(); });
   const fr = $('dcp-free'); if (fr) fr.addEventListener('click', () => setFree(selectedKey));
@@ -289,7 +289,7 @@ function updateSwapBar() {
   if (!bar) return;
   if (!swapFrom) { bar.classList.add('hidden'); return; }
   const [g, s, p] = swapFrom.split('|');
-  $('dd-swapbar-text').textContent = `اختر الخانة اللي تبي تبدّلها مع ${classLabel(g, s)} · الحصة ${p} (أي فصل وأي حصة)`;
+  $('dd-swapbar-text').textContent = `اختر الخانة التي تريد تبديلها مع ${classLabel(g, s)} · الحصة ${p} (أي فصل وأي حصة)`;
   bar.classList.remove('hidden');
 }
 $('dd-swap-cancel').addEventListener('click', () => { swapFrom = null; updateSwapBar(); renderGrid(); });
@@ -384,12 +384,12 @@ async function assignTeacher(k, teacher) {
   const e = effective(k);
   const prev = e && !e.free ? e.teacher : '';
   const subject = e && !e.free ? e.subject : (baseMap.get(k) ? baseMap.get(k).subject_name : 'انتظار');
-  await applyOps([{ k, content: { teacher, subject, reason: 'substitute', note: prev ? `بديل عن ${prev}` : 'انتظار' } }], `${teacher} صار في ${classLabel(...k.split('|').slice(0, 2))} / الحصة ${k.split('|')[2]}`);
+  await applyOps([{ k, content: { teacher, subject, reason: 'substitute', note: prev ? `بديل عن ${prev}` : 'انتظار' } }], `${teacher} أصبح في ${classLabel(...k.split('|').slice(0, 2))} / الحصة ${k.split('|')[2]}`);
   const n = norm(teacher); weekSubs.set(n, (weekSubs.get(n) || 0) + 1);
   renderCellPanel();
 }
 async function setFree(k) {
-  await applyOps([{ k, content: { teacher: '', subject: 'فراغ', reason: 'substitute', note: $('dcp-note-input') && $('dcp-note-input').value.trim() || 'فراغ' } }], 'صارت الخانة فراغ');
+  await applyOps([{ k, content: { teacher: '', subject: 'فراغ', reason: 'substitute', note: $('dcp-note-input') && $('dcp-note-input').value.trim() || 'فراغ' } }], 'أصبحت الخانة فارغة');
 }
 async function revertCell(k) { await applyOps([{ k, content: null }], 'رجعت الخانة للأصل'); }
 async function setNote(k, note) {
@@ -420,8 +420,8 @@ $('dd-undo').addEventListener('click', async () => {
 function stripMeta(r) { const { id, created_at, updated_at, school_id, ...rest } = r; return rest; }
 
 $('dd-reset').addEventListener('click', async () => {
-  if (!changes.size) { flash('ما فيه تغييرات على هذا اليوم'); return; }
-  if (!confirm(`ترجيع جدول ${$('dd-dayname').textContent} للأصل؟ ينحذف ${changes.size} تغيير.`)) return;
+  if (!changes.size) { flash('لا توجد تغييرات على هذا اليوم'); return; }
+  if (!confirm(`ترجيع جدول ${$('dd-dayname').textContent} إلى الأصل؟ سيُحذف ${changes.size} تغيير.`)) return;
   const { error } = await sb.from('daily_schedule_changes').delete().eq('change_date', subDate);
   if (error) { flash('تعذّر: ' + error.message, true); return; }
   changes = new Map(); undoStack = []; $('dd-undo').disabled = true;
@@ -441,7 +441,7 @@ $('dd-approve').addEventListener('click', async () => {
     markDirty(false);
     if (data === -1) flash('الاعتماد للمدير والوكيل فقط', true);
     else if (data > 0) flash('تم الاعتماد وإرسال الإشعار ' + (data === 1 ? 'لمعلم واحد' : data === 2 ? 'لمعلمَين' : `لـ ${data} معلمين`));
-    else flash('تم الاعتماد. ما فيه تغييرات جديدة تحتاج إشعار');
+    else flash('تم الاعتماد. لا توجد تغييرات جديدة تستدعي إشعارًا');
   } catch (e) {
     flash('تعذّر الاعتماد: ' + (e.message || e), true);
   } finally { b.disabled = false; }
@@ -472,13 +472,13 @@ $('dd-copy').addEventListener('click', async () => {
   const rows = changeList();
   const day = $('dd-dayname').textContent;
   let text = `تغييرات جدول ${day}\n`;
-  if (statuses.length) text += '\n' + statuses.map(s => `• ${s.teacher_name}: ${(s.kind || 'absent') === 'absent' ? 'غائب' : (s.kind === 'leave' ? 'مستأذن من الحصة ' + s.from_period : 'متأخر لين الحصة ' + s.from_period)}`).join('\n') + '\n';
+  if (statuses.length) text += '\n' + statuses.map(s => `• ${s.teacher_name}: ${(s.kind || 'absent') === 'absent' ? 'غائب' : (s.kind === 'leave' ? 'مستأذن من الحصة ' + s.from_period : 'متأخر حتى الحصة ' + s.from_period)}`).join('\n') + '\n';
   const byT = new Map();
   rows.filter(r => r.teacher).forEach(r => { if (!byT.has(r.teacher)) byT.set(r.teacher, []); byT.get(r.teacher).push(r); });
   byT.forEach((list, t) => { text += `\nأ. ${t}:\n` + list.map(r => `  - الحصة ${r.p} · ${r.cls} (${r.to.split(' · ')[0]})${r.note ? ' — ' + r.note : ''}`).join('\n'); });
   const frees = rows.filter(r => !r.teacher);
   if (frees.length) text += '\n\nفراغ:\n' + frees.map(r => `  - الحصة ${r.p} · ${r.cls}${r.note && r.note !== 'فراغ' ? ' — ' + r.note : ''}`).join('\n');
-  if (!rows.length) text += '\nما فيه تغييرات على الجدول.';
+  if (!rows.length) text += '\nلا توجد تغييرات على الجدول.';
   try { await navigator.clipboard.writeText(text); flash('انسخ الملخص، الصقه في الواتساب'); }
   catch { prompt('انسخ النص:', text); }
 });
@@ -491,8 +491,8 @@ $('dd-print').addEventListener('click', () => {
     if (!e) return '<td></td>';
     return `<td class="${e.changed ? 'ch' : ''}">${e.free ? esc(e.note || 'فراغ') : `<b>${esc(e.subject)}</b><br>${esc(shortName(e.teacher))}${conf.get(p).has(e.teacher) ? ' ⚠' : ''}`}</td>`;
   }).join('')}</tr>`).join('')}</tbody></table>`;
-  const list = rows.length ? `<table class="l"><thead><tr><th>الحصة</th><th>الفصل</th><th>الأصل</th><th>اليوم</th><th>ملاحظة</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r.p}</td><td>${esc(r.cls)}</td><td>${esc(r.from)}</td><td><b>${esc(r.to)}</b></td><td>${esc(r.note)}</td></tr>`).join('')}</tbody></table>` : '<p>ما فيه تغييرات.</p>';
-  const st = statuses.length ? `<p class="st">${statuses.map(s => `${esc(s.teacher_name)} (${(s.kind || 'absent') === 'absent' ? 'غائب' : s.kind === 'leave' ? 'مستأذن من ' + s.from_period : 'متأخر لين ' + s.from_period})`).join(' · ')}</p>` : '';
+  const list = rows.length ? `<table class="l"><thead><tr><th>الحصة</th><th>الفصل</th><th>الأصل</th><th>اليوم</th><th>ملاحظة</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r.p}</td><td>${esc(r.cls)}</td><td>${esc(r.from)}</td><td><b>${esc(r.to)}</b></td><td>${esc(r.note)}</td></tr>`).join('')}</tbody></table>` : '<p>لا توجد تغييرات.</p>';
+  const st = statuses.length ? `<p class="st">${statuses.map(s => `${esc(s.teacher_name)} (${(s.kind || 'absent') === 'absent' ? 'غائب' : s.kind === 'leave' ? 'مستأذن من ' + s.from_period : 'متأخر حتى ' + s.from_period})`).join(' · ')}</p>` : '';
   const w = window.open('', '_blank');
   if (!w) return;
   w.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>جدول ${esc(day)}</title><style>
@@ -530,5 +530,5 @@ function renderMine() {
     ${items.length ? items.map(x => `<div class="dd-mine-row k-${x.kind}">
       <b>الحصة ${x.p} · ${esc(x.cls)}</b>
       <span>${x.kind === 'sub' ? `حصة إشغال${x.subject ? ' · ' + esc(x.subject) : ''}` : x.kind === 'moved' ? `انتقلت ${x.to ? 'إلى ' + esc(x.to) : '(فراغ)'}` : esc(x.subject || '')}${x.note ? ' — ' + esc(x.note) : ''}</span>
-    </div>`).join('') : '<p class="dd-empty-panel">ما عندك حصص في هذا اليوم.</p>'}`;
+    </div>`).join('') : '<p class="dd-empty-panel">لا توجد لديك حصص في هذا اليوم.</p>'}`;
 }

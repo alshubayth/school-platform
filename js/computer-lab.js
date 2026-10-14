@@ -80,7 +80,7 @@ async function refreshSectionOptions() {
   });
   const sections = [...new Set((data || []).map(s => s.class_section).filter(n => n > 0))].sort((a, b) => a - b);
   sel.innerHTML = sections.length === 0
-    ? '<option value="">ما فيه طلاب مسجلين لهذه المرحلة بعد</option>'
+    ? '<option value="">لا يوجد طلاب مسجلون لهذه المرحلة بعد</option>'
     : '<option value="">اختر الفصل</option>' + sections.map(n => `<option value="${n}">الفصل ${n}</option>`).join('');
 }
 
@@ -88,7 +88,7 @@ document.getElementById('lab-add-class-btn').addEventListener('click', async () 
   const errEl = document.getElementById('lab-add-error');
   errEl.style.display = 'none';
   const section = Number(document.getElementById('lab-section-select').value);
-  if (!section) { errEl.textContent = 'اختر الفصل أولاً'; errEl.style.display = 'block'; return; }
+  if (!section) { errEl.textContent = 'اختر الفصل أولًا'; errEl.style.display = 'block'; return; }
 
   const { error } = await writeWithSchool(extra => sb.from('lab_classes').upsert({
     teacher_id: currentUserId, grade_level: labGrade, class_section: section, ...extra,
@@ -111,7 +111,7 @@ async function refreshClassesList() {
 function renderClassesChips() {
   const wrap = document.getElementById('lab-classes-chips');
   if (classesCache.length === 0) {
-    wrap.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin:8px 0 0;">ما أضفت أي فصل بالمعمل بعد</p>';
+    wrap.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin:8px 0 0;">لم تُضف أي فصل إلى المعمل بعد</p>';
     return;
   }
   wrap.innerHTML = '';
@@ -182,11 +182,11 @@ async function ensureSeatingAllClasses() {
 async function renderSeatingSection() {
   const container = document.getElementById('lab-seating-area');
   if (!computerCount) {
-    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>حدّد عدد أجهزة المعمل أولاً</p></div>';
+    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>حدّد عدد أجهزة المعمل أولًا</p></div>';
     return;
   }
   if (classesCache.length === 0) {
-    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>أضف فصل واحد على الأقل عشان يبدأ التوزيع</p></div>';
+    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>أضف فصلًا واحدًا على الأقل ليبدأ التوزيع</p></div>';
     return;
   }
   container.innerHTML = '<p style="font-size:12.5px; color:var(--slate);">جارٍ تحميل التوزيع...</p>';
@@ -262,7 +262,7 @@ async function moveOrSwapSeat(labClassId, fromComputer, toComputer) {
 const GRADE_DOT_CLASS = { first_intermediate: 'first', second_intermediate: 'second', third_intermediate: 'third' };
 
 document.getElementById('lab-print-btn').addEventListener('click', async () => {
-  if (!computerCount || classesCache.length === 0) { alert('حدّد عدد الأجهزة وأضف فصل واحد على الأقل أولاً'); return; }
+  if (!computerCount || classesCache.length === 0) { alert('حدّد عدد الأجهزة وأضف فصلًا واحدًا على الأقل أولًا'); return; }
   const perClass = await ensureSeatingAllClasses();
 
   const byNumber = new Map();
@@ -278,7 +278,7 @@ document.getElementById('lab-print-btn').addEventListener('click', async () => {
     });
   });
   const usedNumbers = [...byNumber.keys()].filter(n => byNumber.get(n).length > 0).sort((a, b) => a - b);
-  if (usedNumbers.length === 0) { alert('ما فيه أي طالب موزّع على جهاز بعد'); return; }
+  if (usedNumbers.length === 0) { alert('لا يوجد أي طالب موزّع على جهاز بعد'); return; }
 
   // كثافة الملصق تتحدد حسب أكبر عدد أسطر بجهاز واحد (لو فصولك كثيرة ممكن يوصل الجهاز الواحد
   // لـ10-15 طالب لأنه يُستخدم بحصص مختلفة) - كل ما زاد العدد صغّرنا الخط والمسافات وقسّمنا

@@ -119,7 +119,7 @@ async function renderQuery(q) {
     { label: 'الأقسام', rows: secRows },
     { label: 'الطلاب', rows: stuRows },
     { label: 'الموظفين', rows: empRows },
-  ], `ما لقيت نتائج لـ «${esc(q)}»`);
+  ], `لم يُعثر على نتائج لـ «${esc(q)}»`);
 }
 
 /* ---------- بطاقات مختصرة ---------- */
@@ -160,7 +160,7 @@ async function showStudentCard(s) {
   const a = list[0];
   extra.innerHTML = a
     ? `<span style="display:inline-block; background:var(--gold-light); color:#8A4515; border-radius:99px; padding:5px 12px; font-weight:700;">${a.is_special ? 'اللجنة الخاصة' : 'لجنة ' + esc(a.committee_number)} · رقم الجلوس ${esc(a.seat_number)}</span> <span>— ${esc(a.exam_periods.name)}</span>`
-    : 'ما له توزيع على لجان اختبار حاليًا';
+    : 'ليس له توزيع على لجان الاختبار حاليًا';
 }
 
 function showEmployeeCard(e) {

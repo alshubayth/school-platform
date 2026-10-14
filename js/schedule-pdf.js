@@ -295,7 +295,7 @@ async function extractPageItems(page) {
 
 async function parsePdfFile(file) {
   await loadPdfJs();
-  if (!window.pdfjsLib) throw new Error('مكتبة قراءة PDF ما تحمّلت. حدّث الصفحة وجرب مرة ثانية.');
+  if (!window.pdfjsLib) throw new Error('لم تُحمَّل مكتبة قراءة PDF. حدّث الصفحة وحاول مرة أخرى.');
   window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
   const buf = await file.arrayBuffer();
@@ -310,7 +310,7 @@ async function parsePdfFile(file) {
     const items = filterBoilerplateItems(await extractPageItems(page));
 
     if (items.length === 0) {
-      issues.push({ page: pageNum, reason: 'ما فيه أي نص قابل للقراءة بهذي الصفحة — يحتمل إن الملف صورة ممسوحة ضوئيًا (سكان) أو تم ضغطه بطريقة حوّلت الصفحات لصور بدل نص. جرّب ملف PDF الأصلي غير المضغوط.' });
+      issues.push({ page: pageNum, reason: 'لا يوجد نص قابل للقراءة في هذه الصفحة — قد يكون الملف صورة ممسوحة ضوئيًا أو ضُغط بطريقة حوّلت الصفحات إلى صور بدل النص. جرّب ملف PDF الأصلي غير المضغوط.' });
       continue;
     }
 
@@ -319,7 +319,7 @@ async function parsePdfFile(file) {
 
     const columnAnchors = findColumnAnchors(items);
     if (Object.keys(columnAnchors).length !== 7) {
-      issues.push({ page: pageNum, reason: 'ما قدرت أحدد أعمدة الحصص (1-7) بهذي الصفحة' });
+      issues.push({ page: pageNum, reason: 'تعذّر تحديد أعمدة الحصص (1-7) في هذه الصفحة' });
       continue;
     }
     const byX = Object.entries(columnAnchors).map(([p, a]) => ({ period: parseInt(p), x: a.x })).sort((a, b) => a.x - b.x);
@@ -327,7 +327,7 @@ async function parsePdfFile(file) {
 
     const dayAnchors = findDayAnchors(items, decode);
     if (Object.keys(dayAnchors).length !== 5) {
-      issues.push({ page: pageNum, reason: 'ما قدرت أحدد كل أيام الأسبوع (5 أيام) بهذي الصفحة' });
+      issues.push({ page: pageNum, reason: 'تعذّر تحديد جميع أيام الأسبوع (5 أيام) في هذه الصفحة' });
       continue;
     }
     const dayAnchorItems = new Set(Object.values(dayAnchors).map(a => a.item));
@@ -335,7 +335,7 @@ async function parsePdfFile(file) {
     const excludeForTitle = new Set([...columnAnchorItems, ...dayAnchorItems]);
     const title = parseTitle(items, decode, excludeForTitle);
     if (!title) {
-      issues.push({ page: pageNum, reason: 'ما قدرت أحدد المرحلة/الفصل (اسم الصفحة) بهذي الصفحة' });
+      issues.push({ page: pageNum, reason: 'تعذّر تحديد المرحلة/الفصل (اسم الصفحة) في هذه الصفحة' });
       continue;
     }
 
@@ -481,12 +481,12 @@ async function renderSummary({ classes, issues, correctedCount }) {
 
   let html = `<p style="font-size:12.5px; color:var(--slate); margin:10px 0;">تم التعرف على <b>${classes.length}</b> فصل${issues.length ? ` (وتعذّر التعرف على ${issues.length} صفحة، راجعها يدويًا)` : ''}.</p>`;
   if (correctedCount > 0) {
-    html += `<p style="font-size:12px; color:var(--warning, #b8860b); background:#fff8e6; border-radius:8px; padding:6px 10px; margin:0 0 10px;">⚠ تم تصحيح <b>${correctedCount}</b> خلية تلقائيًا (كان فيها حروف ناقصة بسبب عيب بترميز حروف ملف الـ PDF الأصلي) — راجعها للتأكد.</p>`;
+    html += `<p style="font-size:12px; color:var(--warning, #b8860b); background:#fff8e6; border-radius:8px; padding:6px 10px; margin:0 0 10px;">⚠ تم تصحيح <b>${correctedCount}</b> خلية تلقائيًا (كانت فيها حروف ناقصة بسبب خلل في ترميز حروف ملف PDF الأصلي) — راجعها للتأكد.</p>`;
   }
 
   if (unmatched.length > 0) {
     html += `<div style="background:var(--sand); border-radius:10px; padding:10px 14px; margin-bottom:14px;">
-      <p style="font-size:12.5px; font-weight:700; margin-bottom:8px;">${unmatched.some(u => /^\d+$/.test(u.norm)) ? 'أرقام وظيفية أو أسماء' : 'أسماء معلمين'} ما طابقت أي حساب مسجّل (${unmatched.length}) — اربطها بالحساب الصحيح قبل الاعتماد:</p>
+      <p style="font-size:12.5px; font-weight:700; margin-bottom:8px;">${unmatched.some(u => /^\d+$/.test(u.norm)) ? 'أرقام وظيفية أو أسماء' : 'أسماء معلمين'} لم تطابق أي حساب مسجّل (${unmatched.length}) — اربطها بالحساب الصحيح قبل الاعتماد:</p>
       ${unmatched.map(({ norm, raw }) => `
         <div class="stl-row">
           <span class="stl-name">${escHtml(raw)}</span>
@@ -511,14 +511,14 @@ async function renderSummary({ classes, issues, correctedCount }) {
     });
     html += `</div>
       <div style="margin-top:14px;">
-        <button class="btn-primary" id="sc-pdf-commit-all" style="width:auto; padding:11px 22px;">اعتماد كل الفصول دفعة وحدة</button>
+        <button class="btn-primary" id="sc-pdf-commit-all" style="width:auto; padding:11px 22px;">اعتماد جميع الفصول دفعة واحدة</button>
         <span id="sc-pdf-commit-status" style="font-size:12.5px; color:var(--slate); margin-right:10px;"></span>
       </div>`;
   }
 
   if (issues.length > 0) {
     html += `<div style="margin-top:14px; background:var(--danger-light); border-radius:10px; padding:10px 14px;">
-      <p style="font-size:12.5px; font-weight:700; color:var(--danger); margin-bottom:6px;">صفحات ما قدرنا نقرأها تلقائيًا:</p>
+      <p style="font-size:12.5px; font-weight:700; color:var(--danger); margin-bottom:6px;">صفحات تعذّرت قراءتها تلقائيًا:</p>
       ${issues.map(i => `<p style="font-size:12px; color:var(--danger); margin:2px 0;">صفحة ${i.page}: ${i.reason}</p>`).join('')}
     </div>`;
   }
@@ -557,7 +557,7 @@ async function renderSummary({ classes, issues, correctedCount }) {
 
 async function commitAllParsed() {
   const statusEl = document.getElementById('sc-pdf-commit-status');
-  if (!confirm(`سيتم استبدال جدول ${parsedClasses.length} فصل بالكامل بالبيانات المستخرجة من الملف. هذا الإجراء يحذف الجدول الحالي لهذي الفصول ويحطّ بدله الجديد. متأكد؟`)) return;
+  if (!confirm(`سيتم استبدال جدول ${parsedClasses.length} فصل بالكامل بالبيانات المستخرجة من الملف. هذا الإجراء يحذف الجدول الحالي لهذه الفصول ويحطّ بدله الجديد. متأكد؟`)) return;
 
   statusEl.textContent = 'جارٍ الاعتماد...';
   statusEl.style.color = 'var(--slate)';
@@ -618,11 +618,11 @@ async function handleParseClick() {
   const summaryEl = document.getElementById('sc-pdf-summary');
   errEl.style.display = 'none';
   errEl.textContent = '';
-  summaryEl.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin-top:10px;">جارٍ القراءة والتحليل، ممكن تاخذ نص دقيقة لو الملف كبير...</p>';
+  summaryEl.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin-top:10px;">جارٍ القراءة والتحليل، قد يستغرق ذلك نصف دقيقة إذا كان الملف كبيرًا...</p>';
 
   const file = fileInput.files[0];
   if (!file) {
-    errEl.textContent = 'اختر ملف PDF أولاً';
+    errEl.textContent = 'اختر ملف PDF أولًا';
     errEl.style.display = 'block';
     summaryEl.innerHTML = '';
     return;
@@ -631,14 +631,14 @@ async function handleParseClick() {
   try {
     const result = await parsePdfFile(file);
     if (result.classes.length === 0 && result.issues.length === 0) {
-      errEl.textContent = 'ما قدرت أستخرج أي فصل من الملف. تأكد إنه ملف PDF سليم وبنفس شكل الجدول الرسمي المعتاد.';
+      errEl.textContent = 'تعذّر استخراج أي فصل من الملف. تأكد من أنه ملف PDF سليم وبشكل الجدول الرسمي المعتاد.';
       errEl.style.display = 'block';
       summaryEl.innerHTML = '';
       return;
     }
     await renderSummary(result);
     if (result.classes.length === 0) {
-      errEl.textContent = 'ما قدرت أستخرج أي فصل من الملف — شوف تفاصيل كل صفحة بالأسفل لمعرفة السبب.';
+      errEl.textContent = 'تعذّر استخراج أي فصل من الملف — راجع تفاصيل كل صفحة أدناه لمعرفة السبب.';
       errEl.style.display = 'block';
     }
   } catch (e) {

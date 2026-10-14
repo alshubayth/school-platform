@@ -390,7 +390,7 @@ async function renderList() {
   papers = data;
   root.innerHTML = `
     <div class="qp-intro">
-      <div><b>ورقة أسئلة مع التظليل</b><span>اكتب الأسئلة مرة وحدة، وكل طالب تطلع له ورقة بترتيب أسئلة وخيارات مختلف ومربوط بهويته. ولما ترفع ملف Remark بالتقارير يتصحح كل طالب على نموذجه تلقائيًا.</span></div>
+      <div><b>ورقة أسئلة مع التظليل</b><span>اكتب الأسئلة مرة واحدة، فتُطبع لكل طالب ورقة بترتيب مختلف للأسئلة والخيارات مرتبطة بهويته. وعند رفع ملف Remark في التقارير يُصحَّح كل طالب وفق نموذجه تلقائيًا.</span></div>
       <button type="button" class="btn-primary" id="qp-new" style="width:auto; padding:10px 18px;">+ ورقة أسئلة جديدة</button>
     </div>
     ${papers.length ? `<div class="qp-list">${papers.map(p => {
@@ -398,15 +398,15 @@ async function renderList() {
       const mcq = (p.questions || []).filter(q => q.type === 'mcq').length, tf = (p.questions || []).length - mcq;
       return `<div class="qp-item" data-id="${esc(p.id)}">
         <div class="qpi-main"><b>${esc(p.title || 'بدون عنوان')}</b><span>${esc([p.subject, gradeLabels[p.grade_level]].filter(Boolean).join(' · '))}</span></div>
-        <div class="qpi-tags"><i>${mcq} اختيار متعدد</i>${tf ? `<i>${tf} صح وخطأ</i>` : ''}${printed ? `<i class="ok">مطبوعة لـ ${printed} طالب</i>` : '<i class="muted">ما انطبعت</i>'}</div>
+        <div class="qpi-tags"><i>${mcq} اختيار متعدد</i>${tf ? `<i>${tf} صح وخطأ</i>` : ''}${printed ? `<i class="ok">مطبوعة لـ ${printed} طالب</i>` : '<i class="muted">لم تُطبع</i>'}</div>
         <div class="qpi-act"><button type="button" class="btn-secondary qp-open" data-id="${esc(p.id)}" style="width:auto; padding:8px 14px;">فتح</button>${canEdit(p) ? `<button type="button" class="text-action-btn qp-del" data-id="${esc(p.id)}" style="color:var(--danger) !important;">حذف</button>` : ''}</div>
       </div>`;
-    }).join('')}</div>` : '<div class="ex-empty"><b>ما فيه أوراق أسئلة بعد</b><span>اضغط «+ ورقة أسئلة جديدة» واكتب أسئلتك أو الصقها جاهزة.</span></div>'}`;
+    }).join('')}</div>` : '<div class="ex-empty"><b>لا توجد أوراق أسئلة بعد</b><span>اضغط «+ ورقة أسئلة جديدة» واكتب أسئلتك أو الصقها جاهزة.</span></div>'}`;
   $('qp-new').onclick = () => { cur = blankPaper(); cur.questions.push(newMcq()); dirty = false; renderEditor(); };
   root.querySelectorAll('.qp-open').forEach(b => b.onclick = () => { const p = papers.find(x => x.id === b.dataset.id); if (!p) return; cur = JSON.parse(JSON.stringify(p)); cur.settings = { shuffleQ: true, shuffleOpts: true, order: 'mcq', ...(cur.settings || {}) }; cur.perms = cur.perms || {}; dirty = false; renderEditor(); });
   root.querySelectorAll('.qp-del').forEach(b => b.onclick = async () => {
     const p = papers.find(x => x.id === b.dataset.id);
-    if (!p || !confirm(`حذف ورقة «${p.title || 'بدون عنوان'}» نهائيًا؟${Object.keys(p.perms || {}).length ? '\nتنبيه: الأوراق المطبوعة ما راح تتصحح بعد الحذف.' : ''}`)) return;
+    if (!p || !confirm(`حذف ورقة «${p.title || 'بدون عنوان'}» نهائيًا؟${Object.keys(p.perms || {}).length ? '\nتنبيه: لن تُصحَّح الأوراق المطبوعة بعد الحذف.' : ''}`)) return;
     const { error } = await sb.from('exam_papers').delete().eq('id', p.id);
     if (error) { alert('تعذر الحذف: ' + error.message); return; }
     renderList();
@@ -437,18 +437,18 @@ function renderEditor() {
           <label class="qp-chk"><input type="checkbox" id="qp-shq" ${s.shuffleQ !== false ? 'checked' : ''} ${ro ? 'disabled' : ''}/> ترتيب الأسئلة يختلف لكل طالب</label>
           <label class="qp-chk"><input type="checkbox" id="qp-sho" ${s.shuffleOpts !== false ? 'checked' : ''} ${ro ? 'disabled' : ''}/> ترتيب الخيارات يختلف لكل طالب</label>
           <label class="as-f" style="margin-top:8px;">ترتيب الأقسام<select id="qp-order" ${ro ? 'disabled' : ''}><option value="mcq"${s.order !== 'tf' ? ' selected' : ''}>الاختيار من متعدد ثم الصح والخطأ</option><option value="tf"${s.order === 'tf' ? ' selected' : ''}>الصح والخطأ ثم الاختيار من متعدد</option></select></label>
-          <p class="qp-note">الأسئلة تتلخبط داخل قسمها، والصح والخطأ ما تتغير خياراته.</p>
+          <p class="qp-note">يتغيّر ترتيب الأسئلة داخل قسمها، ولا تتغيّر خيارات أسئلة الصح والخطأ.</p>
         </div>
         <div class="form-card">
           <h4>الطباعة</h4>
           <div id="qp-print"></div>
         </div>
         <div class="form-card qp-remark">
-          <h4>قالب Remark (مرة وحدة)</h4>
+          <h4>قالب Remark (مرة واحدة)</h4>
           <p>«نموذج الإجابة» أسفل الصفحة بنفس المكان بكل الأوراق: <b>${G_COLS} أعمدة × ${G_ROWS} أسئلة</b>، وبكل سطر <b>${SLOTS} دوائر</b> (أ ب ج من اليمين). عرّف قالب Remark واحد: الباركود ← StudentID، والشبكة ← ${CAP} سؤال اختيار متعدد. نفس القالب يقرأ كل الاختبارات.</p>
-          <p>لو طبعت A4 بالعرض (طالبين)، قص الورقة من النص، وكل نص يصير ورقة A5 بنفس التصميم مصغّر - عرّف له قالب A5 مستقل.</p>
+          <p>إذا طبعت A4 بالعرض (طالبان)، فقص الورقة من المنتصف، ليصبح كل نصف ورقة A5 بالتصميم نفسه مصغّرًا - وعرّف له قالب A5 مستقلًا.</p>
           
-          <p>ارفع ملف النتائج من «التقارير ← رفع نتائج اختبار»، والمنصة تعرف إنه ورقة أسئلة من الباركود وتصحح كل طالب على نموذجه.</p>
+          <p>ارفع ملف النتائج من «التقارير ← رفع نتائج اختبار»، وستتعرّف المنصة من الباركود على أنه ملف ورقة أسئلة وتصحح كل طالب وفق نموذجه.</p>
         </div>
       </div>
       <div class="qp-main">
@@ -461,7 +461,7 @@ function renderEditor() {
           </div>`}
         </div>
         <div id="qp-paste" class="qp-paste hidden">
-          <p>الصق أسئلتك بهالشكل، وحط <b>*</b> جنب الإجابة الصحيحة، و<b>(صح)</b> أو <b>(خطأ)</b> آخر سؤال الصح والخطأ:</p>
+          <p>الصق أسئلتك بهذا الشكل، وضع <b>*</b> بجانب الإجابة الصحيحة، و<b>(صح)</b> أو <b>(خطأ)</b> في نهاية سؤال الصح والخطأ:</p>
           <pre dir="rtl">1- عاصمة المملكة العربية السعودية؟
 أ) جدة
 ب) الرياض *
@@ -474,7 +474,7 @@ function renderEditor() {
       </div>
     </div>`;
 
-  $('qp-back').onclick = () => { if (dirty && !confirm('فيه تعديلات ما انحفظت. ترجع بدون حفظ؟')) return; cur = null; dirty = false; renderList(); };
+  $('qp-back').onclick = () => { if (dirty && !confirm('توجد تعديلات غير محفوظة. هل تريد الرجوع دون حفظ؟')) return; cur = null; dirty = false; renderList(); };
   if (!ro) {
     const bind = (id, fn) => { const el = $(id); el.addEventListener('input', () => { fn(el); markDirty(); }); el.addEventListener('change', () => { fn(el); markDirty(); }); };
     bind('qp-title', el => { p.title = el.value; });
@@ -490,7 +490,7 @@ function renderEditor() {
     $('qp-paste-cancel').onclick = () => $('qp-paste').classList.add('hidden');
     $('qp-paste-go').onclick = () => {
       const res = parsePasted($('qp-paste-text').value);
-      if (!res.length) { $('qp-paste-msg').textContent = 'ما لقيت أسئلة بالنص'; return; }
+      if (!res.length) { $('qp-paste-msg').textContent = 'لم يُعثر على أسئلة في النص'; return; }
       // لو أول سؤال فاضي (الورقة جديدة) نشيله
       if (p.questions.length === 1 && !p.questions[0].text.trim() && (p.questions[0].options || []).every(o => !o.trim())) p.questions = [];
       p.questions.push(...res);
@@ -507,7 +507,7 @@ function renderEditor() {
   renderPrint();
 }
 
-function markDirty() { dirty = true; const st = $('qp-status'); if (st) { st.textContent = 'فيه تعديلات ما انحفظت'; st.className = 'qp-status warn'; } }
+function markDirty() { dirty = true; const st = $('qp-status'); if (st) { st.textContent = 'توجد تعديلات غير محفوظة'; st.className = 'qp-status warn'; } }
 function setStatus(msg, warn = false) { const st = $('qp-status'); if (st) { st.textContent = msg; st.className = 'qp-status' + (warn ? ' warn' : ' ok'); } }
 
 // ترتيب العرض بالمحرر: نفس ترتيب الأقسام بالورقة الأصلية
@@ -520,7 +520,7 @@ function renderQuestions(scrollLast = false) {
   const order = displayOrder();
   const mcq = p.questions.filter(q => q.type === 'mcq').length;
   $('qp-count').textContent = `${p.questions.length} من ${CAP} سؤال · ${mcq} اختيار متعدد · ${p.questions.length - mcq} صح وخطأ`;
-  if (!p.questions.length) { box.innerHTML = '<div class="ex-empty"><b>ما فيه أسئلة</b><span>أضف سؤال أو الصق أسئلة جاهزة.</span></div>'; return; }
+  if (!p.questions.length) { box.innerHTML = '<div class="ex-empty"><b>لا توجد أسئلة</b><span>أضف سؤال أو الصق أسئلة جاهزة.</span></div>'; return; }
   let lastType = null;
   box.innerHTML = order.map((qi, pos) => {
     const q = p.questions[qi];
@@ -601,7 +601,7 @@ function renderQuestions(scrollLast = false) {
 function questionIssues(q) {
   const out = [];
   if (!q.text.trim()) out.push('بدون نص');
-  if (q.type === 'mcq' && q.options.some(o => !o.trim())) out.push('خيار فاضي');
+  if (q.type === 'mcq' && q.options.some(o => !o.trim())) out.push('خيار فارغ');
   if (q.type === 'mcq' && q.options.length > SLOTS) out.push(`أقصى ${SLOTS} خيارات`);
   if (q.answer == null) out.push('حدد الإجابة الصحيحة');
   return out;
@@ -648,7 +648,7 @@ async function savePaper(silent = false) {
   const sig = structSig(p);
   const printed = Object.keys(p.perms || {}).length;
   if (printed && p.settings.permSig && p.settings.permSig !== sig) {
-    if (!confirm(`الورقة انطبعت لـ ${printed} طالب، وتغيّر عدد الأسئلة أو أنواعها أو خياراتها أو إعدادات الخلط.\nالأوراق المطبوعة قبل ما راح تتصحح صح - لازم تطبعها من جديد.\nأكمل الحفظ؟`)) return false;
+    if (!confirm(`طُبعت الورقة لـ ${printed} طالب، وتغيّر عدد الأسئلة أو أنواعها أو خياراتها أو إعدادات الخلط.\nلن تُصحَّح الأوراق المطبوعة سابقًا تصحيحًا سليمًا - يجب طباعتها من جديد.\nأكمل الحفظ؟`)) return false;
     p.perms = {};
   }
   const row = { title: p.title.trim(), subject: (p.subject || '').trim() || null, grade_level: p.grade_level || null, questions: p.questions, settings: { ...p.settings, permSig: Object.keys(p.perms).length ? sig : (p.settings.permSig || null) }, perms: p.perms, updated_at: new Date().toISOString() };
@@ -711,8 +711,8 @@ function selectedStudents(list) {
 
 function readyProblems() {
   const p = cur;
-  if (!p.questions.length) return 'أضف أسئلة أول';
-  if (p.questions.length > CAP) return `أقصى عدد ${CAP} سؤال بالورقة (عندك ${p.questions.length})`;
+  if (!p.questions.length) return 'أضف أسئلة أولًا';
+  if (p.questions.length > CAP) return `أقصى عدد ${CAP} سؤال في الورقة (لديك ${p.questions.length})`;
   const bad = p.questions.map((q, i) => (questionIssues(q).length ? i : -1)).filter(i => i >= 0);
   if (bad.length) { const ord = displayOrder(); return `فيه ${bad.length} ${bad.length === 1 ? 'سؤال ناقص' : 'أسئلة ناقصة'} (رقم ${bad.map(i => ord.indexOf(i) + 1).sort((a, b) => a - b).slice(0, 6).join('، ')}) - كمّلها قبل الطباعة`; }
   return null;
@@ -736,7 +736,7 @@ async function printStudents(previewOnly) {
     if (!p.id) { if (!(await savePaper(true))) { win.close(); return; } }
     targets.forEach(st => { const id = String(st.national_id).trim(); if (!p.perms[id]) p.perms[id] = makePerm(p, id); });
     p.settings.permSig = sig;
-    if (!(await savePaper(true))) { win.close(); msg.textContent = 'تعذر حفظ ربط الأوراق بالطلاب - ما انطبعت'; msg.className = 'qp-status warn'; return; }
+    if (!(await savePaper(true))) { win.close(); msg.textContent = 'تعذّر حفظ ربط الأوراق بالطلاب - لم تُطبع'; msg.className = 'qp-status warn'; return; }
     msg.textContent = `تم ربط ${targets.length} ورقة بالطلاب وحفظها ✓`; msg.className = 'qp-status ok';
   }
   const bundles = targets.map(st => {
@@ -744,7 +744,7 @@ async function printStudents(previewOnly) {
     const perm = (!previewOnly && p.perms[id]) || makePerm({ ...p, id: p.id || 'preview' }, id);
     return studentBundle(p, perm, st, {});
   });
-  openPrintWindow(win, `${p.title} — أوراق الطلاب`, bundles, previewOnly ? 'معاينة (ما انحفظت)' : `${targets.length} طالب`, scope.layout);
+  openPrintWindow(win, `${p.title} — أوراق الطلاب`, bundles, previewOnly ? 'معاينة (غير محفوظة)' : `${targets.length} طالب`, scope.layout);
 }
 
 function printKey() {

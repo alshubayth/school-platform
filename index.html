@@ -94,7 +94,7 @@
 <div id="school-picker-screen" class="hidden" style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:var(--sand); padding:24px;">
   <div style="max-width:640px; width:100%;">
     <h2 style="text-align:center; margin-bottom:6px;">اختر المدرسة</h2>
-    <p style="text-align:center; color:var(--slate); font-size:13px; margin:0 0 22px;">حسابك يدير أكثر من مدرسة - اختر المدرسة اللي تبي تفتح لوحة تحكمها</p>
+    <p style="text-align:center; color:var(--slate); font-size:13px; margin:0 0 22px;">حسابك يدير أكثر من مدرسة - اختر المدرسة التي تريد فتح لوحة تحكمها</p>
     <div id="school-picker-list" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:14px;"></div>
     <p style="text-align:center; margin-top:22px;">
       <span class="text-action-btn" id="school-picker-logout-btn">تسجيل خروج</span>
@@ -213,8 +213,8 @@
               <input type="search" id="ev-search" class="cv-search" placeholder="ابحث باسم الموظف" />
               <select id="ev-sort">
                 <option value="name">ترتيب: أبجدي</option>
-                <option value="low">الأقل تقييمًا أول</option>
-                <option value="viol">الأكثر مخالفات أول</option>
+                <option value="low">الأقل تقييمًا أولًا</option>
+                <option value="viol">الأكثر مخالفات أولًا</option>
               </select>
             </div>
             <div id="eval-employee-list"></div>
@@ -286,7 +286,7 @@
         <div class="bud-section-card" style="margin-top:14px;">
           <div class="bud-section-head">
             <div class="bud-section-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg></div>
-            <div><h4>تحقق من تطابق أسماء المعلمين بالجدول الدراسي</h4><p>عدد الحصص يُحسب من مطابقة الاسم بالضبط مع جدول الحصص - أي معلم بصفر يحتاج تصحيح الاسم بأحد الجدولين</p></div>
+            <div><h4>تحقق من تطابق أسماء المعلمين بالجدول الدراسي</h4><p>يُحسب عدد الحصص من مطابقة الاسم تمامًا مع جدول الحصص - أي معلم بصفر يحتاج إلى تصحيح اسمه في أحد الجدولين</p></div>
           </div>
           <div id="perf-name-check-list"></div>
         </div>
@@ -318,7 +318,7 @@
           <button type="button" class="dd-nav" id="week-next" aria-label="الأسبوع التالي">←</button>
         </div>
         <div class="wp-admin-actions">
-          <label class="wp-publish hidden" id="weekly-publish-card" title="لما تفعّله، يقدر ولي الأمر يشوف خطة هذا الأسبوع. المعلمون يدخلون خططهم لأي أسبوع بغض النظر عن هذا الخيار.">
+          <label class="wp-publish hidden" id="weekly-publish-card" title="عند تفعيله يستطيع ولي الأمر الاطلاع على خطة هذا الأسبوع. ويُدخل المعلمون خططهم لأي أسبوع بصرف النظر عن هذا الخيار.">
             <input type="checkbox" id="weekly-publish-toggle" />
             <span class="wp-switch"></span>
             <span class="wp-publish-txt">منشور لأولياء الأمور</span>
@@ -330,7 +330,7 @@
       <div id="weekly-copy-parent-link-msg" class="wp-msg" style="display:none;"></div>
       <div id="weekly-admin-note-card" class="form-card hidden wp-note-card">
         <h4>ملاحظة الإدارة لهذا الأسبوع</h4>
-        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">تظهر لولي الأمر فوق قائمة المواد مباشرة</p>
+        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">تظهر لولي الأمر أعلى قائمة المواد مباشرة</p>
         <textarea id="weekly-admin-note-text" placeholder="مثال: يوم الخميس القادم إجازة رسمية، أو تذكير باجتماع أولياء الأمور" rows="2"></textarea>
         <div id="weekly-admin-note-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:8px 12px; border-radius:8px; font-size:13px; margin-bottom:10px;"></div>
         <button id="weekly-admin-note-save" style="width:auto;">حفظ الملاحظة</button>
@@ -353,7 +353,7 @@
           يوجد اختبار هذا الأسبوع لهذه المادة
         </label>
         <div id="weekly-test-sections-wrap" class="hidden" style="background:#fff; border:1px solid #ECEAE1; border-radius:10px; padding:10px 12px; margin-bottom:14px;">
-          <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول اللي عليها الاختبار (لو المادة تُدرّس بأكثر من فصل بمعلمين مختلفين). اتركها كلها فاضية = الاختبار على كل الفصول.</p>
+          <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول المشمولة بالاختبار (إذا كانت المادة تُدرَّس في أكثر من فصل بمعلمين مختلفين). اتركها جميعًا فارغة = الاختبار لجميع الفصول.</p>
           <div id="weekly-test-sections-list" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
           <textarea id="weekly-test-note" placeholder="ملاحظة عن الاختبار (مثال: من صفحة ١٠ إلى ١٥ في الكتاب، أو من ورقة العمل المرفقة)" rows="2" style="margin:10px 0 0;"></textarea>
         </div>
@@ -379,31 +379,31 @@
         </nav>
         <div class="st-body">
           <section class="st-pane hidden" data-s="identity">
-            <div class="st-head"><h3>هوية المدرسة</h3><p>تطلع في الشريط العلوي والمطبوعات وصفحة أولياء الأمور</p></div>
+            <div class="st-head"><h3>هوية المدرسة</h3><p>تظهر في الشريط العلوي والمطبوعات وصفحة أولياء الأمور</p></div>
 
         <div class="br-grid">
           <div class="form-card br-form">
             <div class="field">
               <label for="br-name">اسم المدرسة الرسمي</label>
               <input type="text" id="br-name" placeholder="مثال: مدرسة النور المتوسطة" />
-              <small class="br-help">يطلع بترويسة المطبوعات وصفحة أولياء الأمور</small>
+              <small class="br-help">يظهر في ترويسة المطبوعات وصفحة أولياء الأمور</small>
             </div>
             <div class="field">
               <label for="br-short">الاسم المختصر</label>
               <input type="text" id="br-short" placeholder="مثال: مدرسة النور" />
-              <small class="br-help">يطلع بالشريط العلوي للمنصة</small>
+              <small class="br-help">يظهر في الشريط العلوي للمنصة</small>
             </div>
             <div class="field">
               <label for="br-principal">اسم مدير المدرسة</label>
-              <input type="text" id="br-principal" placeholder="الاسم كما يطلع في التوقيع" />
-              <small class="br-help">يطلع في خانة "اعتماد المدير" بسند الصرف</small>
+              <input type="text" id="br-principal" placeholder="الاسم كما يظهر في التوقيع" />
+              <small class="br-help">يظهر في خانة "اعتماد المدير" في سند الصرف</small>
             </div>
 
             <div class="br-logo-row">
               <div class="br-logo-box" id="br-school-logo-box"></div>
               <div class="br-logo-info">
                 <b>شعار المدرسة</b>
-                <small class="br-help">يطلع بالشريط العلوي وصفحة أولياء الأمور. PNG بخلفية شفافة أفضل.</small>
+                <small class="br-help">يظهر في الشريط العلوي وصفحة أولياء الأمور. يُفضَّل PNG بخلفية شفافة.</small>
                 <div class="br-logo-actions">
                   <label class="br-upload">رفع شعار<input type="file" id="br-school-logo-file" accept="image/png,image/jpeg,image/webp,image/svg+xml" hidden /></label>
                   <button type="button" class="ope-link danger br-remove" id="br-school-logo-remove">إزالة</button>
@@ -418,7 +418,7 @@
                 <button type="button" data-a="custom">جهة أخرى</button>
                 <button type="button" data-a="none">بدون</button>
               </div>
-              <small class="br-help">شعار الجهة يطلع بترويسة كل المطبوعات (سند الصرف، الزيارات، التقييم، كشوف الاختبارات...)</small>
+              <small class="br-help">يظهر شعار الجهة في ترويسة جميع المطبوعات (سند الصرف، الزيارات، التقييم، كشوف الاختبارات...)</small>
             </div>
             <div id="br-custom" class="hidden">
               <div class="field">
@@ -463,11 +463,11 @@
           </section>
 
           <section class="st-pane hidden" data-s="students">
-            <div class="st-head"><h3>الطلاب</h3><p>كل الأقسام تاخذ الطلاب والفصول من هنا: الاختبارات، المتابعات، المعمل، الجدول، الزيارات</p></div>
+            <div class="st-head"><h3>الطلاب</h3><p>تأخذ جميع الأقسام الطلاب والفصول من هنا: الاختبارات، المتابعات، المعمل، الجدول، الزيارات</p></div>
             <div class="st-kpis" id="st-stu-kpis"></div>
             <div class="form-card st-card">
               <h4>تحديث من ملف نور (إكسل)</h4>
-              <p class="st-help">ارفع ملف الطلاب المصدّر من نور. الطالب الموجود تتحدث بياناته (الصف والفصل والجوال)، والجديد ينضاف. ما ينحذف أي طالب.</p>
+              <p class="st-help">ارفع ملف الطلاب المصدَّر من نظام نور. تُحدَّث بيانات الطالب الموجود (الصف والفصل والجوال)، ويُضاف الطالب الجديد. ولا يُحذف أي طالب.</p>
               <div class="st-upload-row">
                 <input type="file" id="st-stu-file" accept=".xlsx,.xls" />
                 <button type="button" class="btn-primary" id="st-stu-import">استيراد الملف</button>
@@ -498,7 +498,7 @@
           </section>
 
           <section class="st-pane hidden" data-s="contacts">
-            <div class="st-head"><h3>بيانات التواصل</h3><p>الأرقام اللي تطلع لولي الأمر في صفحة الخطة الأسبوعية</p></div>
+            <div class="st-head"><h3>بيانات التواصل</h3><p>الأرقام التي تظهر لولي الأمر في صفحة الخطة الأسبوعية</p></div>
             <div id="school-contacts-module" class="st-embed hidden">
       <span class="back-link" id="back-to-tiles-21">→ رجوع للرئيسية</span>
 
@@ -587,7 +587,7 @@
         <div class="form-card pm-sync">
           <div class="pm-sync-head">
             <div><h4 style="margin:0;">تحديث التخصصات من الجدول الدراسي</h4>
-              <p class="pt-hint" style="margin:4px 0 0;">تنضاف مادة وصفوف كل معلم من حصصه بالجدول، واللي ما له حصص ينحذف بعد ما تراجعه.</p></div>
+              <p class="pt-hint" style="margin:4px 0 0;">تُضاف مادة كل معلم وصفوفه من حصصه في الجدول، ومن ليست له حصص يُحذف بعد مراجعتك.</p></div>
             <button class="btn-primary" id="pm-sync-btn" style="width:auto; padding:10px 18px; white-space:nowrap;">⟳ تحديث من الجدول</button>
           </div>
           <div id="pm-sync-body" class="hidden" style="margin-top:14px;"></div>
@@ -605,7 +605,7 @@
             <button class="btn-primary" id="perm-submit" style="width:auto; padding:10px 18px;">+ إضافة</button>
           </div>
           <div class="error-msg" id="perm-error"></div>
-          <p class="pt-hint" style="margin:8px 0 0;">التخصص يحدد وش يقدر المعلم يدخّل في الخطة الأسبوعية، ومين يطلع ناقص في متابعتها.</p>
+          <p class="pt-hint" style="margin:8px 0 0;">يحدد التخصص ما يستطيع المعلم إدخاله في الخطة الأسبوعية، ومن يظهر ناقصًا في متابعتها.</p>
         </div>
         <div class="pt-toolbar">
           <input type="search" id="pm-search" class="cv-search" placeholder="ابحث باسم المعلم أو المادة" />
@@ -676,7 +676,7 @@
           <svg id="portal-bulk-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
         </h4>
         <div id="portal-bulk-body" style="margin-top:14px;">
-          <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج، عبّه ببيانات الموظفين (اسم، إيميل، كلمة مرور، دور)، وارفعه — يتم إنشاء كل حساب وربطه بجدول الموظفين تلقائيًا.</p>
+          <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج، وعبّئه ببيانات الموظفين (اسم، إيميل، كلمة مرور، دور)، وارفعه — يتم إنشاء كل حساب وربطه بجدول الموظفين تلقائيًا.</p>
           <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
             <button id="portal-download-template" style="width:auto; background:var(--sand); color:var(--ink); border:1px solid #E4E2D9;">تنزيل نموذج فارغ</button>
           </div>
@@ -713,7 +713,7 @@
           </div>
           <div>
             <h4>صلاحية عرض القسم</h4>
-            <p>معلمين محددين يقدرون يشوفون متابعة الخطة الأسبوعية (مثل رواد النشاط أو المشرفين)</p>
+            <p>معلمون محددون يستطيعون الاطلاع على متابعة الخطة الأسبوعية (مثل رواد النشاط أو المشرفين)</p>
           </div>
         </div>
         <div id="wt-perms-list"></div>
@@ -769,7 +769,7 @@
         <div class="bud-panel" id="opplan-panel-dashboard">
         <div class="op-dashboard">
           <div class="op-page-head">
-            <p>متابعة تنفيذ مدرستنا للبرامج الرسمية المعتمدة من إدارة التعليم — النسبة تُحسب تلقائيًا من المهام الأسبوعية المعتمدة والمنجزة تحت كل برنامج، بدون تسجيل يدوي</p>
+            <p>متابعة تنفيذ مدرستنا للبرامج الرسمية المعتمدة من إدارة التعليم — النسبة تُحسب تلقائيًا من المهام الأسبوعية المعتمدة والمنجزة ضمن كل برنامج، دون تسجيل يدوي</p>
             <span class="op-scope-note hidden" id="opplan-scope-note"></span>
             <div style="display:flex; align-items:center; gap:10px; margin-top:12px;">
               <label style="font-size:12.5px; color:var(--slate); font-weight:700;">الفصل الدراسي الحالي:</label>
@@ -921,11 +921,11 @@
 
         <div class="form-card">
           <h4 id="opt-excel-toggle" style="cursor:pointer; display:flex; align-items:center; justify-content:space-between;">
-            <span>+ رفع مهام دفعة وحدة من ملف إكسل</span>
+            <span>+ رفع مهام دفعة واحدة من ملف إكسل</span>
             <svg id="opt-excel-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="transition:0.2s;"><path d="M6 9l6 6 6-6"/></svg>
           </h4>
           <div id="opt-excel-body" class="hidden" style="margin-top:14px;">
-            <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج الفارغ، عبّه بمهامك، وارفعه. كل مهمة تنضاف لك بحالة "بانتظار اعتماد الإضافة" تلقائيًا.</p>
+            <p style="font-size:13px; color:var(--slate); margin:0 0 12px;">حمّل النموذج الفارغ، وعبّئه بمهامك، ثم ارفعه. تُضاف كل مهمة تلقائيًا بحالة "بانتظار اعتماد الإضافة".</p>
             <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
               <button id="opt-download-template" style="width:auto; background:var(--sand); color:var(--ink); border:1px solid #E4E2D9;">تنزيل نموذج فارغ</button>
             </div>
@@ -1052,7 +1052,7 @@
               <label>بداية أرقام ثالث متوسط<input type="number" min="1" id="exam-edit-seat-third" /></label>
               <label>بداية أرقام اللجنة الخاصة<input type="number" min="1" id="exam-edit-seat-special" /></label>
             </div>
-            <div id="exam-edit-warn" class="ex-warn hidden">غيّرت عدد اللجان أو أرقام الجلوس بعد التوليد، فلازم تعيد توليد التوزيع (الخطوة 3) عشان يتطبق التعديل.</div>
+            <div id="exam-edit-warn" class="ex-warn hidden">غيّرت عدد اللجان أو أرقام الجلوس بعد التوليد، فيجب إعادة توليد التوزيع (الخطوة 3) ليُطبَّق التعديل.</div>
             <div class="error-msg" id="exam-edit-error"></div>
             <button class="btn-primary" id="exam-edit-save" style="width:auto; padding:10px 18px;">حفظ بيانات الفترة</button>
             <span id="exam-edit-ok" class="ex-ok hidden">تم الحفظ</span>
@@ -1071,7 +1071,7 @@
         </section>
 
         <section class="ex-step" data-step="2">
-          <div class="ex-step-head"><h4>اللجنة الخاصة</h4><p>الطلاب اللي يختبرون في لجنة مستقلة (ظروف صحية أو غيرها). خطوة اختيارية.</p></div>
+          <div class="ex-step-head"><h4>اللجنة الخاصة</h4><p>الطلاب الذين يختبرون في لجنة مستقلة (لظروف صحية أو غيرها). خطوة اختيارية.</p></div>
           <div class="form-card">
             <div class="form-row">
               <input type="text" id="exam-special-search" placeholder="ابحث بالاسم أو رقم الهوية لإضافته للجنة الخاصة" />
@@ -1096,8 +1096,8 @@
         </section>
 
         <section class="ex-step" data-step="4">
-          <div class="ex-step-head"><h4>الطباعة</h4><p>كل مطبوعات الفترة في مكان واحد. تحتاج توليد التوزيع أول.</p></div>
-          <div id="exam-print-gate" class="ex-warn hidden">ما تم توليد التوزيع لهذي الفترة بعد. ولّده من الخطوة 3 قبل الطباعة.</div>
+          <div class="ex-step-head"><h4>الطباعة</h4><p>جميع مطبوعات الفترة في مكان واحد. يلزم توليد التوزيع أولًا.</p></div>
+          <div id="exam-print-gate" class="ex-warn hidden">لم يتم توليد التوزيع لهذه الفترة بعد. ولّده من الخطوة 3 قبل الطباعة.</div>
           <h5 class="ex-sub">الكشوف</h5>
           <div class="ex-print-grid">
             <button type="button" class="ex-print-tile" id="exam-print-all-btn"><span class="ept-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg></span><span class="ept-main"><b>كشوف المناداة</b><span>كشف لكل لجنة بأسماء طلابها وأرقام جلوسهم</span></span></button>
@@ -1191,7 +1191,7 @@
                       <label>يمين/يسار <input type="number" id="ov-offset-x" step="0.5" value="0" style="width:70px; margin:0 4px; padding:6px 4px; text-align:center;" /></label>
                       <label>أعلى/أسفل <input type="number" id="ov-offset-y" step="0.5" value="0" style="width:70px; margin:0 4px; padding:6px 4px; text-align:center;" /></label>
                     </div>
-                    <p style="font-size:11px; color:var(--slate); margin:4px 0 0;">موجب = يمين/أسفل. اطبع "تجربة مع النموذج" على ورق عادي، طابقها فوق ورقة معتمدة ضد الضوء، وعدّل الإزاحة لو فيه فرق.</p>
+                    <p style="font-size:11px; color:var(--slate); margin:4px 0 0;">موجب = يمين/أسفل. اطبع "تجربة مع النموذج" على ورق عادي، وطابقها فوق ورقة معتمدة أمام الضوء، وعدّل الإزاحة إن وُجد فرق.</p>
                   </div>
 
                   <div style="display:flex; gap:8px; flex-wrap:wrap;">
@@ -1212,7 +1212,7 @@
         </section>
 
         <section class="ex-step" data-step="5">
-          <div class="ex-step-head"><h4>رسائل أولياء الأمور</h4><p>اكتب نص الرسالة مرة وحدة، ويتعبّى لكل طالب بلجنته ورقم جلوسه، ثم صدّرها إكسل للإرسال.</p></div>
+          <div class="ex-step-head"><h4>رسائل أولياء الأمور</h4><p>اكتب نص الرسالة مرة واحدة، فتُعبَّأ لكل طالب بلجنته ورقم جلوسه، ثم صدّرها ملف إكسل للإرسال.</p></div>
           <div class="form-card">
             <span id="exam-messages-toggle" hidden></span><span id="exam-messages-chevron" hidden></span>
             <div id="exam-messages-body">
@@ -1241,7 +1241,7 @@
         <div class="tr-periods" id="tracking-period-chips" role="tablist" aria-label="فترة الاختبار"></div>
         <button type="button" class="btn-secondary hidden" id="tr-setup-toggle" style="width:auto; padding:9px 14px;">إعداد الفترة</button>
       </div>
-      <div id="tr-no-periods" class="ex-empty hidden"><b>ما فيه فترات اختبار</b><span>أنشئ فترة من قسم «الاختبارات» أول.</span></div>
+      <div id="tr-no-periods" class="ex-empty hidden"><b>لا توجد فترات اختبار</b><span>أنشئ فترة من قسم «الاختبارات» أولًا.</span></div>
 
       <div id="tracking-content" class="hidden">
         <div id="tr-setup" class="hidden tr-setup">
@@ -1329,7 +1329,7 @@
         <div class="er-flow" aria-label="طريقة العمل">
           <button type="button" class="er-flow-step" data-mode="sheet" style="--fc:#0E93A8;"><span class="efs-n">1</span><span class="efs-t"><b>صمّم ورقة الإجابة واحفظ المفتاح</b><span>عدد الأسئلة والخيارات، وباركود الطالب</span></span></button>
           <button type="button" class="er-flow-step" data-mode="sheet" style="--fc:#6249A6;"><span class="efs-n">2</span><span class="efs-t"><b>اطبع وصحّح في Remark</b><span>الأوراق تُقرأ بالماسح وتطلع ملف إكسل</span></span></button>
-          <button type="button" class="er-flow-step" data-mode="upload" style="--fc:#E07A34;"><span class="efs-n">3</span><span class="efs-t"><b>ارفع ملف الإكسل</b><span>المفتاح المحفوظ يتطبق تلقائيًا ويطلع التقرير</span></span></button>
+          <button type="button" class="er-flow-step" data-mode="upload" style="--fc:#E07A34;"><span class="efs-n">3</span><span class="efs-t"><b>ارفع ملف الإكسل</b><span>يُطبَّق المفتاح المحفوظ تلقائيًا ويظهر التقرير</span></span></button>
         </div>
         <div class="seg-tabs" id="er-mode-tabs" role="tablist">
           <button type="button" role="tab" data-mode="reports" class="active">التقارير</button>
@@ -1350,7 +1350,7 @@
             </div>
             <div>
               <h4>رفع نتائج اختبار جديد</h4>
-              <p>ملف إكسل من Remark فيه إجابات الطلاب (رقم الهوية، الاسم، الصف، الفصل، المادة، ثم عمود لكل سؤال). المفتاح ينطبق تلقائيًا لو محفوظ من بطاقة ورقة الإجابة، وإلا تدخله يدويًا</p>
+              <p>ملف إكسل من Remark يتضمن إجابات الطلاب (رقم الهوية، الاسم، الصف، الفصل، المادة، ثم عمود لكل سؤال). يُطبَّق المفتاح تلقائيًا إن كان محفوظًا من بطاقة ورقة الإجابة، وإلا فأدخله يدويًا</p>
             </div>
           </div>
           <input type="file" id="er-file" accept=".xlsx,.xls" style="margin-bottom:12px;" />
@@ -1392,7 +1392,7 @@
             </div>
 
             <h5 style="margin:16px 0 8px; font-size:13px;">الإجابة الصحيحة لكل سؤال</h5>
-            <p style="font-size:11.5px; color:var(--slate); margin:0 0 10px;">اختر الإجابة الصحيحة لكل سؤال يدويًا (الملف ما يحتوي نموذج إجابة جاهز)</p>
+            <p style="font-size:11.5px; color:var(--slate); margin:0 0 10px;">اختر الإجابة الصحيحة لكل سؤال يدويًا (الملف لا يحتوي على نموذج إجابة جاهز)</p>
             <div id="er-key-form"></div>
 
             <button class="btn-primary" id="er-save-btn" style="width:auto; padding:10px 18px; margin-top:14px;">حفظ التقرير</button>
@@ -1440,7 +1440,7 @@
                     <div id="as-key-grades" class="as-key-secs"></div>
                   </div>
                   <div class="as-f hidden" id="as-key-secs-wrap">الفصول
-                    <div id="as-key-secs" class="as-key-secs"><span class="as-muted">اختر المرحلة أول</span></div>
+                    <div id="as-key-secs" class="as-key-secs"><span class="as-muted">اختر المرحلة أولًا</span></div>
                   </div>
                   <label class="as-f">لغة الخيارات
                     <select id="as-lang">
@@ -1495,7 +1495,7 @@
                     <label style="font-size:13px; font-weight:700; display:flex; align-items:center; gap:10px;">درجة الجزء المقالي (المجموع)
                       <input type="number" id="as-essay-total" min="1" max="40" value="10" style="width:80px; margin:0; text-align:center; padding:7px 4px;" />
                     </label>
-                    <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">إطار واحد للكتابة بأسفل الورقة، وفوقه فقاعات المجموع يظللها المعلم بعد التصحيح. لحد ١٠ درجات صف واحد (0 إلى الدرجة)، وأكثر من ١٠ صفّين: العشرات والآحاد (مثال: ١٥ = ظلّل ١٠ و ٥). مع المقالي يصير الاختيار من متعدد ٣ أعمدة × ١٠ بأعلى الورقة.</p>
+                    <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">إطار واحد للكتابة بأسفل الورقة، وفوقه فقاعات المجموع يظللها المعلم بعد التصحيح. حتى ١٠ درجات صف واحد (0 إلى الدرجة)، وأكثر من ١٠ صفّين: العشرات والآحاد (مثال: ١٥ = ظلّل ١٠ و ٥). ومع المقالي يصبح الاختيار من متعدد ٣ أعمدة × ١٠ في أعلى الورقة.</p>
                   </div>
                 </div>
                   <div id="as-limit-hint" style="font-size:12px; color:var(--slate); margin:4px 0 0;"></div>
@@ -1507,7 +1507,7 @@
                     <h5 class="as-step-h" style="margin:0;">الإجابات الصحيحة (المفتاح)</h5>
                     <button type="button" class="text-action-btn" id="as-key-clear-btn" style="width:auto; padding:4px 8px; font-size:12px;">مسح</button>
                   </div>
-                  <p style="font-size:11.5px; color:var(--slate); margin:4px 0 10px;">اضغط الإجابة الصحيحة لكل سؤال واحفظ المفتاح. لما ترفع ملف Remark أو تصحح بالجوال، يتطبق المفتاح تلقائيًا. (اختياري لو بتطبع أوراق فاضية بس)</p>
+                  <p style="font-size:11.5px; color:var(--slate); margin:4px 0 10px;">اضغط الإجابة الصحيحة لكل سؤال واحفظ المفتاح. عند رفع ملف Remark أو التصحيح بالجوال يُطبَّق المفتاح تلقائيًا. (اختياري إذا كنت ستطبع أوراقًا فارغة فقط)</p>
                   <div class="as-models-box">
                     <label class="as-models-on"><input type="checkbox" id="as-models-on" /> الاختبار بنموذجين (أ و ب)</label>
                     <div id="as-models-opts" class="hidden">
@@ -1558,7 +1558,7 @@
                   إضافة باركود باسم الطالب (ورقة خاصة لكل طالب)
                 </label>
                 <div id="as-barcode-opts" class="hidden" style="background:var(--sand); border-radius:10px; padding:4px 12px 12px; margin-top:-6px;">
-                  <p style="font-size:11.5px; color:var(--slate); margin:6px 0 8px;">يُطبع لكل طالب ورقة فيها اسمه وصفه وفصله، وباركود (Code 128) برقم هويته يقرأه Remark. الترتيب: أول ١، أول ٢ ... ثم ثاني ١ ... وداخل الفصل أبجديًا.</p>
+                  <p style="font-size:11.5px; color:var(--slate); margin:6px 0 8px;">تُطبع لكل طالب ورقة تتضمن اسمه وصفه وفصله، وباركود (Code 128) برقم هويته يقرأه Remark. الترتيب: أول ١، أول ٢ ... ثم ثاني ١ ... وداخل الفصل أبجديًا.</p>
                   <div class="form-row" style="margin-bottom:0;">
                     <label style="font-size:12.5px; font-weight:700; display:block;">الطلاب
                       <select id="as-scope" style="margin-top:4px;">
@@ -1585,7 +1585,7 @@
                     </div>
                     <div id="as-dist-list" class="as-dist-list hidden"></div>
                   </div>
-                  <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">ورقة A4 بالعرض: بعد القص، حط رزمة الأنصاف اليسرى تحت رزمة الأنصاف اليمنى، وتصير الأوراق مرتبة بالتسلسل.</p>
+                  <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">ورقة A4 بالعرض: بعد القص ضع رزمة الأنصاف اليسرى تحت رزمة الأنصاف اليمنى، فتصبح الأوراق مرتبة بالتسلسل.</p>
                 </div>
                 </div>
 
@@ -1612,16 +1612,16 @@
                   </div>
                   <div id="as-status" style="font-size:12.5px; margin-top:8px;"></div>
                 <details style="margin-top:14px; font-size:12px; color:var(--slate); background:var(--sand); border-radius:10px; padding:10px 12px;">
-                  <summary style="font-weight:700; color:var(--ink); cursor:pointer;">طريقة الإعداد ببرنامج Remark (مرة وحدة لكل إعدادات)</summary>
+                  <summary style="font-weight:700; color:var(--ink); cursor:pointer;">طريقة الإعداد في برنامج Remark (مرة واحدة لكل إعدادات)</summary>
                   <ol style="margin:8px 18px 0; padding:0; line-height:1.9;">
-                    <li>اطبع ورقة فاضية بنفس الإعدادات وامسحها بالسكانر، وافتحها في Remark Template Editor.</li>
-                    <li>عرّف منطقة الباركود (Barcode Region) نوع Code 128 على المربع اللي فوق، وسمّها <b>StudentID</b> عشان ملف النتائج يرتبط تلقائيًا بتقارير المنصة.</li>
+                    <li>اطبع ورقة فارغة بالإعدادات نفسها وامسحها بالماسح الضوئي، وافتحها في Remark Template Editor.</li>
+                    <li>عرّف منطقة الباركود (Barcode Region) نوع Code 128 على المربع في الأعلى، وسمّها <b>StudentID</b> ليرتبط ملف النتائج تلقائيًا بتقارير المنصة.</li>
                     <li>عرّف منطقة الإجابات (OMR) لكل عمود أسئلة، وخلّ ترتيب القيم الافتراضي (من اليسار لليمين) حتى للعربي - المنصة تعرف إن الحروف العربية معكوسة وتعدّلها تلقائيًا من المفتاح المحفوظ.</li>
-                    <li>لو الاختبار بنموذجين والطالب يظلّل نموذجه: عرّف منطقة OMR بسؤال واحد وخيارين على خانة "النموذج"، وسمّها <b>النموذج</b> (أو Form) - المنصة تقرأ منها نموذج كل طالب.</li>
-                    <li>للجزء المقالي: عرّف منطقة OMR بإجابة وحدة قيمها الأرقام المكتوبة داخل الفقاعات. لو المجموع أكثر من ١٠: منطقتين (العشرات بقيم 0، 10، 20 ... والآحاد 0-9) واجمعهم.</li>
+                    <li>إذا كان الاختبار بنموذجين ويظلّل الطالب نموذجه: عرّف منطقة OMR بسؤال واحد وخيارين على خانة "النموذج"، وسمّها <b>النموذج</b> (أو Form) - المنصة تقرأ منها نموذج كل طالب.</li>
+                    <li>للجزء المقالي: عرّف منطقة OMR بإجابة واحدة قيمها الأرقام المكتوبة داخل الفقاعات. إذا كان المجموع أكثر من ١٠: منطقتين (العشرات بقيم 0، 10، 20 ... والآحاد 0-9) واجمعهم.</li>
                     <li>احفظ القالب باسم الإعدادات المكتوبة أسفل الورقة (مثال: A4 · 20 سؤال · 4 خيارات) واستخدمه لكل الأوراق بنفس الإعدادات.</li>
                     <li>ورقة "A4 بالعرض" كل نصف فيها نسخة مطابقة لورقة A5، فبعد القص تستخدم نفس قالب A5.</li>
-                    <li>لو غيّرت عدد الأسئلة أو الخيارات أو الحجم، تتغيّر مواقع الفقاعات ويحتاج قالب جديد.</li>
+                    <li>إذا غيّرت عدد الأسئلة أو الخيارات أو الحجم، تتغيّر مواقع الفقاعات ويلزم قالب جديد.</li>
                     <li>اطبع دايمًا بالحجم الفعلي (100%) بدون "ملاءمة للصفحة".</li>
                   </ol>
                 </details>
@@ -1663,7 +1663,7 @@
               </div>
             </div>
             <div style="display:flex; gap:8px; flex-wrap:wrap; flex-shrink:0;">
-              <button type="button" class="btn-secondary" id="er-append-file-btn" style="width:auto; padding:8px 14px;" title="ترفع ملف فيه طلاب صُححوا بعدين، وينضافون للتقرير مع الموجودين">➕ إضافة طلاب من ملف</button>
+              <button type="button" class="btn-secondary" id="er-append-file-btn" style="width:auto; padding:8px 14px;" title="ارفع ملفًا يضم طلابًا صُحّحت أوراقهم لاحقًا، ليُضافوا إلى التقرير مع الموجودين">➕ إضافة طلاب من ملف</button>
               <button type="button" class="text-action-btn" id="er-update-file-btn" style="width:auto; padding:8px 14px;" title="ترفع ملف إكسل جديد (نفس عدد الأسئلة) وتبقى الإجابة الصحيحة كما هي">⭯ تحديث ملف الإكسل</button>
               <button type="button" class="btn-secondary hidden" id="er-add-sheet-btn" style="width:auto; padding:8px 14px;" title="إضافة ورقة طالب (مثلاً اختبر متأخر) بإدخال إجاباته يدويًا">➕ إضافة ورقة طالب</button>
               <button type="button" class="btn-secondary hidden" id="er-camera-continue" style="width:auto; padding:8px 14px;">📷 متابعة التصحيح بالجوال</button>
@@ -1673,7 +1673,7 @@
 
           <div id="er-updatefile-card" class="hidden" style="background:var(--sand); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:18px;">
             <h5 id="er-updatefile-h" style="margin:0 0 4px; font-size:13.5px;">تحديث ملف الإكسل</h5>
-            <p id="er-updatefile-p" style="font-size:11.5px; color:var(--slate); margin:0 0 12px;">ارفع ملف إكسل جديد بنفس عدد الأسئلة (مثلاً بيانات طلاب محدّثة أو فصل إضافي) - الإجابة الصحيحة لكل سؤال تبقى كما هي، وبس بيانات الطلاب والتقارير الستة تتحدّث.</p>
+            <p id="er-updatefile-p" style="font-size:11.5px; color:var(--slate); margin:0 0 12px;">ارفع ملف إكسل جديدًا بعدد الأسئلة نفسه (مثل بيانات طلاب محدّثة أو فصل إضافي) - تبقى الإجابة الصحيحة لكل سؤال كما هي، وتُحدَّث بيانات الطلاب والتقارير الستة فقط.</p>
             <input type="file" id="er-update-file" accept=".xlsx,.xls" style="margin-bottom:12px;" />
             <div style="display:flex; gap:8px;">
               <button type="button" class="btn-primary" id="er-updatefile-confirm" style="width:auto; padding:9px 18px;">تحديث</button>
@@ -1728,14 +1728,14 @@
       </div>
       <div class="form-card hidden" id="sc-sync-card">
         <h4>تحديث تخصصات المعلمين من الجدول</h4>
-        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">نطلع من الجدول الدراسي المحفوظ مادة وصفوف كل معلم، ونقارنها بتخصصاته الحالية (اللي تحدد الطلاب اللي يشوفهم والخطة الأسبوعية والتصحيح). راجع التغييرات واعتمدها.</p>
+        <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">نستخرج من الجدول الدراسي المحفوظ مادة كل معلم وصفوفه، ونقارنها بتخصصاته الحالية (التي تحدد الطلاب الذين يطّلع عليهم والخطة الأسبوعية والتصحيح). راجع التغييرات واعتمدها.</p>
         <div id="sc-sync-body"></div>
       </div>
       <div class="form-card hidden sc-import" id="sc-import-card">
         <h4>استيراد جدول من ملف PDF</h4>
         <p style="font-size:12.5px; color:var(--slate); margin:0 0 10px;">
           ارفع ملف الجدول الرسمي (نفس شكل الجدول المعتمد من المدرسة) وبنحاول نقرأ كل الفصول منه تلقائيًا.
-          <b>مهم:</b> راجع كل ما يستخرج بعنايه قبل التأكيد — لو أي مادة أو اسم طلع معكوس أو غريب لا تعتمد ولا تحفظ، وخبرنا.
+          <b>مهم:</b> راجع كل ما يُستخرج بعناية قبل التأكيد — إذا ظهرت أي مادة أو اسم معكوسًا أو غريبًا فلا تعتمد ولا تحفظ، وأبلغنا.
         </p>
         <input type="file" id="sc-pdf-file" accept=".pdf" style="margin-bottom:10px;" />
         <button class="btn-primary" id="sc-pdf-parse-btn" style="width:auto; padding:10px 18px;">معاينة الملف</button>
@@ -1748,7 +1748,7 @@
       <div class="form-card" id="sc-coverage-card">
         <h4 id="sc-coverage-title">جدول الاختبارات الفترية</h4>
         <p style="font-size:12.5px; color:var(--slate); margin:0 0 12px;">
-          حدد تاريخ الاختبار ونطاق الصفحات (من - إلى) لكل مادة لهذه المرحلة بهذه الفترة، مع ملاحظة اختيارية لو تحتاج. كل مرحلة (أول/ثاني/ثالث متوسط) لها جدولها الخاص - غيّر المرحلة من التبويب فوق. يُحسب اليوم تلقائيًا من التاريخ، ويظهر الجدول كامل لأولياء الأمور بصفحتهم جاهز للطباعة.
+          حدد تاريخ الاختبار ونطاق الصفحات (من - إلى) لكل مادة لهذه المرحلة بهذه الفترة، مع ملاحظة اختيارية عند الحاجة. كل مرحلة (أول/ثاني/ثالث متوسط) لها جدولها الخاص - غيّر المرحلة من التبويب أعلاه. يُحسب اليوم تلقائيًا من التاريخ، ويظهر الجدول كاملًا لأولياء الأمور في صفحتهم جاهزًا للطباعة.
         </p>
 
         <div style="background:var(--sand); border-radius:10px; padding:12px 14px; margin-bottom:14px;">
@@ -1756,7 +1756,7 @@
             <input type="checkbox" id="sc-coverage-publish-toggle" style="width:auto; margin:0;" />
             <span style="font-weight:700;">نشر الجدول لأولياء الأمور</span>
           </label>
-          <p style="font-size:12px; color:var(--slate); margin:0;">لحد ما تفعّله، الجدول يبقى مسودة وما يظهر لولي الأمر حتى لو عبّيت كل المواد - عشان تراجعه أول. التفعيل/التعطيل خاص بهذي المرحلة فقط.</p>
+          <p style="font-size:12px; color:var(--slate); margin:0;">يبقى الجدول مسودة ولا يظهر لولي الأمر حتى تفعّله، ولو عبّأت جميع المواد - لتراجعه أولًا. التفعيل/التعطيل خاص بهذه المرحلة فقط.</p>
         </div>
 
         <div id="sc-coverage-list"></div>
@@ -1859,7 +1859,7 @@
               <input type="date" id="sf-date" />
             </div>
           </div>
-          <p style="font-size:12px; color:var(--slate); margin:4px 0 0;">التاريخ ينطبق على أي ملاحظة/درجة تضيفها الآن — غيّره لو تسجل ليوم سابق.</p>
+          <p style="font-size:12px; color:var(--slate); margin:4px 0 0;">يُطبَّق التاريخ على أي ملاحظة/درجة تضيفها الآن — غيّره إذا كنت تسجل ليوم سابق.</p>
         </div>
 
         <input type="text" id="sf-search" placeholder="بحث باسم الطالب..." style="margin-bottom:10px;" />
@@ -2014,7 +2014,7 @@
             </div>
             <div>
               <h4>صلاحيات القسم</h4>
-              <p>المدير يتحكم بمين يشوف/يضيف بقسم الميزانية</p>
+              <p>يتحكم المدير في من يطّلع/يضيف في قسم الميزانية</p>
             </div>
           </div>
           <div id="budget-perms-list"></div>
@@ -2061,7 +2061,7 @@
               </select>
               <span></span>
             </div>
-            <p style="font-size:11px; color:var(--slate); margin:0 0 10px;">إيداع سلفة أو مدور سابق يصير "دفعة" مستقلة برصيدها الخاص، تقدر تصرف منها فواتير لحد ما ينتهي مبلغها فتنقفل تلقائيًا — راجع قسم "دفعات السلفة والمدور" تحت</p>
+            <p style="font-size:11px; color:var(--slate); margin:0 0 10px;">يصبح إيداع السلفة أو المدوَّر السابق "دفعة" مستقلة برصيدها الخاص، يمكنك الصرف منها حتى ينتهي مبلغها فتُقفل تلقائيًا — راجع قسم "دفعات السلفة والمدور" أدناه</p>
             <div class="form-row">
               <input type="text" id="budget-rev-notes" placeholder="ملاحظات (اختياري)" style="grid-column:1/-1;" />
             </div>
@@ -2123,7 +2123,7 @@
               </div>
             </summary>
 
-            <p style="font-size:12px; color:var(--slate); margin:10px 0;">نسبتان % من إجمالي إيراد الفصل، تُحسبان وتُخصمان من الرصيد عند إقفال الفصل — يمكنك تعديلهما وقت ما تبي</p>
+            <p style="font-size:12px; color:var(--slate); margin:10px 0;">نسبتان % من إجمالي إيراد الفصل، تُحسبان وتُخصمان من الرصيد عند إقفال الفصل — يمكنك تعديلهما متى شئت</p>
             <div class="form-row">
               <div>
                 <label style="font-size:12px; color:var(--slate);">نسبة الإدارة %</label>
@@ -2171,7 +2171,7 @@
           <button type="button" class="btn-secondary" id="dd-undo" disabled>↶ تراجع</button>
           <button type="button" class="btn-secondary" id="dd-copy">نسخ للواتساب</button>
           <button type="button" class="btn-secondary" id="dd-print">طباعة</button>
-          <button type="button" class="btn-secondary dd-danger" id="dd-reset">رجّع اليوم للأصل</button>
+          <button type="button" class="btn-secondary dd-danger" id="dd-reset">أعد اليوم إلى الأصل</button>
         </div>
       </div>
       <div id="dd-msg" class="dd-msg hidden"></div>
@@ -2199,7 +2199,7 @@
               <select id="dd-st-kind">
                 <option value="absent">غائب اليوم</option>
                 <option value="leave">مستأذن من الحصة</option>
-                <option value="late">متأخر لين الحصة</option>
+                <option value="late">متأخر حتى الحصة</option>
               </select>
               <select id="dd-st-period" class="hidden">
                 <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option><option value="7">7</option>
@@ -2212,7 +2212,7 @@
 
           <section class="dd-card" id="dd-cell-card">
             <div class="dd-sheet-grip"></div>
-            <div id="dd-cell-panel"><p class="dd-empty-panel">اضغط أي خانة في الجدول عشان تشوف خياراتها والمعلمين الفاضيين في حصتها.</p></div>
+            <div id="dd-cell-panel"><p class="dd-empty-panel">اضغط أي خانة في الجدول لعرض خياراتها والمعلمين المتاحين في حصتها.</p></div>
           </section>
         </aside>
       </div>
@@ -2223,7 +2223,7 @@
 
       <div class="form-card" style="background:var(--sand);">
         <h4>عدد أجهزة المعمل</h4>
-        <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">رقم واحد ثابت للمعمل كامل - يُستخدم لتوزيع طلاب كل الفصول اللي تضيفها تحت مع بعض على نفس مجموعة الأجهزة.</p>
+        <p style="font-size:12px; color:var(--slate); margin:0 0 10px;">رقم واحد ثابت للمعمل كامل - يُستخدم لتوزيع طلاب جميع الفصول التي تضيفها أدناه معًا على مجموعة الأجهزة نفسها.</p>
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
           <input type="number" id="lab-computer-count" min="1" style="width:140px;" placeholder="مثلاً 30" />
           <button class="btn-primary" id="lab-save-settings-btn" style="width:auto; padding:9px 18px;">حفظ</button>
@@ -2232,7 +2232,7 @@
       </div>
 
       <div class="form-card" style="margin-top:14px;">
-        <h4>الفصول اللي تدرّسها بالمعمل</h4>
+        <h4>الفصول التي تدرّسها في المعمل</h4>
         <div class="tabs" id="lab-grade-tabs"></div>
         <div class="form-row">
           <div>

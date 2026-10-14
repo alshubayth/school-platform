@@ -137,7 +137,7 @@
 <main>
   <section class="card">
     <div class="ok hidden" id="installed">التطبيق مثبّت على هذا الجهاز ✓ افتحه من أيقونته على الشاشة.</div>
-    <div class="warn hidden" id="ios-browser">أنت على آيفون بس مو في Safari. التثبيت على الآيفون من Safari فقط: انسخ الرابط تحت وافتحه في Safari.</div>
+    <div class="warn hidden" id="ios-browser">أنت على آيفون لكن لست في Safari. التثبيت على الآيفون من Safari فقط: انسخ الرابط أدناه وافتحه في Safari.</div>
 
     <div class="switch" role="tablist" aria-label="نوع الجهاز">
       <button type="button" role="tab" data-p="ios">آيفون</button>
@@ -147,22 +147,22 @@
     <p class="detected" id="detected"></p>
 
     <ol class="steps" data-p="ios">
-      <li><div><b>افتح هذي الصفحة في Safari</b><span>متصفح آبل الأساسي، لأن الآيفون ما يسمح بالتثبيت من غيره.</span></div></li>
-      <li><div><b>اضغط زر المشاركة <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg></span></b><span>تحت في منتصف الشاشة (أو فوق جنب الرابط في الآيباد).</span></div></li>
-      <li><div><b>اختر "إضافة إلى الشاشة الرئيسية" <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span></b><span>انزل في القائمة لين تلقاها، وبعدين اضغط "إضافة" فوق.</span></div></li>
-      <li><div><b>افتح التطبيق من أيقونته</b><span>وسجّل دخولك مرة وحدة.</span></div></li>
-      <li class="notif-step"><div><b>فعّل الإشعارات من داخل التطبيق</b><span class="ns-staff">من قائمة حسابك ← «تفعيل الإشعارات على الجوال». في الآيفون ما تشتغل الإشعارات إلا من التطبيق المثبّت (iOS 16.4 أو أحدث).</span><span class="ns-parent">اضغط الجرس فوق ووافق على الإذن. في الآيفون ما تشتغل الإشعارات إلا من التطبيق المثبّت (iOS 16.4 أو أحدث).</span></div></li>
+      <li><div><b>افتح هذه الصفحة في Safari</b><span>متصفح آبل الأساسي، لأن الآيفون لا يسمح بالتثبيت من غيره.</span></div></li>
+      <li><div><b>اضغط زر المشاركة <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M8 7l4-4 4 4"/><path d="M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/></svg></span></b><span>أسفل منتصف الشاشة (أو أعلاها بجانب الرابط في الآيباد).</span></div></li>
+      <li><div><b>اختر "إضافة إلى الشاشة الرئيسية" <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 8v8M8 12h8"/></svg></span></b><span>انزل في القائمة حتى تجدها، ثم اضغط "إضافة" في الأعلى.</span></div></li>
+      <li><div><b>افتح التطبيق من أيقونته</b><span>وسجّل دخولك مرة واحدة.</span></div></li>
+      <li class="notif-step"><div><b>فعّل الإشعارات من داخل التطبيق</b><span class="ns-staff">من قائمة حسابك ← «تفعيل الإشعارات على الجوال». في الآيفون لا تعمل الإشعارات إلا من التطبيق المثبّت (iOS 16.4 أو أحدث).</span><span class="ns-parent">اضغط الجرس في الأعلى ووافق على الإذن. في الآيفون لا تعمل الإشعارات إلا من التطبيق المثبّت (iOS 16.4 أو أحدث).</span></div></li>
     </ol>
 
     <ol class="steps hidden" data-p="android">
-      <li><div><b>اضغط زر "ثبّت التطبيق" تحت</b><span>لو ما طلع الزر: افتح الصفحة في Chrome، واضغط القائمة <span class="ic" aria-hidden="true">⋮</span> فوق، واختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".</span></div></li>
-      <li><div><b>وافق على التثبيت</b><span>تنضاف أيقونة "مُدار" لشاشتك وقائمة تطبيقاتك.</span></div></li>
-      <li><div><b>افتح التطبيق من أيقونته</b><span>وسجّل دخولك مرة وحدة.</span></div></li>
-      <li class="notif-step"><div><b>فعّل الإشعارات</b><span class="ns-staff">من قائمة حسابك ← «تفعيل الإشعارات على الجوال».</span><span class="ns-parent">اضغط الجرس فوق ووافق على الإذن.</span></div></li>
+      <li><div><b>اضغط زر "ثبّت التطبيق" في الأسفل</b><span>إذا لم يظهر الزر: افتح الصفحة في Chrome، واضغط القائمة <span class="ic" aria-hidden="true">⋮</span> في الأعلى، واختر "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".</span></div></li>
+      <li><div><b>وافق على التثبيت</b><span>تُضاف أيقونة "مُدار" إلى شاشتك وقائمة تطبيقاتك.</span></div></li>
+      <li><div><b>افتح التطبيق من أيقونته</b><span>وسجّل دخولك مرة واحدة.</span></div></li>
+      <li class="notif-step"><div><b>فعّل الإشعارات</b><span class="ns-staff">من قائمة حسابك ← «تفعيل الإشعارات على الجوال».</span><span class="ns-parent">اضغط الجرس في الأعلى ووافق على الإذن.</span></div></li>
     </ol>
 
     <ol class="steps hidden" data-p="desktop">
-      <li><div><b>اضغط زر "ثبّت التطبيق" تحت</b><span>يشتغل في Chrome و Edge. أو اضغط أيقونة التثبيت <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M12 8v6M9 11l3 3 3-3"/><path d="M8 21h8"/></svg></span> بآخر شريط العنوان.</span></div></li>
+      <li><div><b>اضغط زر "ثبّت التطبيق" في الأسفل</b><span>يعمل في Chrome وEdge. أو اضغط أيقونة التثبيت <span class="ic" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M12 8v6M9 11l3 3 3-3"/><path d="M8 21h8"/></svg></span> بآخر شريط العنوان.</span></div></li>
       <li><div><b>يفتح التطبيق بنافذة مستقلة</b><span>وتلقاه بقائمة البرامج وتقدر تثبّته بشريط المهام.</span></div></li>
     </ol>
 
@@ -177,7 +177,7 @@
     <div class="qr" id="qr" aria-label="رمز QR لرابط صفحة التثبيت" role="img"></div>
     <div>
       <h3 id="share-h">شاركها مع الزملاء</h3>
-      <p id="share-p">يصوّرون الرمز بكاميرا الجوال وتفتح لهم هذي الصفحة. أو اطبع ملصق وعلّقه في غرفة المعلمين.</p>
+      <p id="share-p">يصوّرون الرمز بكاميرا الجوال فتُفتح لهم هذه الصفحة. أو اطبع ملصقًا وعلّقه في غرفة المعلمين.</p>
       <div class="link"><code id="url"></code><button type="button" id="copy">نسخ</button></div>
       <div class="actions" style="margin-top:12px;"><button type="button" class="btn ghost" id="print-btn">طباعة ملصق</button></div>
     </div>
@@ -229,7 +229,7 @@
     ['h-title', 'p-title'].forEach(id => { document.getElementById(id).textContent = 'ثبّت لوحة تحكم مدرستك على جوالك'; });
     // الواجهة باسم المدرسة وشعارها، و«مُدار» توقيع صغير على الجنب
     document.getElementById('share-h').textContent = 'شاركها مع أولياء الأمور';
-    document.getElementById('share-p').textContent = 'يصوّرون الرمز بكاميرا الجوال وتفتح لهم هذي الصفحة. أو أرسل الرابط في مجموعات الفصول، أو اطبع ملصق وعلّقه عند مدخل المدرسة.';
+    document.getElementById('share-p').textContent = 'يصوّرون الرمز بكاميرا الجوال فتُفتح لهم هذه الصفحة. أو أرسل الرابط في مجموعات الفصول، أو اطبع ملصقًا وعلّقه عند مدخل المدرسة.';
     // مُدار صغير تحت الشعار (نفس صفحة الخطة)
     const hl = document.getElementById('h-logo');
     const stack = document.createElement('div'); stack.className = 'logo-stack';
@@ -260,8 +260,8 @@
     }
     document.getElementById('h-sub').textContent = 'تابع خطة ابنك الأسبوعية وجدوله وأرقام المدرسة من أيقونة على شاشتك';
     document.getElementById('p-sub').textContent = 'خطة الأسبوع والجدول لولي الأمر';
-    document.querySelectorAll('.steps b').forEach(b => { b.innerHTML = b.innerHTML.replace('وسجّل دخولك مرة وحدة.', ''); });
-    document.querySelectorAll('.steps span').forEach(s => { if (s.textContent.trim() === 'وسجّل دخولك مرة وحدة.') s.textContent = 'وتفتح لك خطة الأسبوع مباشرة.'; });
+    document.querySelectorAll('.steps b').forEach(b => { b.innerHTML = b.innerHTML.replace('وسجّل دخولك مرة واحدة.', ''); });
+    document.querySelectorAll('.steps span').forEach(s => { if (s.textContent.trim() === 'وسجّل دخولك مرة واحدة.') s.textContent = 'وتفتح لك خطة الأسبوع مباشرة.'; });
     document.querySelectorAll('.steps span, .steps b').forEach(el => { el.innerHTML = el.innerHTML.replace('"مُدار"', '"خطة الأسبوع"'); });
   }
   const openLink = document.getElementById('open-link');
@@ -276,7 +276,7 @@
   const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   let platform = isIOS ? 'ios' : isAndroid ? 'android' : 'desktop';
   const names = { ios: 'آيفون', android: 'أندرويد', desktop: 'كمبيوتر' };
-  document.getElementById('detected').textContent = `جهازك: ${names[platform]} - لو مو صحيح اختر من فوق`;
+  document.getElementById('detected').textContent = `جهازك: ${names[platform]} - إن لم يكن صحيحًا فاختر من الأعلى`;
   if (standalone) document.getElementById('installed').classList.remove('hidden');
   if (isIOS && !isSafari) document.getElementById('ios-browser').classList.remove('hidden');
 
@@ -310,7 +310,7 @@
     deferred.prompt();
     const { outcome } = await deferred.userChoice;
     deferred = null; updateInstallBtn();
-    note.textContent = outcome === 'accepted' ? 'جاري التثبيت... بتلقى الأيقونة على شاشتك.' : 'ما انثبّت. تقدر تثبّته بعدين من نفس الزر أو من قائمة المتصفح.';
+    note.textContent = outcome === 'accepted' ? 'جارٍ التثبيت... ستجد الأيقونة على شاشتك.' : 'لم يُثبَّت. يمكنك تثبيته لاحقًا من الزر نفسه أو من قائمة المتصفح.';
   });
   show(platform);
 

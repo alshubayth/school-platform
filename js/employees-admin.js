@@ -32,7 +32,7 @@ document.getElementById('portal-download-template').addEventListener('click', as
   await loadXLSX();
   const headers = ['الاسم الكامل', 'البريد الإلكتروني أو الرقم الوظيفي', 'كلمة المرور', 'الدور'];
   const example = ['محمد سالم العتيبي', '10234 (أو mohammed.example@school.com)', 'Passw0rd123', 'معلم'];
-  const note = ['الدور: اكتب بالضبط أحد هذه الخيارات → معلم / وكيل / مدير (افتراضيًا معلم لو تُرك فاضي). العمود الثاني يقبل رقم وظيفي بدون @ أو إيميل حقيقي.', '', '', ''];
+  const note = ['الدور: اكتب أحد هذه الخيارات بدقة → معلم / وكيل / مدير (افتراضيًا معلم إذا تُرك فارغًا). يقبل العمود الثاني رقمًا وظيفيًا بدون @ أو بريدًا إلكترونيًا حقيقيًا.', '', '', ''];
   const ws = XLSX.utils.aoa_to_sheet([headers, example, note]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'الموظفون');
@@ -48,7 +48,7 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
   successEl.style.display = 'none';
 
   if (!fileInput.files || fileInput.files.length === 0) {
-    errEl.textContent = 'اختر ملف إكسل أولاً';
+    errEl.textContent = 'اختر ملف إكسل أولًا';
     errEl.style.display = 'block';
     return;
   }
@@ -175,7 +175,7 @@ function renderPortalRows() {
   if (ptFilter === 'linked') rows = rows.filter(e => e.profile_id);
   if (ptFilter === 'unlinked') rows = rows.filter(e => !e.profile_id);
   if (!ptEmps.length) { list.innerHTML = '<div class="ex-empty"><b>لا يوجد موظفون بعد</b><span>اضغط «+ موظف» أو استورد الحسابات من ملف إكسل.</span></div>'; return; }
-  if (!rows.length) { list.innerHTML = '<div class="ex-empty"><b>ما فيه نتائج</b></div>'; return; }
+  if (!rows.length) { list.innerHTML = '<div class="ex-empty"><b>لا توجد نتائج</b></div>'; return; }
   const linkedIds = new Set(ptEmps.map(e => e.profile_id).filter(Boolean));
   const freeProfiles = ptProfiles.filter(p => !linkedIds.has(p.id) && p.role !== 'owner' && p.role !== 'parent');
 
@@ -232,11 +232,11 @@ function renderPortalRows() {
     });
     const delBtn = row.querySelector('.pt-del');
     if (delBtn) delBtn.addEventListener('click', async () => {
-      if (!confirm(`متأكد تبي تحذف "${emp.full_name}" من قائمة الموظفين؟ هذا يحذف سجل التقييم فقط، ولا يحذف حساب الدخول لو موجود.`)) return;
+      if (!confirm(`هل أنت متأكد من حذف "${emp.full_name}" من قائمة الموظفين؟ يحذف هذا سجل التقييم فقط، ولا يحذف حساب الدخول إن وُجد.`)) return;
       const { error } = await sb.from('employees').delete().eq('id', emp.id);
       if (error) { alert('تعذر الحذف: ' + error.message); return; }
       // موظف منقول: نشيل تخصصاته عشان ما يطلع بالخطة الأسبوعية ومتابعاتها
-      if (emp.profile_id && confirm(`تحذف تخصصات "${emp.full_name}" كمان؟ (لو انتقل من المدرسة)`)) {
+      if (emp.profile_id && confirm(`تحذف تخصصات "${emp.full_name}" أيضًا؟ (إذا انتقل من المدرسة)`)) {
         await sb.from('teacher_subjects').delete().eq('teacher_id', emp.profile_id);
       }
       await refreshPortalList();
@@ -246,7 +246,7 @@ function renderPortalRows() {
       row.querySelector('.row-menu-pop').classList.add('hidden');
       const newPassword = prompt(`كلمة مرور جديدة لـ "${emp.full_name}" (6 أحرف على الأقل):`);
       if (!newPassword) return;
-      if (newPassword.length < 6) { alert('كلمة المرور لازم تكون 6 أحرف أو أكثر'); return; }
+      if (newPassword.length < 6) { alert('يجب أن تتكون كلمة المرور من 6 أحرف أو أكثر'); return; }
       try {
         const { data: sessionData } = await sb.auth.getSession();
         const accessToken = sessionData.session.access_token;
@@ -282,7 +282,7 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
     return;
   }
   if (password.length < 6) {
-    errEl.textContent = 'كلمة المرور لازم تكون 6 أحرف أو أكثر';
+    errEl.textContent = 'يجب أن تتكون كلمة المرور من 6 أحرف أو أكثر';
     errEl.style.display = 'block';
     return;
   }
@@ -378,7 +378,7 @@ document.getElementById('pm-search').addEventListener('input', (e) => { pmSearch
 document.getElementById('perm-submit').addEventListener('click', async () => {
   const errEl = document.getElementById('perm-error');
   const teacherId = document.getElementById('perm-teacher').value;
-  if (!teacherId) { errEl.textContent = 'لا يوجد معلم لتحديده. أضف حساب معلم أولاً من Supabase.'; errEl.style.display = 'block'; return; }
+  if (!teacherId) { errEl.textContent = 'لا يوجد معلم لتحديده. أضف حساب معلم أولًا من Supabase.'; errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
 
   const { error } = await writeWithSchool(extra => sb.from('teacher_subjects').insert({
@@ -437,7 +437,7 @@ function renderPermsList() {
   const q = pmSearch;
   let rows = all.filter(t => !q || t.name.includes(q) || t.items.some(a => (a.subjects ? a.subjects.name : '').includes(q)));
   rows.sort((x, y) => (x.items.length === 0) - (y.items.length === 0) || String(x.name).localeCompare(String(y.name), 'ar'));
-  if (!rows.length) { list.innerHTML = `<div class="ex-empty"><b>${all.length ? 'ما فيه نتائج' : 'لا توجد تخصيصات بعد'}</b></div>`; return; }
+  if (!rows.length) { list.innerHTML = `<div class="ex-empty"><b>${all.length ? 'لا توجد نتائج' : 'لا توجد تخصيصات بعد'}</b></div>`; return; }
   list.innerHTML = rows.map(t => {
     const items = [...t.items].sort((a, b) => GR.indexOf(a.grade_level) - GR.indexOf(b.grade_level) || String(a.subjects ? a.subjects.name : '').localeCompare(String(b.subjects ? b.subjects.name : ''), 'ar'));
     const initials = String(t.name || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join(' ');
@@ -445,13 +445,13 @@ function renderPermsList() {
       <span class="cvt-av">${escP(initials)}</span>
       <div class="pm-main"><b>${escP(t.name)}</b>
         <div class="pm-line"><span class="pm-lbl">التخصص</span><div class="pm-chips">${items.length ? items.map(a => `<span class="pm-chip">${escP(a.subjects ? a.subjects.name : '-')} · ${escP((gradeLabels[a.grade_level] || '').replace(' متوسط', ''))}<button type="button" data-del="${a.id}" aria-label="حذف التخصص">✕</button></span>`).join('') : '<span class="pm-none">بدون تخصص</span>'}</div></div>
-        ${(() => { const cl = classesOf(t); return pmSchedule.length ? `<div class="pm-line"><span class="pm-lbl">الفصول المسندة</span><div class="pm-chips">${cl.length ? cl.map(c => `<span class="pm-cls" title="${escP([...c.subjects].join('، '))} · ${c.n} حصة">${escP((gradeLabels[c.grade] || '').replace(' متوسط', ''))}/${escP(c.section)}</span>`).join('') + `<span class="pm-cnt">${cl.reduce((s, c) => s + c.n, 0)} حصة</span>` : '<span class="pm-none muted">ما له حصص بالجدول</span>'}</div></div>` : ''; })()}
+        ${(() => { const cl = classesOf(t); return pmSchedule.length ? `<div class="pm-line"><span class="pm-lbl">الفصول المسندة</span><div class="pm-chips">${cl.length ? cl.map(c => `<span class="pm-cls" title="${escP([...c.subjects].join('، '))} · ${c.n} حصة">${escP((gradeLabels[c.grade] || '').replace(' متوسط', ''))}/${escP(c.section)}</span>`).join('') + `<span class="pm-cnt">${cl.reduce((s, c) => s + c.n, 0)} حصة</span>` : '<span class="pm-none muted">ليست له حصص في الجدول</span>'}</div></div>` : ''; })()}
       </div>
       <button type="button" class="pm-plus" data-t="${t.id}" title="إضافة تخصص لهذا المعلم" aria-label="إضافة تخصص">+</button>
     </div>`;
   }).join('');
   list.querySelectorAll('button[data-del]').forEach(b => b.addEventListener('click', async () => {
-    if (!confirm('حذف هذا التخصص؟ المعلم ما يقدر يدخّل خطة هذي المادة بعدها.')) return;
+    if (!confirm('حذف هذا التخصص؟ لن يتمكن المعلم بعدها من إدخال خطة هذه المادة.')) return;
     await sb.from('teacher_subjects').delete().eq('id', b.dataset.del);
     await refreshPermsList();
   }));

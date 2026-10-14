@@ -12,7 +12,7 @@ function loadScript(src) {
     const s = document.createElement('script');
     s.src = src;
     s.onload = () => resolve();
-    s.onerror = () => reject(new Error('تعذر تحميل المكتبة، تأكد من الاتصال بالإنترنت وجرّب مرة ثانية.'));
+    s.onerror = () => reject(new Error('تعذر تحميل المكتبة، تأكد من الاتصال بالإنترنت وحاول مرة أخرى.'));
     document.head.appendChild(s);
   });
   return loadedScripts[src];

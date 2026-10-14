@@ -54,7 +54,7 @@ export async function openSubjectSync(box, opts = {}) {
   const teacherIds = S.profiles.filter(p => p.role === 'teacher').map(p => p.id);
   const linked = teacherIds.filter(id => empIds.includes(id)).length;
   S.employees = empIds.length && linked >= teacherIds.length * 0.5 ? new Set(empIds) : null;
-  if (!S.sched.length) { box.innerHTML = '<p class="ss-note">الجدول الدراسي فاضي - استورد الجدول أو عبّيه أولًا.</p>'; return; }
+  if (!S.sched.length) { box.innerHTML = '<p class="ss-note">الجدول الدراسي فارغ - استورد الجدول أو عبّئه أولًا.</p>'; return; }
   S.map = {};
   [...new Set(S.sched.map(r => r.subject_name.trim()))].forEach(n => { S.map[n] = guessSubject(n); });
   S.removeKeep = new Set();
@@ -152,30 +152,30 @@ function render() {
       <h5>١) ربط أسماء المواد بالجدول بقائمة المواد ${unmapped.length ? `<span class="ss-bad">${unmapped.length} بدون ربط</span>` : '<span class="ss-ok">✓</span>'}</h5>
       <div class="ss-map">${names.map(n => `
         <label class="ss-map-row${S.map[n] ? '' : ' miss'}"><span>${esc(n)}</span>
-          <select data-subj="${esc(n)}"><option value="">— اختر المادة —</option>${S.subjects.map(s => `<option value="${s.id}"${S.map[n] === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="${IGNORE}"${S.map[n] === IGNORE ? ' selected' : ''}>تجاهل (مو مادة تخصص)</option><option value="__new">➕ إضافة مادة جديدة...</option></select>
+          <select data-subj="${esc(n)}"><option value="">— اختر المادة —</option>${S.subjects.map(s => `<option value="${s.id}"${S.map[n] === s.id ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}<option value="${IGNORE}"${S.map[n] === IGNORE ? ' selected' : ''}>تجاهل (ليست مادة تخصص)</option><option value="__new">➕ إضافة مادة جديدة...</option></select>
         </label>`).join('')}</div>
     </div>
-    ${unlinked.size ? `<div class="ss-sec ss-warn"><h5>معلمين بالجدول ما انربطوا بحساب (${unlinked.size}) - اختر حساب كل واحد:</h5>
+    ${unlinked.size ? `<div class="ss-sec ss-warn"><h5>معلمون في الجدول لم يُربطوا بحساب (${unlinked.size}) - اختر حساب كل واحد:</h5>
       <div class="ss-map">${[...unlinked.keys()].sort((a, b) => a.localeCompare(b, 'ar')).map(t => `
         <label class="ss-map-row miss"><span>${esc(t)}</span>
           <select data-tlink="${esc(t)}"><option value="">— اختر الحساب —</option>${staffOptions(t)}</select>
         </label>`).join('')}</div>
-      <small>الربط ينحفظ ويُستخدم كمان باستيراد الجدول الجاي.</small></div>` : ''}
+      <small>يُحفظ الربط ويُستخدم أيضًا عند استيراد الجدول القادم.</small></div>` : ''}
     <div class="ss-sec">
       <h5>٢) التغييرات <span class="ss-sum"><b class="add">+${nAdd}</b> إضافة · <b class="rem">−${nRem}</b> حذف</span></h5>
       <div class="ss-list">${rows.map(r => `
         <div class="ss-row">
-          <b class="ss-name">${esc(r.name)}${r.gone ? ' <small class="ss-gone">(محذوف من قائمة الموظفين)</small>' : r.inSchedule ? '' : ' <small>(ما له حصص بالجدول)</small>'}</b>
+          <b class="ss-name">${esc(r.name)}${r.gone ? ' <small class="ss-gone">(محذوف من قائمة الموظفين)</small>' : r.inSchedule ? '' : ' <small>(ليست له حصص في الجدول)</small>'}</b>
           <div class="ss-chips">
             ${r.add.map(k => { const [sid, g] = k.split('|'); return `<span class="ss-chip add">+ ${esc(subjName(sid))} · ${esc(gShort(g))}</span>`; }).join('')}
             ${r.keep.map(c => `<span class="ss-chip keep">${esc(subjName(c.subject_id))} · ${esc(gShort(c.grade_level))}</span>`).join('')}
-            ${r.remove.map(c => `<label class="ss-chip rem${S.removeKeep.has(c.id) ? ' kept' : ''}" title="ألغِ التحديد عشان يبقى"><input type="checkbox" data-rem="${c.id}"${S.removeKeep.has(c.id) ? '' : ' checked'}> حذف ${esc(subjName(c.subject_id))} · ${esc(gShort(c.grade_level))}</label>`).join('')}
+            ${r.remove.map(c => `<label class="ss-chip rem${S.removeKeep.has(c.id) ? ' kept' : ''}" title="ألغِ التحديد لإبقائه"><input type="checkbox" data-rem="${c.id}"${S.removeKeep.has(c.id) ? '' : ' checked'}> حذف ${esc(subjName(c.subject_id))} · ${esc(gShort(c.grade_level))}</label>`).join('')}
           </div>
-        </div>`).join('') || '<p class="ss-note">التخصصات مطابقة للجدول - ما فيه تغييرات ✓</p>'}</div>
+        </div>`).join('') || '<p class="ss-note">التخصصات مطابقة للجدول - لا توجد تغييرات ✓</p>'}</div>
     </div>
     <div class="ss-foot">
       <button type="button" class="btn-primary" id="ss-apply"${nAdd + nRem ? '' : ' disabled'}>اعتماد التغييرات</button>
-      <span class="ss-note" id="ss-status">${unmapped.length ? 'المواد اللي بدون ربط ما تدخل بالحساب - اربطها أو اختر «تجاهل».' : ''}</span>
+      <span class="ss-note" id="ss-status">${unmapped.length ? 'المواد غير المرتبطة لا تدخل في الحساب - اربطها أو اختر «تجاهل».' : ''}</span>
     </div>`;
   S.box.querySelectorAll('[data-subj]').forEach(sel => sel.addEventListener('change', async () => {
     const n = sel.dataset.subj;
@@ -185,7 +185,7 @@ function render() {
       if (!name) { render(); return; }
       const { data, error } = await sb.from('subjects').insert({ name }).select('id, name').single();
       if (error) {
-        alert(/row-level security|permission|policy/i.test(error.message || '') ? 'إضافة المواد تحتاج تشغيل ملف sql/subjects_admin.sql بقاعدة البيانات أولًا' : 'تعذر إضافة المادة: ' + error.message);
+        alert(/row-level security|permission|policy/i.test(error.message || '') ? 'تتطلب إضافة المواد تشغيل ملف sql/subjects_admin.sql في قاعدة البيانات أولًا' : 'تعذر إضافة المادة: ' + error.message);
         render(); return;
       }
       S.subjects.push(data);

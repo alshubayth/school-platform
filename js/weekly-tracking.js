@@ -44,7 +44,7 @@ async function loadPermsSection() {
   const list = document.getElementById('wt-perms-list');
   list.innerHTML = '';
   if (!perms || perms.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:16px;"><p>ما فيه معلمين عندهم صلاحية بعد</p></div>';
+    list.innerHTML = '<div class="placeholder" style="padding:16px;"><p>لا يوجد معلمون لديهم صلاحية بعد</p></div>';
     return;
   }
   perms.forEach(p => {
@@ -55,7 +55,7 @@ async function loadPermsSection() {
     row.innerHTML = `
       <div class="avatar-circle" style="background:var(--purple-light); color:var(--purple);">${esc(initials)}</div>
       <div class="info"><div class="name">${esc(name)}</div>
-      <div class="title">يشوف متابعة الخطة الأسبوعية</div></div>
+      <div class="title">يطّلع على متابعة الخطة الأسبوعية</div></div>
       <button class="logout-icon" data-id="${p.id}" title="إلغاء الصلاحية" style="color:var(--danger);">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
       </button>`;
@@ -73,12 +73,12 @@ document.getElementById('wt-perm-submit').addEventListener('click', async () => 
   const errEl = document.getElementById('wt-perm-error');
   errEl.style.display = 'none';
   const profileId = document.getElementById('wt-perm-employee').value;
-  if (!profileId) { errEl.textContent = 'اختر معلم أولاً'; errEl.style.display = 'block'; return; }
+  if (!profileId) { errEl.textContent = 'اختر معلم أولًا'; errEl.style.display = 'block'; return; }
 
   const { error } = await writeWithSchool(extra =>
     sb.from('weekly_tracking_permissions').insert({ profile_id: profileId, granted_by: currentUserId, ...extra }));
   if (error) {
-    errEl.textContent = error.message.includes('duplicate') ? 'هذا المعلم عنده الصلاحية بالفعل' : 'حدث خطأ: ' + error.message;
+    errEl.textContent = error.message.includes('duplicate') ? 'لدى هذا المعلم الصلاحية بالفعل' : 'حدث خطأ: ' + error.message;
     errEl.style.display = 'block';
     await loadPermsSection();
     return;
@@ -104,7 +104,7 @@ async function refreshWeeklyTracking() {
   teachersBox.innerHTML = '';
   if (isNoPlanWeek(wtWeek)) {
     stats.innerHTML = '';
-    container.innerHTML = `<div class="ex-empty"><b>الأسبوع ${wtWeek} بدون خطة أسبوعية</b><span>ما يُحسب فيه أي مادة ناقصة. تقدر تغيّر هذا من «ضبط التقويم» في لوحة القيادة.</span></div>`;
+    container.innerHTML = `<div class="ex-empty"><b>الأسبوع ${wtWeek} بدون خطة أسبوعية</b><span>لا تُحتسب فيه أي مادة ناقصة. يمكنك تغيير ذلك من «ضبط التقويم» في لوحة القيادة.</span></div>`;
     return;
   }
   container.innerHTML = '<div class="tr-loading">جارٍ التحميل...</div>';
@@ -144,9 +144,9 @@ async function refreshWeeklyTracking() {
       return `<span class="wt-chip ${ok ? 'ok' : 'miss'}"><b>${ok ? '✓ ' : ''}${esc(s.name)}</b>${!ok && t ? `<span>${esc(t)}</span>` : ''}</span>`;
     }).join('');
     return `<div class="wt-grade">
-      <div class="wt-gh"><b>${gradeLabels[grade]}</b><span class="wt-gcount ${subjects.length && done === subjects.length ? 'full' : ''}">${subjects.length ? `${done} من ${subjects.length}` : 'ما فيه مواد مسندة'}</span></div>
+      <div class="wt-gh"><b>${gradeLabels[grade]}</b><span class="wt-gcount ${subjects.length && done === subjects.length ? 'full' : ''}">${subjects.length ? `${done} من ${subjects.length}` : 'لا توجد مواد مسندة'}</span></div>
       ${subjects.length ? `<div class="cmd-bar"><div style="width:${pct}%; ${pct === 100 ? 'background:var(--status-good);' : ''}"></div></div>` : ''}
-      <div class="wt-chips">${chips || '<span class="dd-empty-panel">أضف تخصصات المعلمين من «إدارة الصلاحيات» عشان تظهر المواد هنا.</span>'}</div>
+      <div class="wt-chips">${chips || '<span class="dd-empty-panel">أضف تخصصات المعلمين من «إدارة الصلاحيات» لتظهر المواد هنا.</span>'}</div>
     </div>`;
   }).join('');
   container.innerHTML = html;
@@ -157,9 +157,9 @@ async function refreshWeeklyTracking() {
   stats.innerHTML = `
     <span class="ds ${doneAll === totalAll && totalAll ? 'ds-present' : 'ds-all'}"><b>${doneAll}</b> من ${totalAll} خطة مسلّمة</span>
     <span class="ds ${totalAll - doneAll ? 'ds-absent' : 'ds-present'}"><b>${totalAll - doneAll}</b> ناقصة</span>
-    <span class="ds ${realTeachers ? 'ds-late' : 'ds-present'}"><b>${realTeachers}</b> معلم ما سلّم</span>`;
+    <span class="ds ${realTeachers ? 'ds-late' : 'ds-present'}"><b>${realTeachers}</b> معلم لم يسلّم</span>`;
   if (missingTeachers.size) {
-    teachersBox.innerHTML = `<h3 class="duty-h" style="margin:24px 0 10px;">المعلمين اللي ما سلّموا</h3><div class="wt-tlist">${[...missingTeachers.entries()].sort((a, b) => b[1].length - a[1].length).map(([t, list]) => `
+    teachersBox.innerHTML = `<h3 class="duty-h" style="margin:24px 0 10px;">المعلمون الذين لم يسلّموا</h3><div class="wt-tlist">${[...missingTeachers.entries()].sort((a, b) => b[1].length - a[1].length).map(([t, list]) => `
       <div class="wt-t"><span class="cvt-av">${esc(t.split(' ').slice(0, 2).map(w => w.charAt(0)).join(' '))}</span><span class="wt-t-main"><b>${esc(t)}</b><span>${list.map(m => `${esc(m.subject)} · ${esc((gradeLabels[m.grade] || '').replace(' متوسط', ''))}`).join(' — ')}</span></span><span class="wt-t-n">${list.length}</span></div>`).join('')}</div>`;
   }
 }

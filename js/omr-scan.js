@@ -67,14 +67,14 @@ function keyOpts(k) {
 function renderPanel() {
   const root = $('omr-root');
   if (!S.keys.length) {
-    root.innerHTML = `<div class="ex-empty"><b>ما فيه مفاتيح إجابة محفوظة</b><span>التصحيح بالجوال يحتاج مفتاح الاختبار محفوظ من «ورقة الإجابة والمفتاح»${currentProfile && currentProfile.role === 'teacher' ? ' - تقدر تسويه من تبويب «ورقة الإجابة والمفتاح» أو تطلبه من الإدارة' : ''}.</span></div>`;
+    root.innerHTML = `<div class="ex-empty"><b>لا توجد مفاتيح إجابة محفوظة</b><span>يتطلب التصحيح بالجوال حفظ مفتاح الاختبار من «ورقة الإجابة والمفتاح»${currentProfile && currentProfile.role === 'teacher' ? ' - يمكنك إعداده من تبويب «ورقة الإجابة والمفتاح» أو طلبه من الإدارة' : ''}.</span></div>`;
     return;
   }
   root.innerHTML = `
     <div class="form-card omr-card">
       <div class="omr-head">
         <span class="omr-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg></span>
-        <div><b>التصحيح بكاميرا الجوال</b><span>خيار مساند للسكانر: صوّر ورقة الطالب والمنصة تقرأ الباركود والإجابات وتطلع التقرير</span></div>
+        <div><b>التصحيح بكاميرا الجوال</b><span>خيار مساند للماسح الضوئي: صوّر ورقة الطالب لتقرأ المنصة الباركود والإجابات وتُظهر التقرير</span></div>
       </div>
       <label class="omr-lbl" for="omr-key">الاختبار (المفتاح المحفوظ)</label>
       <select id="omr-key"><option value="">اختر الاختبار...</option>${S.keys.map(k => `<option value="${k.id}">${esc(k.title)}${k.subject ? ' — ' + esc(k.subject) : ''} (${k.questions} سؤال${k.essay_total ? ' + مقالي' : ''})</option>`).join('')}</select>
@@ -86,9 +86,9 @@ function renderPanel() {
         <button type="button" class="btn-secondary omr-manual-btn" id="omr-manual">✍️ إدخال ورقة يدويًا</button>
       </div>
       <div class="omr-tips">
-        <b>«ابدأ التصحيح»</b> أسرع (يلتقط تلقائيًا ورقة ورا ورقة)، و<b>«صورة بكاميرا الجوال»</b> أدق لأنها بدقة الكاميرا الكاملة - استخدمها لو الباركود ما انقرأ.<br>
+        <b>«ابدأ التصحيح»</b> أسرع (يلتقط الأوراق تلقائيًا ورقة تلو الأخرى)، و<b>«صورة بكاميرا الجوال»</b> أدق لأنها بدقة الكاميرا الكاملة - استخدمها إذا لم يُقرأ الباركود.<br>
         <b>للحصول على قراءة دقيقة:</b> صوّر الورقة كاملة بحيث تظهر <b>المربعات السوداء الأربع</b> بالزوايا، على سطح مستوٍ وبإضاءة جيدة بدون ظل على الورقة.
-        ورقة A4 بالعرض (طالبين) تقدر تصوّرها كاملة قبل القص وتنقرأ الورقتين مع بعض.
+        يمكنك تصوير ورقة A4 بالعرض (طالبان) كاملة قبل القص، فتُقرأ الورقتان معًا.
       </div>
     </div>
     <div id="omr-scans"></div>`;
@@ -133,7 +133,7 @@ async function loadScans() {
   const { data: reps, error } = await sb.from('exam_reports').select('id, title, students_count, created_at')
     .eq('key_id', S.key.id).eq('created_by', currentUserId).eq('source', 'camera').order('created_at', { ascending: true }).limit(1);
   if (error) {
-    box.innerHTML = `<div class="omr-err">${/source|key_id|exam_scans|schema cache|does not exist/i.test(error.message || '') ? 'التصحيح بالجوال يحتاج تشغيل ملف sql/omr_camera.sql بقاعدة البيانات أولًا' : esc(error.message)}</div>`;
+    box.innerHTML = `<div class="omr-err">${/source|key_id|exam_scans|schema cache|does not exist/i.test(error.message || '') ? 'التصحيح بالجوال يحتاج تشغيل ملف sql/omr_camera.sql في قاعدة البيانات أولًا' : esc(error.message)}</div>`;
     $('omr-actions').classList.add('hidden');
     return;
   }
@@ -172,7 +172,7 @@ function renderScans() {
           <span class="omr-row-main"><b>${esc(s.student_name || s.national_id)}</b><small>${esc((gradeLabels[s.grade_level] || s.grade_level || '').replace(' متوسط', ''))} ${esc(s.class_section || '')}${s.model ? ` · نموذج ${esc(s.model)}` : ''}${s.flags && s.flags.manual ? ' · إدخال يدوي' : s.flags && s.flags.edited ? ' · عُدّلت يدويًا' : ''}</small></span>
           <span class="omr-score">${scoreText(s)}</span>
           <button type="button" class="omr-del" data-id="${esc(s.national_id)}" aria-label="حذف الورقة" title="حذف">✕</button>
-        </div>`).join('')}</div>` : '<p class="omr-empty">ما صححت أي ورقة لهذا الاختبار بعد.</p>'}
+        </div>`).join('')}</div>` : '<p class="omr-empty">لم تصحّح أي ورقة لهذا الاختبار بعد.</p>'}
     </div>`;
   if ($('omr-open-report')) $('omr-open-report').addEventListener('click', () => S.opts.openReport && S.opts.openReport(S.report.id));
   box.querySelectorAll('.omr-row').forEach(r => r.addEventListener('click', e => {
@@ -195,7 +195,7 @@ function renderScans() {
 /* ---------- الكاميرا ---------- */
 async function openCamera() {
   if (!S.key) return;
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert('المتصفح ما يدعم الكاميرا هنا - استخدم «صور من الجهاز»'); return; }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert('المتصفح لا يدعم الكاميرا هنا - استخدم «صور من الجهاز»'); return; }
   const ov = document.createElement('div');
   ov.className = 'omr-cam';
   ov.innerHTML = `
@@ -225,7 +225,7 @@ async function openCamera() {
     cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 3840 }, height: { ideal: 2160 } } });
   } catch (e) {
     try { cam.stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: 'environment' } }); }
-    catch (e2) { msg.textContent = 'ما قدرنا نفتح الكاميرا - اسمح للمتصفح باستخدامها، أو استخدم «صور من الجهاز»'; return; }
+    catch (e2) { msg.textContent = 'تعذّر فتح الكاميرا - اسمح للمتصفح باستخدامها، أو استخدم «صور من الجهاز»'; return; }
   }
   video.srcObject = cam.stream;
   await video.play().catch(() => {});
@@ -240,7 +240,7 @@ async function openCamera() {
     if (caps.focusMode && caps.focusMode.includes('continuous')) track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }).catch(() => {});
   } catch (e) {}
   try { if (navigator.wakeLock) cam.wake = await navigator.wakeLock.request('screen'); } catch (e) {}
-  msg.textContent = 'قرّب الجوال لين تدخل مربعات الورقة السوداء داخل المربعات';
+  msg.textContent = 'قرّب الجوال حتى تدخل المربعات السوداء في الورقة داخل الإطارات';
   cam.timer = setInterval(detectTick, 220);
 }
 
@@ -303,7 +303,7 @@ function detectTick() {
   drawGuide(G, hits.map(c => (c ? G.toScr([c.x / scale, c.y / scale]) : null)));
   if (!ok) {
     cam.match = 0;
-    cam.msg.textContent = found.length >= 2 ? `طابق المربعات الأربع (${found.length} من 4)` : 'قرّب الجوال لين تدخل مربعات الورقة السوداء داخل المربعات';
+    cam.msg.textContent = found.length >= 2 ? `طابق المربعات الأربع (${found.length} من 4)` : 'قرّب الجوال حتى تدخل المربعات السوداء في الورقة داخل الإطارات';
     return;
   }
   cam.match = (cam.match || 0) + 1;
@@ -391,7 +391,7 @@ async function processFiles(files) {
     } catch (e) { fails.push(files[i].name + ': تعذر فتح الصورة'); }
   }
   st.innerHTML = st.dataset.prev || ''; delete st.dataset.prev;
-  if (fails.length) alert(`ما انقرأت ${fails.length} صورة:\n` + fails.slice(0, 8).join('\n'));
+  if (fails.length) alert(`لم تُقرأ ${fails.length} صورة:\n` + fails.slice(0, 8).join('\n'));
   if (items.length) openReview(items);
 }
 
@@ -401,7 +401,7 @@ function processCanvas(canvas, quad = null) {
   const g = grayFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
   const loc = locateSheet(g, S.geo, keyOpts(S.key).size, quad ? { quad } : {});
   if (!loc.ok) {
-    return { ok: false, msg: loc.reason === 'marks' || loc.reason === 'shape' ? 'ما لقيت المربعات الأربع - صوّر الورقة كاملة' : 'الصورة مو واضحة أو الورقة مو لهذا الاختبار' };
+    return { ok: false, msg: loc.reason === 'marks' || loc.reason === 'shape' ? 'لم يُعثر على المربعات الأربعة - صوّر الورقة كاملة' : 'الصورة غير واضحة أو الورقة ليست لهذا الاختبار' };
   }
   const items = [];
   for (const ox of loc.layout.sheets) {
@@ -412,7 +412,7 @@ function processCanvas(canvas, quad = null) {
     rectifyToCanvas(g, loc.H, ox, S.geo.w, S.geo.h, 2.4, thumb);
     items.push(fromRead(r, thumb, ox));
   }
-  if (!items.length) return { ok: false, msg: 'هذي ورقة النموذج أو الورقة مو واضحة' };
+  if (!items.length) return { ok: false, msg: 'هذه ورقة النموذج أو أن الورقة غير واضحة' };
   return { ok: true, items };
 }
 
@@ -483,7 +483,7 @@ function reviewOne(it, next, remaining) {
       <div class="omr-rev-model ${o.modelsOn ? '' : 'hidden'}"><span>النموذج:</span>
         <button type="button" data-m="${MODEL_A}">أ</button><button type="button" data-m="${MODEL_B}">ب</button></div>
       <div class="omr-rev-essay ${k.essay_total ? '' : 'hidden'}"><label>درجة المقالي <input type="number" min="0" max="${k.essay_total}" step="0.5" inputmode="decimal"> / ${k.essay_total}</label></div>
-      <div class="omr-legend"><i class="ok"></i>صحيحة <i class="no"></i>خاطئة <i class="bl"></i>فاضية/متعددة <i class="un"></i>راجعها</div>
+      <div class="omr-legend"><i class="ok"></i>صحيحة <i class="no"></i>خاطئة <i class="bl"></i>فارغة/متعددة <i class="un"></i>راجعها</div>
       <div class="omr-grid"></div>
       ${it.thumb ? '<details class="omr-photo"><summary>صورة الورقة</summary><div class="omr-photo-box"></div></details>' : ''}
     </div>
@@ -506,7 +506,7 @@ function reviewOne(it, next, remaining) {
       ? `<b>${esc(st.full_name || ('رقم الهوية ' + st.national_id))}</b><span>${esc(gradeLabels[st.grade_level] || st.grade_level || '')} ${esc(st.class_section || '')}${it.barcode && !it.saved ? ' · من الباركود ✓' : ''}</span>
          ${it.saved ? '' : '<button type="button" class="ope-link omr-change-st">تغيير</button>'}
          ${dup ? `<div class="omr-dup">سبق تصحيح ورقته (${scoreText(dup)}) - الحفظ يستبدلها</div>` : ''}`
-      : `<b class="${it.manual ? '' : 'omr-warn'}">${it.manual ? 'إدخال يدوي - اختر الطالب وظلّل إجاباته بالضغط على كل سؤال' : it.barcode ? `رقم الهوية ${esc(it.barcode)} مو موجود بقائمة طلابك` : 'ما انقرأ الباركود'}${it.manual ? '' : ' - اختر الطالب:'}</b>
+      : `<b class="${it.manual ? '' : 'omr-warn'}">${it.manual ? 'إدخال يدوي - اختر الطالب وظلّل إجاباته بالضغط على كل سؤال' : it.barcode ? `رقم الهوية ${esc(it.barcode)} غير موجود في قائمة طلابك` : 'لم يُقرأ الباركود'}${it.manual ? '' : ' - اختر الطالب:'}</b>
          ${it.barcode && /^\d{6,}$/.test(it.barcode) ? `<button type="button" class="ope-link omr-use-id">أو احفظها برقم الهوية فقط</button>` : ''}${pickerHtml()}`;
     if (!st) bindPicker();
     const ui = $w('.omr-use-id');
@@ -538,7 +538,7 @@ function reviewOne(it, next, remaining) {
         && (!q || normAr(s.full_name).includes(q) || String(s.national_id).includes(q)))
         .sort((a, b) => String(a.full_name).localeCompare(String(b.full_name), 'ar')).slice(0, 60);
       list.innerHTML = rows.map(s => `<button type="button" data-id="${esc(s.national_id)}"><b>${esc(s.full_name)}</b><small>${esc((gradeLabels[s.grade_level] || '').replace(' متوسط', ''))} ${esc(s.class_section || '')}${S.scans.has(String(s.national_id).trim()) ? ' · مصحح ✓' : ''}</small></button>`).join('')
-        || '<span class="omr-empty">ما فيه نتائج</span>';
+        || '<span class="omr-empty">لا توجد نتائج</span>';
       list.querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
         const s = S.byId.get(b.dataset.id);
         it.student = { ...s, national_id: String(s.national_id).trim() };
@@ -571,7 +571,7 @@ function reviewOne(it, next, remaining) {
     const pop = document.createElement('div');
     pop.className = 'omr-qpick';
     pop.innerHTML = `<b>سؤال ${q + 1}</b>` + lettersOf(q).map((l, i) => `<button type="button" data-v="${i}"${it.answers[q] === i ? ' class="on"' : ''}>${l}</button>`).join('') +
-      `<button type="button" data-v="-1"${it.answers[q] === -1 ? ' class="on"' : ''}>فاضي</button><button type="button" data-v="-2"${it.answers[q] === -2 ? ' class="on"' : ''}>متعدد</button>`;
+      `<button type="button" data-v="-1"${it.answers[q] === -1 ? ' class="on"' : ''}>فارغ</button><button type="button" data-v="-2"${it.answers[q] === -2 ? ' class="on"' : ''}>متعدد</button>`;
     btn.after(pop);
     pop.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { it.answers[q] = +b.dataset.v; it.unsure[q] = false; pop.remove(); renderAll(); }));
   };
@@ -580,7 +580,7 @@ function reviewOne(it, next, remaining) {
     const un = it.unsure.filter(Boolean).length + (it.essayUnsure ? 1 : 0) + (it.modelUnsure ? 1 : 0);
     const essay = Number(it.essay) || 0;
     $w('.omr-rev-score').innerHTML = `<span class="omr-big">${fmt(mc + (k.essay_total ? essay : 0))}<small> / ${k.essay_total ? totalOf(k) : k.questions}</small></span>
-      <span class="omr-sub">${k.essay_total ? `اختيار من متعدد ${mc} / ${k.questions} · مقالي ${it.essay == null ? '؟' : fmt(essay)} / ${k.essay_total}` : `${it.answers.filter(a => a === -1).length} فاضية · ${it.answers.filter(a => a === -2).length} متعددة`}</span>
+      <span class="omr-sub">${k.essay_total ? `اختيار من متعدد ${mc} / ${k.questions} · مقالي ${it.essay == null ? '؟' : fmt(essay)} / ${k.essay_total}` : `${it.answers.filter(a => a === -1).length} فارغة · ${it.answers.filter(a => a === -2).length} متعددة`}</span>
       ${un ? `<span class="omr-unsure">⚠ ${un} ${un === 1 ? 'خانة' : 'خانات'} تحتاج مراجعة (مظللة بالأصفر)</span>` : ''}`;
   };
   const renderModel = () => {
@@ -605,7 +605,7 @@ function reviewOne(it, next, remaining) {
   $w('.omr-save').addEventListener('click', async () => {
     if (!it.student) { alert('اختر الطالب أولًا'); return; }
     if (o.modelsOn && !it.model) { alert('حدد نموذج الطالب'); return; }
-    if (k.essay_total && it.essay == null && !confirm('ما حددت درجة المقالي - تحفظ بدونها (صفر)؟')) return;
+    if (k.essay_total && it.essay == null && !confirm('لم تحدد درجة المقالي - هل تريد الحفظ بدونها (صفر)؟')) return;
     const btn = $w('.omr-save');
     btn.disabled = true; btn.textContent = 'جارٍ الحفظ...';
     const err = await saveScan(it);

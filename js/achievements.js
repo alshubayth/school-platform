@@ -136,11 +136,11 @@ async function syncNow(silent = false) {
     const out = await r.json().catch(() => ({}));
     if (!r.ok) {
       msg = {
-        not_public: 'الملف ما انفتح بدون تسجيل دخول. تأكد إن رابط المشاركة «أي شخص لديه الرابط».',
-        no_table: 'الملف انقرأ لكن ما فيه جدول النتائج. افتحه في Excel واضغط «تحديث الكل» ثم احفظ.',
-        bad_url: 'الرابط لازم يكون رابط مشاركة من ون درايف أو SharePoint.',
-        no_source: 'ما فيه رابط محفوظ، أو ما عندك صلاحية.',
-        download: 'تعذر تنزيل الملف من ون درايف. حاول بعد شوي.',
+        not_public: 'تعذّر فتح الملف دون تسجيل الدخول. تأكد من أن صلاحية رابط المشاركة هي «أي شخص لديه الرابط».',
+        no_table: 'قُرئ الملف لكنه لا يحتوي على جدول النتائج. افتحه في Excel واضغط «تحديث الكل» ثم احفظ.',
+        bad_url: 'يجب أن يكون الرابط رابط مشاركة من ون درايف أو SharePoint.',
+        no_source: 'لا يوجد رابط محفوظ، أو ليست لديك صلاحية.',
+        download: 'تعذّر تنزيل الملف من ون درايف. حاول مرة أخرى بعد قليل.',
         auth: 'انتهت الجلسة، سجّل دخول من جديد.',
       }[out.error] || 'تعذر التحديث (' + (out.error || r.status) + ')';
       if (out.at || out.title) console.warn('achv-sync', out);
@@ -171,7 +171,7 @@ function sourceCard() {
       <div class="av-source-info">
         <span class="av-dot ${snap ? 'ok' : ''}"></span>
         <div><b>${snap ? 'آخر قراءة ' + esc(ago(snap.fetched_at)) : 'لم تتم القراءة بعد'}</b>
-        <span>${state.lastError ? esc(state.lastError) : 'المصدر: ملف «قارئ ملفات الإنجاز» في ون درايف. حدّث الإكسل من Excel أولاً لو تغيّرت الملفات.'}</span></div>
+        <span>${state.lastError ? esc(state.lastError) : 'المصدر: ملف «قارئ ملفات الإنجاز» في ون درايف. حدّث ملف الإكسل من Excel أولًا إذا تغيّرت الملفات.'}</span></div>
       </div>
       <div class="av-source-actions">
         <button class="btn-primary" id="av-sync">تحديث الآن</button>
@@ -208,14 +208,14 @@ function renderManager() {
       <div class="stat-card"><div class="label">ملف مكتمل</div><div class="value">${full}</div></div>
       <div class="stat-card"><div class="label">يحتاج متابعة</div><div class="value">${behind}</div></div>
     </div>
-    ${!reqRules.length ? '<div class="av-note">ورقة «البنود» في الإكسل ما فيها بنود إلزامية، فما تنحسب نسبة إنجاز. حدّد الإلزامي من الإكسل.</div>' : ''}
-    ${unlinked ? `<div class="av-note av-note-link"><span>⚠ ${unlinked} معلم اسم مجلده ما تطابق مع اسم حسابه بالمنصة. اربطه من القائمة بجانب اسمه عشان يوصله التذكير ويشوف ملفه.</span><button class="btn-secondary" id="av-only-unlinked">${f.unlinked ? 'عرض الكل' : 'عرض غير المربوطين'}</button></div>` : ''}
+    ${!reqRules.length ? '<div class="av-note">ورقة «البنود» في ملف الإكسل لا تحتوي على بنود إلزامية، لذا لا تُحتسب نسبة الإنجاز. حدّد الإلزامي من الإكسل.</div>' : ''}
+    ${unlinked ? `<div class="av-note av-note-link"><span>⚠ ${unlinked} معلم لا يطابق اسم مجلده اسم حسابه في المنصة. اربطه من القائمة المجاورة لاسمه ليصله التذكير ويطّلع على ملفه.</span><button class="btn-secondary" id="av-only-unlinked">${f.unlinked ? 'عرض الكل' : 'عرض غير المربوطين'}</button></div>` : ''}
     <div class="av-toolbar">
       <input id="av-q" type="search" placeholder="بحث باسم المعلم" value="${esc(f.q)}">
       ${termsOf(state.snap && state.snap.rows).length > 1 ? `<select id="av-term">${termsOf(state.snap.rows).map(x => `<option ${x === f.term ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>` : ''}
       <select id="av-spec"><option value="">كل التخصصات</option>${specs.map(s => `<option ${s === f.spec ? 'selected' : ''}>${esc(s)}</option>`).join('')}</select>
       <select id="av-sort">
-        <option value="low" ${f.sort === 'low' ? 'selected' : ''}>الأقل إنجازًا أولاً</option>
+        <option value="low" ${f.sort === 'low' ? 'selected' : ''}>الأقل إنجازًا أولًا</option>
         <option value="spec" ${f.sort === 'spec' ? 'selected' : ''}>حسب التخصص</option>
         <option value="name" ${f.sort === 'name' ? 'selected' : ''}>حسب الاسم</option>
       </select>
@@ -223,7 +223,7 @@ function renderManager() {
       <button class="btn-secondary" id="av-remind">تذكير الناقصين</button>
       <button class="btn-secondary" id="av-print">طباعة التقرير</button>
     </div>
-    <div class="av-list">${list.length ? list.map(teacherRow).join('') : '<div class="av-empty">ما فيه نتائج.</div>'}</div>
+    <div class="av-list">${list.length ? list.map(teacherRow).join('') : '<div class="av-empty">لا توجد نتائج.</div>'}</div>
     ${discoveredPanel()}
     ${state.excluded.size ? `<details class="av-excluded"><summary>المستبعدون من المتابعة (${state.excluded.size})</summary>${state.staff.filter(p => state.excluded.has(p.id)).map(p => `<div class="av-exc-row"><span>${esc(p.full_name)}</span><button class="text-action-btn av-restore" data-id="${p.id}">إرجاع</button></div>`).join('')}</details>` : ''}` : ''}`;
   bindManager();
@@ -363,11 +363,11 @@ async function openRemind() {
   wrap.innerHTML = `
     <div class="av-modal-card" role="dialog" aria-modal="true" aria-label="تذكير الناقصين">
       <h3>تذكير المعلمين بالبنود الناقصة</h3>
-      ${linked.length ? `<p>يوصل كل معلم تنبيه في المنصة وإشعار على الجوال، فيه بنوده الناقصة هو بس.</p>
+      ${linked.length ? `<p>يصل كل معلم تنبيه في المنصة وإشعار على الجوال يتضمن بنوده الناقصة فقط.</p>
       <label class="av-check-all"><input type="checkbox" id="av-all" checked> تحديد الكل (${linked.length})</label>
       <div class="av-pick">${linked.map(t => `<label><input type="checkbox" class="av-pick-cb" value="${esc(t.name)}" checked><span>${esc(t.name)}</span><small>${t.ev.missing.length} بند ناقص</small></label>`).join('')}</div>`
-      : '<p>ما فيه معلم مربوط بحساب عنده نقص.</p>'}
-      ${unl.length ? `<p class="av-warn">${unl.length} مجلد عنده نقص لكنه غير مربوط بحساب، فما يوصله تذكير: ${unl.slice(0, 5).map(t => esc(t.name)).join('، ')}${unl.length > 5 ? '…' : ''}</p>` : ''}
+      : '<p>لا يوجد معلم مرتبط بحساب لديه نقص.</p>'}
+      ${unl.length ? `<p class="av-warn">${unl.length} مجلد لديه نقص لكنه غير مرتبط بحساب، فلن يصله تذكير: ${unl.slice(0, 5).map(t => esc(t.name)).join('، ')}${unl.length > 5 ? '…' : ''}</p>` : ''}
       <div class="av-modal-actions">
         ${linked.length ? '<button class="btn-primary" id="av-send">إرسال التذكير</button>' : ''}
         <button class="btn-secondary" id="av-cancel">إغلاق</button>
@@ -388,7 +388,7 @@ async function openRemind() {
     let ok = 0, fail = 0;
     for (const t of targets) {
       send.textContent = `جارٍ الإرسال ${ok + fail + 1}/${targets.length}...`;
-      const lines = t.ev.missing.map(x => `• ${x.rule.name}${x.rule.min > 1 || x.files ? ` (عندك ${x.files} من ${x.rule.min})` : ''}`);
+      const lines = t.ev.missing.map(x => `• ${x.rule.name}${x.rule.min > 1 || x.files ? ` (لديك ${x.files} من ${x.rule.min})` : ''}`);
       const { error } = await sb.rpc('notice_send', {
         p_title: 'ملف الإنجاز: بنود تحتاج إكمال',
         p_body: `نأمل إكمال البنود التالية في ملف إنجازك على ون درايف:\n${lines.join('\n')}`,
@@ -455,7 +455,7 @@ async function renderTeacher() {
       ${ev.missing.length ? `<div class="av-note">نأمل إكمال: ${ev.missing.map(x => esc(x.rule.name) + (x.rule.min > 1 ? ` (${x.files}/${x.rule.min})` : '')).join('، ')}</div>`
         : ev.req.length ? '<div class="av-note good">كل البنود الإلزامية مكتملة. شكرًا لك.</div>' : ''}
       ${itemsTable(ev)}
-      <p class="av-hint">البيانات تُقرأ من مجلدك في ون درايف. بعد ما تضيف ملفات، تظهر هنا بعد التحديث القادم من الإدارة.</p>
+      <p class="av-hint">البيانات تُقرأ من مجلدك في ون درايف. بعد إضافتك للملفات، تظهر هنا بعد التحديث القادم من الإدارة.</p>
     </div>`;
 }
 

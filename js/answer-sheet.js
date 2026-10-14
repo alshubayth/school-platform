@@ -108,11 +108,11 @@ export function computeLayout({ size, questions, choices, essayTotal = 0, tf = 0
   if (essayTotal) {
     const maxCols = Math.min(COMPACT_MAX_COLS, maxColsW);
     const maxQuestions = maxCols * COMPACT_ROWS;
-    if (!(essayTotal >= 1 && essayTotal <= ESSAY_MAX_TOTAL)) return { ok: false, maxQuestions, error: `درجة الجزء المقالي لازم تكون من 1 إلى ${ESSAY_MAX_TOTAL}` };
+    if (!(essayTotal >= 1 && essayTotal <= ESSAY_MAX_TOTAL)) return { ok: false, maxQuestions, error: `يجب أن تكون درجة الجزء المقالي من 1 إلى ${ESSAY_MAX_TOTAL}` };
     let cols, rows, extra;
     if (t) {
       const mx = questions ? mixed(COMPACT_ROWS) : { rows: 0, colsList: [], cols: 0 };
-      if (!mx) return { ok: false, maxQuestions, error: `مع الجزء المقالي: الأسئلة ما تكفي بأعلى الورقة - قلّل عددها` };
+      if (!mx) return { ok: false, maxQuestions, error: `مع الجزء المقالي: لا تتسع أعلى الورقة للأسئلة - قلّل عددها` };
       cols = mx.cols; rows = mx.rows; extra = { colsList: mx.colsList, gap: 0, offset: 0 };
     } else {
       if (questions > maxQuestions) return { ok: false, maxQuestions, error: `مع الجزء المقالي: أقصى الاختيار من متعدد ${maxQuestions} سؤال (${maxCols} أعمدة × ${COMPACT_ROWS})` };
@@ -125,7 +125,7 @@ export function computeLayout({ size, questions, choices, essayTotal = 0, tf = 0
     const twoRows = essayTotal > ESSAY_SINGLE_ROW_MAX;
     const stripH = twoRows ? P.essayStripH * 1.9 : P.essayStripH;
     const essayBoxH = P.answersBottom - essayTop;
-    if (essayBoxH < P.essayMinH) return { ok: false, maxQuestions, error: 'ما بقى مساحة كافية للجزء المقالي - قلّل عدد أسئلة الاختيار من متعدد' };
+    if (essayBoxH < P.essayMinH) return { ok: false, maxQuestions, error: 'لم تبقَ مساحة كافية للجزء المقالي - قلّل عدد أسئلة الاختيار من متعدد' };
     const L = { ok: true, P, mode: 'essay', cols, rows, rowH, colW, ...spread(cols || 1), maxQuestions, essayTop, essayBoxH, twoRows, stripH };
     return extra ? { ...L, ...extra } : uniform(L);
   }
@@ -135,7 +135,7 @@ export function computeLayout({ size, questions, choices, essayTotal = 0, tf = 0
   const maxQuestions = maxColsW * maxRows;
   if (t) {
     const mx = mixed(Math.min(maxRows, 20)) || mixed(maxRows);
-    if (!mx) return { ok: false, maxQuestions, error: `الأسئلة ما تكفي بالورقة بهذا الحجم - قلّل عددها أو الخيارات` };
+    if (!mx) return { ok: false, maxQuestions, error: `لا تتسع الورقة بهذا الحجم للأسئلة - قلّل عددها أو عدد الخيارات` };
     const rowH = Math.min(P.maxRowH, availH / mx.rows);
     return { ok: true, P, mode: 'normal', cols: mx.cols, rows: mx.rows, rowH, colW, gap: 0, offset: 0, maxQuestions, colsList: mx.colsList };
   }
@@ -521,7 +521,7 @@ function updateLimitHint() {
   const hint = $('as-limit-hint');
   hint.textContent = o.essayTotal
     ? `مع الأسئلة المقالية: الاختيار من متعدد بأعمدة ١٠ أسئلة، أقصاه ${L.maxQuestions} سؤال`
-    : `أقصى عدد للأسئلة بهذي الإعدادات: ${L.maxQuestions}`;
+    : `أقصى عدد للأسئلة بهذه الإعدادات: ${L.maxQuestions}`;
   hint.style.color = o.questions > L.maxQuestions ? 'var(--danger)' : 'var(--slate)';
 }
 
@@ -557,7 +557,7 @@ function refreshScopeControls() {
     const secs = [...new Set(asStudents.filter(s => s.grade_level === grade).map(s => s.class_section || 0))].sort((a, b) => a - b);
     $('as-section').innerHTML = secs.length
       ? secs.map(n => `<option value="${n}">${n ? `${gradeLabels[grade] || ''} ${n}` : 'بدون فصل'}</option>`).join('')
-      : '<option value="">لا يوجد فصول</option>';
+      : '<option value="">لا توجد فصول</option>';
     if (secs.map(String).includes(prev)) $('as-section').value = prev;
   }
   const n = selectedStudents().length;
@@ -600,9 +600,9 @@ function buildAllPages() {
   const pg = PAGE[o.size];
   if (o.withBarcode) {
     const studs = selectedStudents();
-    if (studs.length === 0) throw new Error('ما فيه طلاب بالاختيار الحالي');
+    if (studs.length === 0) throw new Error('لا يوجد طلاب في الاختيار الحالي');
     const bad = studs.filter(s => !/^[\x20-\x7E]+$/.test(String(s.national_id || '').trim()));
-    if (bad.length) throw new Error(`فيه ${bad.length} طالب رقم هويته فاضي أو غير صالح للباركود (مثال: ${bad[0].full_name})`);
+    if (bad.length) throw new Error(`فيه ${bad.length} طالب رقم هويته فارغ أو غير صالح للباركود (مثال: ${bad[0].full_name})`);
     let list = studs;
     if (o.modelsOn && !o.modelBubble) { ensureAssignments(studs); list = studs.map(st => ({ ...st, model: modelMap[String(st.national_id).trim()] || MODEL_A })); }
     const pages = paginate(list, pg.perPage);
@@ -688,12 +688,12 @@ function renderKeyGrid() {
   $('as-model-cnt-b').textContent = n ? (missB ? missB : '✓') : '';
   const ordering = on && activeModel === MODEL_B && modelMode() === 'order';
   $('as-models-hint').textContent = !on ? '' : ordering
-    ? 'لكل سؤال بالنموذج ب: اضغط إجابته، واختر رقمه المقابل بالنموذج أ (عشان تحليل الأسئلة يجمع السؤال نفسه من النموذجين).'
+    ? 'لكل سؤال في النموذج ب: اضغط إجابته، واختر رقمه المقابل في النموذج أ (ليجمع تحليل الأسئلة السؤال نفسه من النموذجين).'
     : modelMode() === 'different' ? 'كل نموذج يتحلّل لحاله بالتقارير، والدرجات والترتيب للكل مع بعض.' : 'أدخل إجابة كل نموذج من تبويبه.';
   const arr = activeModel === MODEL_B ? keyAnswersB : keyAnswers;
   const letters = (o.lang === 'en' ? EN_LETTERS : AR_LETTERS).slice(0, o.choices);
   const grid = $('as-key-grid');
-  if (!n) { grid.innerHTML = '<span style="font-size:12px; color:var(--slate);">ما فيه أسئلة اختيار من متعدد</span>'; updateKeyStatus(); return; }
+  if (!n) { grid.innerHTML = '<span style="font-size:12px; color:var(--slate);">لا توجد أسئلة اختيار من متعدد</span>'; updateKeyStatus(); return; }
   grid.innerHTML = arr.map((sel, q) => `
     <div class="as-key-q" style="display:flex; align-items:center; gap:4px; background:#fff; border:1px solid var(--border); border-radius:9px; padding:4px 6px;">
       <b style="min-width:20px; font-size:12px; text-align:center;">${q + 1}</b>
@@ -711,8 +711,8 @@ function keyProblems() {
   if (missA) return `النموذج أ: باقي ${missA} سؤال بدون إجابة`;
   if (missB) return `النموذج ب: باقي ${missB} سؤال بدون إجابة`;
   if (modelMode() === 'order') {
-    if (orderB.some(v => v == null)) return `النموذج ب: باقي ${orderB.filter(v => v == null).length} سؤال ما حددت رقمه المقابل بالنموذج أ`;
-    if (new Set(orderB).size !== n) return 'النموذج ب: فيه رقم سؤال من النموذج أ مكرر بالمقابلة';
+    if (orderB.some(v => v == null)) return `النموذج ب: باقي ${orderB.filter(v => v == null).length} سؤال لم تحدد رقمه المقابل في النموذج أ`;
+    if (new Set(orderB).size !== n) return 'النموذج ب: يوجد رقم سؤال من النموذج أ مكرر في المقابلة';
   }
   return null;
 }
@@ -758,14 +758,14 @@ function renderDistribution() {
     const m = modelMap[id] || MODEL_A;
     return `<div class="as-dist-row"><span>${escHtml(st.full_name)}</span><small>${escHtml((gradeLabels[st.grade_level] || '').replace(' متوسط', ''))} ${st.class_section || ''}</small>
       <button type="button" class="as-dist-m ${m === MODEL_B ? 'b' : 'a'}" data-id="${escHtml(id)}" title="اضغط للتبديل">${m}</button></div>`;
-  }).join('') || '<span class="as-models-hint">ما فيه طلاب</span>';
+  }).join('') || '<span class="as-models-hint">لا يوجد طلاب</span>';
 }
 
 // يحفظ نموذج كل طالب مع المفتاح المحفوظ (بعد الطباعة)
 async function persistModelMap() {
   if (!currentKeyId) return;
   const { error } = await sb.from('answer_keys').update({ model_map: modelMap, updated_at: new Date().toISOString() }).eq('id', currentKeyId);
-  if (error) { setStatus('انطبعت الأوراق، بس تعذر حفظ نموذج كل طالب: ' + error.message, true); return; }
+  if (error) { setStatus('طُبعت الأوراق، لكن تعذّر حفظ نموذج كل طالب: ' + error.message, true); return; }
   const k = savedKeys.find(x => x.id === currentKeyId);
   if (k) k.model_map = { ...modelMap };
 }
@@ -853,16 +853,16 @@ async function saveKey() {
   $('as-key-save-btn').disabled = false;
   if (res.error) {
     const msg = res.error.message || '';
-    if (/tf_count|tf_first|sections/i.test(msg)) { keyStatusMsg('أسئلة الصح والخطأ تحتاج تشغيل ملف sql/answer_keys_tf.sql بقاعدة البيانات أولًا', true); return; }
+    if (/tf_count|tf_first|sections/i.test(msg)) { keyStatusMsg('أسئلة الصح والخطأ تحتاج تشغيل ملف sql/answer_keys_tf.sql في قاعدة البيانات أولًا', true); return; }
     const missingCols = /models|model_map/i.test(msg);
     const missingTbl = /answer_keys|relation|does not exist|schema cache/i.test(msg);
-    keyStatusMsg(missingCols ? 'ميزة النموذجين تحتاج تشغيل ملف sql/exam_models.sql بقاعدة البيانات أولًا' : missingTbl ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + msg, true);
+    keyStatusMsg(missingCols ? 'ميزة النموذجين تحتاج تشغيل ملف sql/exam_models.sql في قاعدة البيانات أولًا' : missingTbl ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : 'تعذر الحفظ: ' + msg, true);
     return;
   }
   currentKeyId = res.data.id;
   setStatus('');
   await refreshSavedKeysList();
-  keyStatusMsg(notMine ? `المفتاح الأصلي من الإدارة، فانحفظ "${o.title}" كنسخة خاصة فيك ✓` : `تم حفظ المفتاح "${o.title}" ✓ - لما ترفع ملف Remark بالتقارير ينطبق تلقائيًا`);
+  keyStatusMsg(notMine ? `المفتاح الأصلي من الإدارة، فانحفظ "${o.title}" كنسخة خاصة فيك ✓` : `تم حفظ المفتاح "${o.title}" ✓ - يُطبَّق تلقائيًا عند رفع ملف Remark في التقارير`);
 }
 
 function loadKeyIntoForm(k) {
@@ -919,8 +919,8 @@ function buildKeyPages() {
 function modelsGuard() {
   const o = readOptions();
   if (!o.modelsOn || o.modelBubble) return null;
-  if (!o.withBarcode) return 'الاختبار بنموذجين يحتاج "باركود باسم الطالب"، عشان المنصة تعرف نموذج كل طالب وقت التصحيح';
-  if (!currentKeyId) return 'احفظ مفتاح الإجابة للنموذجين أولًا، وبعدها اطبع الأوراق (ينحفظ نموذج كل طالب مع المفتاح)';
+  if (!o.withBarcode) return 'يتطلب الاختبار بنموذجين "باركود باسم الطالب"، لتتعرّف المنصة على نموذج كل طالب أثناء التصحيح';
+  if (!currentKeyId) return 'احفظ مفتاح الإجابة للنموذجين أولًا، وبعدها اطبع الأوراق (يُحفظ نموذج كل طالب مع المفتاح)';
   return null;
 }
 
@@ -941,7 +941,7 @@ function printSheets(builtOverride) {
   const go = () => { win.focus(); win.print(); };
   Promise.all([...win.document.images].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; }))).then(() => setTimeout(go, 200));
   setStatus(built.isKey
-    ? 'ورقة النموذج جاهزة للطباعة - امسحها مع أوراق الطلاب (مرة وحدة بس).'
+    ? 'ورقة النموذج جاهزة للطباعة - امسحها ضوئيًا مع أوراق الطلاب (مرة واحدة فقط).'
     : `جاهز للطباعة: ${built.count} صفحة${pg.perPage === 2 ? ` (${built.sheets} ورقة طالب بعد القص)` : ''}. اطبع بالحجم الفعلي 100% وبدون رؤوس وتذييلات.`);
 }
 
@@ -1128,7 +1128,7 @@ function updateQSum() {
   if (mcq) parts.push(`${mcq} اختيار من متعدد`);
   if (tf) parts.push(`${tf} صح وخطأ`);
   const ok = mcq + tf === total;
-  el.innerHTML = `${parts.length ? parts.join(' + ') + ` = <b>${total} سؤال</b>` : 'ما فيه أسئلة موضوعية'}${essay ? ` · ومقالي من <b>${essay}</b>` : ''}${ok ? '' : ' <span style="color:var(--danger);">(المجموع ما يطابق)</span>'}`;
+  el.innerHTML = `${parts.length ? parts.join(' + ') + ` = <b>${total} سؤال</b>` : 'لا توجد أسئلة موضوعية'}${essay ? ` · ومقالي من <b>${essay}</b>` : ''}${ok ? '' : ' <span style="color:var(--danger);">(المجموع غير مطابق)</span>'}`;
   el.classList.toggle('bad', !ok);
   if ($('as-tf-pos')) $('as-tf-pos').closest('label').style.opacity = tf ? '1' : '0.5';
 }
@@ -1137,7 +1137,7 @@ function stepError(n) {
   if (n === 2) {
     const o = readOptions();
     if (!o.questions && !o.essayTotal) return 'حدد عدد الأسئلة';
-    if (num('as-mcq') + num('as-tf') !== o.questions) return 'مجموع الاختيار من متعدد والصح والخطأ لازم يساوي عدد الأسئلة';
+    if (num('as-mcq') + num('as-tf') !== o.questions) return 'يجب أن يساوي مجموع الاختيار من متعدد والصح والخطأ عدد الأسئلة';
     const L = computeLayout({ size: o.size, questions: o.questions, choices: o.choices, essayTotal: o.essayTotal, tf: o.tf, tfFirst: o.tfFirst });
     if (!L.ok) return L.error;
   }
@@ -1154,7 +1154,7 @@ function showStep(n) {
   if (asStep === 5) {
     const o = readOptions();
     const n2 = o.withBarcode ? selectedStudents().length : 0;
-    $('as-exp-sum').textContent = o.withBarcode ? `${n2} ورقة باسم الطالب${PAGE[o.size].perPage === 2 ? ` (${Math.ceil(n2 / 2)} صفحة A4)` : ''}` : 'ورقة فاضية بدون أسماء - اطبع العدد اللي تحتاجه';
+    $('as-exp-sum').textContent = o.withBarcode ? `${n2} ورقة باسم الطالب${PAGE[o.size].perPage === 2 ? ` (${Math.ceil(n2 / 2)} صفحة A4)` : ''}` : 'ورقة فارغة بدون أسماء - اطبع العدد الذي تحتاجه';
   }
 }
 function goStep(n) {
@@ -1257,7 +1257,7 @@ export function initAnswerSheetCard() {
   $('as-key-delete-btn').addEventListener('click', async () => {
     const k = savedKeys.find(x => x.id === $('as-saved-keys').value);
     if (!k) return;
-    if (isTeacherRole() && k.created_by && k.created_by !== currentUserId) { keyStatusMsg('هذا المفتاح من الإدارة - تقدر تحذف مفاتيحك أنت بس', true); return; }
+    if (isTeacherRole() && k.created_by && k.created_by !== currentUserId) { keyStatusMsg('هذا المفتاح من الإدارة - يمكنك حذف مفاتيحك فقط', true); return; }
     if (!confirm(`حذف المفتاح "${k.title}" نهائيًا؟`)) return;
     const { error } = await sb.from('answer_keys').delete().eq('id', k.id);
     if (error) { keyStatusMsg('تعذر الحذف: ' + error.message, true); return; }

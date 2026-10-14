@@ -96,8 +96,8 @@ function renderList() {
   const list = matches();
   const box = $('sd-list');
   $('sd-count').textContent = `${list.length} ${list.length === 1 ? 'طالب' : list.length === 2 ? 'طالبان' : 'طالب'} · ${scopeLabel()}`;
-  if (!S.all.length) { box.innerHTML = '<div class="ex-empty"><b>ما فيه طلاب بعد</b><span>ارفع ملف الطلاب من الإعدادات ← الطلاب</span></div>'; return; }
-  if (!list.length) { box.innerHTML = '<div class="ex-empty"><b>ما لقيت طالب بهذا البحث</b><span>جرّب جزء من الاسم أو رقم الهوية، أو وسّع البحث للجميع</span></div>'; return; }
+  if (!S.all.length) { box.innerHTML = '<div class="ex-empty"><b>لا يوجد طلاب بعد</b><span>ارفع ملف الطلاب من الإعدادات ← الطلاب</span></div>'; return; }
+  if (!list.length) { box.innerHTML = '<div class="ex-empty"><b>لم يُعثر على طالب بهذا البحث</b><span>جرّب جزء من الاسم أو رقم الهوية، أو وسّع البحث للجميع</span></div>'; return; }
   const shown = list.slice(0, S.limit);
   box.innerHTML = shown.map(s => {
     const open = S.open === s.id;

@@ -98,7 +98,7 @@ document.getElementById('exam-period-add').addEventListener('click', async () =>
   errEl.style.display = 'none';
 
   if (!name || !committeeCount || committeeCount < 1) {
-    errEl.textContent = 'اكتب اسم الفترة وعدد اللجان أولاً';
+    errEl.textContent = 'اكتب اسم الفترة وعدد اللجان أولًا';
     errEl.style.display = 'block';
     return;
   }
@@ -164,7 +164,7 @@ async function refreshPeriodsList() {
   const list = document.getElementById('exam-periods-list');
   list.innerHTML = '';
   if (!periodsCache.length) {
-    list.innerHTML = '<div class="ex-empty"><b>ما فيه فترات اختبار بعد</b><span>اضغط «+ فترة جديدة» وحدد عدد اللجان وبداية أرقام الجلوس.</span></div>';
+    list.innerHTML = '<div class="ex-empty"><b>لا توجد فترات اختبار بعد</b><span>اضغط «+ فترة جديدة» وحدد عدد اللجان وبداية أرقام الجلوس.</span></div>';
     return;
   }
   periodsCache.forEach(p => {
@@ -187,7 +187,7 @@ async function refreshPeriodsList() {
     card.addEventListener('click', (e) => { if (!e.target.closest('.epc-del')) open(); });
     card.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
     card.querySelector('.epc-del').addEventListener('click', async () => {
-      if (!confirm(`متأكد تبي تحذف فترة "${p.name}"؟ هذا يحذف كل التوزيع المرتبط فيها.`)) return;
+      if (!confirm(`هل أنت متأكد من حذف الفترة "${p.name}"؟ سيؤدي ذلك إلى حذف التوزيع المرتبط بها كاملًا.`)) return;
       await sb.from('exam_periods').delete().eq('id', p.id);
       await refreshPeriodsList();
     });
@@ -249,7 +249,7 @@ function renderSteps() {
   const st = document.getElementById('exam-generate-state');
   if (st) st.innerHTML = gen
     ? `<span class="ex-dot ok"></span><span>تم التوليد ${fmtDate(p.generated_at)}. إعادة التوليد تعيد ترقيم الكل من الصفر.</span>`
-    : `<span class="ex-dot"></span><span>ما تم التوليد بعد. تأكد من اللجنة الخاصة قبل التوليد.</span>`;
+    : `<span class="ex-dot"></span><span>لم يتم التوليد بعد. تأكد من اللجنة الخاصة قبل التوليد.</span>`;
   document.getElementById('exam-generate-btn').textContent = gen ? 'إعادة توليد التوزيع' : 'توليد التوزيع والترقيم';
 }
 
@@ -366,7 +366,7 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
   });
 
   if (!data || data.length === 0) {
-    resultsEl.innerHTML = '<div class="placeholder" style="padding:14px;"><p>ما فيه نتائج</p></div>';
+    resultsEl.innerHTML = '<div class="placeholder" style="padding:14px;"><p>لا توجد نتائج</p></div>';
     return;
   }
   data.forEach(s => {
@@ -402,7 +402,7 @@ async function refreshSpecialList() {
   progressByPeriod.set(currentPeriodId, pr);
   renderSteps();
   if (!data || data.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:14px;"><p>ما فيه طلاب باللجنة الخاصة بعد</p></div>';
+    list.innerHTML = '<div class="placeholder" style="padding:14px;"><p>لا يوجد طلاب باللجنة الخاصة بعد</p></div>';
     return;
   }
   data.forEach(m => {
@@ -691,7 +691,7 @@ async function printAllCommittees(win) {
     return q.order('committee_number', { ascending: true }).order('seat_number', { ascending: true });
   });
 
-  if (!data || data.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!data || data.length === 0) { win.close(); alert('لا يوجد توزيع مولّد لهذه الفترة بعد'); return; }
 
   const committees = new Map();
   const special = [];
@@ -760,7 +760,7 @@ async function printClassSheets(win) {
     }),
   ]);
 
-  if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!assignments || assignments.length === 0) { win.close(); alert('لا يوجد توزيع مولّد لهذه الفترة بعد'); return; }
 
   const locationMap = {};
   (locations || []).forEach(l => { locationMap[l.committee_number] = l.location; });
@@ -799,7 +799,7 @@ async function printClassSheets(win) {
     innerHtml += classSheetInnerHtml(title, group.rows);
   });
 
-  if (!innerHtml) { win.close(); alert('ما فيه بيانات كافية لبناء كشوف الفصول'); return; }
+  if (!innerHtml) { win.close(); alert('لا توجد بيانات كافية لبناء كشوف الفصول'); return; }
   openPrintWindow(win, 'كشوف مقاعد الاختبار حسب الفصل', innerHtml);
 }
 
@@ -854,7 +854,7 @@ async function printSpecialConditions(win) {
     }),
   ]);
 
-  if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه طلاب باللجنة الخاصة مسكّنين لهذه الفترة بعد'); return; }
+  if (!assignments || assignments.length === 0) { win.close(); alert('لا يوجد طلاب باللجنة الخاصة مسكّنين لهذه الفترة بعد'); return; }
 
   const conditionMap = {};
   (members || []).forEach(m => { conditionMap[m.student_id] = m.condition_note; });
@@ -926,7 +926,7 @@ async function printCommitteeRoster(win) {
     }),
   ]);
 
-  if (!assignments || assignments.length === 0) { win.close(); alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!assignments || assignments.length === 0) { win.close(); alert('لا يوجد توزيع مولّد لهذه الفترة بعد'); return; }
 
   const locationMap = {};
   (locations || []).forEach(l => { locationMap[l.committee_number] = l.location; });
@@ -1127,7 +1127,7 @@ async function printStudentLabels() {
     return q.order('committee_number', { ascending: true }).order('seat_number', { ascending: true });
   });
 
-  if (!data || data.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!data || data.length === 0) { alert('لا يوجد توزيع مولّد لهذه الفترة بعد'); return; }
 
   const rows = data.map(r => ({
     full_name: r.students ? r.students.full_name : '',
@@ -1155,7 +1155,7 @@ async function printStudentLabelsByGrade() {
     return q.order('committee_number', { ascending: true }).order('seat_number', { ascending: true });
   });
 
-  if (!data || data.length === 0) { alert('ما فيه توزيع مولّد لهذه الفترة بعد'); return; }
+  if (!data || data.length === 0) { alert('لا يوجد توزيع مولّد لهذه الفترة بعد'); return; }
 
   const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 
@@ -1188,7 +1188,7 @@ document.getElementById('exam-messages-export-btn').addEventListener('click', as
   if (!currentPeriodId) return;
 
   const template = document.getElementById('exam-message-template').value;
-  if (!template.trim()) { errEl.textContent = 'اكتب نص الرسالة أولاً'; errEl.style.display = 'block'; return; }
+  if (!template.trim()) { errEl.textContent = 'اكتب نص الرسالة أولًا'; errEl.style.display = 'block'; return; }
 
   const { data: assignments } = await readScopedBySchool(scoped => {
     let q = sb.from('exam_committee_assignments')
@@ -1197,7 +1197,7 @@ document.getElementById('exam-messages-export-btn').addEventListener('click', as
     return q;
   });
 
-  if (!assignments || assignments.length === 0) { errEl.textContent = 'ما فيه توزيع مولّد لهذه الفترة بعد'; errEl.style.display = 'block'; return; }
+  if (!assignments || assignments.length === 0) { errEl.textContent = 'لا يوجد توزيع مولّد لهذه الفترة بعد'; errEl.style.display = 'block'; return; }
 
   const [{ data: students }, { data: locations }] = await Promise.all([
     readScopedBySchool(scoped => {
@@ -1233,7 +1233,7 @@ document.getElementById('exam-messages-export-btn').addEventListener('click', as
     rows.push([s.mobile, msg]);
   });
 
-  if (rows.length === 0) { errEl.textContent = 'ما فيه طلاب لديهم رقم جوال مسجّل بهذه الفترة'; errEl.style.display = 'block'; return; }
+  if (rows.length === 0) { errEl.textContent = 'لا يوجد طلاب لديهم رقم جوال مسجّل بهذه الفترة'; errEl.style.display = 'block'; return; }
 
   await loadXLSX();
   const ws = XLSX.utils.aoa_to_sheet(rows);

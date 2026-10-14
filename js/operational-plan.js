@@ -205,7 +205,7 @@ async function renderOpPlanGuide() {
   if (legendEl) legendEl.innerHTML = '';
 
   if (programsCache.length === 0) {
-    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه برامج رسمية مضافة بعد</p></div>';
+    container.innerHTML = '<div class="placeholder" style="padding:20px;"><p>لا توجد برامج رسمية مضافة بعد</p></div>';
     return;
   }
 
@@ -274,7 +274,7 @@ async function renderOpPlanGuide() {
       <div class="op-stat-tile" style="--op-accent:var(--status-good);">
         <div class="lbl">متوسط نسبة الإنجاز</div>
         <div class="val">${avgPct}%</div>
-        <div class="sub">عبر البرامج اللي بدأ العمل عليها</div>
+        <div class="sub">عبر البرامج التي بدأ العمل عليها</div>
       </div>
       <div class="op-stat-tile" style="--op-accent:var(--gold);">
         <div class="lbl">قيد التنفيذ الآن</div>
@@ -454,7 +454,7 @@ async function openProgramTasksView(programId) {
   });
 
   if (!tasks || tasks.length === 0) {
-    bodyEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">ما فيه مهام مدخلة لهذا البرنامج بعد.</p>';
+    bodyEl.innerHTML = '<p style="font-size:12px; color:var(--slate);">لا توجد مهام مدخلة لهذا البرنامج بعد.</p>';
     return;
   }
 
@@ -629,7 +629,7 @@ async function deleteProgramFlow(programId, programTitle) {
 
   let warning = `هل تريد حذف برنامج "${programTitle}"؟`;
   if ((taskCount || 0) > 0 || (assignCount || 0) > 0) {
-    warning += `\n\nتنبيه: فيه ${taskCount || 0} مهمة مُدخلة و${assignCount || 0} إسناد مرتبط بهذا البرنامج - راح تنحذف كلها معه ولا يمكن التراجع.`;
+    warning += `\n\nتنبيه: يوجد ${taskCount || 0} مهمة مُدخلة و${assignCount || 0} إسناد مرتبط بهذا البرنامج - ستُحذف جميعها معه ولا يمكن التراجع.`;
   }
   if (!confirm(warning)) return;
 
@@ -744,7 +744,7 @@ function opeStats(pid) {
   const pct = approved.length ? Math.round(done / approved.length * 100) : 0;
   let stage;
   if (!assigns.length) stage = { cls: 'idle', label: 'بدون برامج مسندة' };
-  else if (!tasks.length) stage = { cls: 'bad', label: 'ما بدأ إدخال المهام' };
+  else if (!tasks.length) stage = { cls: 'bad', label: 'لم يبدأ إدخال المهام' };
   else if (entryDone < assigns.length) stage = { cls: 'warn', label: `أنهى إدخال ${entryDone} من ${assigns.length} برامج` };
   else stage = { cls: 'ok', label: 'أنهى إدخال مهامه' };
   return { tasks, assigns, approved, done, late, pendPlan, pendComp, pending: pendPlan.length + pendComp.length, pct, stage };
@@ -770,7 +770,7 @@ function renderOpEmployees() {
     <span class="ds ds-present"><b>${totalApproved ? Math.round(totalDone / totalApproved * 100) : 0}%</b> إنجاز عام</span>
     <span class="ds ${totalPend ? 'ds-late' : ''}"><b>${totalPend}</b> بانتظار اعتمادك</span>
     <span class="ds ${totalLate ? 'ds-absent' : ''}"><b>${totalLate}</b> مهمة متأخرة</span>
-    ${notStarted ? `<span class="ds ds-absent"><b>${notStarted}</b> ما بدأ الإدخال</span>` : ''}`;
+    ${notStarted ? `<span class="ds ds-absent"><b>${notStarted}</b> لم يبدأ الإدخال</span>` : ''}`;
 
   const q = opeSearch;
   let shown = rows.filter(r => !q || r.m.name.includes(q));
@@ -779,8 +779,8 @@ function renderOpEmployees() {
   else if (opeSort === 'low') shown.sort((a, b) => a.st.pct - b.st.pct || a.m.name.localeCompare(b.m.name, 'ar'));
   else shown.sort((a, b) => att(b) - att(a) || a.st.pct - b.st.pct || a.m.name.localeCompare(b.m.name, 'ar'));
 
-  if (!rows.length) { list.innerHTML = '<div class="ex-empty"><b>ما فيه مشاركين بالخطة بعد</b><span>أضف الموظفين من الأعلى ثم أسند لكل واحد برامجه</span></div>'; return; }
-  if (!shown.length) { list.innerHTML = '<div class="ex-empty"><b>ما فيه نتائج</b></div>'; return; }
+  if (!rows.length) { list.innerHTML = '<div class="ex-empty"><b>لا يوجد مشاركون بالخطة بعد</b><span>أضف الموظفين من الأعلى ثم أسند إلى كل واحد منهم برامجه</span></div>'; return; }
+  if (!shown.length) { list.innerHTML = '<div class="ex-empty"><b>لا توجد نتائج</b></div>'; return; }
   list.innerHTML = shown.map(({ m, st }) => `
     <button type="button" class="ope-card" data-pid="${m.pid}">
       <span class="cvt-av">${esc(opeInitials(m.name))}</span>
@@ -883,7 +883,7 @@ function renderOpeDrawer() {
     const dn = appr.filter(t => (opeCompsByTask.get(t.id) || []).some(c => c.status === 'approved')).length;
     const pct = appr.length ? Math.round(dn / appr.length * 100) : 0;
     const tasks = g.tasks.slice().sort((a, b) => (a.duration_type === 'single_week' ? 0 : 1) - (b.duration_type === 'single_week' ? 0 : 1) || String(a.semester || '').localeCompare(String(b.semester || '')) || (a.week_number || 0) - (b.week_number || 0));
-    const entry = g.assign ? (g.assign.tasks_entry_complete ? '<span class="ope-stage ok">أنهى الإدخال</span>' : (g.tasks.length ? '<span class="ope-stage warn">يُدخل المهام</span>' : '<span class="ope-stage bad">ما دخّل مهام</span>')) : '<span class="ope-stage idle">غير مسند حاليًا</span>';
+    const entry = g.assign ? (g.assign.tasks_entry_complete ? '<span class="ope-stage ok">أنهى الإدخال</span>' : (g.tasks.length ? '<span class="ope-stage warn">يُدخل المهام</span>' : '<span class="ope-stage bad">لم يُدخل مهام</span>')) : '<span class="ope-stage idle">غير مسند حاليًا</span>';
     return `
       <div class="ope-prog">
         <div class="ope-prog-h">
@@ -936,7 +936,7 @@ function renderOpeDrawer() {
   body.innerHTML = kpis + pendingHtml + assignHtml + `
     <section class="ope-sec">
       <div class="ope-sec-h"><h4>البرامج والمهام</h4>${member && !opeAssignOpen ? '<button type="button" class="ope-link strong" id="ope-assign-open">+ إسناد برامج</button>' : ''}</div>
-      ${progBlocks || '<div class="ex-empty"><b>ما فيه برامج مسندة</b><span>اضغط "إسناد برامج" وحدد برامجه</span></div>'}
+      ${progBlocks || '<div class="ex-empty"><b>لا توجد برامج مسندة</b><span>اضغط "إسناد برامج" وحدد برامجه</span></div>'}
     </section>
     ${member ? `<button type="button" class="ope-link danger" id="ope-remove-member">إزالة ${esc(name)} من الخطة</button>` : ''}`;
 
@@ -945,7 +945,7 @@ function renderOpeDrawer() {
   if (allBtn) allBtn.addEventListener('click', () => opApproveAll(pid, allBtn));
   body.querySelectorAll('.ope-unassign').forEach(b => b.addEventListener('click', async () => {
     const n = Number(b.dataset.n);
-    if (!confirm(n ? `إلغاء إسناد البرنامج؟ مهامه المدخلة (${n}) تبقى محفوظة بس الموظف ما يقدر يضيف عليه مهام جديدة.` : 'إلغاء إسناد هذا البرنامج؟')) return;
+    if (!confirm(n ? `إلغاء إسناد البرنامج؟ مهامه المدخلة (${n}) تبقى محفوظة، لكن لا يستطيع الموظف إضافة مهام جديدة إليه.` : 'إلغاء إسناد هذا البرنامج؟')) return;
     const { error } = await sb.from('program_assignments').delete().eq('id', b.dataset.aid);
     if (error) { alert('تعذر الإلغاء: ' + error.message); return; }
     await refreshOpEmployees();
@@ -979,7 +979,7 @@ function renderOpeDrawer() {
     await refreshOpEmployees();
   });
   body.querySelector('#ope-remove-member')?.addEventListener('click', async () => {
-    if (!confirm(`إزالة ${name} من الخطة التشغيلية؟ ما يقدر يدخل صفحة الخطة بعدها، ومهامه المدخلة تبقى محفوظة.`)) return;
+    if (!confirm(`إزالة ${name} من الخطة التشغيلية؟ لن يتمكن بعدها من دخول صفحة الخطة، وتبقى مهامه المدخلة محفوظة.`)) return;
     const { error } = await sb.from('operational_plan_members').delete().eq('id', member.id);
     if (error) { alert('تعذرت الإزالة: ' + error.message); return; }
     closeOpeDrawer();
@@ -1072,7 +1072,7 @@ function renderOpApprovals() {
   const compList = document.getElementById('opplan-pending-completion-list');
   if (!planList) return;
   if (compList) compList.innerHTML = '';
-  if (!byEmp.size) { planList.innerHTML = '<div class="ex-empty"><b>ما فيه شي ينتظر اعتمادك</b><span>أي مهمة جديدة أو إنجاز يسجله الموظفين بيطلع هنا</span></div>'; return; }
+  if (!byEmp.size) { planList.innerHTML = '<div class="ex-empty"><b>لا يوجد ما ينتظر اعتمادك</b><span>ستظهر هنا أي مهمة جديدة أو إنجاز يسجله الموظفون</span></div>'; return; }
   planList.innerHTML = [...byEmp.entries()].sort((a, b) => b[1].length - a[1].length).map(([pid, items]) => `
     <section class="ope-sec ope-appr-group">
       <div class="ope-sec-h">
@@ -1164,7 +1164,7 @@ async function renderMyProgramList() {
   const wrap = document.getElementById('myprog-list');
   if (!wrap) return;
   if (myProgAssignments.length === 0) {
-    wrap.innerHTML = '<div class="placeholder" style="padding:24px;"><p>ما فيه برامج مسندة لك بعد — راجع المدير</p></div>';
+    wrap.innerHTML = '<div class="placeholder" style="padding:24px;"><p>لا توجد برامج مسندة إليك بعد — راجع المدير</p></div>';
     return;
   }
 
@@ -1261,7 +1261,7 @@ async function renderProgramEditor(body, assignment, program) {
           <span style="flex:1;">${esc(t.title)}</span>
           <span style="flex-shrink:0; font-size:10.5px; color:${statusColor[t.plan_status] || 'var(--status-idle)'};">${statusLabel[t.plan_status] || t.plan_status}</span>
         </div>`).join('')}
-    </div>` : '<p style="font-size:12px; color:var(--slate); margin-bottom:10px;">ما فيه مهام مدخلة بعد لهذا البرنامج</p>';
+    </div>` : '<p style="font-size:12px; color:var(--slate); margin-bottom:10px;">لا توجد مهام مدخلة بعد لهذا البرنامج</p>';
 
   body.innerHTML = `
     ${program.department || program.school_indicator ? `
@@ -1349,7 +1349,7 @@ onEl('opt-download-template', 'click', async () => {
   await loadXLSX();
   const headers = ['الهدف العام', 'الهدف التشغيلي', 'البرنامج', 'عنوان المهمة', 'الوصف', 'نوع المدة', 'رقم الأسبوع', 'التكرار'];
   const example = ['(مثال) رفع كفاءة العملية التعليمية', '(مثال) تطوير أداء المعلمين', '(مثال) برنامج التطوير المهني', 'إعداد الجدول الدراسي', 'وصف مختصر للمهمة', 'أسبوع محدد', '3', ''];
-  const note = ['نوع المدة: اكتب بالضبط أحد هذه الخيارات → أسبوع محدد / الفصل الأول / الفصل الثاني / طوال العام', '', '', '', '', 'التكرار (لو المدة فصل أو عام): أسبوعي أو يومي — اتركه فاضي إذا أسبوع محدد', '', ''];
+  const note = ['نوع المدة: اكتب أحد هذه الخيارات بدقة → أسبوع محدد / الفصل الأول / الفصل الثاني / طوال العام', '', '', '', '', 'التكرار (إذا كانت المدة فصلًا أو عامًا): أسبوعي أو يومي — اتركه فارغًا إذا كان لأسبوع محدد', '', ''];
   const ws = XLSX.utils.aoa_to_sheet([headers, example, note]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'المهام');
@@ -1384,7 +1384,7 @@ onEl('opt-excel-upload', 'click', async () => {
   successEl.style.display = 'none';
 
   if (!fileInput.files || fileInput.files.length === 0) {
-    errEl.textContent = 'اختر ملف إكسل أولاً';
+    errEl.textContent = 'اختر ملف إكسل أولًا';
     errEl.style.display = 'block';
     return;
   }

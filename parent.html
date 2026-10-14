@@ -334,7 +334,7 @@
   <div id="kids-bar"></div>
 
   <div id="school-not-found" class="hidden-view" style="padding:40px 20px; text-align:center; color:#c0392b; font-weight:700;">
-    تعذر تحديد المدرسة. تأكد إن الرابط اللي استخدمته صحيح، أو تواصل مع إدارة المدرسة.
+    تعذّر تحديد المدرسة. تأكد من صحة الرابط الذي استخدمته، أو تواصل مع إدارة المدرسة.
     <div id="school-not-found-detail" style="margin-top:10px; font-weight:500; font-size:12.5px; color:#8a3a30; direction:ltr; unicode-bidi:plaintext;"></div>
   </div>
 
@@ -743,8 +743,8 @@ function renderKidSheet() {
   const nameVal = document.getElementById('kid-name') ? document.getElementById('kid-name').value : (d.name || '');
   const secs = sectionsByGrade[d.grade] || [];
   document.getElementById('kid-sheet-body').innerHTML = `
-    <p class="kid-hint">تفتح الصفحة على خطة صفه وجدول فصله مباشرة كل مرة، ويوصلك تنبيه الاختبار اللي يخص فصله. الاختيار يُحفظ في جوالك فقط.</p>
-    <div class="kid-lbl">اسم الابن <small>(اختياري، يفيدك لو عندك أكثر من ابن)</small></div>
+    <p class="kid-hint">تُفتح الصفحة على خطة صفه وجدول فصله مباشرة في كل مرة، ويصلك تنبيه الاختبار الذي يخص فصله. الاختيار يُحفظ في جوالك فقط.</p>
+    <div class="kid-lbl">اسم الابن <small>(اختياري، يفيدك إن كان لديك أكثر من ابن)</small></div>
     <input id="kid-name" class="kid-input" maxlength="20" autocomplete="off" value="${escAttr(nameVal)}" />
     <div class="kid-lbl">الصف</div>
     <div class="kid-opts">${schoolGrades.map(g => `<button type="button" class="kid-opt${g === d.grade ? ' on' : ''}" data-g="${g}">${esc(gradeLabel(g))}</button>`).join('')}</div>
@@ -1171,7 +1171,7 @@ async function bootParentPage() {
       const err = window.__resolveSchoolError;
       detailEl.textContent = err
         ? `(${err.code || '?'}) ${err.message || ''}`
-        : '(لا يوجد خطأ من الخادم - الاستعلام رجع فاضي: تأكد أن slug المدرسة صحيح بجدول schools)';
+        : '(لا يوجد خطأ من الخادم - أعاد الاستعلام نتيجة فارغة: تأكد أن slug المدرسة صحيح بجدول schools)';
     }
     document.getElementById('school-not-found').classList.remove('hidden-view');
     document.getElementById('weekly-view').classList.add('hidden-view');
@@ -1250,7 +1250,7 @@ function renderNotifSheet(st) {
     body.innerHTML = `<p class="notif-hint">الإشعارات مفعّلة لـ: <b>${names}</b></p>${what}
       <button type="button" class="notif-btn off" id="notif-off">إيقاف الإشعارات</button>`;
   } else {
-    body.innerHTML = `<p class="notif-hint">يوصلك تنبيه على جوالك لما:</p>${what}
+    body.innerHTML = `<p class="notif-hint">يصلك تنبيه على جوالك عندما:</p>${what}
       <p class="notif-hint">لـ: <b>${names}</b></p>
       <button type="button" class="notif-btn go" id="notif-on">تفعيل الإشعارات</button>`;
   }
@@ -1270,17 +1270,17 @@ document.getElementById('notif-sheet-body').addEventListener('click', async (e) 
   } catch (err) {
     closeNotifSheet();
     const m = String(err && err.message || '');
-    pToast(m === 'denied' ? 'رفضت الإذن. تقدر تسمح بالإشعارات من إعدادات الجوال لهذا التطبيق.'
-      : m === 'dismissed' ? 'ما تم التفعيل. اضغط الجرس مرة ثانية ووافق على الإذن.'
+    pToast(m === 'denied' ? 'رُفض الإذن. يمكنك السماح بالإشعارات من إعدادات الجوال لهذا التطبيق.'
+      : m === 'dismissed' ? 'لم يتم التفعيل. اضغط الجرس مرة أخرى ووافق على الإذن.'
       : 'تعذر التفعيل حاليًا، حاول لاحقًا.');
   }
 });
 heroBell.addEventListener('click', async () => {
   const st = await refreshBell();
-  if (st === 'unsupported') { pToast('جهازك أو متصفحك ما يدعم الإشعارات.'); return; }
+  if (st === 'unsupported') { pToast('جهازك أو متصفحك لا يدعم الإشعارات.'); return; }
   if (st === 'ios-install') { pToast('في الآيفون: ثبّت التطبيق أولًا من زر «تثبيت»، وبعدها فعّل الإشعارات من داخل التطبيق.'); return; }
   if (st === 'denied') { pToast('الإشعارات مرفوضة. اسمح بها من إعدادات الجوال لهذا التطبيق ثم ارجع هنا.'); return; }
-  if (!kids.length) { pToast('احفظ صف ابنك أولًا عشان توصلك إشعاراته'); openKidSheet(null, false); return; }
+  if (!kids.length) { pToast('احفظ صف ابنك أولًا لتصلك إشعاراته'); openKidSheet(null, false); return; }
   renderNotifSheet(st);
   openSheet(notifSheet);
 });
@@ -1314,7 +1314,7 @@ async function loadContactList() {
     .order('group_name', { ascending: true }).order('sort_order', { ascending: true });
 
   if (error || !data || data.length === 0) {
-    container.innerHTML = '<div class="placeholder" style="padding:20px; text-align:center; color:#8a8f9c; font-size:12.5px;">ما فيه بيانات تواصل مضافة لهذي المدرسة بعد</div>';
+    container.innerHTML = '<div class="placeholder" style="padding:20px; text-align:center; color:#8a8f9c; font-size:12.5px;">لا توجد بيانات تواصل مضافة لهذه المدرسة بعد</div>';
     return;
   }
 

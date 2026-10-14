@@ -124,7 +124,7 @@ async function refreshDashboard() {
 
   const grid = document.getElementById('grid');
   if (!assignments || assignments.length === 0) {
-    grid.innerHTML = '<div class="placeholder">ما فيه مواد مضافة لهذه الفترة بعد</div>';
+    grid.innerHTML = '<div class="placeholder">لا توجد مواد مضافة لهذه الفترة بعد</div>';
     return;
   }
 
@@ -160,7 +160,7 @@ async function refreshDashboard() {
       <div class="progress-wrap"><div class="progress-bar" style="width:${pct}%; background:${progressColor(pct)};"></div></div>
       <div class="footer-row">
         <span class="stage-label ${stageInfo.done ? 'done' : ''}">${stageInfo.label}</span>
-        <span class="absence-badge ${absenceCount > 0 ? 'has' : 'none'}">${absenceCount > 0 ? absenceCount + ' غائب' : 'لا يوجد غياب'}</span>
+        <span class="absence-badge ${absenceCount > 0 ? 'has' : 'none'}">${absenceCount > 0 ? absenceCount + ' غائب' : 'لا توجد غياب'}</span>
       </div>`;
     grid.appendChild(card);
   });

@@ -90,7 +90,7 @@ async function refreshSectionOptions() {
   const sections = [...new Set((data || []).map(s => s.class_section).filter(n => n > 0))].sort((a, b) => a - b);
 
   if (sections.length === 0) {
-    sectionSelect.innerHTML = '<option value="">ما فيه طلاب مسجلين لهذه المرحلة بعد</option>';
+    sectionSelect.innerHTML = '<option value="">لا يوجد طلاب مسجلون لهذه المرحلة بعد</option>';
     return;
   }
   sectionSelect.innerHTML = '<option value="">اختر الفصل</option>' +
@@ -125,14 +125,14 @@ function renderFilteredStudentRows() {
   const container = document.getElementById('sf-students-list');
   if (!sfSection) { container.innerHTML = ''; return; }
   if (studentsCache.length === 0) {
-    container.innerHTML = '<div class="placeholder"><p>ما فيه طلاب مسجلين بهذا الفصل</p></div>';
+    container.innerHTML = '<div class="placeholder"><p>لا يوجد طلاب مسجلون بهذا الفصل</p></div>';
     return;
   }
   const term = sfSearchTerm.trim();
   const filtered = term ? studentsCache.filter(s => (s.full_name || '').includes(term)) : studentsCache;
   container.innerHTML = '';
   if (filtered.length === 0) {
-    container.innerHTML = '<div class="placeholder"><p>ما فيه طالب بهذا الاسم بالفصل</p></div>';
+    container.innerHTML = '<div class="placeholder"><p>لا يوجد طالب بهذا الاسم بالفصل</p></div>';
     return;
   }
   filtered.forEach(st => container.appendChild(buildStudentRow(st)));
@@ -254,7 +254,7 @@ async function renderLog(logWrap, studentId) {
 
   const rows = data || [];
   if (rows.length === 0) {
-    logWrap.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin:0;">ما فيه سجلات لهذا الطالب بعد</p>';
+    logWrap.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin:0;">لا توجد سجلات لهذا الطالب بعد</p>';
     return;
   }
 
@@ -313,7 +313,7 @@ async function refreshOverviewSectionOptions() {
   const sections = [...new Set((data || []).map(s => s.class_section).filter(n => n > 0))].sort((a, b) => a - b);
 
   if (sections.length === 0) {
-    sectionSelect.innerHTML = '<option value="">ما فيه طلاب مسجلين لهذه المرحلة بعد</option>';
+    sectionSelect.innerHTML = '<option value="">لا يوجد طلاب مسجلون لهذه المرحلة بعد</option>';
     return;
   }
   sectionSelect.innerHTML = '<option value="">اختر الفصل</option>' +
@@ -407,13 +407,13 @@ function renderOverviewStats() {
 function renderOverviewStudentList() {
   const listEl = document.getElementById('sfo-student-list');
   if (sfoStudentsCache.length === 0) {
-    listEl.innerHTML = '<div class="placeholder"><p>ما فيه طلاب مسجلين بهذا الفصل</p></div>';
+    listEl.innerHTML = '<div class="placeholder"><p>لا يوجد طلاب مسجلون بهذا الفصل</p></div>';
     return;
   }
   const term = sfoSearchTerm.trim();
   const filtered = term ? sfoStudentsCache.filter(s => (s.full_name || '').includes(term)) : sfoStudentsCache;
   if (filtered.length === 0) {
-    listEl.innerHTML = '<div class="placeholder"><p>ما فيه طالب بهذا الاسم بالفصل</p></div>';
+    listEl.innerHTML = '<div class="placeholder"><p>لا يوجد طالب بهذا الاسم بالفصل</p></div>';
     return;
   }
   listEl.innerHTML = filtered.map(s => {
@@ -491,7 +491,7 @@ function renderDetailStats(rows) {
 function renderDetailLog(rows) {
   const detailLog = document.getElementById('sf-detail-log');
   if (rows.length === 0) {
-    detailLog.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin:0;">ما فيه سجلات لهذا الطالب بعد</p>';
+    detailLog.innerHTML = '<p style="font-size:12.5px; color:var(--slate); margin:0;">لا توجد سجلات لهذا الطالب بعد</p>';
     return;
   }
   detailLog.innerHTML = '';

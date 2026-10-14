@@ -183,7 +183,7 @@ async function renderMyScheduleWidget(container, dayKey, dateStr) {
   };
   const draw = () => {
     const bodyHtml = lines.length === 0
-      ? '<div style="font-size:13.5px; color:var(--slate);">ما عندك حصص اليوم</div>'
+      ? '<div style="font-size:13.5px; color:var(--slate);">لا توجد لديك حصص اليوم</div>'
       : lines.map(l => {
         const st = isToday && !l.lost ? statusOf(l.t) : { status: 'later' };
         const tag = st.status === 'now' ? `<span class="ps-tag now">الآن · باقي ${st.left} د</span>`
@@ -200,7 +200,7 @@ async function renderMyScheduleWidget(container, dayKey, dateStr) {
   if (hero) {
     const n = (lessons || []).length, m = duties.length;
     const dutyTxt = m ? ` و${m === 1 ? 'مناوبة' : m === 2 ? 'مناوبتين' : m + ' مناوبات'}` : '';
-    hero.textContent = n ? `عندك ${n} ${n === 1 ? 'حصة' : n === 2 ? 'حصتين' : n <= 10 ? 'حصص' : 'حصة'}${dutyTxt} اليوم` : (m ? `عندك ${m === 1 ? 'مناوبة' : m === 2 ? 'مناوبتين' : m + ' مناوبات'} اليوم` : 'ما عندك حصص اليوم');
+    hero.textContent = n ? `لديك ${n} ${n === 1 ? 'حصة' : n === 2 ? 'حصتين' : n <= 10 ? 'حصص' : 'حصة'}${dutyTxt} اليوم` : (m ? `لديك ${m === 1 ? 'مناوبة' : m === 2 ? 'مناوبتين' : m + ' مناوبات'} اليوم` : 'لا توجد لديك حصص اليوم');
   }
 }
 
@@ -259,7 +259,7 @@ async function computeWsStatus(groupKey) {
     if (!dayKey) return { text: 'إجازة نهاية الأسبوع', tone: 'idle' };
     const { data: changes } = await scopedSel('daily_schedule_changes', 'id', q => q.eq('change_date', dateStr));
     const n = (changes || []).length;
-    return n ? { text: `${arCount(n, 'تغيير', 'تغييران', 'تغييرات')} على حصص اليوم (انتظار/تبديل)`, tone: 'bad' } : { text: 'ما فيه تغييرات على جدول اليوم', tone: 'good' };
+    return n ? { text: `${arCount(n, 'تغيير', 'تغييران', 'تغييرات')} على حصص اليوم (انتظار/تبديل)`, tone: 'bad' } : { text: 'لا توجد تغييرات على جدول اليوم', tone: 'good' };
   }
   if (groupKey === 'exams') {
     const { data: cov } = await scopedSel('subject_exam_coverage', 'subject_name, grade_level, exam_date', q => q.gte('exam_date', dateStr));
@@ -280,8 +280,8 @@ async function computeWsStatus(groupKey) {
       scopedSel('op_task_completions', 'id', q => q.eq('status', 'pending')),
     ]);
     const n = (t || []).length + (c || []).length;
-    if (currentProfile.role !== 'admin') return n ? { text: `${arCount(n, 'عنصر', 'عنصران', 'عناصر')} بالخطة التشغيلية بانتظار الاعتماد`, tone: 'warn' } : { text: 'ما فيه شي معلّق بالخطة التشغيلية', tone: 'good' };
-    return n ? { text: `${arCount(n, 'عنصر', 'عنصران', 'عناصر')} بانتظار اعتمادك`, tone: 'warn' } : { text: 'ما فيه شي بانتظار اعتمادك', tone: 'good' };
+    if (currentProfile.role !== 'admin') return n ? { text: `${arCount(n, 'عنصر', 'عنصران', 'عناصر')} بالخطة التشغيلية بانتظار الاعتماد`, tone: 'warn' } : { text: 'لا توجد عناصر معلّقة في الخطة التشغيلية', tone: 'good' };
+    return n ? { text: `${arCount(n, 'عنصر', 'عنصران', 'عناصر')} بانتظار اعتمادك`, tone: 'warn' } : { text: 'لا يوجد ما ينتظر اعتمادك', tone: 'good' };
   }
   return null;
 }
@@ -366,7 +366,7 @@ function renderHomeHeader() {
     if (g) g.textContent = 'لوحة القيادة';
     if (sub) sub.textContent = `${dateStr}${first ? ' · مرحبًا ' + first : ''}`;
   } else if (role === 'deputy') {
-    if (g) g.textContent = 'وش تبي تسوي اليوم؟';
+    if (g) g.textContent = 'ماذا تريد أن تنجز اليوم؟';
     if (sub) sub.textContent = `${now.getHours() < 12 ? 'صباح الخير' : 'مساء الخير'}${first ? '، ' + first : ''} · ${dateStr}`;
   } else {
     if (g) g.textContent = `${now.getHours() < 12 ? 'صباح الخير' : 'مساء الخير'}${first ? '، ' + first : ''}`;
@@ -534,18 +534,18 @@ async function renderAdminDashboard(container) {
   }
   if (missingCount > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('weekly-tracking', `${missingCount} مادة لسا ما دخّل لها المعلمون خطة الأسبوع ${planWeek()}`, { level: 'mid', action: 'عرض الناقص' }));
+    attentionList.appendChild(attentionItem('weekly-tracking', `${missingCount} مادة لم يُدخل لها المعلمون خطة الأسبوع بعد ${planWeek()}`, { level: 'mid', action: 'عرض الناقص' }));
   }
   if (dutyMissingCount > 0) {
     anyAttention = true;
-    attentionList.appendChild(attentionItem('duty', `${dutyMissingCount} من مناوبي اليوم لسا ما سجّلت حضورهم`, { level: 'mid', action: 'تسجيل الحضور' }));
+    attentionList.appendChild(attentionItem('duty', `${dutyMissingCount} من مناوبي اليوم لم يُسجَّل حضورهم بعد`, { level: 'mid', action: 'تسجيل الحضور' }));
   }
   if (unlinkedCount > 0) {
     anyAttention = true;
     attentionList.appendChild(attentionItem('portal', `${unlinkedCount} موظف بدون حساب دخول مربوط`, { level: 'low', action: 'ربط الحسابات' }));
   }
   if (!anyAttention) {
-    attentionList.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">كل شي محدّث، ما فيه شي يحتاج قرارك حاليًا.</div>';
+    attentionList.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">كل شيء محدّث، ولا يوجد ما يحتاج إلى قرارك حاليًا.</div>';
   }
   renderTodayCard(dayKey, dateStr, totalDutyToday, dutyMissingCount);
 }
@@ -580,9 +580,9 @@ async function renderTodayCard(dayKey, dateStr, dutyTotal, dutyMissing) {
   let html = '';
   if (!dayKey) html += row('اليوم', 'إجازة نهاية الأسبوع');
   else {
-    html += row('المناوبات', dutyTotal ? `${dutyTotal} مناوبة اليوم${dutyMissing ? ` · ${dutyMissing} بدون تسجيل حضور` : ' · كلها مسجّلة'}` : 'ما فيه مناوبات مسجلة لليوم', 'duty', 'فتح');
+    html += row('المناوبات', dutyTotal ? `${dutyTotal} مناوبة اليوم${dutyMissing ? ` · ${dutyMissing} بدون تسجيل حضور` : ' · جميعها مسجّلة'}` : 'لا توجد مناوبات مسجلة لليوم', 'duty', 'فتح');
     const nChanges = (changes || []).length;
-    html += row('الجدول', nChanges ? `${nChanges} تغيير على حصص اليوم (انتظار/تبديل)` : 'ما فيه تغييرات على جدول اليوم', 'substitutes', nChanges ? 'عرض' : 'توزيع بدلاء');
+    html += row('الجدول', nChanges ? `${nChanges} تغيير على حصص اليوم (انتظار/تبديل)` : 'لا توجد تغييرات على جدول اليوم', 'substitutes', nChanges ? 'عرض' : 'توزيع بدلاء');
   }
   const next = (coverage || []).filter(r => r.exam_date).sort((a, b) => a.exam_date.localeCompare(b.exam_date))[0];
   if (next) {
@@ -640,7 +640,7 @@ async function renderTeacherDashboard(container) {
   if (missingAssignments.length > 0) {
     any = true;
     const names = missingAssignments.map(a => a.subjects ? esc(a.subjects.name) : '').filter(Boolean).join('، ');
-    list.appendChild(attentionItem('weekly', `لسا ما سلّمت خطة الأسبوع ${planWeek()} لـ: ${names}`, { level: 'high', action: 'تسليم الخطة', primary: true }));
+    list.appendChild(attentionItem('weekly', `لم تُسلِّم خطة الأسبوع بعد ${planWeek()} لـ: ${names}`, { level: 'high', action: 'تسليم الخطة', primary: true }));
   } else if ((assignments || []).length > 0) {
     any = true;
     const t = tiles.find(x => x.key === 'weekly');
@@ -656,7 +656,7 @@ async function renderTeacherDashboard(container) {
   }
 
   if (!any) {
-    list.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">ما عندك مهام معلّقة حاليًا.</div>';
+    list.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">لا توجد لديك مهام معلّقة حاليًا.</div>';
   }
 }
 
@@ -744,7 +744,7 @@ async function renderCommandDashboard(container) {
       ${kpi('إنجاز الخطة التشغيلية', opRate + '%', `${approved} من ${comp.length} معتمدة`, opRate)}
       ${kpi('بانتظار اعتمادك', pendingApprovals, 'بالخطة التشغيلية', null, pendingApprovals ? '#A4501A' : '')}
       ${kpi('الزيارات الصفية هذا الشهر', vThis, trend(vThis, vLast))}
-      ${kpi('متوسط آخر اختبار', examPct != null ? examPct + '%' : '—', lastReport ? esc(lastReport.title) : 'ما فيه تقارير اختبارات بعد')}
+      ${kpi('متوسط آخر اختبار', examPct != null ? examPct + '%' : '—', lastReport ? esc(lastReport.title) : 'لا توجد تقارير اختبارات بعد')}
     </div>
     <div class="home-cols">
       <section class="home-card" style="flex:3 1 460px;">
@@ -752,13 +752,13 @@ async function renderCommandDashboard(container) {
           <div><h3>رفع الخطط الأسبوعية حسب المادة</h3><div style="font-size:12.5px; color:var(--slate); margin-top:2px;">${esc(weekLabel(planWeek()))}</div></div>
           <div style="display:flex; gap:12px;"><button type="button" class="cmd-link" id="cal-edit-btn">ضبط التقويم</button><button type="button" class="cmd-link" data-key="weekly-tracking">التفاصيل</button></div>
         </div>
-        ${noPlan ? `<div style="font-size:13.5px; color:var(--slate);">الأسبوع ${planWeek()} بدون خطة أسبوعية، فما فيه شي يُتابع.</div>` : subjRows.length ? `<div style="overflow-x:auto;"><table class="cmd-table">
+        ${noPlan ? `<div style="font-size:13.5px; color:var(--slate);">الأسبوع ${planWeek()} بدون خطة أسبوعية، فلا يوجد ما يُتابَع.</div>` : subjRows.length ? `<div style="overflow-x:auto;"><table class="cmd-table">
           <thead><tr><th class="al-r">المادة</th>${GRADE_KEYS.map(g => `<th>${GRADE_SHORT[g]}</th>`).join('')}<th style="width:32%;">النسبة</th></tr></thead>
           <tbody>${subjRows.map(r => `<tr>
             <td class="al-r" style="font-weight:600;">${esc(r.name)}</td>
             ${r.cells.map(c => `<td>${!c.exp ? '<span style="color:#C3CAD6;">·</span>' : c.done ? '<span class="ok" aria-label="مرفوعة">✓</span>' : '<span class="miss" aria-label="ناقصة">—</span>'}</td>`).join('')}
             <td><div class="cmd-bar"><div style="width:${r.pct}%;"></div></div></td></tr>`).join('')}</tbody></table></div>`
-          : '<div style="font-size:13.5px; color:var(--slate);">ما فيه مواد مسندة للمعلمين بعد</div>'}
+          : '<div style="font-size:13.5px; color:var(--slate);">لا توجد مواد مسندة للمعلمين بعد</div>'}
       </section>
       <section class="home-card cmd-alerts" style="flex:2 1 300px;"><h3>يحتاج قرارك</h3><div id="dash-attention-list" style="display:flex; flex-direction:column; gap:8px;"></div></section>
     </div>
@@ -769,7 +769,7 @@ async function renderCommandDashboard(container) {
           const e = byWeek.get(w); const pct = e.total ? Math.round(e.ok / e.total * 100) : 0;
           return `<div class="cc-col"><span class="cc-val">${pct}%</span><div class="cc-bar" style="height:${Math.max(4, pct)}%;" title="${e.ok} من ${e.total}"></div><span class="cc-lbl">أ${w}</span></div>`;
         }).join('')}</div><div style="font-size:12px; color:var(--slate);">نسبة المهام المعتمد إنجازها من المسجّلة لكل أسبوع</div>`
-          : '<div style="font-size:13.5px; color:var(--slate);">ما فيه إنجازات مسجّلة بالخطة التشغيلية بعد</div>'}
+          : '<div style="font-size:13.5px; color:var(--slate);">لا توجد إنجازات مسجّلة بالخطة التشغيلية بعد</div>'}
       </section>
       <section class="home-card" style="flex:2 1 300px;"><h3>اليوم في المدرسة</h3><div id="dash-today" style="display:flex; flex-direction:column; gap:2px;"><div style="font-size:13px; color:var(--slate);">جارٍ التحميل...</div></div></section>
     </div>`;
@@ -795,7 +795,7 @@ async function renderCommandDashboard(container) {
     dutyMissing = sm.missing;
     if (dutyMissing > 0) { any = true; list.appendChild(attentionItem('duty', `${dutyMissing} من مناوبي اليوم بدون تسجيل حضور`, { level: 'mid', action: 'تسجيل' })); }
   }
-  if (!any) list.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">كل شي محدّث، ما فيه شي يحتاج قرارك حاليًا.</div>';
+  if (!any) list.innerHTML = '<div style="font-size:13.5px; color:var(--slate); padding:6px 0;">كل شيء محدّث، ولا يوجد ما يحتاج إلى قرارك حاليًا.</div>';
   renderTodayCard(dayKey, dateStr, dutyTotal, dutyMissing);
 }
 
@@ -812,13 +812,13 @@ export function renderCalendarEditor(box, onSaved) {
       <div style="background:var(--sand); border-radius:12px; padding:12px 14px; display:flex; flex-direction:column; gap:10px; margin-top:6px;">
         <label style="font-size:13px; font-weight:700; display:flex; flex-wrap:wrap; align-items:center; gap:8px;">بداية الأسبوع الأول (يوم الأحد)
           <input type="date" id="cal-start" value="${academicCalendar.start || DEFAULT_ACADEMIC_START}" style="width:auto; margin:0;" /></label>
-        <div style="font-size:13px; font-weight:700;">أسابيع الإجازة (ما تنحسب بالترقيم)</div>
+        <div style="font-size:13px; font-weight:700;">أسابيع الإجازة (لا تُحتسب في الترقيم)</div>
         <div style="display:flex; flex-wrap:wrap; gap:6px;">${breaks.length ? breaks.map(b => `<span style="display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--border); border-radius:99px; padding:5px 10px; font-size:12.5px;">أسبوع ${fmt(b)}<button type="button" data-rm="${b}" aria-label="حذف" style="border:0; background:none; color:var(--danger); font-size:14px; cursor:pointer; padding:0;">×</button></span>`).join('') : '<span style="font-size:12.5px; color:var(--slate);">لا توجد</span>'}</div>
         <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
           <input type="date" id="cal-break" style="width:auto; margin:0;" aria-label="أي يوم من أسبوع الإجازة" />
           <button type="button" class="btn-secondary" id="cal-add" style="width:auto;">+ إضافة أسبوع إجازة</button>
         </div>
-        <div style="font-size:13px; font-weight:700;">أسابيع دراسة بدون خطة أسبوعية (ما تنحسب ناقصة)</div>
+        <div style="font-size:13px; font-weight:700;">أسابيع دراسة بدون خطة أسبوعية (لا تُحتسب ناقصة)</div>
         <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">${noPlan.length ? noPlan.map(w => `<span style="display:inline-flex; align-items:center; gap:6px; background:#fff; border:1px solid var(--border); border-radius:99px; padding:5px 10px; font-size:12.5px;">الأسبوع ${w}<button type="button" data-rmw="${w}" aria-label="حذف" style="border:0; background:none; color:var(--danger); font-size:14px; cursor:pointer; padding:0;">×</button></span>`).join('') : '<span style="font-size:12.5px; color:var(--slate);">لا توجد</span>'}
           <input type="number" id="cal-noplan" min="1" max="40" placeholder="رقم" style="width:80px; margin:0; padding:7px 6px; text-align:center;" aria-label="رقم الأسبوع" />
           <button type="button" class="btn-secondary" id="cal-noplan-add" style="width:auto;">+ إضافة</button>

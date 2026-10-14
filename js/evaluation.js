@@ -213,14 +213,14 @@ function ringSVG(score) {
 function renderEmployeeList() {
   const list = document.getElementById('eval-employee-list');
   if (employeesCache.length === 0) {
-    list.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px 4px;">لا يوجد موظفون مضافون بعد. أضفهم من قسم "بوابة الموظفين" أولاً.</p>';
+    list.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px 4px;">لا يوجد موظفون مضافون بعد. أضفهم من قسم "بوابة الموظفين" أولًا.</p>';
     return;
   }
   const q = (document.getElementById('ev-search') || {}).value || '';
   const sort = (document.getElementById('ev-sort') || {}).value || 'name';
   let rows = employeesCache.map(e => ({ e, st: employeeStats(e.id) })).filter(x => !q.trim() || `${x.e.full_name} ${x.e.job_title || ''}`.includes(q.trim()));
   rows.sort((a, b) => sort === 'low' ? ((a.st.finalScore ?? 99) - (b.st.finalScore ?? 99)) : sort === 'viol' ? (b.st.violations.length - a.st.violations.length) : String(a.e.full_name).localeCompare(String(b.e.full_name), 'ar'));
-  if (!rows.length) { list.innerHTML = '<p style="font-size:12.5px; color:var(--slate); padding:10px 4px;">ما فيه نتائج.</p>'; return; }
+  if (!rows.length) { list.innerHTML = '<p style="font-size:12.5px; color:var(--slate); padding:10px 4px;">لا توجد نتائج.</p>'; return; }
   list.innerHTML = rows.map(({ e, st }) => {
     const { finalScore, violations } = st;
     return `<div class="emp-row" data-employee-id="${e.id}" style="cursor:pointer;">
@@ -463,7 +463,7 @@ document.getElementById('note-submit').addEventListener('click', async () => {
   const occurredDate = document.getElementById('note-date').value || todayIso();
   const content = document.getElementById('note-text').value.trim();
 
-  if (!employeeId) { errEl.textContent = 'أضف موظفًا أولاً من قسم بوابة الموظفين'; errEl.style.display = 'block'; return; }
+  if (!employeeId) { errEl.textContent = 'أضف موظفًا أولًا من قسم بوابة الموظفين'; errEl.style.display = 'block'; return; }
   if (!criterionId) { errEl.textContent = 'اختر معيارًا'; errEl.style.display = 'block'; return; }
   if (!detailId) { errEl.textContent = 'اختر بندًا (أو أضف بنود لهذا المعيار من الإعدادات)'; errEl.style.display = 'block'; return; }
 
@@ -532,7 +532,7 @@ function renderCriteriaSettings() {
   const openIds = new Set(Array.from(container.querySelectorAll('details[open]')).map(d => d.dataset.critId));
 
   if (criteriaCache.length === 0) {
-    container.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px 4px;">لا توجد معايير محمّلة - تأكد إنك شغّلت ملف SQL الخاص بهذا القسم أولاً.</p>';
+    container.innerHTML = '<p style="font-size:12px; color:var(--slate); padding:10px 4px;">لا توجد معايير محمّلة - تأكد إنك شغّلت ملف SQL الخاص بهذا القسم أولًا.</p>';
     return;
   }
 

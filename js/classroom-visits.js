@@ -583,15 +583,15 @@ async function renderList(container) {
       <div id="cv-dl-status" class="cv-dl-status"></div>
       <div class="kpi-grid">
         <div class="kpi"><span class="k-label">زيارات هذا الشهر</span><span class="k-value">${thisMonth}</span><span class="k-note">${visits.length} زيارة من بداية العام</span></div>
-        <div class="kpi"><span class="k-label">المعلمين اللي انزاروا</span><span class="k-value">${visitedT}${totalT ? ` / ${totalT}` : ''}</span>${totalT ? `<div class="k-bar"><div style="width:${Math.round(visitedT / totalT * 100)}%;"></div></div>` : ''}<span class="k-note">من بداية العام الدراسي</span></div>
-        <div class="kpi"><span class="k-label">ما انزاروا بعد</span><span class="k-value"${unvisited.length ? ' style="color:#A4501A;"' : ''}>${unvisited.length}</span><span class="k-note">${unvisited.length ? 'اضغط «ما انزاروا» تحت' : 'كل المعلمين انزاروا'}</span></div>
-        <div class="kpi"><span class="k-label">مسودات غير منشورة</span><span class="k-value"${draftsAll ? ' style="color:#7A5410;"' : ''}>${draftsAll}</span><span class="k-note">ما يشوفها المعلم لين تنشرها</span></div>
+        <div class="kpi"><span class="k-label">المعلمون الذين تمت زيارتهم</span><span class="k-value">${visitedT}${totalT ? ` / ${totalT}` : ''}</span>${totalT ? `<div class="k-bar"><div style="width:${Math.round(visitedT / totalT * 100)}%;"></div></div>` : ''}<span class="k-note">من بداية العام الدراسي</span></div>
+        <div class="kpi"><span class="k-label">لم تتم زيارتهم بعد</span><span class="k-value"${unvisited.length ? ' style="color:#A4501A;"' : ''}>${unvisited.length}</span><span class="k-note">${unvisited.length ? 'اضغط «لم تتم زيارتهم» أدناه' : 'تمت زيارة جميع المعلمين'}</span></div>
+        <div class="kpi"><span class="k-label">مسودات غير منشورة</span><span class="k-value"${draftsAll ? ' style="color:#7A5410;"' : ''}>${draftsAll}</span><span class="k-note">لا يطّلع عليها المعلم حتى تنشرها</span></div>
       </div>
       <div class="tr-toolbar">
         <div class="seg-tabs" id="cv-filter">
           <button type="button" data-f="all">كل المعلمين <span class="tr-cnt">${teachers.length || ''}</span></button>
-          <button type="button" data-f="draft">فيها مسودات <span class="tr-cnt">${teachers.filter(t => t.drafts).length || ''}</span></button>
-          <button type="button" data-f="unvisited">ما انزاروا <span class="tr-cnt">${unvisited.length || ''}</span></button>
+          <button type="button" data-f="draft">تتضمن مسودات <span class="tr-cnt">${teachers.filter(t => t.drafts).length || ''}</span></button>
+          <button type="button" data-f="unvisited">لم تتم زيارتهم <span class="tr-cnt">${unvisited.length || ''}</span></button>
         </div>
         <select id="cv-spec" class="cv-spec" aria-label="فلتر التخصص">
           <option value="">كل التخصصات</option>
@@ -641,7 +641,7 @@ async function renderList(container) {
     const match = name => !q || normalizeArName(name).includes(normalizeArName(q));
     if (!staff) {
       board.innerHTML = visits.length ? `<div class="cv-teacher open"><div class="cvt-visits">${visits.map(visitRow).join('')}</div></div>`
-        : '<div class="ex-empty"><b>ما فيه زيارات منشورة لك بعد</b><span>تظهر هنا الزيارة بعد ما ينشرها المدير أو الوكيل.</span></div>';
+        : '<div class="ex-empty"><b>لا توجد زيارات منشورة لك بعد</b><span>تظهر الزيارة هنا بعد أن ينشرها المدير أو الوكيل.</span></div>';
       wireRows();
       return;
     }
@@ -653,19 +653,19 @@ async function renderList(container) {
         const st = specStats.get(cvSpec) || { total: 0, visited: 0 };
         const missing = unvisited.filter(specOk);
         const nVis = teachers.filter(specOk).reduce((n, t) => n + t.visits.length, 0);
-        sumEl.innerHTML = `<div class="cv-spec-sum"><div class="cvs-head"><b>${esc(cvSpec)}</b><span>انزار <strong>${st.visited}</strong> من ${st.total} ${st.total === 1 ? 'معلم' : 'معلمين'} · ${nVis} ${nVis === 1 ? 'زيارة' : nVis === 2 ? 'زيارتين' : 'زيارات'}</span>${st.total ? `<i class="cvs-bar"><i style="width:${Math.round(st.visited / st.total * 100)}%"></i></i>` : ''}</div>${missing.length ? `<div class="cvs-miss"><span>ما انزاروا:</span>${missing.map(t => `<em>${esc(t.full_name)}</em>`).join('')}</div>` : '<div class="cvs-miss done">كل معلمين هذا التخصص انزاروا ✓</div>'}</div>`;
+        sumEl.innerHTML = `<div class="cv-spec-sum"><div class="cvs-head"><b>${esc(cvSpec)}</b><span>تمت زيارة <strong>${st.visited}</strong> من ${st.total} ${st.total === 1 ? 'معلم' : 'معلمين'} · ${nVis} ${nVis === 1 ? 'زيارة' : nVis === 2 ? 'زيارتين' : 'زيارات'}</span>${st.total ? `<i class="cvs-bar"><i style="width:${Math.round(st.visited / st.total * 100)}%"></i></i>` : ''}</div>${missing.length ? `<div class="cvs-miss"><span>لم تتم زيارتهم:</span>${missing.map(t => `<em>${esc(t.full_name)}</em>`).join('')}</div>` : '<div class="cvs-miss done">تمت زيارة جميع معلمي هذا التخصص ✓</div>'}</div>`;
       }
     }
     if (cvFilter === 'unvisited') {
       const list = unvisited.filter(t => match(t.full_name) && specOk(t));
-      board.innerHTML = list.length ? `<div class="cv-unvisited">${list.map(t => `<div class="cvu-card"><span class="cvt-av">${esc(initialsOf(t.full_name))}</span><b>${esc(t.full_name)}</b><span>ما انزار من بداية العام</span></div>`).join('')}</div>`
-        : `<div class="ex-empty"><b>${unvisited.length ? 'ما فيه نتائج' : 'كل المعلمين انزاروا من بداية العام'}</b></div>`;
+      board.innerHTML = list.length ? `<div class="cv-unvisited">${list.map(t => `<div class="cvu-card"><span class="cvt-av">${esc(initialsOf(t.full_name))}</span><b>${esc(t.full_name)}</b><span>لم تتم زيارته منذ بداية العام</span></div>`).join('')}</div>`
+        : `<div class="ex-empty"><b>${unvisited.length ? 'لا توجد نتائج' : 'تمت زيارة جميع المعلمين منذ بداية العام'}</b></div>`;
       return;
     }
     let list = teachers.filter(t => match(t.name) && specOk(t));
     if (cvFilter === 'draft') list = list.filter(t => t.drafts);
     if (!list.length) {
-      board.innerHTML = `<div class="ex-empty"><b>${visits.length ? 'ما فيه نتائج' : 'ما فيه زيارات مسجلة بعد'}</b>${visits.length ? '' : '<span>اضغط «+ زيارة صفية جديدة» وسجّل أول زيارة.</span>'}</div>`;
+      board.innerHTML = `<div class="ex-empty"><b>${visits.length ? 'لا توجد نتائج' : 'لا توجد زيارات مسجلة بعد'}</b>${visits.length ? '' : '<span>اضغط «+ زيارة صفية جديدة» وسجّل أول زيارة.</span>'}</div>`;
       return;
     }
     board.innerHTML = list.map(t => {
@@ -735,7 +735,7 @@ async function renderList(container) {
       renderView();
     }));
     board.querySelectorAll('.cv-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
-      if (!confirm('تأكيد حذف هذي الزيارة نهائيًا؟')) return;
+      if (!confirm('تأكيد حذف هذه الزيارة نهائيًا؟')) return;
       await sb.from('classroom_visits').delete().eq('id', btn.dataset.id);
       renderView();
     }));
@@ -815,10 +815,10 @@ async function renderForm(container, existing) {
       </div>
       <div id="cv-slot-info" style="margin-top:10px; font-size:13px; color:var(--navy); font-weight:700;"></div>
       <div style="margin-top:12px;">
-        <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">المعلم اللي زُرت حصته فعليًا</label>
+        <label style="font-size:12.5px; color:var(--slate); display:block; margin-bottom:6px; font-weight:600;">المعلم الذي زرت حصته فعليًا</label>
         <select id="cv-teacher-select"><option value="">اختر المعلم</option></select>
         <div id="cv-teacher-hint" style="font-size:11.5px; color:var(--danger); margin-top:4px;"></div>
-        <p style="font-size:11px; color:var(--slate); margin:6px 0 0;">يُختار تلقائيًا حسب الجدول الدراسي - لو الحصة كانت لمعلم بديل ذاك اليوم، غيّره يدويًا من القائمة للمعلم الصحيح.</p>
+        <p style="font-size:11px; color:var(--slate); margin:6px 0 0;">يُختار تلقائيًا حسب الجدول الدراسي - إذا كانت الحصة لمعلم بديل في ذلك اليوم، فغيّره يدويًا من القائمة إلى المعلم الصحيح.</p>
       </div>
     </div>
 
@@ -1074,7 +1074,7 @@ function updateSlotInfo() {
   if (!cvSection || !day || !period) { infoEl.textContent = ''; return; }
   const cell = cvSchedule[day + '-' + period];
   if (!cell || !cell.subject) {
-    infoEl.innerHTML = '<span style="color:var(--danger);">لا توجد مادة مسجلة بهذي الحصة بالجدول الدراسي — تأكد من اختيار الحصة الصحيحة أو حدّث الجدول أولًا.</span>';
+    infoEl.innerHTML = '<span style="color:var(--danger);">لا توجد مادة مسجلة بهذه الحصة بالجدول الدراسي — تأكد من اختيار الحصة الصحيحة أو حدّث الجدول أولًا.</span>';
     return;
   }
   infoEl.innerHTML = `المادة: <b>${esc(cell.subject)}</b> — المعلم المسجّل بالجدول: <b>${esc(cell.teacher || '-')}</b>`;
@@ -1088,7 +1088,7 @@ function updateSlotInfo() {
     if (match) { teacherSel.value = match.id; if (hintEl) hintEl.textContent = ''; }
     else {
       teacherSel.value = '';
-      if (hintEl) hintEl.textContent = 'تعذّر إيجاد حساب معلم مطابق تلقائيًا لاسم "' + (cell.teacher || '') + '" — اختر الحساب الصحيح يدويًا من القائمة أعلاه حتى يقدر المعلم يشوف هذي الزيارة.';
+      if (hintEl) hintEl.textContent = 'تعذّر إيجاد حساب معلم مطابق تلقائيًا لاسم "' + (cell.teacher || '') + '" — اختر الحساب الصحيح يدويًا من القائمة أعلاه ليتمكن المعلم من الاطلاع على هذه الزيارة.';
     }
   }
 }
@@ -1103,10 +1103,10 @@ async function saveVisit() {
   const period = document.getElementById('cv-period-select').value;
   if (!cvSection || !day || !period) { showErr('اختر الفصل واليوم والحصة'); return; }
   const cell = cvSchedule[day + '-' + period];
-  if (!cell || !cell.subject) { showErr('لا توجد مادة مسجلة بهذي الحصة بالجدول الدراسي'); return; }
+  if (!cell || !cell.subject) { showErr('لا توجد مادة مسجلة بهذه الحصة بالجدول الدراسي'); return; }
 
   const teacherProfileId = document.getElementById('cv-teacher-select').value;
-  if (!teacherProfileId) { showErr('اختر المعلم اللي زرت حصته من القائمة'); document.getElementById('cv-teacher-select').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+  if (!teacherProfileId) { showErr('اختر من القائمة المعلم الذي زرت حصته'); document.getElementById('cv-teacher-select').scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   // اسم المعلم المحفوظ مع الزيارة يُؤخذ من المعلم المختار فعليًا بالقائمة (يدعم تغييره يدويًا لمعلم بديل)
   // بدل الاسم الثابت بالجدول الدراسي الرسمي
   const teacherAccount = cvTeachers.find(t => t.id === teacherProfileId);

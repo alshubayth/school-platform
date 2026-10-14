@@ -106,7 +106,7 @@ async function loadStudentsAndPeriods() {
   periods = pr.data || [];
   studentsLoaded = true;
   const prevPeriod = $('ov-period').value;
-  $('ov-period').innerHTML = '<option value="">بدون (ما نحتاج رقم جلوس/لجنة)</option>' +
+  $('ov-period').innerHTML = '<option value="">بدون (لا حاجة إلى رقم جلوس/لجنة)</option>' +
     periods.map(p => `<option value="${p.id}">${esc(p.name)}${p.academic_year ? ' — ' + esc(p.academic_year) : ''}</option>`).join('');
   if (pendingPeriodId && periods.some(p => p.id === pendingPeriodId)) {
     // داخل فترة اختبار: نختارها، ونطبع لطلابها الموزعين على اللجان، مرتبين باللجنة ورقم الجلوس
@@ -154,7 +154,7 @@ function refreshScope() {
   if (scope === 'class') {
     const g = $('ov-grade').value, prev = $('ov-section').value;
     const secs = [...new Set(students.filter(s => s.grade_level === g).map(s => s.class_section || 0))].sort((a, b) => a - b);
-    $('ov-section').innerHTML = secs.length ? secs.map(n => `<option value="${n}">${esc(gradeLabels[g] || '')} ${n}</option>`).join('') : '<option value="">لا يوجد فصول</option>';
+    $('ov-section').innerHTML = secs.length ? secs.map(n => `<option value="${n}">${esc(gradeLabels[g] || '')} ${n}</option>`).join('') : '<option value="">لا توجد فصول</option>';
     if (secs.map(String).includes(prev)) $('ov-section').value = prev;
   }
   const n = selectedStudents().length;
@@ -226,7 +226,7 @@ function buildOutput(withBackground) {
   const on = FIELD_DEFS.filter(d => layout.fields[d.key] && layout.fields[d.key].on);
   if (!on.length) throw new Error('فعّل حقل واحد على الأقل');
   const list = selectedStudents();
-  if (!list.length) throw new Error('ما فيه طلاب بالاختيار الحالي');
+  if (!list.length) throw new Error('لا يوجد طلاب في الاختيار الحالي');
   if (on.some(d => d.barcode)) {
     const bad = list.filter(s => !/^[\x20-\x7E]+$/.test(String(s.national_id || '').trim()));
     if (bad.length) throw new Error(`فيه ${bad.length} طالب رقم هويته غير صالح للباركود (مثال: ${bad[0].full_name})`);
@@ -282,7 +282,7 @@ function renderProps() {
     <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end;">
       ${num('x', 'من اليسار (مم)')}${num('y', 'من الأعلى (مم)')}${num('w', 'العرض (مم)')}${num('h', 'الارتفاع (مم)')}
       ${d.barcode
-        ? `<label style="font-size:12px; display:flex; align-items:center; gap:5px;"><input type="checkbox" class="ov-prop-cb" data-k="digits" ${f.digits ? 'checked' : ''} style="width:auto; margin:0;" />الرقم تحت الباركود</label>`
+        ? `<label style="font-size:12px; display:flex; align-items:center; gap:5px;"><input type="checkbox" class="ov-prop-cb" data-k="digits" ${f.digits ? 'checked' : ''} style="width:auto; margin:0;" />الرقم أسفل الباركود</label>`
         : `${num('fs', 'الخط (pt)', 0.5)}
            <label style="font-size:12px; display:flex; align-items:center; gap:5px;"><input type="checkbox" class="ov-prop-cb" data-k="bold" ${f.bold ? 'checked' : ''} style="width:auto; margin:0;" />عريض</label>
            <label style="font-size:11.5px; font-weight:700; display:flex; flex-direction:column; gap:2px;">المحاذاة<select class="ov-prop-sel" data-k="align" style="margin:0; padding:6px;">${[['right', 'يمين'], ['center', 'وسط'], ['left', 'يسار']].map(([v, l]) => `<option value="${v}" ${f.align === v ? 'selected' : ''}>${l}</option>`).join('')}</select></label>`}
@@ -348,7 +348,7 @@ async function refreshLayouts() {
     return q.order('updated_at', { ascending: false });
   });
   const sel = $('ov-saved');
-  if (error) { savedLayouts = []; sel.innerHTML = '<option value="">—</option>'; if (tableMissing(error)) status('جدول حفظ النماذج غير موجود بعد - شغّل أمر SQL الخاص به (تقدر تستخدم الميزة بدون حفظ)', true); return; }
+  if (error) { savedLayouts = []; sel.innerHTML = '<option value="">—</option>'; if (tableMissing(error)) status('جدول حفظ النماذج غير موجود بعد - شغّل أمر SQL الخاص به (يمكنك استخدام الميزة دون حفظ)', true); return; }
   savedLayouts = data || [];
   sel.innerHTML = `<option value="">${savedLayouts.length ? `النماذج المحفوظة (${savedLayouts.length})` : 'لا توجد نماذج محفوظة'}</option>` +
     savedLayouts.map(l => `<option value="${l.id}" ${layout && layout.id === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('');
@@ -386,7 +386,7 @@ function printOut(withBackground) {
   Promise.all([...win.document.images].map(i => i.complete ? null : new Promise(r => { i.onload = i.onerror = r; })))
     .then(() => setTimeout(() => { win.focus(); win.print(); }, 200));
   status(withBackground
-    ? `طباعة تجربة (${out.count} صفحة) مع النموذج - اطبع صفحة وحدة على ورق عادي وطابقها فوق النموذج الأصلي ضد الضوء`
+    ? `طباعة تجربة (${out.count} صفحة) مع النموذج - اطبع صفحة واحدة على ورق عادي وطابقها فوق النموذج الأصلي أمام الضوء`
     : `جاهز: ${out.count} ورقة - حمّل النماذج المعتمدة بالطابعة واطبع بالحجم الفعلي 100% وبدون رؤوس وتذييلات`);
 }
 

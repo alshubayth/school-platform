@@ -104,7 +104,7 @@ document.getElementById('at-add-btn').addEventListener('click', async () => {
   const respOther = document.getElementById('at-responsible-other').value.trim();
   const note = document.getElementById('at-note').value.trim();
 
-  if (!title) { errEl.textContent = 'اكتب المهمة أولاً'; errEl.style.display = 'block'; return; }
+  if (!title) { errEl.textContent = 'اكتب المهمة أولًا'; errEl.style.display = 'block'; return; }
   if (!respSel) { errEl.textContent = 'اختر مسؤول التنفيذ'; errEl.style.display = 'block'; return; }
   if (respSel === '__other__' && !respOther) { errEl.textContent = 'اكتب اسم مسؤول التنفيذ'; errEl.style.display = 'block'; return; }
 
@@ -164,7 +164,7 @@ async function refreshTasksList() {
 
   list.innerHTML = '';
   if (rows.length === 0) {
-    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>ما فيه مهام مضافة لهذا الأسبوع بعد</p></div>';
+    list.innerHTML = '<div class="placeholder" style="padding:20px;"><p>لا توجد مهام مضافة لهذا الأسبوع بعد</p></div>';
     setAtFormOpen(true);
     return;
   }

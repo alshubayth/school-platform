@@ -74,7 +74,7 @@ function restrictWeeklyFormForTeacher() {
   const allowedGrades = [...new Set(teacherAssignments.map(a => a.grade_level))];
 
   if (teacherAssignments.length === 0) {
-    document.getElementById('weekly-form-card').innerHTML = '<p style="color:var(--slate); font-size:13px;">ما عندك تخصيص مادة/مرحلة بعد. راجع المدير عشان يضيفك من "إدارة الصلاحيات".</p>';
+    document.getElementById('weekly-form-card').innerHTML = '<p style="color:var(--slate); font-size:13px;">لم تُخصَّص لك مادة/مرحلة بعد. راجع المدير ليضيفك من "إدارة الصلاحيات".</p>';
     return;
   }
 
@@ -578,7 +578,7 @@ async function renderSubjectStatus(grade, plans) {
   const n = subjects.filter(s => done.has(s.id)).length;
   const mine = currentProfile.role === 'teacher';
   box.innerHTML = `<div class="wp-status-head"><b>${mine ? 'موادي' : 'المواد'} في ${esc(gradeLabels[grade] || '')}</b><span class="wt-gcount ${n === subjects.length ? 'full' : ''}">${n} من ${subjects.length} مسلّمة</span></div>
-    <div class="wt-chips">${subjects.map(s => `<button type="button" class="wt-chip ${done.has(s.id) ? 'ok' : 'miss'}" data-id="${s.id}"><b>${done.has(s.id) ? '✓ ' : ''}${esc(s.name)}</b><span>${done.has(s.id) ? 'مسلّمة · اضغط للتعديل' : 'لسا · اضغط للإدخال'}</span></button>`).join('')}</div>`;
+    <div class="wt-chips">${subjects.map(s => `<button type="button" class="wt-chip ${done.has(s.id) ? 'ok' : 'miss'}" data-id="${s.id}"><b>${done.has(s.id) ? '✓ ' : ''}${esc(s.name)}</b><span>${done.has(s.id) ? 'مسلّمة · اضغط للتعديل' : 'لم تُدخل بعد · اضغط للإدخال'}</span></button>`).join('')}</div>`;
   box.querySelectorAll('.wt-chip').forEach(b => b.addEventListener('click', () => {
     const sel = document.getElementById('weekly-subject');
     if (![...sel.options].some(o => o.value === b.dataset.id)) return;
@@ -621,7 +621,7 @@ function renderPlanViewMode(row, p) {
   const delBtn = row.querySelector('.weekly-delete-btn');
   if (delBtn) {
     delBtn.addEventListener('click', async () => {
-      if (!confirm(`متأكد تبي تحذف خطة "${p.subjects ? p.subjects.name : 'هذه المادة'}" لهذا الأسبوع؟`)) return;
+      if (!confirm(`هل أنت متأكد من حذف خطة "${p.subjects ? p.subjects.name : 'هذه المادة'}" لهذا الأسبوع؟`)) return;
       const { error } = await sb.from('weekly_plans').delete().eq('id', p.id);
       if (error) { alert('تعذر الحذف: ' + error.message); return; }
       await refreshWeeklyList();
@@ -648,7 +648,7 @@ function renderPlanEditMode(card, p) {
       يوجد اختبار هذا الأسبوع لهذه المادة
     </label>
     <div class="edit-test-sections-wrap ${p.has_test ? '' : 'hidden'}" style="background:var(--sand); border-radius:10px; padding:10px 12px; margin-bottom:14px;">
-      <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول اللي عليها الاختبار. اتركها كلها فاضية = الاختبار على كل الفصول.</p>
+      <p style="font-size:12px; color:var(--slate); margin:0 0 8px;">حدد الفصول المشمولة بالاختبار. اتركها جميعًا فارغة = الاختبار لجميع الفصول.</p>
       <div class="edit-test-sections-list" style="display:flex; flex-wrap:wrap; gap:12px;"></div>
       <textarea class="edit-test-note" placeholder="ملاحظة عن الاختبار (مثال: من صفحة ١٠ إلى ١٥ في الكتاب، أو من ورقة العمل المرفقة)" rows="2" style="margin:10px 0 0;">${esc(p.test_note || '')}</textarea>
     </div>

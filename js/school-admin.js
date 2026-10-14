@@ -42,7 +42,7 @@ async function renderSchoolsList() {
   ]);
 
   if (schoolsErr) { wrap.innerHTML = `<div class="error-msg">تعذر تحميل المدارس: ${esc(schoolsErr.message)}</div>`; return; }
-  if (!schools || !schools.length) { wrap.innerHTML = '<p style="color:var(--slate); font-size:13px;">ما فيه أي مدرسة مضافة بعد - أضف وحدة من النموذج أعلاه.</p>'; return; }
+  if (!schools || !schools.length) { wrap.innerHTML = '<p style="color:var(--slate); font-size:13px;">لا توجد أي مدرسة مضافة بعد - أضف مدرسة من النموذج أعلاه.</p>'; return; }
 
   const modulesBySchool = new Map();
   (allModules || []).forEach(m => {

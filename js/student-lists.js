@@ -24,7 +24,7 @@ const COL_TYPES = {
   grade: { label: 'الصف', title: 'الصف', w: 20 },
   section: { label: 'الفصل', title: 'الفصل', w: 12 },
   mobile: { label: 'جوال ولي الأمر', title: 'جوال ولي الأمر', w: 26, manager: true },
-  blank: { label: 'خانة فاضية', title: 'ملاحظات', w: 30 },
+  blank: { label: 'خانة فارغة', title: 'ملاحظات', w: 30 },
   score: { label: 'درجة (من ...)', title: 'الدرجة', w: 16, max: 10 },
   check: { label: 'مربع ✓', title: 'تم', w: 12 },
   multi: { label: 'أعمدة مقسومة', title: 'المتابعة', w: 9, n: 5, labels: '' },
@@ -146,7 +146,7 @@ async function loadTemplates() {
 function render() {
   const root = $('sl-root');
   if (!S.classes.length) {
-    root.innerHTML = `<div class="ex-empty"><b>ما فيه فصول متاحة لك</b><span>${isManager() ? 'استورد الطلاب من الإعدادات أولًا.' : 'فصولك تُعرف من الجدول الدراسي (اسمك بالجدول) أو من تخصصاتك - راجع الإدارة.'}</span></div>`;
+    root.innerHTML = `<div class="ex-empty"><b>لا توجد فصول متاحة لك</b><span>${isManager() ? 'استورد الطلاب من الإعدادات أولًا.' : 'تُحدَّد فصولك من الجدول الدراسي (اسمك في الجدول) أو من تخصصاتك - راجع الإدارة.'}</span></div>`;
     return;
   }
   root.innerHTML = `
@@ -171,7 +171,7 @@ function render() {
         <div class="sl-grid2">
           <label>الترتيب<select id="sl-sort"><option value="name">بالاسم</option><option value="nid">برقم الهوية</option><option value="section">بالفصل ثم الاسم</option></select></label>
           <label>التقسيم<select id="sl-per"><option value="1">كل فصل بصفحة مستقلة</option><option value="0">كلهم بكشف واحد</option></select></label>
-          <label>أسطر فاضية زيادة<input type="number" id="sl-extra" min="0" max="40"></label>
+          <label>أسطر فارغة إضافية<input type="number" id="sl-extra" min="0" max="40"></label>
         </div>
         <p class="sl-note" id="sl-count"></p>
       </section>
@@ -183,7 +183,7 @@ function render() {
           <select id="sl-add-type">${Object.entries(COL_TYPES).filter(([k, t]) => !t.manager || isManager()).map(([k, t]) => `<option value="${k}">${esc(t.label)}</option>`).join('')}</select>
           <button type="button" class="btn-secondary" id="sl-add">+ عمود</button>
         </div>
-        <p class="sl-note">العرض بالمليمتر. عمود الاسم ياخذ المساحة الباقية. «أعمدة مقسومة»: اكتب عناوينها مفصولة بفاصلة (مثل: الأحد،الاثنين) أو خلها فاضية.</p>
+        <p class="sl-note">العرض بالمليمتر. يأخذ عمود الاسم المساحة المتبقية. «أعمدة مقسومة»: اكتب عناوينها مفصولة بفاصلة (مثل: الأحد،الاثنين) أو اتركها فارغة.</p>
       </section>
 
       <section class="sl-box">

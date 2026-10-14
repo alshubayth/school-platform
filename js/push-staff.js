@@ -27,9 +27,9 @@ function notify(msg) {
 btn && btn.addEventListener('click', async () => {
   document.getElementById('user-menu').classList.add('hidden');
   const st = await refresh();
-  if (st === 'unsupported') { notify('جهازك أو متصفحك ما يدعم الإشعارات.'); return; }
+  if (st === 'unsupported') { notify('جهازك أو متصفحك لا يدعم الإشعارات.'); return; }
   if (st === 'ios-install') { notify('في الآيفون: ثبّت التطبيق على الشاشة الرئيسية أولًا، وبعدها فعّل الإشعارات من داخله.'); return; }
-  if (st === 'denied') { notify('الإشعارات مرفوضة لهذا الموقع. اسمح بها من إعدادات المتصفح أو الجوال ثم حاول مرة ثانية.'); return; }
+  if (st === 'denied') { notify('الإشعارات مرفوضة لهذا الموقع. اسمح بها من إعدادات المتصفح أو الجوال ثم حاول مرة أخرى.'); return; }
   if (st === 'on') {
     try {
       const sub = await MudaarPush.currentSubscription();
@@ -46,11 +46,11 @@ btn && btn.addEventListener('click', async () => {
     if (error || data !== true) throw new Error(error ? error.message : 'rejected');
     MudaarPush.markOn('staff', true);
     await refresh();
-    notify('تم تفعيل الإشعارات ✓ يوصلك تنبيه بحصص الانتظار ونتائج اعتماد مهامك');
+    notify('تم تفعيل الإشعارات ✓ سيصلك تنبيه بحصص الانتظار ونتائج اعتماد مهامك');
   } catch (err) {
     const m = String(err && err.message || '');
-    notify(m === 'denied' ? 'رفضت الإذن. تقدر تسمح بالإشعارات من إعدادات المتصفح أو الجوال.'
-      : m === 'dismissed' ? 'ما تم التفعيل. حاول مرة ثانية ووافق على الإذن.'
+    notify(m === 'denied' ? 'رُفض الإذن. يمكنك السماح بالإشعارات من إعدادات المتصفح أو الجوال.'
+      : m === 'dismissed' ? 'لم يتم التفعيل. حاول مرة أخرى ووافق على الإذن.'
       : 'تعذر التفعيل حاليًا، حاول لاحقًا.');
   }
 });

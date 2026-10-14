@@ -97,7 +97,7 @@ async function save() {
   const name = draft.name.trim();
   if (!name) { err.textContent = 'اكتب اسم المدرسة الرسمي'; err.style.display = 'block'; return; }
   if (draft.authority === 'custom' && !draft.authority_name.trim() && !draft.authority_logo) { err.textContent = 'اكتب اسم الجهة أو ارفع شعارها، أو اختر "بدون"'; err.style.display = 'block'; return; }
-  if (!currentSchoolId) { err.textContent = 'ما فيه مدرسة محددة لهذا الحساب'; err.style.display = 'block'; return; }
+  if (!currentSchoolId) { err.textContent = 'لا توجد مدرسة محددة لهذا الحساب'; err.style.display = 'block'; return; }
   const branding = { authority: draft.authority };
   if (draft.short.trim()) branding.short_name = draft.short.trim();
   if (draft.principal.trim()) branding.principal_name = draft.principal.trim();
@@ -114,7 +114,7 @@ async function save() {
     // نعرض نص الخطأ الفعلي دايمًا عشان نعرف السبب بدقة
     const detail = [error.code, error.message, error.details, error.hint].filter(Boolean).join(' | ');
     const notFound = error.code === 'PGRST202' || /schema cache|could not find the function/i.test(error.message || '');
-    err.textContent = (notFound ? 'قاعدة البيانات ما تعرّفت على دالة الحفظ بعد. ' : 'تعذر الحفظ. ') + 'تفاصيل الخطأ: ' + detail;
+    err.textContent = (notFound ? 'لم تتعرّف قاعدة البيانات على دالة الحفظ بعد. ' : 'تعذر الحفظ. ') + 'تفاصيل الخطأ: ' + detail;
     err.style.display = 'block';
     return;
   }

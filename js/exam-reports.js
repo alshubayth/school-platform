@@ -116,11 +116,11 @@ function textAnswer(v) {
 }
 
 export function parseSheetRows(rows) {
-  if (!rows || rows.length < 2) throw new Error('الملف فاضي أو ما فيه بيانات كافية');
+  if (!rows || rows.length < 2) throw new Error('الملف فارغ أو لا يحتوي على بيانات كافية');
   const header = rows[0];
   const { col, items, itemTypes } = detectColumns(header);
-  if (col.id == null && col.name == null) throw new Error('ما لقيت عمود "StudentID" (رقم الهوية) ولا عمود اسم الطالب بالملف');
-  if (items.length === 0) throw new Error('ما لقيت أعمدة الأسئلة (اختيار متعدد) بالملف');
+  if (col.id == null && col.name == null) throw new Error('لم يُعثر في الملف على عمود "StudentID" (رقم الهوية) ولا على عمود اسم الطالب');
+  if (items.length === 0) throw new Error('لم يُعثر في الملف على أعمدة الأسئلة (اختيار متعدد)');
 
   const allRows = rows.slice(1)
     .filter(r => r && (
@@ -152,7 +152,7 @@ export function parseSheetRows(rows) {
   const keyRows = allRows.filter(isKeyRow);
   const detectedKeyRow = keyRows[0] || null;
   const students = allRows.filter(r => !isKeyRow(r));
-  if (students.length === 0) throw new Error('ما فيه طلاب بالملف');
+  if (students.length === 0) throw new Error('لا يوجد طلاب بالملف');
 
   const choiceCounts = computeChoiceCounts(items, students.concat(detectedKeyRow ? [detectedKeyRow] : []), itemTypes);
 
@@ -391,10 +391,10 @@ function renderModelSummary(parsed) {
     <div class="dd-stats" style="margin:8px 0;">
       <span class="ds ds-all"><b>${a}</b> نموذج أ</span>
       <span class="ds ds-present"><b>${b}</b> نموذج ب</span>
-      ${unknown.length ? `<span class="ds ds-late"><b>${unknown.length}</b> ما عُرف نموذجهم</span>` : ''}
+      ${unknown.length ? `<span class="ds ds-late"><b>${unknown.length}</b> لم يُعرف نموذجهم</span>` : ''}
     </div>
     <p class="er-models-p">${fromFile ? `نموذج ${fromFile} طالب مقروء من تظليلهم بالورقة. ` : ''}كل طالب يتصحّح بإجابة نموذجه تلقائيًا. لتعديل الإجابات: عدّل المفتاح من "ورقة إجابة للتصحيح الآلي" واحفظه.</p>
-    ${unknown.length ? `<div class="er-unknown"><p>هذول ما عرفت نموذجهم (ما ظلّلوه، أو ظلّلوا الاثنين، أو أوراقهم ما انطبعت من المنصة) - اختر نموذج كل واحد:</p>
+    ${unknown.length ? `<div class="er-unknown"><p>تعذّر تحديد نموذج هؤلاء الطلاب (لم يظلّلوه، أو ظلّلوا النموذجين، أو لم تُطبع أوراقهم من المنصة) - اختر نموذج كل طالب:</p>
       ${unknown.map(st => `<label class="er-unk-row"><span>${esc(st.name || st.id)}</span><small>${esc(st.id)}</small>
         <select class="er-model-pick" data-id="${esc(idOf(st))}"><option value="أ">نموذج أ</option><option value="ب">نموذج ب</option></select></label>`).join('')}</div>` : ''}
   </div>`;
@@ -503,7 +503,7 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
   const errEl = document.getElementById('er-analyze-error');
   errEl.style.display = 'none';
   const file = document.getElementById('er-file').files[0];
-  if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
+  if (!file) { errEl.textContent = 'اختر ملف إكسل أولًا'; errEl.style.display = 'block'; return; }
 
   try {
     await loadXLSX();
@@ -522,15 +522,15 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     const keyNote = paperRes
       ? ` — ورقة أسئلة «${esc(paperRes.paper.title)}»: كل طالب تصحح على نموذجه، والمفتاح من الورقة`
       : parsedData.detectedKeyRaw
-      ? ' — لقيت صف نموذج جاهز بالملف وعبّيت الإجابات منه، راجعها/عدّلها بالأسفل'
+      ? ' — عُثر في الملف على صف نموذج جاهز وعُبّئت الإجابات منه، راجعها أو عدّلها أدناه'
       : ' — عبّي الإجابة الصحيحة لكل سؤال بالأسفل';
     document.getElementById('er-preview-summary').innerHTML =
       `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`
       + (enr.filled ? `<br><span style="color:#1F6A3C;">✓ كمّلت بيانات ${enr.filled} ${enr.filled === 1 ? 'طالب' : 'طلاب'} (الاسم/الصف/الفصل) من طلاب المنصة برقم الهوية</span>` : '')
-      + (enr.fixedIds && enr.fixedIds.length ? `<br><span style="color:#1F6A3C;">✓ صححت ${enr.fixedIds.length === 1 ? 'رقم هوية انقرأ غلط من الباركود' : enr.fixedIds.length + ' أرقام هوية انقرأت غلط من الباركود'}: ${enr.fixedIds.map(esc).join('، ')}</span>` : '')
-      + (paperRes && paperRes.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.unknown.length} ورقة ما انربطت بطالب (ما انطبعت له من المنصة أو تغيّرت الورقة بعد الطباعة): ${paperRes.unknown.slice(0, 5).map(esc).join('، ')}</span>` : '')
-      + (paperRes && paperRes.missingPages.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.missingPages.length} طالب ناقصهم صفحة أو أكثر بالملف (أسئلتها تنحسب بدون إجابة): ${paperRes.missingPages.slice(0, 5).map(esc).join('، ')}${paperRes.missingPages.length > 5 ? '...' : ''}</span>` : '')
-      + (enr.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${enr.unknown.length} ${enr.unknown.length === 1 ? 'رقم هوية' : 'أرقام هوية'} مو موجودة بطلاب المنصة: ${enr.unknown.slice(0, 5).map(esc).join('، ')}${enr.unknown.length > 5 ? '...' : ''}</span>` : '');
+      + (enr.fixedIds && enr.fixedIds.length ? `<br><span style="color:#1F6A3C;">✓ صححت ${enr.fixedIds.length === 1 ? 'رقم هوية قُرئ خطأً من الباركود' : enr.fixedIds.length + ' أرقام هوية قُرئت خطأً من الباركود'}: ${enr.fixedIds.map(esc).join('، ')}</span>` : '')
+      + (paperRes && paperRes.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.unknown.length} ورقة لم ترتبط بطالب (لم تُطبع له من المنصة أو تغيّرت الورقة بعد الطباعة): ${paperRes.unknown.slice(0, 5).map(esc).join('، ')}</span>` : '')
+      + (paperRes && paperRes.missingPages.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.missingPages.length} طالب تنقصهم صفحة أو أكثر في الملف (تُحتسب أسئلتها بلا إجابة): ${paperRes.missingPages.slice(0, 5).map(esc).join('، ')}${paperRes.missingPages.length > 5 ? '...' : ''}</span>` : '')
+      + (enr.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${enr.unknown.length} ${enr.unknown.length === 1 ? 'رقم هوية' : 'أرقام هوية'} غير موجودة ضمن طلاب المنصة: ${enr.unknown.slice(0, 5).map(esc).join('، ')}${enr.unknown.length > 5 ? '...' : ''}</span>` : '');
     document.getElementById('er-title').value = '';
     document.getElementById('er-subject').value = parsedData.detected.subject || '';
     document.getElementById('er-grade').value = parsedData.detected.grade || '';
@@ -605,11 +605,11 @@ async function setupSavedKeyPicker(parsed) {
   if (matches.length) {
     sel.value = matches[0].k.id;
     applySavedKey(matches[0].k);
-    if (matches.length > 1) msg.textContent += ` (فيه ${matches.length} مفاتيح بنفس عدد الأسئلة - تأكد إنه الصحيح)`;
+    if (matches.length > 1) msg.textContent += ` (يوجد ${matches.length} مفاتيح بنفس عدد الأسئلة - تأكد إنه الصحيح)`;
   } else {
     msg.textContent = erSavedKeys.length
-      ? `ما فيه مفتاح محفوظ بنفس عدد أسئلة الملف (${parsed.itemCount}) - أدخل المفتاح يدويًا أو احفظه من بطاقة ورقة الإجابة`
-      : 'ما فيه مفاتيح محفوظة بعد - تقدر تحفظها من بطاقة "ورقة إجابة للتصحيح الآلي"';
+      ? `لا يوجد مفتاح محفوظ بعدد أسئلة الملف نفسه (${parsed.itemCount}) - أدخل المفتاح يدويًا أو احفظه من بطاقة ورقة الإجابة`
+      : 'لا توجد مفاتيح محفوظة بعد - يمكنك حفظها من بطاقة "ورقة إجابة للتصحيح الآلي"';
   }
 }
 
@@ -659,7 +659,7 @@ function applySavedKey(k) {
   if (!document.getElementById('er-subject').value.trim() && k.subject) document.getElementById('er-subject').value = k.subject;
   renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
   msg.textContent = `تم تطبيق المفتاح "${k.title}" ✓ راجع الإجابات واضغط "حفظ التقرير"`;
-  if (observedMax > k.choices) msg.textContent += ` — تنبيه: بالملف قيم أكبر من عدد الخيارات بالمفتاح (${k.choices})، تأكد إن الملف لنفس الاختبار`;
+  if (observedMax > k.choices) msg.textContent += ` — تنبيه: بالملف قيم أكبر من عدد الخيارات بالمفتاح (${k.choices})، تأكد من أن الملف للاختبار نفسه`;
 }
 
 document.getElementById('er-saved-key').addEventListener('change', (e) => {
@@ -680,7 +680,7 @@ document.getElementById('er-cancel-btn').addEventListener('click', () => {
 document.getElementById('er-save-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('er-save-error');
   errEl.style.display = 'none';
-  if (!parsedData) { errEl.textContent = 'حلّل الملف أولاً'; errEl.style.display = 'block'; return; }
+  if (!parsedData) { errEl.textContent = 'حلّل الملف أولًا'; errEl.style.display = 'block'; return; }
   const title = document.getElementById('er-title').value.trim();
   if (!title) { errEl.textContent = 'اكتب عنوان للتقرير'; errEl.style.display = 'block'; return; }
 
@@ -809,8 +809,8 @@ async function loadSavedList() {
   }
   if (!data || data.length === 0) {
     listEl.innerHTML = isTeacherView()
-      ? '<div class="ex-empty"><b>ما فيه تقارير لك بعد</b><span>صحّح أوراق طلابك من تبويب «التصحيح بالجوال» ويطلع التقرير هنا تلقائيًا.</span></div>'
-      : '<div class="ex-empty"><b>ما فيه تقارير محفوظة بعد</b><span>صحّح أوراق الطلاب في Remark، ثم اضغط «+ رفع نتائج اختبار» وارفع ملف الإكسل.</span></div>';
+      ? '<div class="ex-empty"><b>لا توجد تقارير لك بعد</b><span>صحّح أوراق طلابك من تبويب «التصحيح بالجوال»، وسيظهر التقرير هنا تلقائيًا.</span></div>'
+      : '<div class="ex-empty"><b>لا توجد تقارير محفوظة بعد</b><span>صحّح أوراق الطلاب في Remark، ثم اضغط «+ رفع نتائج اختبار» وارفع ملف الإكسل.</span></div>';
     return 0;
   }
   // مين صحح (للإدارة): أسماء أصحاب التقارير
@@ -889,7 +889,7 @@ async function loadSavedList() {
   listEl.querySelectorAll('.er-delete-btn').forEach(btn => {
     btn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      if (!confirm('متأكد تبي تحذف هذا التقرير؟')) return;
+      if (!confirm('هل أنت متأكد من حذف هذا التقرير؟')) return;
       await sb.from('exam_reports').delete().eq('id', btn.dataset.id);
       await loadSavedList();
     });
@@ -939,7 +939,7 @@ async function openReport(id) {
 let updMode = 'replace';
 const UPD_TEXT = {
   replace: ['تحديث ملف الإكسل', 'ارفع ملف إكسل جديد بنفس عدد الأسئلة (مثلاً بيانات طلاب محدّثة أو فصل إضافي) - الإجابة الصحيحة لكل سؤال تبقى كما هي، والملف الجديد يحل محل كل الطلاب الحاليين.', 'تحديث'],
-  append: ['إضافة طلاب من ملف', 'ارفع ملف Remark فيه الطلاب اللي صححتهم بعدين (نفس الاختبار ونفس عدد الأسئلة). ينضافون للطلاب الموجودين بالتقرير، ولو فيه طالب له ورقة قبل تتحدّث ورقته بالجديدة. الإجابة الصحيحة تبقى كما هي.', 'إضافة للتقرير'],
+  append: ['إضافة طلاب من ملف', 'ارفع ملف Remark الذي يضم الطلاب الذين صححتهم لاحقًا (للاختبار نفسه وبعدد الأسئلة نفسه). سيُضافون إلى الطلاب الموجودين في التقرير، وإذا كان لأحدهم ورقة سابقة فستُحدَّث بالورقة الجديدة. تبقى الإجابة الصحيحة كما هي.', 'إضافة للتقرير'],
 };
 function openUpdateCard(mode) {
   updMode = mode;
@@ -957,7 +957,7 @@ function openUpdateCardBody() {
   errEl.style.display = 'none';
   document.getElementById('er-update-file').value = '';
   if (!currentReport.raw_data || !Array.isArray(currentReport.raw_data.choiceCounts)) {
-    errEl.textContent = 'هذا تقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات كافية لتحديث الملف بدون تعديل يدوي - احذفه وارفعه من جديد.';
+    errEl.textContent = 'هذا التقرير محفوظ بنسخة سابقة من النظام لا تحتوي على بيانات كافية لتحديث الملف دون تعديل يدوي - احذفه وارفعه من جديد.';
     errEl.style.display = 'block';
   }
   document.getElementById('er-updatefile-card').classList.remove('hidden');
@@ -972,12 +972,12 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
   const errEl = document.getElementById('er-updatefile-error');
   errEl.style.display = 'none';
   if (!currentReport || !currentReport.raw_data || !Array.isArray(currentReport.raw_data.choiceCounts)) {
-    errEl.textContent = 'ما فيه بيانات كافية بالتقرير الحالي لتحديثه بهذي الطريقة.';
+    errEl.textContent = 'لا تتوفر في التقرير الحالي بيانات كافية لتحديثه بهذه الطريقة.';
     errEl.style.display = 'block';
     return;
   }
   const file = document.getElementById('er-update-file').files[0];
-  if (!file) { errEl.textContent = 'اختر ملف إكسل أولاً'; errEl.style.display = 'block'; return; }
+  if (!file) { errEl.textContent = 'اختر ملف إكسل أولًا'; errEl.style.display = 'block'; return; }
 
   try {
     await loadXLSX();
@@ -995,7 +995,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
 
     const { choiceCounts: oldChoiceCounts, reversedOrder = true } = currentReport.raw_data;
     if (newParsed.itemCount !== oldChoiceCounts.length) {
-      errEl.textContent = `عدد أسئلة الملف الجديد (${newParsed.itemCount}) ما يطابق عدد أسئلة التقرير الحالي (${oldChoiceCounts.length}) - لازم يكون نفس عدد الأسئلة عشان يبقى نفس مفتاح الإجابة صحيح. لو الاختبار مختلف كليًا، ارفعه كتقرير جديد بدل التحديث.`;
+      errEl.textContent = `عدد أسئلة الملف الجديد (${newParsed.itemCount}) لا يطابق عدد أسئلة التقرير الحالي (${oldChoiceCounts.length}) - يجب أن يكون عدد الأسئلة نفسه ليبقى مفتاح الإجابة صحيحًا. وإذا كان الاختبار مختلفًا كليًا، فارفعه تقريرًا جديدًا بدل التحديث.`;
       errEl.style.display = 'block';
       return;
     }
@@ -1050,7 +1050,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
     // حتى لو الترميز الخام اختلف شوي بين الملفين
     const letters = oldChoiceCounts.map((numChoices, i) => letterFor(currentReport.key_raw[i], numChoices, reversedOrder));
     if (letters.some(l => !l)) {
-      errEl.textContent = 'تعذر قراءة مفتاح الإجابة الحالي لتطبيقه على الملف الجديد - استخدم "تعديل مفتاح الإجابة" بدالًا من ذلك.';
+      errEl.textContent = 'تعذر قراءة مفتاح الإجابة الحالي لتطبيقه على الملف الجديد - استخدم "تعديل مفتاح الإجابة" بدلًا من ذلك.';
       errEl.style.display = 'block';
       return;
     }
@@ -1090,7 +1090,7 @@ async function fetchKeyById(id) {
 async function regradeModelReport() {
   const rd = currentReport.raw_data;
   const key = await fetchKeyById(rd.models.keyId);
-  if (!key || !key.models) { alert('المفتاح المحفوظ لهذا الاختبار انحذف أو صار بنموذج واحد - ما أقدر أعيد التصحيح منه.'); return; }
+  if (!key || !key.models) { alert('حُذف المفتاح المحفوظ لهذا الاختبار أو أصبح بنموذج واحد - تتعذّر إعادة التصحيح منه.'); return; }
   if (!confirm('إعادة تصحيح كل الطلاب بآخر نسخة من المفتاح المحفوظ؟')) return;
   const reversedOrder = rd.reversedOrder !== false;
   const map = key.model_map || {};
@@ -1115,7 +1115,7 @@ document.getElementById('er-edit-key-btn').addEventListener('click', () => {
   const errEl = document.getElementById('er-editkey-error');
   errEl.style.display = 'none';
   if (!currentReport.raw_data || !Array.isArray(currentReport.raw_data.choiceCounts)) {
-    errEl.textContent = 'هذا تقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات الطلاب الخام - لازم ترفع نفس ملف الإكسل وتحفظ التقرير من جديد عشان تقدر تعدّل مفتاحه لاحقًا.';
+    errEl.textContent = 'هذا التقرير محفوظ بنسخة سابقة من النظام لا تحتوي على بيانات الطلاب الخام - يجب رفع ملف الإكسل نفسه وحفظ التقرير من جديد لتتمكن من تعديل مفتاحه لاحقًا.';
     errEl.style.display = 'block';
     document.getElementById('er-editkey-card').classList.remove('hidden');
     document.getElementById('er-editkey-form').innerHTML = '';
@@ -1233,7 +1233,7 @@ function renderReportStats(stats, view = 'all') {
   if (view === 'all' && stats.itemsMixed) {
     ['er-panel-items', 'er-panel-itemstats', 'er-panel-analysis'].forEach(id => {
       const el = document.getElementById(id);
-      if (el) el.insertAdjacentHTML('afterbegin', '<div class="er-mixed-note">أسئلة النموذجين مختلفة، فتحليل الأسئلة هنا يخلط سؤالين مختلفين. اختر "نموذج أ" أو "نموذج ب" من فوق لتحليل أسئلة كل نموذج.</div>');
+      if (el) el.insertAdjacentHTML('afterbegin', '<div class="er-mixed-note">أسئلة النموذجين مختلفة، فتحليل الأسئلة هنا يخلط سؤالين مختلفين. اختر "نموذج أ" أو "نموذج ب" من الأعلى لتحليل أسئلة كل نموذج.</div>');
     });
   }
 }
@@ -1304,10 +1304,10 @@ function renderItems(s) {
   el.innerHTML = `
     <h4 style="margin-bottom:14px;">التحليل المجمع لبنود الاختبار</h4>
     <p style="font-size:12px; color:var(--slate); margin:0 0 14px;">
-      الإجابة الصحيحة معلّمة بـ * ولون <span style="color:#2E9155; font-weight:700;">أخضر</span> — المشتت الأكثر
-      اختيارًا يصير <span style="color:#D4B106; font-weight:700;">أصفر</span> فقط لو تجاوز عدد من اختاره عدد من
-      اختار الإجابة الصحيحة (تحتاج مراجعة) — وإلا يبقى <span style="color:#C0453D; font-weight:700;">أحمر</span>
-      مثل بقية الاختيارات وعدم الاستجابة/متعدد
+      الإجابة الصحيحة معلّمة بـ * وباللون <span style="color:#2E9155; font-weight:700;">الأخضر</span> — ويظهر المشتت الأكثر
+      اختيارًا باللون <span style="color:#D4B106; font-weight:700;">الأصفر</span> فقط إذا تجاوز عدد من اختاره عدد من
+      اختار الإجابة الصحيحة (يحتاج إلى مراجعة) — وإلا فيبقى باللون <span style="color:#C0453D; font-weight:700;">الأحمر</span>
+      مثل بقية الاختيارات وعدم الاستجابة/الإجابة المتعددة
     </p>
     <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px,1fr)); gap:14px; direction:rtl;">
       ${s.itemStats.map(it => `
@@ -1388,7 +1388,7 @@ function renderAnalysis(s) {
     </div>
     <div class="form-card" style="margin-top:18px;">
       <h5 style="margin:0 0 8px; font-size:13px;">أسئلة للمراجعة</h5>
-      <p style="font-size:12.5px; margin:0;">${s.toReview.length ? s.toReview.map(it => esc(it.label) + (it.topWrong ? ` (اختار كثيرون "${esc(it.topWrong)}" بدل الإجابة الصحيحة)` : '')).join('، ') : 'ما فيه أسئلة مشتتاتها أكثر اختيارًا من الإجابة الصحيحة'}</p>
+      <p style="font-size:12.5px; margin:0;">${s.toReview.length ? s.toReview.map(it => esc(it.label) + (it.topWrong ? ` (اختار كثيرون "${esc(it.topWrong)}" بدل الإجابة الصحيحة)` : '')).join('، ') : 'لا توجد أسئلة مشتتاتها أكثر اختيارًا من الإجابة الصحيحة'}</p>
     </div>
     <div style="margin-top:22px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
       <div>
@@ -1410,7 +1410,7 @@ function renderAnalysis(s) {
         <button type="button" class="text-action-btn" id="er-export-remedial" style="width:auto; padding:8px 14px;" title="ملف وورد منفصل لكل فصل فيه طلاب ضعاف - جاهز للتعبئة اليدوية">📄 خطط علاجية جماعية (وورد)</button>
       </div>`}
     </div>
-    ${isLegacyReport ? `<p style="font-size:12px; color:var(--danger); margin:8px 0 0;">هذا التقرير محفوظ بنسخة سابقة من النظام ما تحتوي بيانات الترتيب - ارفع نفس ملف الإكسل وأعد حفظ التقرير لعرض هذه القائمة.</p>` : `
+    ${isLegacyReport ? `<p style="font-size:12px; color:var(--danger); margin:8px 0 0;">هذا التقرير محفوظ بنسخة سابقة من النظام لا تحتوي على بيانات الترتيب - ارفع ملف الإكسل نفسه وأعد حفظ التقرير لعرض هذه القائمة.</p>` : `
     <div class="form-row" style="align-items:stretch; margin-top:10px;">
       ${studentRankTable(topStudents, 'أعلى ١٥ درجة', 'badge-meadow')}
       ${studentRankTable(weakStudents, 'الطلاب الضعاف (أقل من ٥٠٪)', 'badge-danger')}
@@ -1624,13 +1624,13 @@ async function exportRemedialPlans(weakStudents) {
   const errEl = document.getElementById('er-remedial-error');
   if (errEl) { errEl.style.display = 'none'; errEl.textContent = ''; }
   if (!weakStudents.length) {
-    if (errEl) { errEl.textContent = 'ما فيه طلاب ضعاف (أقل من ٥٠٪) بهذا التقرير حاليًا.'; errEl.style.display = 'block'; }
+    if (errEl) { errEl.textContent = 'لا يوجد طلاب ضعاف (أقل من ٥٠٪) في هذا التقرير حاليًا.'; errEl.style.display = 'block'; }
     return;
   }
   try {
     await loadJSZip();
     const templateResp = await fetch(REMEDIAL_TEMPLATE_URL);
-    if (!templateResp.ok) throw new Error('تعذر تحميل نموذج الخطة العلاجية (js/templates/remedial-plan-template.docx) - تأكد إنه مرفوع على الموقع بنفس المسار.');
+    if (!templateResp.ok) throw new Error('تعذر تحميل نموذج الخطة العلاجية (js/templates/remedial-plan-template.docx) - تأكد من أنه مرفوع على الموقع بالمسار نفسه.');
     const templateBuf = await templateResp.arrayBuffer();
 
     const subject = currentReport ? currentReport.subject_name : '';
@@ -1758,7 +1758,7 @@ async function loadPeriodicData(reportId) {
   const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
   const [{ data: rep, error }, platList] = await Promise.all([
     sb.from('exam_reports').select('id, title, subject_name, key_raw, raw_data').eq('id', reportId).single(),
-    allStudents().catch(e => { throw new Error('تعذر تحميل بيانات الطلاب، حدّث الصفحة وحاول مرة ثانية' + (e && e.message ? ` (${e.message})` : '')); }),
+    allStudents().catch(e => { throw new Error('تعذر تحميل بيانات الطلاب، حدّث الصفحة وحاول مرة أخرى' + (e && e.message ? ` (${e.message})` : '')); }),
   ]);
   if (error || !rep) throw new Error('تعذر تحميل التقرير');
   const rd = rep.raw_data || {};
@@ -1854,8 +1854,8 @@ async function showAbsence(reportId) {
       ${list.map(g => `<details class="er-abs-sec"${g.absent.length ? '' : ' disabled'}>
         <summary><span class="er-abs-name">${esc(SHORT_GRADE[g.gl] || gradeLabels[g.gl] || '')} ${esc(g.section)}</span><span class="er-abs-n${g.absent.length ? '' : ' zero'}">غياب ${g.absent.length}</span><span class="er-abs-of">من ${g.present + g.absent.length}</span></summary>
         ${g.absent.length ? `<ol>${g.absent.map(x => `<li><span>${esc(x.name)}</span><small>${esc(x.id)}</small></li>`).join('')}</ol>` : ''}
-      </details>`).join('') || '<p class="er-abs-empty">ما قدرت أحدد فصول الطلاب - تأكد إن أرقام الهوية بالملف موجودة بطلاب المنصة</p>'}
-      ${unknown ? `<p class="er-abs-note">${unknown} طالب بالملف أرقامهم مو موجودة بطلاب المنصة، فما انحسبوا بالفصول</p>` : ''}
+      </details>`).join('') || '<p class="er-abs-empty">تعذّر تحديد فصول الطلاب - تأكد من أن أرقام الهوية في الملف موجودة ضمن طلاب المنصة</p>'}
+      ${unknown ? `<p class="er-abs-note">${unknown} طالب في الملف أرقامهم غير موجودة ضمن طلاب المنصة، فلم يُحتسبوا في الفصول</p>` : ''}
     </div>
   </div>`;
   document.body.appendChild(back);
@@ -1943,7 +1943,7 @@ async function openManualSheet(rep, onDone) {
       const q = normAr(pq.value);
       const rows = students.filter(x => (!pg.value || x.grade_level === pg.value) && (!ps.value || String(x.class_section) === ps.value) && (!q || normAr(x.full_name).includes(q) || String(x.national_id).includes(q)))
         .sort((a, b) => (have.has(String(a.national_id).trim()) - have.has(String(b.national_id).trim())) || String(a.full_name).localeCompare(String(b.full_name), 'ar')).slice(0, 60);
-      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? ' · له ورقة بالتقرير (الحفظ يستبدلها)' : ''}</small></button>`; }).join('') || `<span class="omr-empty">${students.length ? 'ما فيه نتائج' : 'ما فيه طلاب متاحين لك - تأكد إن تخصصاتك مسجلة في «تخصصات المعلمين» أو إن حصصك موجودة بالجدول الدراسي'}</span>`;
+      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? ' · له ورقة بالتقرير (الحفظ يستبدلها)' : ''}</small></button>`; }).join('') || `<span class="omr-empty">${students.length ? 'لا توجد نتائج' : 'لا يوجد طلاب متاحون لك - تأكد من تسجيل تخصصاتك في «تخصصات المعلمين» أو من وجود حصصك في الجدول الدراسي'}</span>`;
       list.querySelectorAll('button').forEach(b => b.onclick = () => { st.student = students.find(x => String(x.national_id) === b.dataset.id); renderSt(); });
     };
     pg.onchange = () => { fill(); draw(); }; ps.onchange = draw; pq.oninput = draw;
@@ -2039,7 +2039,7 @@ async function showResults(reportId) {
             : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${x.mcq}</td>` : ''}${d.nTf ? `<td>${x.tf}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td></tr>`).join('')}
           </tbody></table>
         </details>`;
-      }).join('') || '<p class="er-abs-empty">ما فيه نتائج</p>'}
+      }).join('') || '<p class="er-abs-empty">لا توجد نتائج</p>'}
     </div>
   </div>`;
   document.body.appendChild(back);
