@@ -1423,6 +1423,10 @@
           <div id="as-body" class="hidden" style="margin-top:14px;">
             <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:18px;" class="as-grid">
               <div>
+                <div class="as-cur" id="as-cur">
+                  <span id="as-cur-label">اختبار جديد</span>
+                  <button type="button" class="btn-secondary" id="as-key-new-btn" style="width:auto; padding:6px 12px;">＋ اختبار جديد</button>
+                </div>
                 <div class="as-steps" id="as-steps" role="tablist">
                   <button type="button" data-step="1" class="active"><i>1</i><span>بيانات الاختبار</span></button>
                   <button type="button" data-step="2"><i>2</i><span>الأسئلة</span></button>
@@ -1434,8 +1438,8 @@
                 <!-- ١) بيانات الاختبار -->
                 <div class="as-step" data-step="1">
                   <h5 class="as-step-h">بيانات الاختبار</h5>
-                  <label class="as-f">عنوان الاختبار<input type="text" id="as-title" placeholder="مثال: اختبار الفترة الأولى" /></label>
-                  <label class="as-f">المادة<input type="text" id="as-subject" placeholder="مثال: العلوم" /></label>
+                  <label class="as-f">عنوان الاختبار<input autocomplete="off" type="text" id="as-title" placeholder="مثال: اختبار الفترة الأولى" /></label>
+                  <label class="as-f">المادة<input autocomplete="off" type="text" id="as-subject" placeholder="مثال: العلوم" /></label>
                   <div class="as-f">المرحلة
                     <div id="as-key-grades" class="as-key-secs"></div>
                   </div>
@@ -1443,7 +1447,7 @@
                     <div id="as-key-secs" class="as-key-secs"><span class="as-muted">اختر المرحلة أولًا</span></div>
                   </div>
                   <label class="as-f">لغة الخيارات
-                    <select id="as-lang">
+                    <select autocomplete="off" id="as-lang">
                       <option value="ar" selected>عربي (أ ب ج د) - من اليمين</option>
                       <option value="en">English (A B C D) - من اليسار</option>
                     </select>
@@ -1451,7 +1455,7 @@
                   <div class="as-load">
                     <span>أو افتح اختبار محفوظ:</span>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
-                      <select id="as-saved-keys" style="flex:1; min-width:180px; margin:0;"><option value="">المفاتيح المحفوظة</option></select>
+                      <select autocomplete="off" id="as-saved-keys" style="flex:1; min-width:180px; margin:0;"><option value="">المفاتيح المحفوظة</option></select>
                       <button type="button" class="btn-secondary" id="as-key-load-btn" style="width:auto; padding:8px 12px;" disabled>تحميل</button>
                       <button type="button" class="text-action-btn" id="as-key-delete-btn" style="width:auto; padding:8px 10px; color:var(--danger) !important;" disabled>حذف</button>
                     </div>
@@ -1462,12 +1466,12 @@
                 <div class="as-step hidden" data-step="2">
                   <h5 class="as-step-h">الأسئلة</h5>
                   <label class="as-f">عدد الأسئلة (اختيار من متعدد + صح وخطأ)
-                    <input type="number" id="as-questions" min="0" max="150" value="20" />
+                    <input autocomplete="off" type="number" id="as-questions" min="0" max="150" value="20" />
                   </label>
                   <div class="as-split">
-                    <label class="as-f">منها اختيار من متعدد<input type="number" id="as-mcq" min="0" max="150" value="20" /></label>
+                    <label class="as-f">منها اختيار من متعدد<input autocomplete="off" type="number" id="as-mcq" min="0" max="150" value="20" /></label>
                     <label class="as-f">عدد الخيارات
-                      <select id="as-choices">
+                      <select autocomplete="off" id="as-choices">
                         <option value="2">2 (أ ب)</option>
                         <option value="3">3 (أ ب ج)</option>
                         <option value="4" selected>4 (أ ب ج د)</option>
@@ -1477,9 +1481,9 @@
                     </label>
                   </div>
                   <div class="as-split">
-                    <label class="as-f">ومنها صح وخطأ<input type="number" id="as-tf" min="0" max="150" value="0" /></label>
+                    <label class="as-f">ومنها صح وخطأ<input autocomplete="off" type="number" id="as-tf" min="0" max="150" value="0" /></label>
                     <label class="as-f">مكانها
-                      <select id="as-tf-pos">
+                      <select autocomplete="off" id="as-tf-pos">
                         <option value="first" selected>بالبداية (أول الأسئلة)</option>
                         <option value="last">بالنهاية (آخر الأسئلة)</option>
                       </select>
@@ -1488,12 +1492,12 @@
                   <div id="as-q-sum" class="as-q-sum"></div>
                 <div style="background:var(--sand); border-radius:10px; padding:11px 12px; margin-bottom:12px;">
                   <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; cursor:pointer;">
-                    <input type="checkbox" id="as-essay-on" style="width:auto; margin:0;" />
+                    <input autocomplete="off" type="checkbox" id="as-essay-on" style="width:auto; margin:0;" />
                     إضافة جزء مقالي
                   </label>
                   <div id="as-essay-total-wrap" class="hidden" style="margin-top:8px;">
                     <label style="font-size:13px; font-weight:700; display:flex; align-items:center; gap:10px;">درجة الجزء المقالي (المجموع)
-                      <input type="number" id="as-essay-total" min="1" max="40" value="10" style="width:80px; margin:0; text-align:center; padding:7px 4px;" />
+                      <input autocomplete="off" type="number" id="as-essay-total" min="1" max="40" value="10" style="width:80px; margin:0; text-align:center; padding:7px 4px;" />
                     </label>
                     <p style="font-size:11.5px; color:var(--slate); margin:6px 0 0;">إطار واحد للكتابة بأسفل الورقة، وفوقه فقاعات المجموع يظللها المعلم بعد التصحيح. حتى ١٠ درجات صف واحد (0 إلى الدرجة)، وأكثر من ١٠ صفّين: العشرات والآحاد (مثال: ١٥ = ظلّل ١٠ و ٥). ومع المقالي يصبح الاختيار من متعدد ٣ أعمدة × ١٠ في أعلى الورقة.</p>
                   </div>
@@ -1509,10 +1513,10 @@
                   </div>
                   <p style="font-size:11.5px; color:var(--slate); margin:4px 0 10px;">اضغط الإجابة الصحيحة لكل سؤال واحفظ المفتاح. عند رفع ملف Remark أو التصحيح بالجوال يُطبَّق المفتاح تلقائيًا. (اختياري إذا كنت ستطبع أوراقًا فارغة فقط)</p>
                   <div class="as-models-box">
-                    <label class="as-models-on"><input type="checkbox" id="as-models-on" /> الاختبار بنموذجين (أ و ب)</label>
+                    <label class="as-models-on"><input autocomplete="off" type="checkbox" id="as-models-on" /> الاختبار بنموذجين (أ و ب)</label>
                     <div id="as-models-opts" class="hidden">
                       <label class="as-models-mode">الفرق بين النموذجين
-                        <select id="as-models-mode">
+                        <select autocomplete="off" id="as-models-mode">
                           <option value="choices">نفس الأسئلة ونفس الترتيب، والخيارات مختلفة</option>
                           <option value="order">نفس الأسئلة بترتيب مختلف</option>
                           <option value="different">أسئلة مختلفة كليًا</option>
@@ -1523,7 +1527,7 @@
                           <button type="button" data-a="auto">المنصة توزّع</button>
                           <button type="button" data-a="bubble">الطالب يظلّل نموذجه</button>
                         </div>
-                        <select id="as-models-assign" hidden>
+                        <select autocomplete="off" id="as-models-assign" hidden>
                           <option value="auto">auto</option>
                           <option value="bubble">bubble</option>
                         </select>
@@ -1534,6 +1538,13 @@
                         <button type="button" data-m="ب">نموذج ب <span class="tr-cnt" id="as-model-cnt-b"></span></button>
                       </div>
                       <p class="as-models-hint" id="as-models-hint"></p>
+                    </div>
+                  </div>
+                  <div class="as-points-box">
+                    <label class="as-models-on"><input autocomplete="off" type="checkbox" id="as-points-on" /> تحديد درجة لكل سؤال</label>
+                    <div id="as-points-opts" class="hidden">
+                      <div class="as-points-fill">اجعل درجة كل الأسئلة <input autocomplete="off" type="number" id="as-points-all" min="0" step="0.25" value="1" /> <button type="button" class="text-action-btn" id="as-points-apply">تطبيق</button></div>
+                      <span class="as-points-sum" id="as-points-sum"></span>
                     </div>
                   </div>
                   <div id="as-key-grid" style="display:flex; flex-wrap:wrap; gap:6px; max-height:300px; overflow-y:auto;"></div>
@@ -1547,31 +1558,31 @@
                 <div class="as-step hidden" data-step="4">
                   <h5 class="as-step-h">إعدادات الطباعة</h5>
                   <label class="as-f">حجم الورقة
-                    <select id="as-size">
+                    <select autocomplete="off" id="as-size">
                       <option value="A4" selected>A4 (طالب بالصفحة)</option>
                       <option value="A4L2">A4 بالعرض (طالبين بالصفحة - تُقص)</option>
                       <option value="A5">A5</option>
                     </select>
                   </label>
                 <label style="display:flex; align-items:center; gap:8px; font-size:13.5px; font-weight:700; background:var(--sand); border-radius:10px; padding:11px 12px; cursor:pointer;">
-                  <input type="checkbox" id="as-barcode" style="width:auto; margin:0;" />
+                  <input autocomplete="off" type="checkbox" id="as-barcode" style="width:auto; margin:0;" />
                   إضافة باركود باسم الطالب (ورقة خاصة لكل طالب)
                 </label>
                 <div id="as-barcode-opts" class="hidden" style="background:var(--sand); border-radius:10px; padding:4px 12px 12px; margin-top:-6px;">
                   <p style="font-size:11.5px; color:var(--slate); margin:6px 0 8px;">تُطبع لكل طالب ورقة تتضمن اسمه وصفه وفصله، وباركود (Code 128) برقم هويته يقرأه Remark. الترتيب: أول ١، أول ٢ ... ثم ثاني ١ ... وداخل الفصل أبجديًا.</p>
                   <div class="form-row" style="margin-bottom:0;">
                     <label style="font-size:12.5px; font-weight:700; display:block;">الطلاب
-                      <select id="as-scope" style="margin-top:4px;">
+                      <select autocomplete="off" id="as-scope" style="margin-top:4px;">
                         <option value="class" selected>فصل محدد</option>
                         <option value="grade">مرحلة كاملة</option>
                         <option value="school">المدرسة كاملة</option>
                       </select>
                     </label>
                     <label id="as-grade-wrap" style="font-size:12.5px; font-weight:700; display:block;">المرحلة
-                      <select id="as-grade" style="margin-top:4px;"></select>
+                      <select autocomplete="off" id="as-grade" style="margin-top:4px;"></select>
                     </label>
                     <label id="as-section-wrap" style="font-size:12.5px; font-weight:700; display:block;">الفصل
-                      <select id="as-section" style="margin-top:4px;"></select>
+                      <select autocomplete="off" id="as-section" style="margin-top:4px;"></select>
                     </label>
                   </div>
                   <div id="as-scope-count" style="font-size:12px; color:var(--slate); font-weight:700;"></div>
@@ -1667,7 +1678,7 @@
               <button type="button" class="text-action-btn" id="er-update-file-btn" style="width:auto; padding:8px 14px;" title="ترفع ملف إكسل جديد (نفس عدد الأسئلة) وتبقى الإجابة الصحيحة كما هي">⭯ تحديث ملف الإكسل</button>
               <button type="button" class="btn-secondary hidden" id="er-add-sheet-btn" style="width:auto; padding:8px 14px;" title="إضافة ورقة طالب (مثلاً اختبر متأخر) بإدخال إجاباته يدويًا">➕ إضافة ورقة طالب</button>
               <button type="button" class="btn-secondary hidden" id="er-camera-continue" style="width:auto; padding:8px 14px;">📷 متابعة التصحيح بالجوال</button>
-              <button type="button" class="text-action-btn" id="er-edit-key-btn" style="width:auto; padding:8px 14px;" title="تعديل الإجابة الصحيحة لكل سؤال وإعادة حساب التقارير">✎ تعديل مفتاح الإجابة</button>
+              <button type="button" class="text-action-btn" id="er-edit-key-btn" style="width:auto; padding:8px 14px;" title="تعديل الإجابة الصحيحة ودرجة كل سؤال وإعادة حساب التقارير">✎ تعديل مفتاح الإجابة والدرجات</button>
             </div>
           </div>
 
@@ -1684,7 +1695,7 @@
 
           <div id="er-editkey-card" class="hidden" style="background:var(--sand); border:1px solid var(--border); border-radius:14px; padding:16px 18px; margin-bottom:18px;">
             <h5 style="margin:0 0 4px; font-size:13.5px;">تعديل مفتاح الإجابة</h5>
-            <p style="font-size:11.5px; color:var(--slate); margin:0 0 12px;">غيّر الإجابة الصحيحة لأي سؤال وبعدين احفظ - كل التقارير الستة بتُعاد حسابها تلقائيًا بالمفتاح الجديد.</p>
+            <p style="font-size:11.5px; color:var(--slate); margin:0 0 12px;">غيّر الإجابة الصحيحة أو درجة أي سؤال ثم احفظ - تُعاد حسابات التقارير الستة تلقائيًا بالمفتاح الجديد.</p>
             <div id="er-editkey-form"></div>
             <div style="display:flex; gap:8px; margin-top:14px;">
               <button type="button" class="btn-primary" id="er-editkey-save" style="width:auto; padding:9px 18px;">حفظ المفتاح الجديد</button>

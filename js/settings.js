@@ -190,7 +190,7 @@ async function importStudentsFile() {
 
       const known = new Set(stuCache.map(x => String(x.national_id)));
       const added = students.filter(x => !known.has(x.national_id)).length;
-      let msg = `تم استيراد ${students.length} طالب: ${added} جديد و${students.length - added} تحدّثت بياناتهم`;
+      let msg = `تم استيراد ${students.length} طالب: ${added} جديد و${students.length - added} حُدِّثت بياناتهم`;
 
       // الطلاب اللي مو موجودين بالملف (انتقلوا/انسحبوا) - بس من الصفوف اللي بالملف، عشان ملف صف واحد ما يحذف باقي الصفوف
       const inFile = new Set(students.map(x => x.national_id));

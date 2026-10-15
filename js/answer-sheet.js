@@ -651,6 +651,10 @@ function renderPreview() {
  * وقسم تقارير الاختبارات يتعرف عليه تلقائيًا كمفتاح إجابة ويستبعده من الطلاب. */
 const KEY_ID = '0000000000';
 let keyAnswers = []; // لكل سؤال: رقم الخيار الصحيح (0 = أ) أو null - النموذج أ (أو الوحيد)
+let keyPoints = [];  // درجة كل سؤال (بترتيب النموذج أ) - تُستخدم لما يكون «تحديد درجة لكل سؤال» مفعّلًا
+function pointsOn() { const el = $('as-points-on'); return !!(el && el.checked); }
+const ptVal = v => (Number.isFinite(+v) && +v >= 0 ? +v : 1);
+const fmtPt = v => String(Math.round(v * 100) / 100);
 
 /* ---------- الاختبار بنموذجين ----------
  * keyAnswersB: إجابات النموذج ب. orderB (لو الأسئلة نفسها بترتيب مختلف): orderB[i] = رقم السؤال
@@ -674,6 +678,13 @@ function renderKeyGrid() {
   keyAnswers = fitK(keyAnswers);
   keyAnswersB = fitK(keyAnswersB);
   orderB = fitArr(orderB, n, n);
+  keyPoints = Array.from({ length: n }, (_, i) => ptVal(keyPoints[i] == null ? 1 : keyPoints[i]));
+  const pOn = pointsOn();
+  if ($('as-points-opts')) {
+    $('as-points-opts').classList.toggle('hidden', !pOn);
+    const total = keyPoints.reduce((a, b) => a + b, 0) + (o.essayTotal || 0);
+    $('as-points-sum').textContent = pOn ? `الدرجة الكاملة: ${fmtPt(total)}${o.essayTotal ? ` (منها المقالي ${o.essayTotal})` : ''}` : '';
+  }
   const on = modelsOn();
   $('as-models-opts').classList.toggle('hidden', !on);
   const assign = $('as-models-assign').value;
@@ -698,6 +709,7 @@ function renderKeyGrid() {
     <div class="as-key-q" style="display:flex; align-items:center; gap:4px; background:#fff; border:1px solid var(--border); border-radius:9px; padding:4px 6px;">
       <b style="min-width:20px; font-size:12px; text-align:center;">${q + 1}</b>
       ${(kinds[q] === 'tf' ? TF_LETTERS[o.lang === 'en' ? 'en' : 'ar'] : letters).map((l, c) => `<button type="button" class="as-key-btn" data-q="${q}" data-c="${c}" style="width:26px; height:26px; border-radius:50%; border:1.5px solid ${sel === c ? 'var(--meadow)' : '#C9CED8'}; background:${sel === c ? 'var(--meadow)' : '#fff'}; color:${sel === c ? '#fff' : 'var(--ink)'}; font-size:12px; font-weight:700; padding:0; cursor:pointer;">${l}</button>`).join('')}
+      ${pOn && activeModel === MODEL_A ? `<input type="number" class="as-pt" data-q="${q}" min="0" step="0.25" value="${fmtPt(keyPoints[q])}" aria-label="درجة السؤال ${q + 1}" title="درجة السؤال" autocomplete="off" />` : ''}
       ${ordering ? `<select class="as-ord" data-q="${q}" aria-label="رقم السؤال المقابل بالنموذج أ" title="رقمه بالنموذج أ"><option value="">=أ؟</option>${Array.from({ length: n }, (_, j) => `<option value="${j}"${orderB[q] === j ? ' selected' : ''}>أ${j + 1}</option>`).join('')}</select>` : ''}
     </div>`).join('');
   updateKeyStatus();
@@ -786,6 +798,7 @@ const isTeacherRole = () => !!(currentProfile && currentProfile.role === 'teache
 export async function fetchSavedKeys() {
   // نجرب الأعمدة الأحدث أول، ولو قاعدة البيانات أقدم نرجع للأعمدة اللي قبلها
   const colsets = [
+    'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, created_by, points, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, created_by, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, updated_at',
@@ -801,7 +814,7 @@ export async function fetchSavedKeys() {
     });
     if (!error) return { data: data || [], error: null };
     last = error;
-    if (!/tf_count|tf_first|sections|models|model_map|column/i.test(error.message || '')) break;
+    if (!/points|tf_count|tf_first|sections|models|model_map|column/i.test(error.message || '')) break;
   }
   const missing = /answer_keys|relation|does not exist|schema cache/i.test((last && last.message) || '');
   return { data: [], error: missing ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : (last && last.message) };
@@ -815,6 +828,7 @@ async function refreshSavedKeysList() {
   sel.innerHTML = `<option value="">${savedKeys.length ? `المفاتيح المحفوظة (${savedKeys.length})` : 'لا توجد مفاتيح محفوظة'}</option>` +
     savedKeys.map(k => `<option value="${k.id}"${k.id === currentKeyId ? ' selected' : ''}>${escHtml(k.title)} — ${k.questions} سؤال${k.essay_total ? ` + مقالي ${k.essay_total}` : ''}</option>`).join('');
   $('as-key-load-btn').disabled = $('as-key-delete-btn').disabled = !sel.value;
+  updateCurLabel();
 }
 
 async function saveKey() {
@@ -823,7 +837,7 @@ async function saveKey() {
   if (!keyClassChosen()) { keyStatusMsg('حدد المرحلة بالخطوة ١ قبل حفظ المفتاح (أو جميع المراحل)', true); return; }
   if (!o.questions && !o.essayTotal) { keyStatusMsg('حدد عدد الأسئلة', true); return; }
   const prob = keyProblems();
-  if (prob) { keyStatusMsg(prob + ' - كمّل المفتاح قبل الحفظ', true); return; }
+  if (prob) { keyStatusMsg(prob + ' - يُرجى إكمال المفتاح قبل الحفظ', true); return; }
   const row = {
     title: o.title, subject: o.subject || null,
     grade_level: keyGrade() || null,
@@ -832,6 +846,9 @@ async function saveKey() {
     updated_at: new Date().toISOString(),
   };
   if (o.tf || (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).tf_count)) { row.tf_count = o.tf; row.tf_first = o.tfFirst; }
+  const hadPoints = currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).points;
+  if (pointsOn() && keyPoints.some(v => v !== 1)) row.points = keyPoints.slice();
+  else if (hadPoints) row.points = null;
   // sections: { grades: [...] | null (الكل), classes: [أرقام الفصول] | null } - للمرحلة الوحدة grade_level كمان
   const scope = keyGrades === null ? { grades: null, classes: null } : { grades: keyGrades.slice(), classes: keyGrade() ? keySections : null };
   if (keyGrades === null || keyGrades.length !== 1 || keySections || (currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).sections)) row.sections = scope;
@@ -853,6 +870,7 @@ async function saveKey() {
   $('as-key-save-btn').disabled = false;
   if (res.error) {
     const msg = res.error.message || '';
+    if (/points/i.test(msg)) { keyStatusMsg('درجات الأسئلة تحتاج تحديث قاعدة البيانات - تواصل مع الدعم الفني', true); return; }
     if (/tf_count|tf_first|sections/i.test(msg)) { keyStatusMsg('أسئلة الصح والخطأ تحتاج تشغيل ملف sql/answer_keys_tf.sql في قاعدة البيانات أولًا', true); return; }
     const missingCols = /models|model_map/i.test(msg);
     const missingTbl = /answer_keys|relation|does not exist|schema cache/i.test(msg);
@@ -862,6 +880,7 @@ async function saveKey() {
   currentKeyId = res.data.id;
   setStatus('');
   await refreshSavedKeysList();
+  updateCurLabel();
   keyStatusMsg(notMine ? `المفتاح الأصلي من الإدارة، فانحفظ "${o.title}" كنسخة خاصة فيك ✓` : `تم حفظ المفتاح "${o.title}" ✓ - يُطبَّق تلقائيًا عند رفع ملف Remark في التقارير`);
 }
 
@@ -885,6 +904,8 @@ function loadKeyIntoForm(k) {
   }
   updateQSum();
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
+  keyPoints = Array.isArray(k.points) ? k.points.map(ptVal) : [];
+  if ($('as-points-on')) $('as-points-on').checked = Array.isArray(k.points) && k.points.length > 0;
   const m = k.models && k.models.mode ? k.models : null;
   $('as-models-on').checked = !!m;
   if (m) { $('as-models-mode').value = m.mode; $('as-models-assign').value = m.assign === 'bubble' ? 'bubble' : 'auto'; }
@@ -893,6 +914,33 @@ function loadKeyIntoForm(k) {
   modelMap = k.model_map && typeof k.model_map === 'object' ? { ...k.model_map } : {};
   activeModel = MODEL_A;
   currentKeyId = k.id;
+  updateCurLabel();
+}
+
+// شريط «تعمل على»: اختبار جديد أو تعديل اختبار محفوظ
+function updateCurLabel() {
+  const el = $('as-cur-label'); if (!el) return;
+  const k = currentKeyId ? savedKeys.find(x => x.id === currentKeyId) : null;
+  el.innerHTML = k ? `تعديل: <b>${escHtml(k.title)}</b> <small>(الحفظ يحدّث هذا الاختبار)</small>` : 'اختبار جديد <small>(الحفظ ينشئ اختبارًا جديدًا)</small>';
+  $('as-cur').classList.toggle('editing', !!k);
+}
+
+// يبدأ اختبارًا جديدًا: يفرّغ كل الحقول والإجابات ويفصل الارتباط بالمفتاح المحفوظ
+function resetKeyForm() {
+  $('as-title').value = ''; $('as-subject').value = '';
+  $('as-questions').value = 20; $('as-mcq').value = 20; $('as-tf').value = 0; $('as-tf-pos').value = 'first';
+  $('as-choices').value = '4'; $('as-lang').value = 'ar';
+  $('as-essay-on').checked = false; $('as-essay-total-wrap').classList.add('hidden');
+  $('as-models-on').checked = false; $('as-models-mode').value = 'choices'; $('as-models-assign').value = 'auto';
+  if ($('as-points-on')) $('as-points-on').checked = false;
+  keyAnswers = []; keyAnswersB = []; orderB = []; modelMap = {}; keyPoints = []; activeModel = MODEL_A;
+  currentKeyId = null;
+  keyGrades = []; keySections = null;
+  $('as-saved-keys').value = ''; $('as-key-load-btn').disabled = $('as-key-delete-btn').disabled = true;
+  renderKeyGrades(); if ($('as-key-secs-wrap')) $('as-key-secs-wrap').classList.add('hidden');
+  updateQSum(); renderKeyGrid(); updateCurLabel();
+  keyStatusMsg('');
+  showStep(1);
 }
 
 function buildKeyPages() {
@@ -1243,8 +1291,17 @@ export function initAnswerSheetCard() {
   };
   $('as-key-print-btn').addEventListener('click', keyAction(printSheets));
   $('as-key-pdf-btn').addEventListener('click', keyAction(downloadPdf));
-  $('as-key-clear-btn').addEventListener('click', () => { keyAnswers = []; keyAnswersB = []; orderB = []; modelMap = {}; activeModel = MODEL_A; currentKeyId = null; $('as-saved-keys').value = ''; renderKeyGrid(); renderDistribution(); });
+  $('as-key-clear-btn').addEventListener('click', () => { keyAnswers = []; keyAnswersB = []; orderB = []; activeModel = MODEL_A; renderKeyGrid(); renderDistribution(); });
   $('as-key-save-btn').addEventListener('click', saveKey);
+  $('as-key-new-btn').addEventListener('click', () => { resetKeyForm(); refresh(); });
+  $('as-points-on').addEventListener('change', renderKeyGrid);
+  $('as-points-apply').addEventListener('click', () => { const v = ptVal($('as-points-all').value); keyPoints = keyPoints.map(() => v); renderKeyGrid(); });
+  $('as-key-grid').addEventListener('input', (e) => {
+    const inp = e.target.closest('.as-pt'); if (!inp) return;
+    keyPoints[+inp.dataset.q] = ptVal(inp.value);
+    const o = readOptions(); const total = keyPoints.reduce((a, b) => a + b, 0) + (o.essayTotal || 0);
+    $('as-points-sum').textContent = `الدرجة الكاملة: ${fmtPt(total)}${o.essayTotal ? ` (منها المقالي ${o.essayTotal})` : ''}`;
+  });
   $('as-saved-keys').addEventListener('change', () => { $('as-key-load-btn').disabled = $('as-key-delete-btn').disabled = !$('as-saved-keys').value; });
   $('as-key-load-btn').addEventListener('click', () => {
     const k = savedKeys.find(x => x.id === $('as-saved-keys').value);
@@ -1252,7 +1309,7 @@ export function initAnswerSheetCard() {
     loadKeyIntoForm(k);
     if (k.models && k.models.mode && k.models.assign !== 'bubble' && !$('as-barcode').checked) { $('as-barcode').checked = true; $('as-barcode-opts').classList.remove('hidden'); loadAllStudents().then(refresh); }
     refresh(); renderKeyGrid();
-    keyStatusMsg(`تم تحميل "${k.title}" - أي تعديل وحفظ يحدّث نفس المفتاح`);
+    keyStatusMsg(`تم فتح "${k.title}" للتعديل - الحفظ يحدّث هذا الاختبار. لإنشاء اختبار آخر اضغط «＋ اختبار جديد»`);
   });
   $('as-key-delete-btn').addEventListener('click', async () => {
     const k = savedKeys.find(x => x.id === $('as-saved-keys').value);
@@ -1263,6 +1320,7 @@ export function initAnswerSheetCard() {
     if (error) { keyStatusMsg('تعذر الحذف: ' + error.message, true); return; }
     if (currentKeyId === k.id) currentKeyId = null;
     await refreshSavedKeysList();
+    updateCurLabel();
     keyStatusMsg('تم حذف المفتاح');
   });
   ['as-questions', 'as-mcq', 'as-choices', 'as-lang', 'as-tf'].forEach(id => $(id).addEventListener('input', renderKeyGrid));
@@ -1273,4 +1331,5 @@ export function initAnswerSheetCard() {
     if (open) { refresh(); renderKeyGrid(); refreshSavedKeysList(); }
   });
   updateLimitHint();
+  updateCurLabel();
 }

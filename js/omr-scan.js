@@ -671,6 +671,7 @@ function reportPayload(scans) {
     subject: k.subject || '', modelRaw: null, answers: (s.answers || []).slice(0, n).map(toRawQ), essay: s.essay, model: s.model || undefined,
   }));
   const grades = [...new Set(students.map(s => s.grade).filter(Boolean))];
+  const pts = Array.isArray(k.points) && k.points.length === n ? k.points.slice() : null;
   const base = {
     title: k.title, subject_name: k.subject || null, grade_level: grades.length === 1 ? grades[0] : (gradeLabels[k.grade_level] || null),
     item_count: n, students_count: students.length,
@@ -678,7 +679,7 @@ function reportPayload(scans) {
   if (!students.length || !n) return { ...base, key_raw: [], stats: null, raw_data: { students, choiceCounts, itemTypes, reversedOrder: reversed, source: 'camera', keyId: k.id } };
   if (o.modelsOn) {
     const g = gradeWithModels({
-      parsed: { itemCount: n, choiceCounts, itemTypes, students },
+      parsed: { itemCount: n, choiceCounts, itemTypes, students, points: pts },
       keyA: rawFromIdx(k.answers, choiceCounts, reversed), keyB: rawFromIdx(k.models.answers_b, choiceCounts, reversed),
       mode: k.models.mode, orderB: k.models.order_b, reversedOrder: reversed, keyId: k.id,
       modelOf: st => st.model || MODEL_A,
@@ -687,8 +688,8 @@ function reportPayload(scans) {
     return { ...base, key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data };
   }
   const keyRaw = rawFromIdx(k.answers, choiceCounts, reversed);
-  const stats = computeExamStats({ itemCount: n, keyRaw, choiceCounts, students, reversedOrder: reversed, itemTypes });
-  return { ...base, key_raw: keyRaw, stats, raw_data: { students, choiceCounts, itemTypes, reversedOrder: reversed, source: 'camera', keyId: k.id } };
+  const stats = computeExamStats({ itemCount: n, keyRaw, choiceCounts, students, reversedOrder: reversed, itemTypes, points: pts });
+  return { ...base, key_raw: keyRaw, stats, raw_data: { students, choiceCounts, itemTypes, reversedOrder: reversed, source: 'camera', keyId: k.id, ...(pts ? { points: pts } : {}) } };
 }
 
 async function rebuildReport() {

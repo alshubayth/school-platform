@@ -187,15 +187,19 @@ function mostCommon(arr) {
 /* =========================================================================
  * حساب كل الإحصاءات المطلوبة للتقارير الستة، من بيانات مُحلَّلة (parseSheetRows)
  * ========================================================================= */
-export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, reversedOrder = true, itemTypes = [] }) {
+export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, reversedOrder = true, itemTypes = [], points = null }) {
   const n = students.length;
+  // درجة كل سؤال (افتراضيًا ١) والدرجة الكاملة
+  const W = Array.from({ length: itemCount }, (_, i) => (Array.isArray(points) && Number.isFinite(+points[i]) && +points[i] >= 0 ? +points[i] : 1));
+  const maxScore = W.reduce((a, b) => a + b, 0);
+  const weighted = W.some(w => w !== 1);
 
   // كل طالب يتصحّح بمفتاح نموذجه (s.key) لو الاختبار بأكثر من نموذج، وإلا بالمفتاح العام
   const K = st => st.key || keyRaw;
   const isCorrectSt = (st, i) => st.answers[i] != null && st.answers[i] === K(st)[i];
   const totals = students.map(st => {
     let t = 0;
-    for (let i = 0; i < itemCount; i++) if (isCorrectSt(st, i)) t++;
+    for (let i = 0; i < itemCount; i++) if (isCorrectSt(st, i)) t += W[i];
     return t;
   });
 
@@ -206,14 +210,14 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
   const low = Math.min(...totals);
   const variance = totals.reduce((s, t) => s + (t - mean) * (t - mean), 0) / n;
   const sd = Math.sqrt(variance);
-  const meanPct = itemCount ? (mean / itemCount) * 100 : 0;
+  const meanPct = maxScore ? (mean / maxScore) * 100 : 0;
 
   // ---- تقرير ١: التوزيع التكراري للصف (A-F) ----
   const gradeDistribution = GRADE_BANDS.map(b => {
-    const rawMin = (b.min / 100) * itemCount;
-    const rawMax = (b.max / 100) * itemCount;
+    const rawMin = (b.min / 100) * maxScore;
+    const rawMax = (b.max / 100) * maxScore;
     const freq = totals.filter(t => {
-      const p = itemCount ? (t / itemCount) * 100 : 0;
+      const p = maxScore ? (t / maxScore) * 100 : 0;
       return p >= b.min && p <= b.max;
     }).length;
     return { grade: b.grade, pctMin: b.min, pctMax: b.max, rawMin, rawMax, freq, freqPct: n ? (freq / n) * 100 : 0 };
@@ -222,7 +226,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
   // ---- تقرير ٢: الرسم البياني لتقدير الطالب (10 فئات بالدرجة المئوية) ----
   const scoreHistogram = Array.from({ length: 10 }, (_, i) => ({ label: String((i + 1) * 10), count: 0 }));
   totals.forEach(t => {
-    const p = itemCount ? (t / itemCount) * 100 : 0;
+    const p = maxScore ? (t / maxScore) * 100 : 0;
     const idx = Math.min(9, Math.floor(p / 10));
     scoreHistogram[idx].count++;
   });
@@ -290,6 +294,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
 
     itemStats.push({
       num: i + 1,
+      points: W[i],
       label: itemTypes[i] === 'tf' ? 'صح وخطأ' + (++tfSeq) : 'اختيار متعدد' + (++mcqSeq),
       correctLetter,
       correctCount, notPresent, multi,
@@ -319,14 +324,14 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
     name: s.name,
     section: s.section,
     total: totals[idx],
-    pct: itemCount ? (totals[idx] / itemCount) * 100 : 0,
+    pct: maxScore ? (totals[idx] / maxScore) * 100 : 0,
   })).sort((a, b) => b.total - a.total);
   const topStudents = ranked.slice(0, 15);
   // الطلاب الضعاف: أي طالب تحقيقه أقل من ٥٠٪ من الدرجة (مو رقم ثابت) - بالاسم، من الأدنى للأعلى
   const weakStudents = ranked.filter(r => r.pct < 50).slice().sort((a, b) => a.total - b.total);
 
   return {
-    n, itemCount, mean, median, high, low, range: high - low, sd, meanPct, kr20, reliabilityBand,
+    n, itemCount, maxScore, weighted, points: weighted ? W : null, mean, median, high, low, range: high - low, sd, meanPct, kr20, reliabilityBand,
     gradeDistribution, scoreHistogram, itemStats, hardest, easiest, toReview, lowestStudents, highestStudents,
     topStudents, weakStudents,
   };
@@ -362,7 +367,7 @@ export function gradeWithModels({ parsed, keyA, keyB, mode, orderB, reversedOrde
   const keyBA = toA(keyB);
   const tagged = parsed.students.map(st => ({ ...st, model: modelOf(st) === MODEL_B ? MODEL_B : MODEL_A }));
   const graded = tagged.map(st => (st.model === MODEL_B ? { ...st, answers: toA(st.answers), key: keyBA } : { ...st, key: keyA }));
-  const base = { itemCount: n, choiceCounts: parsed.choiceCounts, reversedOrder, itemTypes: parsed.itemTypes || [] };
+  const base = { itemCount: n, choiceCounts: parsed.choiceCounts, reversedOrder, itemTypes: parsed.itemTypes || [], points: parsed.points || null };
   const stats = computeExamStats({ ...base, keyRaw: keyA, students: graded });
   const byModel = {};
   [MODEL_A, MODEL_B].forEach(m => {
@@ -372,7 +377,7 @@ export function gradeWithModels({ parsed, keyA, keyB, mode, orderB, reversedOrde
   stats.models = { mode, counts: { [MODEL_A]: tagged.filter(st => st.model === MODEL_A).length, [MODEL_B]: tagged.filter(st => st.model === MODEL_B).length } };
   stats.itemsMixed = mode === 'different';
   stats.byModel = byModel;
-  const raw_data = { students: tagged, choiceCounts: parsed.choiceCounts, itemTypes: parsed.itemTypes || [], reversedOrder, models: { keyId: keyId || null, mode, keyA, keyB, orderB: orderB || null } };
+  const raw_data = { students: tagged, choiceCounts: parsed.choiceCounts, itemTypes: parsed.itemTypes || [], reversedOrder, ...(parsed.points ? { points: parsed.points } : {}), models: { keyId: keyId || null, mode, keyA, keyB, orderB: orderB || null } };
   return { stats, raw_data, key_raw: keyA };
 }
 
@@ -520,13 +525,13 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     const enr = await enrichFromPlatform(parsedData);
 
     const keyNote = paperRes
-      ? ` — ورقة أسئلة «${esc(paperRes.paper.title)}»: كل طالب تصحح على نموذجه، والمفتاح من الورقة`
+      ? ` — ورقة أسئلة «${esc(paperRes.paper.title)}»: يُصحَّح كل طالب وفق نموذجه، والمفتاح مأخوذ من الورقة`
       : parsedData.detectedKeyRaw
       ? ' — عُثر في الملف على صف نموذج جاهز وعُبّئت الإجابات منه، راجعها أو عدّلها أدناه'
       : ' — عبّي الإجابة الصحيحة لكل سؤال بالأسفل';
     document.getElementById('er-preview-summary').innerHTML =
       `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`
-      + (enr.filled ? `<br><span style="color:#1F6A3C;">✓ كمّلت بيانات ${enr.filled} ${enr.filled === 1 ? 'طالب' : 'طلاب'} (الاسم/الصف/الفصل) من طلاب المنصة برقم الهوية</span>` : '')
+      + (enr.filled ? `<br><span style="color:#1F6A3C;">✓ اكتملت بيانات ${enr.filled} ${enr.filled === 1 ? 'طالب' : 'طلاب'} (الاسم/الصف/الفصل) من طلاب المنصة برقم الهوية</span>` : '')
       + (enr.fixedIds && enr.fixedIds.length ? `<br><span style="color:#1F6A3C;">✓ صححت ${enr.fixedIds.length === 1 ? 'رقم هوية قُرئ خطأً من الباركود' : enr.fixedIds.length + ' أرقام هوية قُرئت خطأً من الباركود'}: ${enr.fixedIds.map(esc).join('، ')}</span>` : '')
       + (paperRes && paperRes.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.unknown.length} ورقة لم ترتبط بطالب (لم تُطبع له من المنصة أو تغيّرت الورقة بعد الطباعة): ${paperRes.unknown.slice(0, 5).map(esc).join('، ')}</span>` : '')
       + (paperRes && paperRes.missingPages.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.missingPages.length} طالب تنقصهم صفحة أو أكثر في الملف (تُحتسب أسئلتها بلا إجابة): ${paperRes.missingPages.slice(0, 5).map(esc).join('، ')}${paperRes.missingPages.length > 5 ? '...' : ''}</span>` : '')
@@ -633,6 +638,7 @@ function applySavedKey(k) {
   if (!k) {
     delete parsedData.presetLetters;
     parsedData.essayMax = null;
+    parsedData.points = null;
     if (parsedData._origItemTypes) parsedData.itemTypes = parsedData._origItemTypes.slice();
     parsedData.choiceCounts = parsedData._origChoiceCounts.slice();
     msg.textContent = '';
@@ -640,6 +646,7 @@ function applySavedKey(k) {
     return;
   }
   parsedData.essayMax = Number(k.essay_total) || null;
+  parsedData.points = Array.isArray(k.points) && k.points.length === parsedData.itemCount ? alignKeyToFile(k, k.points) : null;
   parsedData.presetLetters = alignKeyToFile(k, k.answers || []).map(i => (i == null ? null : ARABIC_LETTERS[i]));
   // مفتاح فيه أسئلة صح وخطأ: نوع كل سؤال وعدد خياراته من المفتاح نفسه
   if (!parsedData._origItemTypes) parsedData._origItemTypes = (parsedData.itemTypes || []).slice();
@@ -741,7 +748,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     // نحفظ إجابات الطلاب الخام كمان (مو بس النتيجة المحسوبة) عشان لو المدير احتاج يعدّل
     // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية - وكذلك اتجاه
     // ترميز الاختيارات المستخدم عشان تعديل المفتاح لاحقًا يفهم نفس الحروف صح
-    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder, essayMax: essayMaxOf(parsedData), hasEssay: !!parsedData.hasEssay, ...(parsedData.paper ? { paper: parsedData.paper } : {}) },
+    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder, essayMax: essayMaxOf(parsedData), hasEssay: !!parsedData.hasEssay, ...(parsedData.paper ? { paper: parsedData.paper } : {}), ...(parsedData.points ? { points: parsedData.points } : {}) },
     created_by: currentUserId,
   });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
@@ -909,7 +916,7 @@ async function openReport(id) {
   document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`;
   showErTab('dist');
   const ekb = document.getElementById('er-edit-key-btn');
-  ekb.textContent = data.raw_data && data.raw_data.models ? '↻ إعادة التصحيح بالمفتاح المحفوظ' : '✎ تعديل مفتاح الإجابة';
+  ekb.textContent = data.raw_data && data.raw_data.models ? '↻ إعادة التصحيح بالمفتاح المحفوظ' : '✎ تعديل مفتاح الإجابة والدرجات';
   // تقرير الجوال ينبني من الأوراق المصححة: التعديل يكون من شاشة التصحيح نفسها
   const cam = data.source === 'camera';
   ekb.classList.toggle('hidden', cam || isTeacherView());
@@ -1000,6 +1007,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       return;
     }
 
+    if (currentReport.raw_data.points && currentReport.raw_data.points.length === newParsed.itemCount) newParsed.points = currentReport.raw_data.points;
     // إضافة: نفس ترميز التقرير الحالي، والطلاب = الموجودين (إلا اللي رجعوا بالملف) + طلاب الملف
     let appendNote = '';
     if (updMode === 'append') {
@@ -1012,7 +1020,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       const added = newParsed.students.filter(st => !oldIds.has(idOf(st))).length;
       const updated = newParsed.students.length - added;
       newParsed.students = oldStudents.filter(st => !newIds.has(idOf(st))).concat(newParsed.students);
-      appendNote = `تمت الإضافة ✓ ${added} طالب جديد${updated ? `، و${updated} ${updated === 1 ? 'طالب تحدّثت ورقته' : 'طلاب تحدّثت أوراقهم'}` : ''} — مجموع الطلاب الآن ${newParsed.students.length}`;
+      appendNote = `تمت الإضافة ✓ ${added} طالب جديد${updated ? `، و${updated} ${updated === 1 ? 'طالب حُدِّثت ورقته' : 'طلاب حُدِّثت أوراقهم'}` : ''} — مجموع الطلاب الآن ${newParsed.students.length}`;
     }
 
     if (currentReport.raw_data.models) {
@@ -1082,7 +1090,8 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
 /* ---------- تعديل مفتاح الإجابة لتقرير محفوظ وإعادة حساب التقارير الستة ---------- */
 async function fetchKeyById(id) {
   if (!id) return null;
-  const { data } = await sb.from('answer_keys').select('id, answers, choices, models, model_map').eq('id', id).maybeSingle();
+  let { data, error } = await sb.from('answer_keys').select('id, answers, choices, models, model_map, points').eq('id', id).maybeSingle();
+  if (error) ({ data } = await sb.from('answer_keys').select('id, answers, choices, models, model_map').eq('id', id).maybeSingle());
   return data || null;
 }
 
@@ -1095,7 +1104,7 @@ async function regradeModelReport() {
   const reversedOrder = rd.reversedOrder !== false;
   const map = key.model_map || {};
   const g = gradeWithModels({
-    parsed: { itemCount: rd.choiceCounts.length, choiceCounts: rd.choiceCounts, itemTypes: rd.itemTypes, students: rd.students },
+    parsed: { itemCount: rd.choiceCounts.length, choiceCounts: rd.choiceCounts, itemTypes: rd.itemTypes, students: rd.students, points: Array.isArray(key.points) && key.points.length === rd.choiceCounts.length ? key.points : (rd.points || null) },
     keyA: rawFromIdx(key.answers, rd.choiceCounts, reversedOrder),
     keyB: rawFromIdx(key.models.answers_b, rd.choiceCounts, reversedOrder),
     mode: key.models.mode, orderB: key.models.order_b, reversedOrder, keyId: key.id,
@@ -1122,6 +1131,8 @@ document.getElementById('er-edit-key-btn').addEventListener('click', () => {
     return;
   }
   const { choiceCounts, reversedOrder = true } = currentReport.raw_data;
+  const pts = currentReport.raw_data.points || [];
+  const ptOf = i => (Number.isFinite(+pts[i]) ? +pts[i] : 1);
   const el = document.getElementById('er-editkey-form');
   el.innerHTML = `<label style="display:flex; align-items:center; gap:8px; font-size:12px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:9px 12px; margin-bottom:12px;">
     <input type="checkbox" id="er-editkey-reversed" style="width:auto; margin:0;"${reversedOrder ? ' checked' : ''} />
@@ -1135,8 +1146,14 @@ document.getElementById('er-edit-key-btn').addEventListener('click', () => {
       <select class="er-editkey-select" data-item="${i}">
         ${options.map(o => `<option value="${o}"${o === current ? ' selected' : ''}>${o}</option>`).join('')}
       </select>
+      <input type="number" class="er-editkey-pt" data-item="${i}" min="0" step="0.25" value="${ptOf(i)}" title="درجة السؤال" aria-label="درجة السؤال ${i + 1}" autocomplete="off" />
     </div>`;
-  }).join('')}</div>`;
+  }).join('')}</div>
+  <div class="er-pt-bar"><span>درجة السؤال تظهر بجانب كل إجابة.</span> اجعل كل الأسئلة بدرجة <input type="number" id="er-editkey-pt-all" min="0" step="0.25" value="1" autocomplete="off" /> <button type="button" class="text-action-btn" id="er-editkey-pt-apply">تطبيق</button> <b id="er-editkey-pt-sum"></b></div>`;
+  const sumPts = () => { const t = [...document.querySelectorAll('.er-editkey-pt')].reduce((a, x) => a + (Number.isFinite(+x.value) && +x.value >= 0 ? +x.value : 1), 0); document.getElementById('er-editkey-pt-sum').textContent = `الدرجة الكاملة: ${Math.round(t * 100) / 100}`; };
+  el.addEventListener('input', e => { if (e.target.classList.contains('er-editkey-pt')) sumPts(); });
+  document.getElementById('er-editkey-pt-apply').onclick = () => { const v = document.getElementById('er-editkey-pt-all').value; document.querySelectorAll('.er-editkey-pt').forEach(x => { x.value = v; }); sumPts(); };
+  sumPts();
   document.getElementById('er-editkey-reversed').addEventListener('change', (e) => {
     const opts = ARABIC_LETTERS;
     document.querySelectorAll('.er-editkey-select').forEach((sel, i) => {
@@ -1168,8 +1185,12 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
   }
   const reversedOrder = document.getElementById('er-editkey-reversed').checked;
   const keyRaw = buildManualKey(letterSelections, choiceCounts, reversedOrder);
-  const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students, reversedOrder, itemTypes });
+  const ptsIn = Array.from(document.querySelectorAll('.er-editkey-pt')).map(x => (Number.isFinite(+x.value) && +x.value >= 0 ? +x.value : 1));
+  const points = ptsIn.length === choiceCounts.length && ptsIn.some(v => v !== 1) ? ptsIn : null;
+  const stats = computeExamStats({ itemCount: choiceCounts.length, keyRaw, choiceCounts, students, reversedOrder, itemTypes, points });
   const newRawData = { ...currentReport.raw_data, reversedOrder };
+  if (points) newRawData.points = points; else delete newRawData.points;
+  periodicCache.delete(currentReport.id);
 
   const { error } = await sb.from('exam_reports').update({ key_raw: keyRaw, stats, raw_data: newRawData }).eq('id', currentReport.id);
   if (error) { errEl.textContent = 'تعذر حفظ المفتاح الجديد: ' + error.message; errEl.style.display = 'block'; return; }
@@ -1205,7 +1226,7 @@ function statBox(label, value) {
 function summaryStatsGrid(s) {
   return `<div class="stat-grid compact-grid" style="grid-template-columns:repeat(3,1fr);">
     ${statBox('عدد الطلاب', s.n)}
-    ${statBox('أعلى درجة', fmt1(s.high))}
+    ${statBox('أعلى درجة', fmt1(s.high) + (s.weighted ? ` <small style="font-size:.6em; color:var(--slate);">من ${fmt1(s.maxScore)}</small>` : ''))}
     ${statBox('أقل درجة', fmt1(s.low))}
     ${statBox('متوسط الدرجة', fmt2(s.mean))}
     ${statBox('الدرجة الوسيطة', fmt1(s.median))}
@@ -1764,12 +1785,14 @@ async function loadPeriodicData(reportId) {
   const rd = rep.raw_data || {};
   const types = rd.itemTypes || [];
   const studs = rd.students || [];
+  const nItems = (rd.choiceCounts || []).length || types.length;
+  const PW = i => (Array.isArray(rd.points) && Number.isFinite(+rd.points[i]) ? +rd.points[i] : 1);
   const scored = studs.map(st => {
     const key = st.key || rep.key_raw || [];
     let mcq = 0, tf = 0;
     (st.answers || []).forEach((v, i) => {
       if (v == null || v !== key[i]) return;
-      if (types[i] === 'tf') tf++; else mcq++;
+      if (types[i] === 'tf') tf += PW(i); else mcq += PW(i);
     });
     const essay = typeof st.essay === 'number' ? st.essay : null;
     return { id: String(st.id || '').trim(), name: st.name || '', grade: st.grade || '', section: st.section || '', mcq, tf, essay };
@@ -1796,7 +1819,8 @@ async function loadPeriodicData(reportId) {
       absentF = absent.filter(x => inMyClasses(sc, x.gl, x.section));
     }
   }
-  const nMcq = types.filter(t => t !== 'tf').length, nTf = types.filter(t => t === 'tf').length;
+  let nMcq = 0, nTf = 0;
+  for (let i = 0; i < nItems; i++) { if (types[i] === 'tf') nTf += PW(i); else nMcq += PW(i); }
   const hasEssay = rd.hasEssay || scored.some(x => x.essay != null);
   const out = { rep, scored: scoredF, absent: absentF, nMcq, nTf, hasEssay, essayMax: rd.essayMax || null };
   periodicCache.set(reportId, out);
@@ -1985,13 +2009,13 @@ async function openManualSheet(rep, onDone) {
     let upd;
     if (models) {
       const g = gradeWithModels({
-        parsed: { itemCount: n, choiceCounts: counts, itemTypes: types, students: list },
+        parsed: { itemCount: n, choiceCounts: counts, itemTypes: types, students: list, points: rd.points || null },
         keyA: models.keyA, keyB: models.keyB, mode: models.mode, orderB: models.orderB, reversedOrder: reversed, keyId: models.keyId,
         modelOf: s2 => s2.model || 'أ',
       });
       upd = { stats: g.stats, raw_data: { ...rd, ...g.raw_data }, students_count: list.length };
     } else {
-      const stats = computeExamStats({ itemCount: n, keyRaw: rep.key_raw, choiceCounts: counts, students: list, reversedOrder: reversed, itemTypes: types });
+      const stats = computeExamStats({ itemCount: n, keyRaw: rep.key_raw, choiceCounts: counts, students: list, reversedOrder: reversed, itemTypes: types, points: rd.points || null });
       upd = { stats, raw_data: { ...rd, students: list }, students_count: list.length };
     }
     let error;

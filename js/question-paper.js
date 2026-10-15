@@ -714,7 +714,7 @@ function readyProblems() {
   if (!p.questions.length) return 'أضف أسئلة أولًا';
   if (p.questions.length > CAP) return `أقصى عدد ${CAP} سؤال في الورقة (لديك ${p.questions.length})`;
   const bad = p.questions.map((q, i) => (questionIssues(q).length ? i : -1)).filter(i => i >= 0);
-  if (bad.length) { const ord = displayOrder(); return `فيه ${bad.length} ${bad.length === 1 ? 'سؤال ناقص' : 'أسئلة ناقصة'} (رقم ${bad.map(i => ord.indexOf(i) + 1).sort((a, b) => a - b).slice(0, 6).join('، ')}) - كمّلها قبل الطباعة`; }
+  if (bad.length) { const ord = displayOrder(); return `يوجد ${bad.length} ${bad.length === 1 ? 'سؤال ناقص' : 'أسئلة ناقصة'} (رقم ${bad.map(i => ord.indexOf(i) + 1).sort((a, b) => a - b).slice(0, 6).join('، ')}) - يُرجى إكمالها قبل الطباعة`; }
   return null;
 }
 
