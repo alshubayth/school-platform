@@ -417,7 +417,8 @@ function buildSheetBody(opts, student, logoSrc, ox) {
       h += `<div class="as-num" style="left:${mm(X(P.side + colStart + P.colPad, P.numW))}; top:${mm(yTop)}; width:${mm(P.numW)}; height:${mm(L.rowH)}; font-size:${P.numSize}pt; direction:ltr;">${q}</div>`;
       lets.forEach((letter, i) => {
         const bx = P.side + colStart + P.colPad + P.numW + i * P.pitch + (P.pitch - P.bubble) / 2;
-        const filled = opts.keyFill && opts.keyFill[q - 1] === i;
+        const kf = opts.keyFill && opts.keyFill[q - 1];
+        const filled = Array.isArray(kf) ? kf.includes(i) : kf === i;
         h += `<div class="as-bubble${filled ? ' fill' : ''}" style="left:${mm(X(bx, P.bubble))}; top:${mm(yMid - P.bubble / 2)}; width:${mm(P.bubble)}; height:${mm(P.bubble)}; font-size:${P.letterSize}pt;">${letter}</div>`;
       });
     }
@@ -667,14 +668,22 @@ let modelMap = {};
 function modelsOn() { return $('as-models-on').checked; }
 function modelMode() { return $('as-models-mode').value; }
 
-function fitArr(arr, n, max) { return Array.from({ length: n }, (_, i) => (arr[i] != null && (max == null || arr[i] < max) ? arr[i] : null)); }
+function fitArr(arr, n, max) {
+  const ok = v => v != null && (max == null || v < max);
+  return Array.from({ length: n }, (_, i) => {
+    const v = arr[i];
+    if (!Array.isArray(v)) return ok(v) ? v : null;
+    const f = v.filter(ok);   // سؤال بأكثر من إجابة صحيحة
+    return f.length > 1 ? f : (f.length ? f[0] : null);
+  });
+}
 
 function renderKeyGrid() {
   const o = readOptions();
   const n = Math.max(0, o.questions);
   // سؤال الصح والخطأ: خيارين بس
   const kinds = itemKinds(o);
-  const fitK = arr => fitArr(arr, n, o.choices).map((v, i) => (v != null && kinds[i] === 'tf' && v > 1 ? null : v));
+  const fitK = arr => fitArr(arr, n, o.choices).map((v, i) => (kinds[i] === 'tf' ? fitArr([v], 1, 2)[0] : v));
   keyAnswers = fitK(keyAnswers);
   keyAnswersB = fitK(keyAnswersB);
   orderB = fitArr(orderB, n, n);
@@ -708,7 +717,7 @@ function renderKeyGrid() {
   grid.innerHTML = arr.map((sel, q) => `
     <div class="as-key-q" style="display:flex; align-items:center; gap:4px; background:#fff; border:1px solid var(--border); border-radius:9px; padding:4px 6px;">
       <b style="min-width:20px; font-size:12px; text-align:center;">${q + 1}</b>
-      ${(kinds[q] === 'tf' ? TF_LETTERS[o.lang === 'en' ? 'en' : 'ar'] : letters).map((l, c) => `<button type="button" class="as-key-btn" data-q="${q}" data-c="${c}" style="width:26px; height:26px; border-radius:50%; border:1.5px solid ${sel === c ? 'var(--meadow)' : '#C9CED8'}; background:${sel === c ? 'var(--meadow)' : '#fff'}; color:${sel === c ? '#fff' : 'var(--ink)'}; font-size:12px; font-weight:700; padding:0; cursor:pointer;">${l}</button>`).join('')}
+      ${(kinds[q] === 'tf' ? TF_LETTERS[o.lang === 'en' ? 'en' : 'ar'] : letters).map((l, c, _a, on = Array.isArray(sel) ? sel.includes(c) : sel === c) => `<button type="button" class="as-key-btn" data-q="${q}" data-c="${c}" style="width:26px; height:26px; border-radius:50%; border:1.5px solid ${on ? 'var(--meadow)' : '#C9CED8'}; background:${on ? 'var(--meadow)' : '#fff'}; color:${on ? '#fff' : 'var(--ink)'}; font-size:12px; font-weight:700; padding:0; cursor:pointer;">${l}</button>`).join('')}
       ${pOn && activeModel === MODEL_A ? `<input type="number" class="as-pt" data-q="${q}" min="0" step="0.25" value="${fmtPt(keyPoints[q])}" aria-label="درجة السؤال ${q + 1}" title="درجة السؤال" autocomplete="off" />` : ''}
       ${ordering ? `<select class="as-ord" data-q="${q}" aria-label="رقم السؤال المقابل بالنموذج أ" title="رقمه بالنموذج أ"><option value="">=أ؟</option>${Array.from({ length: n }, (_, j) => `<option value="${j}"${orderB[q] === j ? ' selected' : ''}>أ${j + 1}</option>`).join('')}</select>` : ''}
     </div>`).join('');
@@ -910,6 +919,7 @@ function loadKeyIntoForm(k) {
   $('as-models-on').checked = !!m;
   if (m) { $('as-models-mode').value = m.mode; $('as-models-assign').value = m.assign === 'bubble' ? 'bubble' : 'auto'; }
   keyAnswersB = m && Array.isArray(m.answers_b) ? m.answers_b.slice() : [];
+  if ($('as-multi-on')) $('as-multi-on').checked = [...keyAnswers, ...keyAnswersB].some(Array.isArray);
   orderB = m && Array.isArray(m.order_b) ? m.order_b.slice() : [];
   modelMap = k.model_map && typeof k.model_map === 'object' ? { ...k.model_map } : {};
   activeModel = MODEL_A;
@@ -933,6 +943,7 @@ function resetKeyForm() {
   $('as-essay-on').checked = false; $('as-essay-total-wrap').classList.add('hidden');
   $('as-models-on').checked = false; $('as-models-mode').value = 'choices'; $('as-models-assign').value = 'auto';
   if ($('as-points-on')) $('as-points-on').checked = false;
+  if ($('as-multi-on')) $('as-multi-on').checked = false;
   keyAnswers = []; keyAnswersB = []; orderB = []; modelMap = {}; keyPoints = []; activeModel = MODEL_A;
   currentKeyId = null;
   keyGrades = []; keySections = null;
@@ -1247,7 +1258,16 @@ export function initAnswerSheetCard() {
     if (!b) return;
     const q = +b.dataset.q, c = +b.dataset.c;
     const arr = activeModel === MODEL_B ? keyAnswersB : keyAnswers;
-    arr[q] = arr[q] === c ? null : c;
+    const cur = arr[q];
+    if ($('as-multi-on') && $('as-multi-on').checked && cur != null) {
+      // أكثر من إجابة: الضغط يضيف الحرف أو يزيله
+      const set = new Set(Array.isArray(cur) ? cur : [cur]);
+      if (set.has(c)) set.delete(c); else set.add(c);
+      const v = [...set].sort((a, b) => a - b);
+      arr[q] = v.length > 1 ? v : (v.length ? v[0] : null);
+    } else {
+      arr[q] = cur === c ? null : c;
+    }
     renderKeyGrid();
   });
   $('as-key-grid').addEventListener('change', (e) => {

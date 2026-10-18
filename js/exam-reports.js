@@ -87,6 +87,10 @@ function letterFor(value, numChoices, reversed = true) {
   const idx = reversed ? numChoices - value : value - 1;
   return ARABIC_LETTERS[idx] || ('اختيار ' + value);
 }
+// سؤال يقبل أكثر من إجابة: قيمته بالمفتاح مصفوفة قيم خام
+export const keyHit = (v, k) => v != null && (Array.isArray(k) ? k.includes(v) : v === k);
+const collapseKey = arr => (arr.length > 1 ? arr : (arr.length ? arr[0] : null));
+function keyLetters(raw, numChoices, reversed = true) { return (Array.isArray(raw) ? raw : [raw]).map(v => letterFor(v, numChoices, reversed)).filter(Boolean); }
 // عكس letterFor: يحوّل الحرف المختار يدويًا (أ/ب/ج...) للقيمة الرقمية الخام المطابقة لترميز الملف
 function valueForLetter(letter, numChoices, reversed = true) {
   const idx = ARABIC_LETTERS.indexOf(letter);
@@ -173,7 +177,9 @@ export function parseSheetRows(rows) {
 
 // يبني مصفوفة المفتاح الرقمية الخام من اختيارات الحروف اللي دخّلها المدير يدويًا لكل سؤال
 export function buildManualKey(letterSelections, choiceCounts, reversed = true) {
-  return letterSelections.map((letter, i) => valueForLetter(letter, choiceCounts[i], reversed));
+  return letterSelections.map((letter, i) => (Array.isArray(letter)
+    ? collapseKey(letter.map(l => valueForLetter(l, choiceCounts[i], reversed)).filter(v => v != null))
+    : valueForLetter(letter, choiceCounts[i], reversed)));
 }
 
 function mostCommon(arr) {
@@ -196,7 +202,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
 
   // كل طالب يتصحّح بمفتاح نموذجه (s.key) لو الاختبار بأكثر من نموذج، وإلا بالمفتاح العام
   const K = st => st.key || keyRaw;
-  const isCorrectSt = (st, i) => st.answers[i] != null && st.answers[i] === K(st)[i];
+  const isCorrectSt = (st, i) => keyHit(st.answers[i], K(st)[i]);
   const totals = students.map(st => {
     let t = 0;
     for (let i = 0; i < itemCount; i++) if (isCorrectSt(st, i)) t += W[i];
@@ -247,14 +253,16 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
     curItem = i;
     const numChoices = choiceCounts[i];
     // لو الطلاب بنماذج إجابتها الصحيحة تختلف بهذا السؤال، الحروف ما تنقارن ببعض - نعرض صحيح/خطأ بس
-    const keyVals = new Set(students.map(st => K(st)[i]));
+    const keyVals = new Set(students.map(st => JSON.stringify(K(st)[i] ?? null)));
     const mixedKey = keyVals.size > 1;
-    const correctLetter = mixedKey ? 'حسب النموذج' : letterFor(students.length ? K(students[0])[i] : keyRaw[i], numChoices, reversedOrder);
+    const correctLabels = mixedKey ? [] : keyLetters(students.length ? K(students[0])[i] : keyRaw[i], numChoices, reversedOrder)
+      .map(l => (itemTypes[i] === 'tf' && TF_LABEL[l] ? TF_LABEL[l] : l));
+    const correctLetter = mixedKey ? 'حسب النموذج' : correctLabels.join(' / ');
     const freqMap = new Map(); // key: label -> {count, isCorrect, sortVal}
     let correctCount = 0, notPresent = 0, multi = 0;
     students.forEach(st => {
       const v = st.answers[i];
-      const ok = v != null && v === K(st)[i];
+      const ok = keyHit(v, K(st)[i]);
       let label, sortVal;
       if (v == null || v === -2) { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
       else if (v === -3) { label = 'متعدد'; sortVal = 999; multi++; }
@@ -263,7 +271,7 @@ export function computeExamStats({ itemCount, keyRaw, choiceCounts, students, re
         else { label = letterFor(v, numChoices, reversedOrder); sortVal = v; }
       }
       else { label = 'لا توجد استجابة'; sortVal = 1000; notPresent++; }
-      if (!freqMap.has(label)) freqMap.set(label, { label, count: 0, isCorrect: mixedKey ? label === 'إجابة صحيحة' : label === correctLetter, sortVal });
+      if (!freqMap.has(label)) freqMap.set(label, { label, count: 0, isCorrect: mixedKey ? label === 'إجابة صحيحة' : correctLabels.includes(label), sortVal });
       freqMap.get(label).count++;
       if (ok) correctCount++;
     });
@@ -347,7 +355,12 @@ const MODEL_A = 'أ', MODEL_B = 'ب';
 const MODE_LABELS = { choices: 'نفس الأسئلة والترتيب، الخيارات مختلفة', order: 'نفس الأسئلة بترتيب مختلف', different: 'أسئلة مختلفة' };
 // مفتاح محفوظ (فهارس: 0 = أ) ← قيم خام بنفس ترميز ملف Remark
 export function rawFromIdx(idxArr, choiceCounts, reversed) {
-  return choiceCounts.map((c, i) => (idxArr && idxArr[i] != null ? valueForLetter(ARABIC_LETTERS[idxArr[i]], c, reversed) : null));
+  return choiceCounts.map((c, i) => {
+    const x = idxArr ? idxArr[i] : null;
+    if (x == null) return null;
+    if (Array.isArray(x)) return collapseKey(x.map(j => valueForLetter(ARABIC_LETTERS[j], c, reversed)).filter(v => v != null));
+    return valueForLetter(ARABIC_LETTERS[x], c, reversed);
+  });
 }
 // نموذج الطالب من تظليله بالورقة: نفس ترميز الأسئلة (عربي معكوس: ٢ = أ، ١ = ب)
 // خانة النموذج بالملف: تقبل حرفًا (أ/ب، A/B، «نموذج أ») أو رقمًا (١/٢ بترميز Remark)
@@ -405,7 +418,7 @@ function modelKeysRaw(parsed, rev) {
 // النموذج الأقرب لإجابات الطالب (عدد الإجابات المطابقة لكل مفتاح) - اقتراح فقط
 function suggestModel(st, keys, mode) {
   if (mode !== 'choices') return null;
-  const hits = key => (st.answers || []).reduce((n, v, i) => n + (v != null && key[i] != null && v === key[i] ? 1 : 0), 0);
+  const hits = key => (st.answers || []).reduce((n, v, i) => n + (key[i] != null && keyHit(v, key[i]) ? 1 : 0), 0);
   const a = hits(keys.A), b = hits(keys.B);
   return a === b ? null : { model: a > b ? MODEL_A : MODEL_B, a, b };
 }
@@ -611,21 +624,42 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
 // يبني نموذج اختيار الإجابة الصحيحة لكل سؤال - قائمة منسدلة بعدد اختيارات ذلك السؤال بالضبط،
 // معبّاة مبدئيًا من صف النموذج لو انلقى بالملف. تُعاد كل مرة يتغيّر فيها خيار "ترتيب الاختيارات"
 // عشان الحروف المعروضة/المعبّأة تطابق الاتجاه المختار
+// اختيار الإجابة الصحيحة بأزرار الحروف. مع «السماح بأكثر من إجابة» يقبل السؤال أكثر من حرف
+function keyPickHtml(i, numChoices, isTf, sel) {
+  return `<div class="er-kp" data-item="${i}">${ARABIC_LETTERS.slice(0, numChoices).map(o => `<button type="button" data-l="${o}" class="${sel.includes(o) ? 'on' : ''}">${isTf ? ({ 'أ': 'صح', 'ب': 'خطأ' }[o] || o) : o}</button>`).join('')}</div>`;
+}
+const multiToggleHtml = on => `<label class="er-multi-lbl"><input type="checkbox" class="er-multi-on"${on ? ' checked' : ''} /> السماح بأكثر من إجابة صحيحة للسؤال (اضغط كل الحروف المقبولة)</label>`;
+function readKeyPick(container) {
+  return [...container.querySelectorAll('.er-kp')].map(box => { const ls = [...box.querySelectorAll('button.on')].map(b => b.dataset.l); return ls.length > 1 ? ls : (ls[0] || ''); });
+}
+function setKeyPick(container, lettersPerItem) {
+  container.querySelectorAll('.er-kp').forEach((box, i) => box.querySelectorAll('button').forEach(b => b.classList.toggle('on', (lettersPerItem[i] || []).includes(b.dataset.l))));
+}
+['er-key-form', 'er-editkey-form'].forEach(id => {
+  const c = document.getElementById(id);
+  if (!c) return;
+  c.addEventListener('click', e => {
+    const b = e.target.closest('.er-kp button');
+    if (!b) return;
+    const multi = c.querySelector('.er-multi-on');
+    if (multi && multi.checked) { b.classList.toggle('on'); return; }
+    const was = b.classList.contains('on');
+    b.parentElement.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    if (!was) b.classList.add('on');
+  });
+});
 function renderKeyForm(parsed, reversed = true) {
   if (parsed.modelKey) { renderModelSummary(parsed); return; }
   const el = document.getElementById('er-key-form');
-  el.innerHTML = `<div class="er-key-grid">${parsed.choiceCounts.map((numChoices, i) => {
-    const options = ARABIC_LETTERS.slice(0, numChoices);
-    const preselect = parsed.presetLetters ? (parsed.presetLetters[i] || null)
+  const pre = parsed.choiceCounts.map((numChoices, i) => {
+    const p = parsed.presetLetters ? parsed.presetLetters[i]
       : (parsed.detectedKeyRaw ? letterFor(parsed.detectedKeyRaw[i], numChoices, reversed) : null);
-    return `<div class="er-key-item">
+    return p == null ? [] : Array.isArray(p) ? p : [p];
+  });
+  el.innerHTML = multiToggleHtml(pre.some(p => p.length > 1)) + `<div class="er-key-grid">${parsed.choiceCounts.map((numChoices, i) => `<div class="er-key-item">
       <label>سؤال ${i + 1}</label>
-      <select class="er-key-select" data-item="${i}">
-        <option value="">اختر...</option>
-        ${options.map(o => `<option value="${o}"${o === preselect ? ' selected' : ''}>${(parsed.itemTypes || [])[i] === 'tf' ? ({ 'أ': 'صح ✓', 'ب': 'خطأ ✗' }[o] || o) : o}</option>`).join('')}
-      </select>
-    </div>`;
-  }).join('')}</div>`;
+      ${keyPickHtml(i, numChoices, (parsed.itemTypes || [])[i] === 'tf', pre[i])}
+    </div>`).join('')}</div>`;
 }
 
 /* ===== تطبيق مفتاح محفوظ (من بطاقة ورقة الإجابة) على الملف المرفوع =====
@@ -694,7 +728,7 @@ function applySavedKey(k) {
   }
   parsedData.essayMax = Number(k.essay_total) || null;
   parsedData.points = Array.isArray(k.points) && k.points.length === parsedData.itemCount ? alignKeyToFile(k, k.points) : null;
-  parsedData.presetLetters = alignKeyToFile(k, k.answers || []).map(i => (i == null ? null : ARABIC_LETTERS[i]));
+  parsedData.presetLetters = alignKeyToFile(k, k.answers || []).map(i => (i == null ? null : Array.isArray(i) ? i.map(j => ARABIC_LETTERS[j]) : ARABIC_LETTERS[i]));
   // مفتاح فيه أسئلة صح وخطأ: نوع كل سؤال وعدد خياراته من المفتاح نفسه
   if (!parsedData._origItemTypes) parsedData._origItemTypes = (parsedData.itemTypes || []).slice();
   if (k.tf_count && k.questions === parsedData.itemCount) {
@@ -772,9 +806,8 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     return;
   }
 
-  const selects = Array.from(document.querySelectorAll('.er-key-select'));
-  const letterSelections = selects.map(s => s.value);
-  if (letterSelections.some(v => !v)) {
+  const letterSelections = readKeyPick(document.getElementById('er-key-form'));
+  if (letterSelections.some(v => !v || !v.length)) {
     errEl.textContent = 'اختر الإجابة الصحيحة لكل سؤال قبل الحفظ';
     errEl.style.display = 'block';
     return;
@@ -1081,7 +1114,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
         keyB = rawFromIdx(key.models.answers_b, newParsed.choiceCounts, reversedOrder);
         mode = key.models.mode; orderB = key.models.order_b;
       } else {
-        const conv = raw => buildManualKey(oldChoiceCounts.map((c, i) => letterFor(raw[i], c, reversedOrder)), newParsed.choiceCounts, reversedOrder);
+        const conv = raw => buildManualKey(oldChoiceCounts.map((c, i) => collapseKey(keyLetters(raw[i], c, reversedOrder))), newParsed.choiceCounts, reversedOrder);
         keyA = conv(m.keyA); keyB = conv(m.keyB);
       }
       const g = gradeWithModels({ parsed: newParsed, keyA, keyB, mode, orderB, reversedOrder, keyId: m.keyId,
@@ -1103,7 +1136,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
     // نحوّل مفتاح الإجابة الحالي (قيم خام) لحروف باستخدام بيانات الترميز القديمة، وبعدين نبنيه
     // من جديد بنفس الحروف على قيم الملف الجديد - عشان الإجابة الصحيحة (بالحرف) تبقى كما هي
     // حتى لو الترميز الخام اختلف شوي بين الملفين
-    const letters = oldChoiceCounts.map((numChoices, i) => letterFor(currentReport.key_raw[i], numChoices, reversedOrder));
+    const letters = oldChoiceCounts.map((numChoices, i) => collapseKey(keyLetters(currentReport.key_raw[i], numChoices, reversedOrder)));
     if (letters.some(l => !l)) {
       errEl.textContent = 'تعذر قراءة مفتاح الإجابة الحالي لتطبيقه على الملف الجديد - استخدم "تعديل مفتاح الإجابة" بدلًا من ذلك.';
       errEl.style.display = 'block';
@@ -1185,14 +1218,12 @@ document.getElementById('er-edit-key-btn').addEventListener('click', () => {
     <input type="checkbox" id="er-editkey-reversed" style="width:auto; margin:0;"${reversedOrder ? ' checked' : ''} />
     <span>ترتيب رموز الاختيارات بالملف معكوس (بطّله إذا المادة إنجليزية أو النتائج غريبة)</span>
   </label>
+  ${multiToggleHtml((currentReport.key_raw || []).some(Array.isArray))}
   <div class="er-key-grid">${choiceCounts.map((numChoices, i) => {
-    const options = ARABIC_LETTERS.slice(0, numChoices);
-    const current = letterFor(currentReport.key_raw[i], numChoices, reversedOrder);
+    const current = keyLetters(currentReport.key_raw[i], numChoices, reversedOrder);
     return `<div class="er-key-item">
       <label>سؤال ${i + 1}</label>
-      <select class="er-editkey-select" data-item="${i}">
-        ${options.map(o => `<option value="${o}"${o === current ? ' selected' : ''}>${o}</option>`).join('')}
-      </select>
+      ${keyPickHtml(i, numChoices, (currentReport.raw_data.itemTypes || [])[i] === 'tf', current)}
       <input type="number" class="er-editkey-pt" data-item="${i}" min="0" step="0.25" value="${ptOf(i)}" title="درجة السؤال" aria-label="درجة السؤال ${i + 1}" autocomplete="off" />
     </div>`;
   }).join('')}</div>
@@ -1202,12 +1233,7 @@ document.getElementById('er-edit-key-btn').addEventListener('click', () => {
   document.getElementById('er-editkey-pt-apply').onclick = () => { const v = document.getElementById('er-editkey-pt-all').value; document.querySelectorAll('.er-editkey-pt').forEach(x => { x.value = v; }); sumPts(); };
   sumPts();
   document.getElementById('er-editkey-reversed').addEventListener('change', (e) => {
-    const opts = ARABIC_LETTERS;
-    document.querySelectorAll('.er-editkey-select').forEach((sel, i) => {
-      const numChoices = choiceCounts[i];
-      const letter = letterFor(currentReport.key_raw[i], numChoices, e.target.checked);
-      sel.value = letter || opts[0];
-    });
+    setKeyPick(el, choiceCounts.map((numChoices, i) => keyLetters(currentReport.key_raw[i], numChoices, e.target.checked)));
   });
   document.getElementById('er-editkey-card').classList.remove('hidden');
   document.getElementById('er-editkey-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1223,9 +1249,8 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
   if (!currentReport || !currentReport.raw_data) return;
   const { students, choiceCounts, itemTypes = [] } = currentReport.raw_data;
 
-  const selects = Array.from(document.querySelectorAll('.er-editkey-select'));
-  const letterSelections = selects.map(s => s.value);
-  if (letterSelections.some(v => !v)) {
+  const letterSelections = readKeyPick(document.getElementById('er-editkey-form'));
+  if (letterSelections.some(v => !v || !v.length)) {
     errEl.textContent = 'اختر الإجابة الصحيحة لكل سؤال';
     errEl.style.display = 'block';
     return;
@@ -1273,7 +1298,7 @@ function statBox(label, value) {
 function summaryStatsGrid(s) {
   return `<div class="stat-grid compact-grid" style="grid-template-columns:repeat(3,1fr);">
     ${statBox('عدد الطلاب', s.n)}
-    ${statBox('أعلى درجة', fmt1(s.high) + (s.weighted ? ` <small style="font-size:.6em; color:var(--slate);">من ${fmt1(s.maxScore)}</small>` : ''))}
+    ${statBox('أعلى درجة', fmt1(s.high) + (s.weighted || s.withEssay ? ` <small style="font-size:.6em; color:var(--slate);">من ${fmt1(s.maxScore)}</small>` : ''))}
     ${statBox('أقل درجة', fmt1(s.low))}
     ${statBox('متوسط الدرجة', fmt2(s.mean))}
     ${statBox('الدرجة الوسيطة', fmt1(s.median))}
@@ -1281,14 +1306,14 @@ function summaryStatsGrid(s) {
     ${statBox('الانحراف المعياري', fmt2(s.sd))}
     ${statBox('معامل الثبات (KR20)', fmt2(s.kr20))}
     ${statBox('متوسط الدرجة %', pct(s.meanPct))}
-  </div>`;
+  </div>${s.withEssay ? `<p class="er-essay-note">الدرجات شاملة المقالي: الموضوعي من ${fmt1(s.objMax)} + المقالي من ${fmt1(s.essayMax)} = ${fmt1(s.maxScore)}. تحليل الأسئلة ومعامل الثبات للجزء الموضوعي فقط.</p>` : ''}`;
 }
 
 // تقرير اختبار بنموذجين: تبديل بين "كل الطلاب" وكل نموذج لحاله
 function renderReportStats(stats, view = 'all') {
   const sw = document.getElementById('er-model-switch');
   const byModel = stats && stats.byModel;
-  if (!sw || !byModel || !Object.keys(byModel).length) { if (sw) sw.classList.add('hidden'); renderAllReports(stats); return; }
+  if (!sw || !byModel || !Object.keys(byModel).length) { if (sw) sw.classList.add('hidden'); renderAllReports(statsWithEssay(stats, currentReport)); return; }
   const c = (stats.models && stats.models.counts) || {};
   sw.innerHTML = `<button type="button" data-v="all">كل الطلاب <span class="tr-cnt">${stats.n}</span></button>` +
     Object.keys(byModel).map(m => `<button type="button" data-v="${m}">نموذج ${m} <span class="tr-cnt">${c[m] || byModel[m].n}</span></button>`).join('');
@@ -1297,7 +1322,7 @@ function renderReportStats(stats, view = 'all') {
     b.classList.toggle('active', b.dataset.v === view);
     b.onclick = () => renderReportStats(stats, b.dataset.v);
   });
-  renderAllReports(view === 'all' ? stats : byModel[view]);
+  renderAllReports(view === 'all' ? statsWithEssay(stats, currentReport) : statsWithEssay(byModel[view], currentReport, view));
   if (view === 'all' && stats.itemsMixed) {
     ['er-panel-items', 'er-panel-itemstats', 'er-panel-analysis'].forEach(id => {
       const el = document.getElementById(id);
@@ -1821,6 +1846,62 @@ async function drawBarChart(canvasId, labels, data, label, opts = {}) {
 const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 
 const periodicCache = new Map(); // reportId -> نتيجة loadPeriodicData (تنمسح لما تنضاف ورقة)
+/* درجة كل طالب من بيانات التقرير المحفوظة: كل طالب بمفتاح نموذجه (أ/ب)، وبدرجة كل سؤال،
+ * والمقالي لحاله. تُستخدم في «الدرجات» وفي إحصاءات التقرير شاملة المقالي */
+function scoreReportStudents(rep) {
+  const rd = rep.raw_data || {};
+  const types = rd.itemTypes || [];
+  const n = (rd.choiceCounts || []).length || types.length;
+  const m = rd.models;
+  const PW = i => (Array.isArray(rd.points) && Number.isFinite(+rd.points[i]) ? +rd.points[i] : 1);
+  return (rd.students || []).map(st => {
+    const isB = !!(m && st.model === MODEL_B && Array.isArray(m.keyB));
+    const key = (isB ? m.keyB : (m && Array.isArray(m.keyA) ? m.keyA : rep.key_raw)) || [];
+    // بالترتيب المختلف: سؤال النموذج ب رقم i يقابل سؤال النموذج أ رقم orderB[i] (ودرجته منه)
+    const toA = i => (isB && m.mode === 'order' && Array.isArray(m.orderB) && m.orderB[i] != null ? m.orderB[i] : i);
+    let mcq = 0, tf = 0;
+    (st.answers || []).forEach((v, i) => {
+      if (i >= n || !keyHit(v, key[i])) return;
+      const j = toA(i);
+      if (types[j] === 'tf') tf += PW(j); else mcq += PW(j);
+    });
+    const essay = typeof st.essay === 'number' ? st.essay : null;
+    return { st, mcq, tf, obj: mcq + tf, essay };
+  });
+}
+// إحصاءات الملخص بالمجموع الكلي (الموضوعي + المقالي) بدل الموضوعي وحده
+function statsWithEssay(stats, rep, model) {
+  const rd = (rep && rep.raw_data) || {};
+  const essayMax = Number(rd.essayMax) || 0;
+  if (!stats || !essayMax || !Array.isArray(rd.students)) return stats;
+  const rows = scoreReportStudents(rep).filter(r => !model || (r.st.model || MODEL_A) === model);
+  if (!rows.length || !rows.some(r => r.essay != null)) return stats;
+  const objMax = Number(stats.maxScore) || Number(stats.itemCount) || 0;
+  const maxAll = objMax + essayMax;
+  const totals = rows.map(r => r.obj + Math.min(essayMax, Math.max(0, r.essay || 0)));
+  const n = totals.length;
+  const mean = totals.reduce((a, b) => a + b, 0) / n;
+  const sorted = totals.slice().sort((a, b) => a - b);
+  const median = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  const high = sorted[n - 1], low = sorted[0];
+  const sd = Math.sqrt(totals.reduce((a, t) => a + (t - mean) * (t - mean), 0) / n);
+  const pctOf = t => (maxAll ? (t / maxAll) * 100 : 0);
+  const gradeDistribution = GRADE_BANDS.map(b => {
+    const freq = totals.filter(t => { const p = pctOf(t); return p >= b.min && p <= b.max; }).length;
+    return { grade: b.grade, pctMin: b.min, pctMax: b.max, rawMin: (b.min / 100) * maxAll, rawMax: (b.max / 100) * maxAll, freq, freqPct: (freq / n) * 100 };
+  });
+  const scoreHistogram = Array.from({ length: 10 }, (_, i) => ({ label: String((i + 1) * 10), count: 0 }));
+  totals.forEach(t => { scoreHistogram[Math.min(9, Math.floor(pctOf(t) / 10))].count++; });
+  const ranked = rows.map((r, i) => ({ id: r.st.id, name: r.st.name, section: r.st.section, total: totals[i], pct: pctOf(totals[i]) })).sort((a, b) => b.total - a.total);
+  return {
+    ...stats, withEssay: true, objMax, essayMax, maxScore: maxAll, n, mean, median, high, low, range: high - low, sd, meanPct: pctOf(mean),
+    gradeDistribution, scoreHistogram,
+    topStudents: ranked.slice(0, 15),
+    weakStudents: ranked.filter(r => r.pct < 50).sort((a, b) => a.total - b.total),
+    highestStudents: ranked.filter(r => r.total === high).map(r => ({ id: r.id, name: r.name })),
+    lowestStudents: ranked.filter(r => r.total === low).map(r => ({ id: r.id, name: r.name })),
+  };
+}
 async function loadPeriodicData(reportId) {
   if (periodicCache.has(reportId)) return periodicCache.get(reportId);
   const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
@@ -1834,16 +1915,8 @@ async function loadPeriodicData(reportId) {
   const studs = rd.students || [];
   const nItems = (rd.choiceCounts || []).length || types.length;
   const PW = i => (Array.isArray(rd.points) && Number.isFinite(+rd.points[i]) ? +rd.points[i] : 1);
-  const scored = studs.map(st => {
-    const key = st.key || rep.key_raw || [];
-    let mcq = 0, tf = 0;
-    (st.answers || []).forEach((v, i) => {
-      if (v == null || v !== key[i]) return;
-      if (types[i] === 'tf') tf += PW(i); else mcq += PW(i);
-    });
-    const essay = typeof st.essay === 'number' ? st.essay : null;
-    return { id: String(st.id || '').trim(), name: st.name || '', grade: st.grade || '', section: st.section || '', mcq, tf, essay };
-  });
+  const scored = scoreReportStudents(rep).map(({ st, mcq, tf, essay }) =>
+    ({ id: String(st.id || '').trim(), name: st.name || '', grade: st.grade || '', section: st.section || '', mcq, tf, essay }));
   // المرحلة والفصل الرسميين من طلاب المنصة (برقم الهوية)
   const plat = new Map(platList.map(p => [String(p.national_id).trim(), p]));
   scored.forEach(x => {
@@ -2025,14 +2098,14 @@ async function openManualSheet(rep, onDone) {
   const renderSum = () => {
     const key = keyFor();
     let ok = 0, blank = 0;
-    st.answers.forEach((j, i) => { if (j == null) blank++; else if (toRaw(i, j) === key[i]) ok++; });
+    st.answers.forEach((j, i) => { if (j == null) blank++; else if (keyHit(toRaw(i, j), key[i])) ok++; });
     $b('.er-man-sum').innerHTML = `<b>${ok}</b> / ${n} صحيحة${blank ? ` · ${blank} بدون إجابة` : ''}${hasEssay && st.essay != null ? ` · مقالي ${st.essay}` : ''}`;
     back.querySelectorAll('.er-man-q').forEach(row => {
       const i = +row.dataset.q;
       row.querySelectorAll('button').forEach(b => {
         const j = +b.dataset.v;
         b.classList.toggle('on', st.answers[i] === j);
-        b.classList.toggle('key', toRaw(i, j) === key[i]);
+        b.classList.toggle('key', keyHit(toRaw(i, j), key[i]));
       });
     });
   };
@@ -2107,7 +2180,7 @@ async function showResults(reportId) {
           <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th></tr></thead><tbody>
           ${rows.map((x, i) => x.absent
             ? `<tr class="abs"><td>${i + 1}</td><td>${esc(x.name)}</td><td colspan="${(d.nMcq ? 1 : 0) + (d.nTf ? 1 : 0) + (d.hasEssay ? 1 : 0) + 1}">غائب</td></tr>`
-            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${x.mcq}</td>` : ''}${d.nTf ? `<td>${x.tf}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td></tr>`).join('')}
+            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${fmtN(x.mcq)}</td>` : ''}${d.nTf ? `<td>${fmtN(x.tf)}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td></tr>`).join('')}
           </tbody></table>
         </details>`;
       }).join('') || '<p class="er-abs-empty">لا توجد نتائج</p>'}

@@ -451,7 +451,7 @@ function keyFor(model) {
 function scoreOf(answers, model) {
   const key = keyFor(model);
   let s = 0;
-  answers.forEach((a, i) => { if (a != null && a >= 0 && key[i] === a) s++; });
+  answers.forEach((a, i) => { if (a != null && a >= 0 && (Array.isArray(key[i]) ? key[i].includes(a) : key[i] === a)) s++; });
   return s;
 }
 
@@ -559,7 +559,7 @@ function reviewOne(it, next, remaining) {
   const renderGrid = () => {
     const key = keyFor(it.model);
     $w('.omr-grid').innerHTML = it.answers.map((a, i) => {
-      const ok = a != null && a >= 0 && key[i] === a;
+      const ok = a != null && a >= 0 && (Array.isArray(key[i]) ? key[i].includes(a) : key[i] === a);
       const cls = a === -1 || a === -2 || a == null ? 'bl' : ok ? 'ok' : 'no';
       const txt = a === -1 || a == null ? '—' : a === -2 ? 'متعدد' : lettersOf(i)[a] || '?';
       return `<button type="button" class="omr-q ${cls}${it.unsure[i] ? ' un' : ''}${it.auto[i] !== a ? ' ed' : ''}" data-q="${i}"><small>${i + 1}</small><b>${txt}</b></button>`;
