@@ -515,6 +515,7 @@ async function enrichFromPlatform(parsed) {
   return { filled, unknown, fixedIds };
 }
 
+let skipPaperOnce = false;
 document.getElementById('er-analyze-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('er-analyze-error');
   errEl.style.display = 'none';
@@ -532,7 +533,8 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     });
     parsedData = parseSheetRows(rows);
     const { applyPaperToParsed } = await import('./question-paper.js?v=' + ASSET_VERSION);
-    const paperRes = await applyPaperToParsed(parsedData);
+    const paperRes = await applyPaperToParsed(parsedData, { skip: skipPaperOnce });
+    skipPaperOnce = false;
     const enr = await enrichFromPlatform(parsedData);
 
     const keyNote = paperRes
@@ -560,7 +562,9 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
       const ks = document.getElementById('er-saved-key');
       ks.innerHTML = `<option value="">ورقة الأسئلة: ${esc(paperRes.paper.title)}</option>`;
       ks.disabled = true;
-      document.getElementById('er-saved-key-msg').textContent = 'المفتاح مأخوذ من ورقة الأسئلة ✓ راجعه واضغط «حفظ التقرير»';
+      const km = document.getElementById('er-saved-key-msg');
+      km.innerHTML = 'المفتاح مأخوذ من ورقة الأسئلة ✓ راجعه واضغط «حفظ التقرير». <button type="button" id="er-not-paper" class="link-btn" style="color:var(--danger); text-decoration:underline; background:none; border:0; cursor:pointer; padding:0;">ليس هذا الملف لورقة الأسئلة؟ استخدم مفتاح إجابة</button>';
+      document.getElementById('er-not-paper').addEventListener('click', () => { skipPaperOnce = true; document.getElementById('er-analyze-btn').click(); });
     } else {
       document.getElementById('er-saved-key').disabled = false;
       await setupSavedKeyPicker(parsedData);

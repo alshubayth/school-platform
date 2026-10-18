@@ -309,11 +309,17 @@ export async function applyPaperToParsed(parsed, { skip = false } = {}) {
   const idOf = s => String(s.id || '').trim().replace(/-\d{1,2}$/, '');
   const fileIds = parsed.students.map(idOf).filter(Boolean);
   if (!fileIds.length) return null;
+  // ملف فيه عمود «النموذج» (أ/ب) = اختبار بنموذجين وليس ورقة أسئلة من المنصة
+  if (parsed.students.some(st => st.modelRaw != null)) return null;
   const { data: papers, error } = await fetchPapers();
   if (error || !papers.length) return null;
+  const answered = v => v != null && v !== '' && !(typeof v === 'number' && v <= 0);
+  const answeredBeyond = n => parsed.students.some(st => (st.answers || []).slice(n).some(answered));
   let best = null, bestN = 0;
   papers.forEach(p => {
-    if (!p.perms || p.questions.length > parsed.itemCount) return;
+    // ملف فيه إجابات بعد آخر سؤال بالورقة ليس لهذه الورقة، حتى لو تطابقت أرقام هويات الطلاب
+    // (نفس الطلاب يختبرون أكثر من مادة)
+    if (!p.perms || !Array.isArray(p.questions) || p.questions.length > parsed.itemCount || answeredBeyond(p.questions.length)) return;
     const n = fileIds.filter(id => p.perms[id]).length;
     if (n > bestN) { best = p; bestN = n; }
   });
