@@ -45,7 +45,7 @@ export function detectColumns(headerRow) {
     else if (col.grade == null && c.includes('صف')) col.grade = idx;
     else if (col.section == null && c === 'الفصل') col.section = idx;
     else if (col.subject == null && c.includes('اسم') && c.includes('ماد')) col.subject = idx;
-    else if (col.model == null && (c === 'النموذج' || c === 'نموذج' || /^(form|version|model)$/i.test(c))) col.model = idx;
+    else if (col.model == null && (/نموذج/.test(c) || /^(exam\s*)?(form|version|model)(\s*(no\.?|#|code))?$/i.test(c))) col.model = idx;
     else if (col.essay == null && (c.includes('مقالي') || c.includes('مقال'))) col.essay = idx;
     else if (c.includes('صح') && c.includes('خطأ')) { items.push(idx); itemTypes.push('tf'); }
     else if (c.includes('اختيار متعدد') || /^q\d+$/i.test(c) || c.includes('سؤال') || /متعدد\s*\d+$/.test(c)) { items.push(idx); itemTypes.push('mcq'); }
@@ -135,7 +135,7 @@ export function parseSheetRows(rows) {
       subject: col.subject != null ? String(r[col.subject] == null ? '' : r[col.subject]).trim() : '',
       // النموذج اللي ظلّله الطالب بورقته (لو الملف فيه عمود "النموذج") - قيمة خام مثل الأسئلة
       essay: col.essay != null && r[col.essay] !== '' && r[col.essay] != null && Number.isFinite(Number(r[col.essay])) ? Number(r[col.essay]) : null,
-      modelRaw: col.model != null && r[col.model] !== '' && r[col.model] != null && Number.isFinite(Number(r[col.model])) ? Number(r[col.model]) : null,
+      modelRaw: col.model != null ? parseModelCell(r[col.model]) : null,
       answers: items.map(ci => {
         const v = r[ci];
         if (v === '' || v == null) return null;
@@ -350,8 +350,19 @@ export function rawFromIdx(idxArr, choiceCounts, reversed) {
   return choiceCounts.map((c, i) => (idxArr && idxArr[i] != null ? valueForLetter(ARABIC_LETTERS[idxArr[i]], c, reversed) : null));
 }
 // نموذج الطالب من تظليله بالورقة: نفس ترميز الأسئلة (عربي معكوس: ٢ = أ، ١ = ب)
+// خانة النموذج بالملف: تقبل حرفًا (أ/ب، A/B، «نموذج أ») أو رقمًا (١/٢ بترميز Remark)
+function parseModelCell(x) {
+  if (x == null) return null;
+  let t = String(x).trim().replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/^(النموذج|نموذج|form|version|model)\s*[:\-]?\s*/i, '').trim();
+  if (!t) return null;
+  if (/^(أ|ا|إ|آ|a)$/i.test(t)) return MODEL_A;
+  if (/^(ب|b)$/i.test(t)) return MODEL_B;
+  const n = Number(t);
+  return Number.isFinite(n) ? n : null;
+}
 function fileModel(st, reversed = true) {
   const v = st && st.modelRaw;
+  if (v === MODEL_A || v === MODEL_B) return v;
   if (v !== 1 && v !== 2) return null;
   return reversed ? (v === 2 ? MODEL_A : MODEL_B) : (v === 1 ? MODEL_A : MODEL_B);
 }
