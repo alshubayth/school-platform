@@ -1803,6 +1803,10 @@
 .er-unk-row span{ flex:1; min-width:0; }
 .er-unk-row small{ color:var(--slate); direction:ltr; }
 .er-unk-row select{ width:auto; margin:0; padding:5px 8px; }
+.er-unk-hint{ font-style:normal; font-size:11px; color:var(--slate); white-space:nowrap; }
+.er-mpick{ display:inline-flex; gap:4px; flex:0 0 auto !important; }
+.er-mpick button{ width:30px; height:30px; border-radius:50%; border:1.5px solid #C9CED8; background:#fff; color:var(--ink); font-weight:700; font-size:13px; padding:0; cursor:pointer; }
+.er-mpick button.on{ background:var(--meadow); border-color:var(--meadow); color:#fff; }
 .er-model-switch{ margin:4px 0 12px; }
 .er-mixed-note{ background:#FFF4E5; color:#8A5200; border-radius:10px; padding:10px 12px; font-size:13px; margin-bottom:12px; }
 

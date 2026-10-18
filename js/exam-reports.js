@@ -392,28 +392,59 @@ export function gradeWithModels({ parsed, keyA, keyB, mode, orderB, reversedOrde
   return { stats, raw_data, key_raw: keyA };
 }
 
+// ملف فيه عمود «النموذج»: الطالب الذي لم يظلّل نموذجه يُحدَّد يدويًا ولا يُؤخذ من توزيع الطباعة،
+// لأن الأوراق قد تُوزَّع على الطلاب بترتيب يختلف عن ترتيب طباعتها
+const fileHasModelCol = parsed => parsed.students.some(st => st.modelRaw != null);
+function modelKeysRaw(parsed, rev) {
+  const k = parsed.modelKey;
+  return {
+    A: rawFromIdx(alignKeyToFile(k, k.answers), parsed.choiceCounts, rev),
+    B: rawFromIdx(alignKeyToFile(k, k.models.answers_b), parsed.choiceCounts, rev),
+  };
+}
+// النموذج الأقرب لإجابات الطالب (عدد الإجابات المطابقة لكل مفتاح) - اقتراح فقط
+function suggestModel(st, keys, mode) {
+  if (mode !== 'choices') return null;
+  const hits = key => (st.answers || []).reduce((n, v, i) => n + (v != null && key[i] != null && v === key[i] ? 1 : 0), 0);
+  const a = hits(keys.A), b = hits(keys.B);
+  return a === b ? null : { model: a > b ? MODEL_A : MODEL_B, a, b };
+}
 function renderModelSummary(parsed) {
   const k = parsed.modelKey;
   const map = k.model_map || {};
   const idOf = st => String(st.id || '').trim();
   const rev = document.getElementById('er-reversed-order').checked;
-  const mOf = st => fileModel(st, rev) || map[idOf(st)] || null;
+  const hasCol = fileHasModelCol(parsed);
+  const picks = parsed.modelPicks || (parsed.modelPicks = {});
+  const keys = modelKeysRaw(parsed, rev);
+  const autoOf = st => fileModel(st, rev) || (hasCol ? null : map[idOf(st)]) || null;
+  const unknown = parsed.students.filter(st => !autoOf(st));
+  unknown.forEach(st => { const id = idOf(st); if (!picks[id]) { const sg = suggestModel(st, keys, k.models.mode); picks[id] = sg ? sg.model : MODEL_A; } });
+  const mOf = st => autoOf(st) || picks[idOf(st)] || null;
   const a = parsed.students.filter(st => mOf(st) === MODEL_A).length;
   const b = parsed.students.filter(st => mOf(st) === MODEL_B).length;
-  const unknown = parsed.students.filter(st => !mOf(st));
   const fromFile = parsed.students.filter(st => fileModel(st, rev)).length;
-  document.getElementById('er-key-form').innerHTML = `<div class="er-models-sum">
+  const el = document.getElementById('er-key-form');
+  el.innerHTML = `<div class="er-models-sum">
     <div class="er-models-h"><b>اختبار بنموذجين</b><span>${esc(MODE_LABELS[k.models.mode] || '')}</span></div>
     <div class="dd-stats" style="margin:8px 0;">
       <span class="ds ds-all"><b>${a}</b> نموذج أ</span>
       <span class="ds ds-present"><b>${b}</b> نموذج ب</span>
-      ${unknown.length ? `<span class="ds ds-late"><b>${unknown.length}</b> لم يُعرف نموذجهم</span>` : ''}
+      ${unknown.length ? `<span class="ds ds-late"><b>${unknown.length}</b> حُدِّد نموذجهم يدويًا</span>` : ''}
     </div>
     <p class="er-models-p">${fromFile ? `نموذج ${fromFile} طالب مقروء من تظليلهم بالورقة. ` : ''}يُصحَّح كل طالب تلقائيًا وفق مفتاح نموذجه. لتعديل الإجابات: عدّل المفتاح من "ورقة إجابة للتصحيح الآلي" واحفظه.</p>
-    ${unknown.length ? `<div class="er-unknown"><p>تعذّر تحديد نموذج هؤلاء الطلاب (لم يظلّلوه، أو ظلّلوا النموذجين، أو لم تُطبع أوراقهم من المنصة) - اختر نموذج كل طالب:</p>
-      ${unknown.map(st => `<label class="er-unk-row"><span>${esc(st.name || st.id)}</span><small>${esc(st.id)}</small>
-        <select class="er-model-pick" data-id="${esc(idOf(st))}"><option value="أ">نموذج أ</option><option value="ب">نموذج ب</option></select></label>`).join('')}</div>` : ''}
+    ${unknown.length ? `<div class="er-unknown"><p>⚠ لم يظلّل هؤلاء الطلاب النموذج (أو ظلّلوا النموذجين) - حدّد نموذج كل طالب. الاختيار المبدئي هو النموذج الأقرب لإجاباته:</p>
+      ${unknown.map(st => {
+        const id = idOf(st); const sg = suggestModel(st, keys, k.models.mode); const cur = picks[id];
+        return `<div class="er-unk-row"><span>${esc(st.name || st.id)}</span><small>${esc(st.id)}</small>
+          ${sg ? `<em class="er-unk-hint" title="عدد الإجابات المطابقة لكل مفتاح">أ: ${sg.a} · ب: ${sg.b}</em>` : ''}
+          <span class="er-mpick" data-id="${esc(id)}">${[MODEL_A, MODEL_B].map(m => `<button type="button" class="${cur === m ? 'on' : ''}" data-m="${m}" title="نموذج ${m}">${m}</button>`).join('')}</span></div>`;
+      }).join('')}</div>` : ''}
   </div>`;
+  el.querySelectorAll('.er-mpick button').forEach(btn => btn.addEventListener('click', () => {
+    picks[btn.parentElement.dataset.id] = btn.dataset.m;
+    renderModelSummary(parsed);
+  }));
 }
 
 /* =========================================================================
@@ -649,6 +680,7 @@ function alignKeyToFile(k, arr) {
 function applySavedKey(k) {
   if (!parsedData) return;
   const msg = document.getElementById('er-saved-key-msg');
+  delete parsedData.modelPicks;
   if (k && k.models && k.models.mode) parsedData.modelKey = k; else delete parsedData.modelKey;
   if (!k) {
     delete parsedData.presetLetters;
@@ -709,15 +741,15 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   if (parsedData.modelKey) {
     const k = parsedData.modelKey;
     const map = k.model_map || {};
-    const picks = {};
-    document.querySelectorAll('.er-model-pick').forEach(sel => { picks[sel.dataset.id] = sel.value; });
+    const picks = parsedData.modelPicks || {};
+    const hasCol = fileHasModelCol(parsedData);
     const reversedOrder = document.getElementById('er-reversed-order').checked;
     const g = gradeWithModels({
       parsed: parsedData,
       keyA: rawFromIdx(alignKeyToFile(k, k.answers), parsedData.choiceCounts, reversedOrder),
       keyB: rawFromIdx(alignKeyToFile(k, k.models.answers_b), parsedData.choiceCounts, reversedOrder),
       mode: k.models.mode, orderB: k.models.order_b, reversedOrder, keyId: k.id,
-      modelOf: st => { const id = String(st.id || '').trim(); return fileModel(st, reversedOrder) || map[id] || picks[id] || MODEL_A; },
+      modelOf: st => { const id = String(st.id || '').trim(); return fileModel(st, reversedOrder) || (hasCol ? null : map[id]) || picks[id] || MODEL_A; },
     });
     g.raw_data.essayMax = essayMaxOf(parsedData);
     g.raw_data.hasEssay = !!parsedData.hasEssay;
