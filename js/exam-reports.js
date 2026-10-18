@@ -155,7 +155,21 @@ export function parseSheetRows(rows) {
 
   const keyRows = allRows.filter(isKeyRow);
   const detectedKeyRow = keyRows[0] || null;
-  const students = allRows.filter(r => !isKeyRow(r));
+  // الورقة نفسها مكررة بالملف (نفس رقم الهوية ونفس الإجابات، كأن تُصدَّر دفعة سابقة مرتين): تُحسب مرة واحدة.
+  // ونفس رقم الهوية بإجابات مختلفة يبقى كما هو مع تنبيه، ليراجعه المعلم
+  const seen = new Map();
+  let dupRemoved = 0;
+  const dupConflicts = new Set();
+  const sig = r => JSON.stringify([r.answers, r.essay ?? null, r.modelRaw ?? null]);
+  const students = [];
+  allRows.filter(r => !isKeyRow(r)).forEach(r => {
+    const id = String(r.id || '').trim();
+    if (!id) { students.push(r); return; }
+    const prev = seen.get(id);
+    if (!prev) { seen.set(id, [sig(r)]); students.push(r); return; }
+    if (prev.includes(sig(r))) { dupRemoved++; return; }
+    prev.push(sig(r)); dupConflicts.add(id); students.push(r);
+  });
   if (students.length === 0) throw new Error('لا يوجد طلاب بالملف');
 
   const choiceCounts = computeChoiceCounts(items, students.concat(detectedKeyRow ? [detectedKeyRow] : []), itemTypes);
@@ -163,6 +177,8 @@ export function parseSheetRows(rows) {
   return {
     hasEssay: col.essay != null,
     textCoded,
+    dupRemoved,
+    dupConflicts: [...dupConflicts],
     itemCount: items.length,
     choiceCounts,
     itemTypes,
@@ -585,13 +601,15 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
       ? ` — ورقة أسئلة «${esc(paperRes.paper.title)}»: يُصحَّح كل طالب وفق نموذجه، والمفتاح مأخوذ من الورقة`
       : parsedData.detectedKeyRaw
       ? ' — عُثر في الملف على صف نموذج جاهز وعُبّئت الإجابات منه، راجعها أو عدّلها أدناه'
-      : ' — عبّي الإجابة الصحيحة لكل سؤال بالأسفل';
+      : ' — أدخل الإجابة الصحيحة لكل سؤال بالأسفل';
     document.getElementById('er-preview-summary').innerHTML =
       `تم العثور على <strong>${parsedData.students.length}</strong> طالب، و<strong>${parsedData.itemCount}</strong> سؤال${keyNote}`
       + (enr.filled ? `<br><span style="color:#1F6A3C;">✓ اكتملت بيانات ${enr.filled} ${enr.filled === 1 ? 'طالب' : 'طلاب'} (الاسم/الصف/الفصل) من طلاب المنصة برقم الهوية</span>` : '')
       + (enr.fixedIds && enr.fixedIds.length ? `<br><span style="color:#1F6A3C;">✓ صححت ${enr.fixedIds.length === 1 ? 'رقم هوية قُرئ خطأً من الباركود' : enr.fixedIds.length + ' أرقام هوية قُرئت خطأً من الباركود'}: ${enr.fixedIds.map(esc).join('، ')}</span>` : '')
       + (paperRes && paperRes.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.unknown.length} ورقة لم ترتبط بطالب (لم تُطبع له من المنصة أو تغيّرت الورقة بعد الطباعة): ${paperRes.unknown.slice(0, 5).map(esc).join('، ')}</span>` : '')
       + (paperRes && paperRes.missingPages.length ? `<br><span style="color:#A4501A;">⚠ ${paperRes.missingPages.length} طالب تنقصهم صفحة أو أكثر في الملف (تُحتسب أسئلتها بلا إجابة): ${paperRes.missingPages.slice(0, 5).map(esc).join('، ')}${paperRes.missingPages.length > 5 ? '...' : ''}</span>` : '')
+      + (parsedData.dupRemoved ? `<br><span style="color:#A4501A;">⚠ ${parsedData.dupRemoved} ${parsedData.dupRemoved === 1 ? 'ورقة مكررة' : 'أوراق مكررة'} في الملف (نفس الطالب بنفس الإجابات) - احتُسبت مرة واحدة</span>` : '')
+      + (parsedData.dupConflicts && parsedData.dupConflicts.length ? `<br><span style="color:#B42318;">⚠ ${parsedData.dupConflicts.length} ${parsedData.dupConflicts.length === 1 ? 'طالب له' : 'طلاب لهم'} أكثر من ورقة بإجابات مختلفة - راجعهم قبل الحفظ: ${parsedData.dupConflicts.slice(0, 5).map(esc).join('، ')}${parsedData.dupConflicts.length > 5 ? '...' : ''}</span>` : '')
       + (enr.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${enr.unknown.length} ${enr.unknown.length === 1 ? 'رقم هوية' : 'أرقام هوية'} غير موجودة ضمن طلاب المنصة: ${enr.unknown.slice(0, 5).map(esc).join('، ')}${enr.unknown.length > 5 ? '...' : ''}</span>` : '');
     document.getElementById('er-title').value = '';
     document.getElementById('er-subject').value = parsedData.detected.subject || '';
