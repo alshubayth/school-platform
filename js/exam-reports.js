@@ -409,7 +409,7 @@ function renderModelSummary(parsed) {
       <span class="ds ds-present"><b>${b}</b> نموذج ب</span>
       ${unknown.length ? `<span class="ds ds-late"><b>${unknown.length}</b> لم يُعرف نموذجهم</span>` : ''}
     </div>
-    <p class="er-models-p">${fromFile ? `نموذج ${fromFile} طالب مقروء من تظليلهم بالورقة. ` : ''}كل طالب يتصحّح بإجابة نموذجه تلقائيًا. لتعديل الإجابات: عدّل المفتاح من "ورقة إجابة للتصحيح الآلي" واحفظه.</p>
+    <p class="er-models-p">${fromFile ? `نموذج ${fromFile} طالب مقروء من تظليلهم بالورقة. ` : ''}يُصحَّح كل طالب تلقائيًا وفق مفتاح نموذجه. لتعديل الإجابات: عدّل المفتاح من "ورقة إجابة للتصحيح الآلي" واحفظه.</p>
     ${unknown.length ? `<div class="er-unknown"><p>تعذّر تحديد نموذج هؤلاء الطلاب (لم يظلّلوه، أو ظلّلوا النموذجين، أو لم تُطبع أوراقهم من المنصة) - اختر نموذج كل طالب:</p>
       ${unknown.map(st => `<label class="er-unk-row"><span>${esc(st.name || st.id)}</span><small>${esc(st.id)}</small>
         <select class="er-model-pick" data-id="${esc(idOf(st))}"><option value="أ">نموذج أ</option><option value="ب">نموذج ب</option></select></label>`).join('')}</div>` : ''}
