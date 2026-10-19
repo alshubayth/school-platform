@@ -1353,7 +1353,7 @@ function printBatchReport(batchId) {
 
   const rowsHtml = b.linked.length === 0
     ? '<tr><td colspan="5" style="color:#999;">لا توجد فواتير مرتبطة بهذه الدفعة</td></tr>'
-    : b.linked.flatMap(r => (r.budget_expense_items || []).map(it => `
+    : b.linked.slice().sort((x, y) => (Number(x.statement_number) || 0) - (Number(y.statement_number) || 0) || String(x.request_date).localeCompare(String(y.request_date))).flatMap(r => (r.budget_expense_items || []).map(it => `
       <tr>
         <td>${r.statement_number}</td>
         <td>${fmtDate(r.request_date)}</td>
