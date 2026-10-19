@@ -1160,16 +1160,65 @@ function renderSavedList(keepSearchFocus = false) {
   });
 }
 
+/* إعادة حساب إحصاءات تقرير محفوظ لقائمة طلاب (بنموذج واحد أو نموذجين) */
+function recomputeSavedReport(rep, list) {
+  const rd = rep.raw_data || {};
+  const n = rep.item_count || (rd.choiceCounts || []).length;
+  const reversed = rd.reversedOrder !== false;
+  const base = { itemCount: n, choiceCounts: rd.choiceCounts || [], itemTypes: rd.itemTypes || [], students: list, points: rd.points || null };
+  if (rd.models) {
+    const m = rd.models;
+    const g = gradeWithModels({ parsed: base, keyA: m.keyA, keyB: m.keyB, mode: m.mode, orderB: m.orderB, reversedOrder: reversed, keyId: m.keyId, modelOf: s2 => s2.model || MODEL_A });
+    return { stats: g.stats, raw_data: { ...rd, ...g.raw_data }, students_count: list.length };
+  }
+  const stats = computeExamStats({ ...base, keyRaw: rep.key_raw, reversedOrder: reversed });
+  return { stats, raw_data: { ...rd, students: list }, students_count: list.length };
+}
+// أوراق مكررة بتقرير محفوظ (نفس الطالب بنفس الإجابات والمقالي والنموذج): تبقى ورقة واحدة
+function dedupeSheets(students) {
+  const seen = new Set();
+  let removed = 0;
+  const list = [];
+  (students || []).forEach(st => {
+    const { key, ...rest } = st;
+    const id = String(rest.id || '').trim();
+    const sig = id && JSON.stringify([id, rest.answers, rest.essay ?? null, rest.model ?? null]);
+    if (sig && seen.has(sig)) { removed++; return; }
+    if (sig) seen.add(sig);
+    list.push(rest);
+  });
+  return { list, removed };
+}
+// عند فتح التقرير: دمج الأوراق المكررة، أو إعادة الحساب لو عدد الطلاب بالإحصاءات لا يطابق الأوراق المحفوظة
+async function healReport(rep) {
+  const rd = rep.raw_data;
+  if (rep.source === 'camera' || !rd || !Array.isArray(rd.students) || !rd.students.length || !Array.isArray(rd.choiceCounts)) return { rep, removed: 0 };
+  if (isTeacherView() && rep.created_by !== currentUserId) return { rep, removed: 0 };
+  const { list, removed } = dedupeSheets(rd.students);
+  const statsN = rep.stats && Number(rep.stats.n);
+  if (!removed && (!statsN || statsN === list.length)) return { rep, removed: 0 };
+  try {
+    const upd = recomputeSavedReport(rep, list);
+    const { error } = await sb.from('exam_reports').update(upd).eq('id', rep.id);
+    if (error) return { rep, removed: 0 };
+    periodicCache.delete(rep.id);
+    return { rep: { ...rep, ...upd }, removed, recalculated: true };
+  } catch (e) { console.error('healReport', e); return { rep, removed: 0 }; }
+}
+
 async function openReport(id) {
-  const { data, error } = await sb.from('exam_reports').select('*').eq('id', id).single();
-  if (error || !data) { alert('تعذر فتح التقرير'); return; }
+  const { data: data0, error } = await sb.from('exam_reports').select('*').eq('id', id).single();
+  if (error || !data0) { alert('تعذر فتح التقرير'); return; }
+  const healed = await healReport(data0);
+  const data = healed.rep;
   currentReport = data;
   setSubRoute(id);
   window.scrollTo(0, 0);
   document.getElementById('er-list-view').classList.add('hidden');
   document.getElementById('er-detail-view').classList.remove('hidden');
   document.getElementById('er-detail-title').textContent = data.title;
-  document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`;
+  document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`
+    + (healed.removed ? ` — دُمجت ${healed.removed === 1 ? 'ورقة مكررة' : healed.removed === 2 ? 'ورقتان مكررتان' : healed.removed + (healed.removed <= 10 ? ' أوراق مكررة' : ' ورقة مكررة')} وأُعيد حساب التقرير` : healed.recalculated ? ' — أُعيد حساب التقرير' : '');
   showErTab('dist');
   const ekb = document.getElementById('er-edit-key-btn');
   ekb.textContent = data.raw_data && data.raw_data.models ? '↻ إعادة التصحيح بالمفتاح المحفوظ' : '✎ تعديل مفتاح الإجابة والدرجات';
