@@ -1109,7 +1109,7 @@ function renderSavedList(keepSearchFocus = false) {
   listEl.innerHTML = head + (groups.length ? groups.map(([g, reps]) => `
     <section class="er-grade-grp">
       <h4>${esc(g ? gradeLabels[g] : NO_GRADE)} <small>${reps.length}</small></h4>
-      <div class="er-report-grid">${reps.map(r => reportCardHtml(r, idx++)).join('')}</div>
+      <div class="er-report-grid er-rows">${reps.map(r => reportCardHtml(r, idx++)).join('')}</div>
     </section>`).join('') : '<div class="ex-empty"><b>لا توجد تقارير مطابقة</b><span>غيّر الفلاتر أو امسحها.</span></div>');
   const back = document.getElementById('er-subj-back');
   if (back) back.onclick = () => { erFilt.subject = ''; saveFilt(); renderSavedList(); };
