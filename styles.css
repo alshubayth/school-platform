@@ -2740,3 +2740,25 @@ body.omr-noscroll{ overflow:hidden; }
 .er-multi-lbl{ display:flex; align-items:center; gap:8px; font-size:12px; background:#fff; border:1px solid var(--border); border-radius:10px; padding:8px 12px; margin-bottom:10px; cursor:pointer; }
 .er-multi-lbl input{ width:auto; margin:0; }
 .er-essay-note{ font-size:12px; color:var(--slate); margin:8px 2px 0; }
+
+/* ===== قائمة تقارير الاختبارات: فلاتر + بطاقات المواد + تجميع بالمرحلة ===== */
+.er-filt{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px; margin:0 0 14px; }
+.er-filt input[type=search]{ flex:1 1 200px; min-width:160px; margin:0; }
+.er-filt select{ flex:0 1 auto; width:auto; min-width:120px; margin:0; }
+.er-filt .text-action-btn{ width:auto; padding:6px 10px; }
+.er-subj-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:12px; }
+.er-subj-card{ display:flex; align-items:center; gap:12px; text-align:right; background:#fff; border:1px solid var(--border); border-radius:14px; padding:14px; cursor:pointer; font:inherit; color:inherit; transition:border-color .15s, box-shadow .15s, transform .15s; }
+.er-subj-card:hover{ border-color:var(--teal); box-shadow:0 4px 14px rgba(0,0,0,.06); transform:translateY(-1px); }
+.er-subj-card:focus-visible{ outline:2px solid var(--teal); outline-offset:2px; }
+.er-subj-card .ers-main{ flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.er-subj-card .ers-main b{ font-size:15px; }
+.er-subj-card .ers-n{ font-size:12px; color:var(--slate); }
+.er-subj-card .ers-go{ font-size:22px; color:var(--slate); }
+.er-subj-head{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 0 10px; }
+.er-subj-head b{ font-size:16px; }
+.er-subj-head span{ font-size:12px; color:var(--slate); background:var(--bg, #F4F6F8); border-radius:10px; padding:2px 8px; }
+.er-subj-head .text-action-btn{ width:auto; padding:6px 10px; }
+.er-grade-grp{ margin:0 0 18px; }
+.er-grade-grp h4{ font-size:13.5px; margin:0 0 8px; display:flex; align-items:center; gap:8px; color:var(--ink); border-bottom:1px dashed var(--border); padding-bottom:6px; }
+.er-grade-grp h4 small{ font-size:11px; color:var(--slate); background:var(--bg, #F4F6F8); border-radius:10px; padding:1px 8px; font-weight:600; }
+@media (max-width:600px){ .er-filt select{ flex:1 1 45%; } }

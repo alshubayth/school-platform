@@ -1,6 +1,7 @@
 import { ASSET_VERSION, sb, currentUserId, currentProfile, backToTiles, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, gradeLabels, printOrgName, printLogo } from './core.js';
 import { loadXLSX, loadJSZip } from './lib-loader.js';
 import { initAnswerSheetCard, fetchSavedKeys, itemKinds } from './answer-sheet.js';
+import { normSubj, subjectMatches, gradeFromText } from './teacher-scope.js';
 
 document.getElementById('back-to-tiles-18').addEventListener('click', backToTiles);
 
@@ -612,8 +613,9 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
       + (parsedData.dupConflicts && parsedData.dupConflicts.length ? `<br><span style="color:#B42318;">⚠ ${parsedData.dupConflicts.length} ${parsedData.dupConflicts.length === 1 ? 'طالب له' : 'طلاب لهم'} أكثر من ورقة بإجابات مختلفة - راجعهم قبل الحفظ: ${parsedData.dupConflicts.slice(0, 5).map(esc).join('، ')}${parsedData.dupConflicts.length > 5 ? '...' : ''}</span>` : '')
       + (enr.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${enr.unknown.length} ${enr.unknown.length === 1 ? 'رقم هوية' : 'أرقام هوية'} غير موجودة ضمن طلاب المنصة: ${enr.unknown.slice(0, 5).map(esc).join('، ')}${enr.unknown.length > 5 ? '...' : ''}</span>` : '');
     document.getElementById('er-title').value = '';
-    document.getElementById('er-subject').value = parsedData.detected.subject || '';
-    document.getElementById('er-grade').value = parsedData.detected.grade || '';
+    await fillUploadSelects();
+    setSelectValue('er-subject', canonSubject(parsedData.detected.subject));
+    setSelectValue('er-grade', canonGrade(parsedData.detected.grade));
     document.getElementById('er-semester').value = '';
     const revEl = document.getElementById('er-reversed-order');
     revEl.checked = parsedData.textCoded || paperRes ? false : guessReversedOrder(parsedData.detected.subject);
@@ -621,6 +623,8 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
     if (paperRes) {
       if (!document.getElementById('er-title').value.trim()) document.getElementById('er-title').value = paperRes.paper.title || '';
+      if (paperRes.paper.subject) setSelectValue('er-subject', canonSubject(paperRes.paper.subject));
+      if (paperRes.paper.grade_level) setSelectValue('er-grade', canonGrade(gradeLabels[paperRes.paper.grade_level] || paperRes.paper.grade_level));
       const ks = document.getElementById('er-saved-key');
       ks.innerHTML = `<option value="">ورقة الأسئلة: ${esc(paperRes.paper.title)}</option>`;
       ks.disabled = true;
@@ -762,7 +766,8 @@ function applySavedKey(k) {
   const observedMax = Math.max(0, ...parsedData.students.flatMap(st => st.answers.filter(v => typeof v === 'number')));
   document.getElementById('er-reversed-order').checked = parsedData.textCoded ? false : k.lang !== 'en';
   if (!document.getElementById('er-title').value.trim()) document.getElementById('er-title').value = k.title || '';
-  if (!document.getElementById('er-subject').value.trim() && k.subject) document.getElementById('er-subject').value = k.subject;
+  if (!document.getElementById('er-subject').value.trim() && k.subject) setSelectValue('er-subject', canonSubject(k.subject));
+  if (!document.getElementById('er-grade').value.trim() && k.grade_level) setSelectValue('er-grade', canonGrade(k.grade_level));
   renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
   msg.textContent = `تم تطبيق المفتاح "${k.title}" ✓ راجع الإجابات واضغط "حفظ التقرير"`;
   if (observedMax > k.choices) msg.textContent += ` — تنبيه: بالملف قيم أكبر من عدد الخيارات بالمفتاح (${k.choices})، تأكد من أن الملف للاختبار نفسه`;
@@ -788,7 +793,9 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   errEl.style.display = 'none';
   if (!parsedData) { errEl.textContent = 'حلّل الملف أولًا'; errEl.style.display = 'block'; return; }
   const title = document.getElementById('er-title').value.trim();
-  if (!title) { errEl.textContent = 'اكتب عنوان للتقرير'; errEl.style.display = 'block'; return; }
+  if (!title) { errEl.textContent = 'اكتب عنوانًا للتقرير'; errEl.style.display = 'block'; return; }
+  if (!document.getElementById('er-subject').value || !document.getElementById('er-grade').value) { errEl.textContent = 'اختر المادة والمرحلة لتنظيم التقرير في قائمة التقارير'; errEl.style.display = 'block'; return; }
+  if (!confirmNoDuplicate(document.getElementById('er-subject').value, document.getElementById('er-grade').value)) return;
 
   if (parsedData.modelKey) {
     const k = parsedData.modelKey;
@@ -807,8 +814,8 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     g.raw_data.hasEssay = !!parsedData.hasEssay;
     const { error } = await insertReport({
       title,
-      subject_name: document.getElementById('er-subject').value.trim() || null,
-      grade_level: document.getElementById('er-grade').value.trim() || null,
+      subject_name: canonSubject(document.getElementById('er-subject').value) || null,
+      grade_level: canonGrade(document.getElementById('er-grade').value) || null,
       semester: document.getElementById('er-semester').value || null,
       item_count: parsedData.itemCount,
       students_count: parsedData.students.length,
@@ -836,8 +843,8 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   const stats = computeExamStats({ ...parsedData, keyRaw, reversedOrder });
   const { error } = await insertReport({
     title,
-    subject_name: document.getElementById('er-subject').value.trim() || null,
-    grade_level: document.getElementById('er-grade').value.trim() || null,
+    subject_name: canonSubject(document.getElementById('er-subject').value) || null,
+    grade_level: canonGrade(document.getElementById('er-grade').value) || null,
     semester: document.getElementById('er-semester').value || null,
     item_count: parsedData.itemCount,
     students_count: parsedData.students.length,
@@ -871,6 +878,63 @@ async function insertReport(row) {
   let res = await writeWithSchool(extra => sb.from('exam_reports').insert({ ...row, exam_type, ...extra }));
   if (res.error && /exam_type/i.test(res.error.message || '')) res = await writeWithSchool(extra => sb.from('exam_reports').insert({ ...row, ...extra }));
   return res;
+}
+
+/* ===== توحيد اسم المادة والمرحلة: «English» و«انجليزي» = «اللغة الإنجليزية»، «الثالث المتوسط» = «ثالث متوسط» ===== */
+const SUBJECTS_FALLBACK = ['التربية البدنية', 'التربية الفنية', 'التفكير الناقد', 'الدراسات الإسلامية', 'الدراسات الاجتماعية', 'الرياضيات', 'العلوم', 'اللغة الإنجليزية', 'اللغة العربية', 'المهارات الحياتية والأسرية', 'المهارات الرقمية'];
+let subjectNames = null;
+async function loadSubjectNames() {
+  if (subjectNames) return subjectNames;
+  try {
+    const { data } = await sb.from('subjects').select('name');
+    subjectNames = [...new Set((data || []).map(x => x.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  } catch { /* نستخدم القائمة الافتراضية */ }
+  if (!subjectNames || !subjectNames.length) subjectNames = SUBJECTS_FALLBACK.slice();
+  return subjectNames;
+}
+function subjScore(a, b) {
+  const x = normSubj(String(a).toLowerCase()), y = normSubj(String(b).toLowerCase());
+  if (!x || !y) return 0;
+  if (x === y) return 100;
+  const tx = x.split(' '), ty = y.split(' ');
+  let sc = tx.filter(w => w.length >= 3 && ty.includes(w)).length * 10;
+  if (!sc && subjectMatches(String(a).toLowerCase(), String(b).toLowerCase())) sc = 5;
+  return sc;
+}
+export function canonSubject(t) {
+  const v = String(t || '').trim();
+  if (!v) return '';
+  let best = null, bestSc = 0;
+  (subjectNames || SUBJECTS_FALLBACK).forEach(n => { const sc = subjScore(v, n); if (sc > bestSc) { best = n; bestSc = sc; } });
+  return best || v;
+}
+export function canonGrade(t) {
+  const g = gradeFromText(t);
+  return g ? gradeLabels[g] : String(t || '').trim();
+}
+// قوائم المادة والمرحلة في نموذج الرفع: تختار القيمة الموحّدة (وتضيفها لو غير موجودة)
+function setSelectValue(id, v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (v && ![...el.options].some(o => o.value === v)) el.add(new Option(v, v));
+  el.value = v || '';
+}
+async function fillUploadSelects() {
+  const names = await loadSubjectNames();
+  const sj = document.getElementById('er-subject');
+  if (sj && sj.tagName === 'SELECT' && sj.options.length <= 1) names.forEach(n => sj.add(new Option(n, n)));
+  const gr = document.getElementById('er-grade');
+  if (gr && gr.tagName === 'SELECT' && gr.options.length <= 1) Object.values(gradeLabels).forEach(n => gr.add(new Option(n, n)));
+}
+// تقرير موجود لنفس المادة والمرحلة والنوع والفصل الدراسي: ننبّه قبل إنشاء تقرير ثانٍ
+function confirmNoDuplicate(subject, grade) {
+  const type = document.getElementById('er-type') ? document.getElementById('er-type').value : 'diagnostic';
+  const sem = document.getElementById('er-semester').value || '';
+  const sj = canonSubject(subject), g = gradeFromText(grade);
+  if (!sj || !g) return true;
+  const dup = erListData.find(r => canonSubject(r.subject_name) === sj && repGradeKey(r) === g && (r.exam_type || 'diagnostic') === type && (r.semester || '') === sem);
+  if (!dup) return true;
+  return confirm(`يوجد تقرير محفوظ لنفس المادة والمرحلة: «${dup.title}» (${dup.students_count || 0} طالب).\n\nإذا كان الملف الجديد لطلاب إضافيين من نفس الاختبار، فالأفضل فتح ذلك التقرير واستخدام «إضافة طلاب من ملف».\n\nهل تريد إنشاء تقرير جديد مستقل؟`);
 }
 
 async function loadSavedList() {
@@ -912,7 +976,9 @@ async function loadSavedList() {
       return !g || sc.grades.has(g);
     });
   }
+  erListData = data || [];
   if (!data || data.length === 0) {
+    const fb = document.getElementById('er-filters'); if (fb) fb.innerHTML = '';
     listEl.innerHTML = isTeacherView()
       ? '<div class="ex-empty"><b>لا توجد تقارير لك بعد</b><span>صحّح أوراق طلابك من تبويب «التصحيح بالجوال»، وسيظهر التقرير هنا تلقائيًا.</span></div>'
       : '<div class="ex-empty"><b>لا توجد تقارير محفوظة بعد</b><span>صحّح أوراق الطلاب في Remark، ثم اضغط «+ رفع نتائج اختبار» وارفع ملف الإكسل.</span></div>';
@@ -927,33 +993,126 @@ async function loadSavedList() {
       (profs || []).forEach(p => { names[p.id] = p.full_name; });
     }
   }
-  const colors = [
-    { bg: 'var(--teal-light)', fg: 'var(--teal)' },
-    { bg: 'var(--gold-light)', fg: 'var(--gold)' },
-    { bg: 'var(--purple-light)', fg: 'var(--purple)' },
-    { bg: 'var(--meadow-light)', fg: 'var(--meadow-dark)' },
-  ];
-  const examIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:26px; height:26px;"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`;
+  erListNames = names;
+  await loadSubjectNames();
+  renderSavedList();
+  return data.length;
+}
 
-  const gradeName = g => gradeLabels[g] || g || '';
-  const dateTxt = d => { try { return new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
-  listEl.innerHTML = `<div class="er-report-grid">
-    ${data.map((r, i) => {
-      const c = colors[i % colors.length];
-      const meta = [r.subject_name, gradeName(r.grade_level), r.semester].filter(Boolean).map(esc).join(' · ');
-      return `
+/* ===== تنظيم قائمة التقارير: بطاقات المواد، وداخل كل مادة اختباراتها مجمّعة بالمرحلة، مع فلاتر ===== */
+let erListData = [], erListNames = {};
+const ER_FILT_KEY = 'er-list-filters';
+let erFilt = (() => { try { return { q: '', type: '', sem: '', grade: '', subject: '', ...JSON.parse(localStorage.getItem(ER_FILT_KEY) || '{}') }; } catch { return { q: '', type: '', sem: '', grade: '', subject: '' }; } })();
+const saveFilt = () => { try { localStorage.setItem(ER_FILT_KEY, JSON.stringify({ ...erFilt, q: '' })); } catch { /* المتصفح يمنع التخزين */ } };
+const NO_SUBJ = 'بدون مادة', NO_GRADE = 'بدون مرحلة';
+const repSubject = r => canonSubject(r.subject_name) || NO_SUBJ;
+const repGradeKey = r => gradeFromText(r.grade_level) || gradeFromText(r.title) || '';
+const SUBJ_COLORS = [
+  { bg: 'var(--teal-light)', fg: 'var(--teal)' }, { bg: 'var(--gold-light)', fg: 'var(--gold)' },
+  { bg: 'var(--purple-light)', fg: 'var(--purple)' }, { bg: 'var(--meadow-light)', fg: 'var(--meadow-dark)' },
+];
+const examIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:26px; height:26px;"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`;
+const bookIconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:26px; height:26px;"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>`;
+const dateTxt = d => { try { return new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
+
+const countTests = n => (n === 1 ? 'اختبار واحد' : n === 2 ? 'اختباران' : n <= 10 ? `${n} اختبارات` : `${n} اختبارًا`);
+function filteredReports(ignoreSubject = false) {
+  const q = normSubj(erFilt.q);
+  return erListData.filter(r =>
+    (!erFilt.type || (r.exam_type || 'diagnostic') === erFilt.type)
+    && (!erFilt.sem || (erFilt.sem === '-' ? !r.semester : r.semester === erFilt.sem))
+    && (!erFilt.grade || repGradeKey(r) === erFilt.grade)
+    && (ignoreSubject || !erFilt.subject || repSubject(r) === erFilt.subject)
+    && (!q || normSubj([r.title, r.subject_name, r.grade_level].join(' ')).includes(q)));
+}
+
+function reportCardHtml(r, i) {
+  const c = SUBJ_COLORS[i % SUBJ_COLORS.length];
+  const names = erListNames;
+  const meta = [repSubject(r) !== NO_SUBJ ? repSubject(r) : '', gradeLabels[repGradeKey(r)] || r.grade_level, r.semester].filter(Boolean).map(esc).join(' · ');
+  return `
       <div data-id="${r.id}" class="er-report-card" tabindex="0" role="button" title="${esc(r.title)}">
         <span class="erc-ic" style="background:${c.bg}; color:${c.fg};">${examIconSvg}</span>
         <span class="erc-main">
           <b>${esc(r.title)}</b>
           <span>${meta || '&nbsp;'}</span>
-          <span class="erc-chips">${isTeacherView() && r.created_by !== currentUserId ? '<i class="erc-shared">من الإدارة</i>' : ''}${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : ''}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
+          <span class="erc-chips">${isTeacherView() && r.created_by !== currentUserId ? '<i class="erc-shared">من الإدارة</i>' : ''}${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : '<i>تشخيصي</i>'}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
           ${r.exam_type === 'periodic' || r.source !== 'camera' ? `<span class="erc-actions">${r.exam_type === 'periodic' ? `<button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-results-btn" data-rid="${r.id}">استعراض النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button>` : ''}${r.source !== 'camera' ? `<button type="button" class="erc-act er-addsheet-btn" data-rid="${r.id}">➕ ورقة طالب</button>` : ''}</span>` : ''}
         </span>
         ${!isTeacherView() || r.created_by === currentUserId ? `<button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>` : ''}
       </div>`;
-    }).join('')}
+}
+
+function renderFilterBar() {
+  const fb = document.getElementById('er-filters');
+  if (!fb) return;
+  const subjects = [...new Set(erListData.map(repSubject))].sort((a, b) => (a === NO_SUBJ) - (b === NO_SUBJ) || a.localeCompare(b, 'ar'));
+  const sems = [...new Set(erListData.map(r => r.semester).filter(Boolean))];
+  const opt = (v, l, cur) => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${esc(l)}</option>`;
+  const active = ['type', 'sem', 'grade', 'subject'].some(k => erFilt[k]) || erFilt.q;
+  fb.innerHTML = `<div class="er-filt">
+    <input type="search" id="erf-q" placeholder="ابحث بعنوان الاختبار..." value="${esc(erFilt.q)}" autocomplete="off" />
+    <select id="erf-subject" aria-label="المادة">${opt('', 'كل المواد', erFilt.subject)}${subjects.map(x => opt(x, x, erFilt.subject)).join('')}</select>
+    <select id="erf-grade" aria-label="المرحلة">${opt('', 'كل المراحل', erFilt.grade)}${GRADE_ORDER.map(g => opt(g, gradeLabels[g], erFilt.grade)).join('')}</select>
+    <select id="erf-type" aria-label="نوع الاختبار">${opt('', 'كل الأنواع', erFilt.type)}${opt('diagnostic', 'تشخيصي', erFilt.type)}${opt('periodic', 'فتري', erFilt.type)}</select>
+    <select id="erf-sem" aria-label="الفصل الدراسي">${opt('', 'كل الفصول الدراسية', erFilt.sem)}${['الفصل الدراسي الأول', 'الفصل الدراسي الثاني', ...sems].filter((x, i, a) => a.indexOf(x) === i).map(x => opt(x, x, erFilt.sem)).join('')}${erListData.some(r => !r.semester) ? opt('-', 'بدون فصل دراسي', erFilt.sem) : ''}</select>
+    ${active ? '<button type="button" class="text-action-btn" id="erf-clear">مسح الفلاتر</button>' : ''}
   </div>`;
+  const on = (id, k, ev = 'change') => { const el = document.getElementById(id); el.addEventListener(ev, () => { erFilt[k] = el.value; saveFilt(); renderSavedList(id === 'erf-q'); }); };
+  on('erf-subject', 'subject'); on('erf-grade', 'grade'); on('erf-type', 'type'); on('erf-sem', 'sem'); on('erf-q', 'q', 'input');
+  const cl = document.getElementById('erf-clear');
+  if (cl) cl.onclick = () => { erFilt = { q: '', type: '', sem: '', grade: '', subject: '' }; saveFilt(); renderSavedList(); };
+}
+
+function renderSavedList(keepSearchFocus = false) {
+  const listEl = document.getElementById('er-saved-list');
+  if (!listEl) return;
+  if (erFilt.subject && !erListData.some(r => repSubject(r) === erFilt.subject)) erFilt.subject = '';
+  if (!keepSearchFocus) renderFilterBar();
+  else { const cl = document.getElementById('erf-clear'); if (!cl) renderFilterBar(); }
+  if (keepSearchFocus) { const q = document.getElementById('erf-q'); if (q && document.activeElement !== q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }
+
+  // بدون مادة محددة وبدون بحث: بطاقات المواد
+  if (!erFilt.subject && !erFilt.q) {
+    const list = filteredReports(true);
+    const bySubj = new Map();
+    list.forEach(r => { const k = repSubject(r); if (!bySubj.has(k)) bySubj.set(k, []); bySubj.get(k).push(r); });
+    const subjects = [...bySubj.keys()].sort((a, b) => (a === NO_SUBJ) - (b === NO_SUBJ) || a.localeCompare(b, 'ar'));
+    listEl.innerHTML = subjects.length ? `<div class="er-subj-grid">${subjects.map((sj, i) => {
+      const reps = bySubj.get(sj);
+      const c = SUBJ_COLORS[i % SUBJ_COLORS.length];
+      const gc = GRADE_ORDER.map(g => [g, reps.filter(r => repGradeKey(r) === g).length]).filter(([, n]) => n);
+      const noG = reps.filter(r => !repGradeKey(r)).length;
+      const last = reps.reduce((a, r) => (!a || r.created_at > a ? r.created_at : a), '');
+      return `<button type="button" class="er-subj-card" data-subj="${esc(sj)}">
+        <span class="erc-ic" style="background:${c.bg}; color:${c.fg};">${bookIconSvg}</span>
+        <span class="ers-main"><b>${esc(sj)}</b>
+          <span class="ers-n">${countTests(reps.length)}${last ? ` · آخرها ${dateTxt(last)}` : ''}</span>
+          <span class="erc-chips">${gc.map(([g, n]) => `<i>${esc(gradeLabels[g])}: ${n}</i>`).join('')}${noG ? `<i>${NO_GRADE}: ${noG}</i>` : ''}</span>
+        </span><span class="ers-go" aria-hidden="true">‹</span>
+      </button>`;
+    }).join('')}</div>` : '<div class="ex-empty"><b>لا توجد تقارير مطابقة للفلاتر</b><span>غيّر الفلاتر أو امسحها لعرض كل التقارير.</span></div>';
+    listEl.querySelectorAll('.er-subj-card').forEach(b => b.addEventListener('click', () => {
+      erFilt.subject = b.dataset.subj; saveFilt(); renderSavedList();
+      listEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }));
+    return;
+  }
+
+  // مادة محددة (أو بحث): الاختبارات مجمّعة بالمرحلة
+  const list = filteredReports();
+  const groups = [...GRADE_ORDER, ''].map(g => [g, list.filter(r => repGradeKey(r) === g)]).filter(([, a]) => a.length);
+  const head = erFilt.subject
+    ? `<div class="er-subj-head"><button type="button" class="text-action-btn" id="er-subj-back">→ كل المواد</button><b>${esc(erFilt.subject)}</b><span>${countTests(list.length)}</span></div>`
+    : `<div class="er-subj-head"><b>نتائج البحث</b><span>${list.length}</span></div>`;
+  let idx = 0;
+  listEl.innerHTML = head + (groups.length ? groups.map(([g, reps]) => `
+    <section class="er-grade-grp">
+      <h4>${esc(g ? gradeLabels[g] : NO_GRADE)} <small>${reps.length}</small></h4>
+      <div class="er-report-grid">${reps.map(r => reportCardHtml(r, idx++)).join('')}</div>
+    </section>`).join('') : '<div class="ex-empty"><b>لا توجد تقارير مطابقة</b><span>غيّر الفلاتر أو امسحها.</span></div>');
+  const back = document.getElementById('er-subj-back');
+  if (back) back.onclick = () => { erFilt.subject = ''; saveFilt(); renderSavedList(); };
   listEl.querySelectorAll('.er-report-card').forEach(card => card.addEventListener('keydown', (e) => { if (e.key === 'Enter') openReport(card.dataset.id); }));
 
   listEl.querySelectorAll('[data-id]').forEach(card => {
@@ -999,7 +1158,6 @@ async function loadSavedList() {
       await loadSavedList();
     });
   });
-  return data.length;
 }
 
 async function openReport(id) {

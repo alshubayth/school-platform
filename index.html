@@ -1368,10 +1368,10 @@
             </div>
             <div class="form-row">
               <input type="text" id="er-title" placeholder="عنوان التقرير (مثال: رياضيات - ثاني متوسط - الفترة الأولى)" />
-              <input type="text" id="er-subject" placeholder="المادة" />
+              <select id="er-subject" aria-label="المادة"><option value="">المادة...</option></select>
             </div>
             <div class="form-row">
-              <input type="text" id="er-grade" placeholder="الصف" />
+              <select id="er-grade" aria-label="المرحلة"><option value="">المرحلة...</option></select>
               <select id="er-semester">
                 <option value="">الفصل الدراسي...</option>
                 <option value="الفصل الدراسي الأول">الفصل الدراسي الأول</option>
@@ -1401,6 +1401,7 @@
           </div>
         </div>
 
+          <div id="er-filters"></div>
           <div id="er-saved-list"><div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div></div>
         </div>
 

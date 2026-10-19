@@ -9,7 +9,7 @@
 import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels, ASSET_VERSION } from './core.js';
 import { fetchSavedKeys, sheetGeometry, PAGE, itemKinds, TF_LETTERS } from './answer-sheet.js';
 import { grayFromImageData, findMarkInRegion, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
-import { computeExamStats, gradeWithModels, rawFromIdx } from './exam-reports.js';
+import { computeExamStats, gradeWithModels, rawFromIdx, canonSubject, canonGrade } from './exam-reports.js';
 
 const AR = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
 const EN = ['A', 'B', 'C', 'D', 'E', 'F'];
@@ -673,7 +673,7 @@ function reportPayload(scans) {
   const grades = [...new Set(students.map(s => s.grade).filter(Boolean))];
   const pts = Array.isArray(k.points) && k.points.length === n ? k.points.slice() : null;
   const base = {
-    title: k.title, subject_name: k.subject || null, grade_level: grades.length === 1 ? grades[0] : (gradeLabels[k.grade_level] || null),
+    title: k.title, subject_name: canonSubject(k.subject) || null, grade_level: canonGrade(grades.length === 1 ? grades[0] : (gradeLabels[k.grade_level] || '')) || null,
     item_count: n, students_count: students.length,
   };
   if (!students.length || !n) return { ...base, key_raw: [], stats: null, raw_data: { students, choiceCounts, itemTypes, reversedOrder: reversed, source: 'camera', keyId: k.id } };
