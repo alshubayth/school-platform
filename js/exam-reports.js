@@ -2192,7 +2192,7 @@ const SHORT_GRADE = { first_intermediate: 'أول', second_intermediate: 'ثان
  * إضافة ورقة طالب يدويًا لتقرير مرفوع (Remark): تختار الطالب وتظلل إجاباته
  * والتقرير ينحسب من جديد. المعلم يختار من طلاب فصوله بس.
  * ========================================================================= */
-async function openManualSheet(rep, onDone) {
+async function openManualSheet(rep, onDone, presetId = null) {
   const rd = rep.raw_data || {};
   const n = rep.item_count || (rd.choiceCounts || []).length;
   const counts = rd.choiceCounts || [];
@@ -2225,12 +2225,19 @@ async function openManualSheet(rep, onDone) {
   const gradesInReport = new Set((rd.students || []).map(st => {
     const p = students.find(x => String(x.national_id).trim() === String(st.id).trim()); return p && p.grade_level;
   }).filter(Boolean));
-  const st = { student: null, answers: Array(n).fill(null), essay: null, model: 'أ' };
+  const st = { student: null, answers: Array(n).fill(null), essay: null, model: 'أ', existing: null };
+  // ورقة الطالب المحفوظة (للتعديل): القيمة الخام ← رقم الخيار
+  const fromRaw = (i, v) => {
+    if (typeof v !== 'number' || v <= 0) return null;
+    const j = reversed ? (counts[i] || 4) - v : v - 1;
+    return j >= 0 && j < (types[i] === 'tf' ? 2 : (counts[i] || 4)) ? j : null;
+  };
+  const existingOf = id => (rd.students || []).find(s2 => String(s2.id || '').trim() === String(id || '').trim()) || null;
   const lettersOf = i => (types[i] === 'tf' ? ['صح', 'خطأ'] : ARABIC_LETTERS.slice(0, counts[i] || 4));
   const back = document.createElement('div');
   back.className = 'er-abs-back';
   back.innerHTML = `<div class="er-abs er-man" role="dialog" aria-modal="true" aria-label="إضافة ورقة طالب">
-    <div class="er-abs-h"><div><b>إضافة ورقة طالب يدويًا</b><span>${esc(rep.title)} · ${n} سؤال</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+    <div class="er-abs-h"><div><b class="er-man-title">إضافة ورقة طالب يدويًا</b><span>${esc(rep.title)} · ${n} سؤال</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
     <div class="er-abs-body">
       <div class="er-man-st"></div>
       ${models ? `<div class="er-man-model"><span>النموذج:</span><button type="button" data-m="أ" class="on">أ</button><button type="button" data-m="ب">ب</button></div>` : ''}
@@ -2238,7 +2245,7 @@ async function openManualSheet(rep, onDone) {
       ${hasEssay ? `<label class="er-man-essay">درجة المقالي <input type="number" class="er-man-essay-v" min="0" step="0.25" inputmode="decimal"${essayMax ? ` max="${essayMax}"` : ''}>${essayMax ? ` / ${essayMax}` : ` من <input type="number" class="er-man-essay-max" min="0" step="0.5" inputmode="decimal" placeholder="العظمى" title="الدرجة العظمى للمقالي">`}</label>` : ''}
       <div class="er-man-sum"></div>
     </div>
-    <div class="er-man-foot"><button type="button" class="btn-primary er-man-save">حفظ الورقة وإعادة حساب التقرير</button></div>
+    <div class="er-man-foot"><button type="button" class="btn-primary er-man-save">حفظ الورقة وإعادة حساب التقرير</button>${!isTeacherView() || rep.created_by === currentUserId ? '<button type="button" class="text-action-btn er-man-del hidden">حذف ورقة الطالب من التقرير</button>' : ''}</div>
   </div>`;
   document.body.appendChild(back);
   const $b = sel => back.querySelector(sel);
@@ -2252,7 +2259,7 @@ async function openManualSheet(rep, onDone) {
     if (st.student) {
       const x = st.student;
       box.innerHTML = `<div class="er-man-chosen"><b>${esc(x.full_name)}</b><span>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')} · ${esc(x.national_id)}</span><button type="button" class="ope-link">تغيير</button></div>`;
-      box.querySelector('button').onclick = () => { st.student = null; renderSt(); };
+      box.querySelector('button').onclick = () => pickStudent(null);
       return;
     }
     const grades = [...new Set(students.map(x => x.grade_level))].filter(Boolean);
@@ -2265,8 +2272,8 @@ async function openManualSheet(rep, onDone) {
       const q = normAr(pq.value);
       const rows = students.filter(x => (!pg.value || x.grade_level === pg.value) && (!ps.value || String(x.class_section) === ps.value) && (!q || normAr(x.full_name).includes(q) || String(x.national_id).includes(q)))
         .sort((a, b) => (have.has(String(a.national_id).trim()) - have.has(String(b.national_id).trim())) || String(a.full_name).localeCompare(String(b.full_name), 'ar')).slice(0, 60);
-      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? ' · له ورقة بالتقرير (الحفظ يستبدلها)' : ''}</small></button>`; }).join('') || `<span class="omr-empty">${students.length ? 'لا توجد نتائج' : 'لا يوجد طلاب متاحون لك - تأكد من تسجيل تخصصاتك في «تخصصات المعلمين» أو من وجود حصصك في الجدول الدراسي'}</span>`;
-      list.querySelectorAll('button').forEach(b => b.onclick = () => { st.student = students.find(x => String(x.national_id) === b.dataset.id); renderSt(); });
+      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? ' · له ورقة بالتقرير (تُفتح للتعديل)' : ''}</small></button>`; }).join('') || `<span class="omr-empty">${students.length ? 'لا توجد نتائج' : 'لا يوجد طلاب متاحون لك - تأكد من تسجيل تخصصاتك في «تخصصات المعلمين» أو من وجود حصصك في الجدول الدراسي'}</span>`;
+      list.querySelectorAll('button').forEach(b => b.onclick = () => pickStudent(students.find(x => String(x.national_id) === b.dataset.id)));
     };
     pg.onchange = () => { fill(); draw(); }; ps.onchange = draw; pq.oninput = draw;
     fill(); draw();
@@ -2293,7 +2300,30 @@ async function openManualSheet(rep, onDone) {
   if (em) em.oninput = () => { essayMax = Number(em.value) > 0 ? Number(em.value) : null; };
   const ei = $b('.er-man-essay-v');
   if (ei) ei.oninput = () => { st.essay = ei.value === '' ? null : Number(ei.value); renderSum(); };
+  // اختيار الطالب: لو له ورقة بالتقرير تُحمَّل إجاباته ودرجة مقاليه ونموذجه للتعديل
+  function pickStudent(x) {
+    st.student = x || null;
+    const ex = x ? existingOf(x.national_id) : null;
+    st.existing = ex;
+    st.answers = Array.from({ length: n }, (_, i) => (ex ? fromRaw(i, (ex.answers || [])[i]) : null));
+    st.essay = ex && typeof ex.essay === 'number' ? ex.essay : null;
+    st.model = ex && ex.model === 'ب' ? 'ب' : 'أ';
+    back.querySelectorAll('.er-man-model button').forEach(b => b.classList.toggle('on', b.dataset.m === st.model));
+    if (ei) ei.value = st.essay == null ? '' : st.essay;
+    $b('.er-man-title').textContent = ex ? 'تعديل ورقة الطالب' : 'إضافة ورقة طالب يدويًا';
+    $b('.er-man-save').textContent = ex ? 'حفظ التعديل وإعادة حساب التقرير' : 'حفظ الورقة وإعادة حساب التقرير';
+    const del = $b('.er-man-del'); if (del) del.classList.toggle('hidden', !ex);
+    renderSt(); renderSum();
+  }
   renderSt(); renderSum();
+  if (presetId) {
+    const id = String(presetId).trim();
+    const ex = existingOf(id);
+    let x = students.find(p => String(p.national_id).trim() === id);
+    // طالب له ورقة بالتقرير لكنه غير موجود بقائمة طلاب المنصة: نعرضه ببيانات ورقته
+    if (!x && ex) x = { national_id: id, full_name: ex.name || id, grade_level: gradeFromText(ex.grade) || null, class_section: ex.section || null };
+    if (x) pickStudent(x);
+  }
 
   $b('.er-man-save').onclick = async () => {
     if (!st.student) { alert('اختر الطالب أولًا'); return; }
@@ -2327,7 +2357,32 @@ async function openManualSheet(rep, onDone) {
       const saved = (upd.raw_data.students || []).find(s2 => String(s2.id).trim() === row.id) || row;
       ({ error } = await sb.rpc('exam_report_put_sheet', { p_report: rep.id, p_student: saved, p_stats: upd.stats }));
     }
-    if (error) { btn.disabled = false; btn.textContent = 'حفظ الورقة وإعادة حساب التقرير'; alert('تعذر الحفظ: ' + error.message); return; }
+    if (error) { btn.disabled = false; btn.textContent = st.existing ? 'حفظ التعديل وإعادة حساب التقرير' : 'حفظ الورقة وإعادة حساب التقرير'; alert('تعذر الحفظ: ' + error.message); return; }
+    periodicCache.delete(rep.id);
+    close();
+    if (onDone) onDone(); else openReport(rep.id);
+  };
+  const delBtn = $b('.er-man-del');
+  if (delBtn) delBtn.onclick = async () => {
+    if (!st.student || !st.existing) return;
+    if (!confirm(`حذف ورقة «${st.student.full_name}» من التقرير؟ سيُعاد حساب إحصاءات التقرير، ويظهر الطالب غائبًا في النتائج.`)) return;
+    const id = String(st.student.national_id).trim();
+    const list = (rd.students || []).filter(s2 => String(s2.id).trim() !== id).map(s2 => { const { key, ...rest } = s2; return rest; });
+    if (!list.length) { alert('لا يمكن حذف آخر ورقة في التقرير - احذف التقرير كاملًا بدلًا من ذلك.'); return; }
+    let upd;
+    if (models) {
+      const g = gradeWithModels({
+        parsed: { itemCount: n, choiceCounts: counts, itemTypes: types, students: list, points: rd.points || null },
+        keyA: models.keyA, keyB: models.keyB, mode: models.mode, orderB: models.orderB, reversedOrder: reversed, keyId: models.keyId,
+        modelOf: s2 => s2.model || 'أ',
+      });
+      upd = { stats: g.stats, raw_data: { ...rd, ...g.raw_data }, students_count: list.length };
+    } else {
+      const stats = computeExamStats({ itemCount: n, keyRaw: rep.key_raw, choiceCounts: counts, students: list, reversedOrder: reversed, itemTypes: types, points: rd.points || null });
+      upd = { stats, raw_data: { ...rd, students: list }, students_count: list.length };
+    }
+    const { error } = await sb.from('exam_reports').update(upd).eq('id', rep.id);
+    if (error) { alert('تعذر الحذف: ' + error.message); return; }
     periodicCache.delete(rep.id);
     close();
     if (onDone) onDone(); else openReport(rep.id);
@@ -2359,10 +2414,10 @@ async function showResults(reportId) {
         const rows = g.rows.slice().sort((a, b) => ((a.absent ? 1 : 0) - (b.absent ? 1 : 0)) || (a.absent ? 0 : totalOfX(b) - totalOfX(a)) || String(a.name).localeCompare(String(b.name), 'ar'));
         return `<details class="er-abs-sec"${gi === 0 ? ' open' : ''}>
           <summary><span class="er-abs-name">${g.gl ? esc((SHORT_GRADE[g.gl] || gradeLabels[g.gl] || '') + ' ' + (g.section || '')) : 'غير محدد الفصل'}</span><span class="er-abs-of">${pres.length} طالب · المتوسط ${fmtN(avg)}${full ? ' / ' + full : ''}</span></summary>
-          <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th></tr></thead><tbody>
+          <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th><th class="er-res-ed-h"><span class="sr-only">تعديل</span></th></tr></thead><tbody>
           ${rows.map((x, i) => x.absent
-            ? `<tr class="abs"><td>${i + 1}</td><td>${esc(x.name)}</td><td colspan="${(d.nMcq ? 1 : 0) + (d.nTf ? 1 : 0) + (d.hasEssay ? 1 : 0) + 1}">غائب</td></tr>`
-            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${fmtN(x.mcq)}</td>` : ''}${d.nTf ? `<td>${fmtN(x.tf)}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td></tr>`).join('')}
+            ? `<tr class="abs"><td>${i + 1}</td><td>${esc(x.name)}</td><td colspan="${(d.nMcq ? 1 : 0) + (d.nTf ? 1 : 0) + (d.hasEssay ? 1 : 0) + 1}">غائب</td><td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="إضافة ورقة للطالب" aria-label="إضافة ورقة ${esc(x.name)}">＋</button></td></tr>`
+            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${fmtN(x.mcq)}</td>` : ''}${d.nTf ? `<td>${fmtN(x.tf)}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td><td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="تعديل إجابات الطالب ودرجته" aria-label="تعديل ورقة ${esc(x.name || x.id)}">✎</button></td></tr>`).join('')}
           </tbody></table>
         </details>`;
       }).join('') || '<p class="er-abs-empty">لا توجد نتائج</p>'}
@@ -2374,4 +2429,14 @@ async function showResults(reportId) {
   document.addEventListener('keydown', onKey);
   back.addEventListener('click', e => { if (e.target === back) close(); });
   back.querySelector('.er-abs-x').onclick = close;
+  // تعديل ورقة طالب (أو إضافة ورقة لطالب غائب) من نافذة النتائج
+  back.querySelectorAll('.er-res-ed').forEach(btn => btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    try {
+      const { data: rep, error } = await sb.from('exam_reports').select('*').eq('id', reportId).single();
+      if (error || !rep) throw new Error(error ? error.message : 'التقرير غير موجود');
+      close();
+      await openManualSheet(rep, () => { periodicCache.delete(reportId); showResults(reportId); }, btn.dataset.id);
+    } catch (err) { btn.disabled = false; alert('تعذر فتح الورقة: ' + (err.message || err)); }
+  }));
 }

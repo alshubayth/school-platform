@@ -2784,3 +2784,11 @@ body.omr-noscroll{ overflow:hidden; }
   .er-rows .erc-actions{ grid-column:1; grid-row:4; justify-content:flex-start; margin-top:6px; }
   .er-rows .er-report-card .er-delete-btn{ top:10px; transform:none; }
 }
+
+/* نافذة النتائج: زر تعديل ورقة الطالب */
+.er-res-t .er-res-ed{ border:1px solid var(--border); background:#fff; color:var(--meadow); border-radius:8px; width:30px; height:28px; padding:0; font-size:14px; cursor:pointer; }
+.er-res-t .er-res-ed:hover{ border-color:var(--meadow); background:var(--meadow-light); }
+.er-res-t .er-res-ed-h{ width:38px; }
+.er-man-foot{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.er-man-del{ width:auto !important; color:var(--danger) !important; }
+.sr-only{ position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
