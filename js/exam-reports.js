@@ -2198,7 +2198,9 @@ async function openManualSheet(rep, onDone) {
   const counts = rd.choiceCounts || [];
   const types = rd.itemTypes || [];
   const reversed = rd.reversedOrder !== false;
-  const hasEssay = !!rd.hasEssay;
+  // خانة المقالي تظهر دائمًا: التقرير قد يُحفظ بلا عمود مقالي (ورقة أسئلة أو ملف بدونه) والمعلم يحتاج رصده يدويًا
+  const hasEssay = true;
+  let essayMax = Number(rd.essayMax) || null;
   const models = rd.models || null;
   const have = new Set((rd.students || []).map(st => String(st.id || '').trim()));
   // الطلاب
@@ -2233,7 +2235,7 @@ async function openManualSheet(rep, onDone) {
       <div class="er-man-st"></div>
       ${models ? `<div class="er-man-model"><span>النموذج:</span><button type="button" data-m="أ" class="on">أ</button><button type="button" data-m="ب">ب</button></div>` : ''}
       <div class="er-man-qs">${Array.from({ length: n }, (_, i) => `<div class="er-man-q" data-q="${i}"><small>${i + 1}</small>${lettersOf(i).map((l, j) => `<button type="button" data-v="${j}">${esc(l)}</button>`).join('')}</div>`).join('')}</div>
-      ${hasEssay ? `<label class="er-man-essay">درجة المقالي <input type="number" min="0" step="0.5" inputmode="decimal"${rd.essayMax ? ` max="${rd.essayMax}"` : ''}>${rd.essayMax ? ` / ${rd.essayMax}` : ''}</label>` : ''}
+      ${hasEssay ? `<label class="er-man-essay">درجة المقالي <input type="number" class="er-man-essay-v" min="0" step="0.25" inputmode="decimal"${essayMax ? ` max="${essayMax}"` : ''}>${essayMax ? ` / ${essayMax}` : ` من <input type="number" class="er-man-essay-max" min="0" step="0.5" inputmode="decimal" placeholder="العظمى" title="الدرجة العظمى للمقالي">`}</label>` : ''}
       <div class="er-man-sum"></div>
     </div>
     <div class="er-man-foot"><button type="button" class="btn-primary er-man-save">حفظ الورقة وإعادة حساب التقرير</button></div>
@@ -2287,12 +2289,15 @@ async function openManualSheet(rep, onDone) {
   };
   back.querySelectorAll('.er-man-q button').forEach(b => b.onclick = () => { const i = +b.closest('.er-man-q').dataset.q, j = +b.dataset.v; st.answers[i] = st.answers[i] === j ? null : j; renderSum(); });
   back.querySelectorAll('.er-man-model button').forEach(b => b.onclick = () => { st.model = b.dataset.m; back.querySelectorAll('.er-man-model button').forEach(x => x.classList.toggle('on', x === b)); renderSum(); });
-  const ei = $b('.er-man-essay input');
+  const em = $b('.er-man-essay-max');
+  if (em) em.oninput = () => { essayMax = Number(em.value) > 0 ? Number(em.value) : null; };
+  const ei = $b('.er-man-essay-v');
   if (ei) ei.oninput = () => { st.essay = ei.value === '' ? null : Number(ei.value); renderSum(); };
   renderSt(); renderSum();
 
   $b('.er-man-save').onclick = async () => {
     if (!st.student) { alert('اختر الطالب أولًا'); return; }
+    if (st.essay != null && (!Number.isFinite(st.essay) || st.essay < 0 || (essayMax && st.essay > essayMax))) { alert(`درجة المقالي يجب أن تكون بين 0 و${essayMax || '...'}`); return; }
     const btn = $b('.er-man-save'); btn.disabled = true; btn.textContent = 'جارٍ الحفظ...';
     const x = st.student;
     const row = {
@@ -2314,6 +2319,7 @@ async function openManualSheet(rep, onDone) {
       const stats = computeExamStats({ itemCount: n, keyRaw: rep.key_raw, choiceCounts: counts, students: list, reversedOrder: reversed, itemTypes: types, points: rd.points || null });
       upd = { stats, raw_data: { ...rd, students: list }, students_count: list.length };
     }
+    if (st.essay != null) { upd.raw_data.hasEssay = true; if (essayMax) upd.raw_data.essayMax = essayMax; }
     let error;
     if (!isTeacherView() || rep.created_by === currentUserId) ({ error } = await sb.from('exam_reports').update(upd).eq('id', rep.id));
     else {
