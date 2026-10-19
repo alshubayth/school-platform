@@ -628,19 +628,27 @@ document.getElementById('budget-exp-submit').addEventListener('click', async () 
     if (!it.amount || it.amount <= 0) { errEl.textContent = 'أدخل مبلغ صحيح لكل فاتورة'; errEl.style.display = 'block'; return; }
   }
 
-  // منع تجاوز المتبقي من دفعة السلفة/المدور - نعيد تحميل الأرصدة عشان نتحقق من أحدث رقم ممكن
+  // تجاوز المتبقي من دفعة السلفة/المدور: مسموح بعد التأكيد - يُحتسب المتبقي بالسالب وتُقفل الدفعة
+  // (مثلًا بقي ريال واحد ولا توجد فاتورة بهذا المبلغ). نعيد تحميل الأرصدة لنتحقق من أحدث رقم
   if (sourceBatchId) {
     await loadFundingBatches();
     const batch = fundingBatchesCache.find(b => b.id === sourceBatchId);
     const total = items.reduce((s, it) => s + it.amount, 0);
     const ownBack = editingExpense && editingExpense.funding_revenue_id === sourceBatchId ? editingExpense.total : 0;
-    if (!batch || Number(batch.remaining) + ownBack < total - 0.009) {
-      errEl.textContent = batch
-        ? `المبلغ الإجمالي (${fmtAmount(total)}) يتجاوز المتبقي من هذه الدفعة (${fmtAmount(Number(batch.remaining) + ownBack)})`
-        : 'تعذر التحقق من رصيد الدفعة - حدّث الصفحة وحاول مرة أخرى';
+    if (!batch) {
+      errEl.textContent = 'تعذر التحقق من رصيد الدفعة - حدّث الصفحة وحاول مرة أخرى';
       errEl.style.display = 'block';
       populateSourceBatchSelect(FUNDING_TO_REVENUE_TYPE[source]);
       return;
+    }
+    const avail = Number(batch.remaining) + ownBack;
+    if (avail < total - 0.009) {
+      const kind = batch.revenue_type === 'سلفة' ? 'السلفة' : 'المدور';
+      const after = avail - total;
+      const ok = confirm(
+        `المبلغ الإجمالي (${fmtAmount(total)}) يتجاوز المتبقي من ${kind} «${batch.description}» (${fmtAmount(avail)}) بمقدار ${fmtAmount(-after)}.\n\n`
+        + `عند المتابعة:\n• سيُحتسب المتبقي بالسالب: ${fmtAmount(after)}\n• ${batch.revenue_type === 'سلفة' ? 'ستُقفل السلفة ولن تظهر' : 'سيُقفل المدور ولن يظهر'} ضمن الدفعات المفتوحة\n\nهل تريد المتابعة؟`);
+      if (!ok) return;
     }
   }
 
@@ -1109,7 +1117,7 @@ async function renderSourceStats(mqasafBalance) {
     const remaining = total - sum(type, 'confirmed');
     const held = sum(type, 'pending');
     const sub = held > 0.009 ? `منها ${fmtAmount(held)} محجوز لطلبات بانتظار الاعتماد` : `${openCount(type)} دفعة مفتوحة`;
-    return statCard(label, fmtAmount(Math.max(0, remaining)), color, sub, icon);
+    return statCard(label, fmtAmount(remaining), color, sub, icon);
   };
   const openCount = (type) => fundingBatchesCache.filter(b => b.revenue_type === type && Number(b.remaining) > 0.009).length;
 
@@ -1317,7 +1325,7 @@ async function loadBatchesLists() {
       </div>
       <div style="font-size:12px; color:var(--slate); margin-top:6px;">
         المبلغ الأصلي: ${fmtAmount(b.amount)} — المصروف: ${fmtAmount(b.spent)} — المتبقي: <strong style="color:${b.isClosed ? 'var(--danger)' : 'var(--meadow)'};">${fmtAmount(b.remaining)}</strong>
-        ${b.isClosed ? ` — <span style="color:var(--danger); font-weight:700;">تم إغلاق ${b.revenue_type === 'سلفة' ? 'السلفة' : 'المدور'}${b.closedDate ? ' بتاريخ ' + fmtDate(b.closedDate) : ''}</span>` : ''}
+        ${b.isClosed ? ` — <span style="color:var(--danger); font-weight:700;">تم إغلاق ${b.revenue_type === 'سلفة' ? 'السلفة' : 'المدور'}${b.closedDate ? ' بتاريخ ' + fmtDate(b.closedDate) : ''}${b.remaining < -0.009 ? ' (بالسالب)' : ''}</span>` : ''}
       </div>
       <div style="background:var(--sand); border-radius:6px; height:6px; margin-top:8px; overflow:hidden;">
         <div style="background:${b.isClosed ? 'var(--danger)' : 'var(--meadow)'}; height:100%; width:${pct}%;"></div>
