@@ -2242,7 +2242,7 @@ async function openManualSheet(rep, onDone, presetId = null) {
       <div class="er-man-st"></div>
       ${models ? `<div class="er-man-model"><span>النموذج:</span><button type="button" data-m="أ" class="on">أ</button><button type="button" data-m="ب">ب</button></div>` : ''}
       <div class="er-man-qs">${Array.from({ length: n }, (_, i) => `<div class="er-man-q" data-q="${i}"><small>${i + 1}</small>${lettersOf(i).map((l, j) => `<button type="button" data-v="${j}">${esc(l)}</button>`).join('')}</div>`).join('')}</div>
-      ${hasEssay ? `<label class="er-man-essay">درجة المقالي <input type="number" class="er-man-essay-v" min="0" step="0.25" inputmode="decimal"${essayMax ? ` max="${essayMax}"` : ''}>${essayMax ? ` / ${essayMax}` : ` من <input type="number" class="er-man-essay-max" min="0" step="0.5" inputmode="decimal" placeholder="العظمى" title="الدرجة العظمى للمقالي">`}</label>` : ''}
+      ${hasEssay ? `<label class="er-man-essay">درجة المقالي <input type="number" class="er-man-essay-v" min="0" step="0.25" inputmode="decimal"${essayMax ? ` max="${essayMax}"` : ''}> من <input type="number" class="er-man-essay-max" min="0" step="0.5" inputmode="decimal" placeholder="العظمى" title="الدرجة العظمى للمقالي (تُحفظ للتقرير كله)"${essayMax ? ` value="${essayMax}"` : ''}></label>` : ''}
       <div class="er-man-sum"></div>
     </div>
     <div class="er-man-foot"><button type="button" class="btn-primary er-man-save">حفظ الورقة وإعادة حساب التقرير</button>${!isTeacherView() || rep.created_by === currentUserId ? '<button type="button" class="text-action-btn er-man-del hidden">حذف ورقة الطالب من التقرير</button>' : ''}</div>
@@ -2297,7 +2297,7 @@ async function openManualSheet(rep, onDone, presetId = null) {
   back.querySelectorAll('.er-man-q button').forEach(b => b.onclick = () => { const i = +b.closest('.er-man-q').dataset.q, j = +b.dataset.v; st.answers[i] = st.answers[i] === j ? null : j; renderSum(); });
   back.querySelectorAll('.er-man-model button').forEach(b => b.onclick = () => { st.model = b.dataset.m; back.querySelectorAll('.er-man-model button').forEach(x => x.classList.toggle('on', x === b)); renderSum(); });
   const em = $b('.er-man-essay-max');
-  if (em) em.oninput = () => { essayMax = Number(em.value) > 0 ? Number(em.value) : null; };
+  if (em) em.oninput = () => { essayMax = Number(em.value) > 0 ? Number(em.value) : null; if (ei) { if (essayMax) ei.max = essayMax; else ei.removeAttribute('max'); } };
   const ei = $b('.er-man-essay-v');
   if (ei) ei.oninput = () => { st.essay = ei.value === '' ? null : Number(ei.value); renderSum(); };
   // اختيار الطالب: لو له ورقة بالتقرير تُحمَّل إجاباته ودرجة مقاليه ونموذجه للتعديل
@@ -2349,7 +2349,12 @@ async function openManualSheet(rep, onDone, presetId = null) {
       const stats = computeExamStats({ itemCount: n, keyRaw: rep.key_raw, choiceCounts: counts, students: list, reversedOrder: reversed, itemTypes: types, points: rd.points || null });
       upd = { stats, raw_data: { ...rd, students: list }, students_count: list.length };
     }
-    if (st.essay != null) { upd.raw_data.hasEssay = true; if (essayMax) upd.raw_data.essayMax = essayMax; }
+    if (st.essay != null) upd.raw_data.hasEssay = true;
+    if (essayMax && essayMax !== Number(rd.essayMax)) {
+      const over = list.filter(s2 => typeof s2.essay === 'number' && s2.essay > essayMax).length;
+      if (over && !confirm(`${over} ${over === 1 ? 'طالب درجته' : 'طلاب درجاتهم'} في المقالي أعلى من ${essayMax}. هل تريد تغيير الدرجة العظمى للمقالي إلى ${essayMax} رغم ذلك؟`)) { btn.disabled = false; btn.textContent = st.existing ? 'حفظ التعديل وإعادة حساب التقرير' : 'حفظ الورقة وإعادة حساب التقرير'; return; }
+      upd.raw_data.essayMax = essayMax;
+    }
     let error;
     if (!isTeacherView() || rep.created_by === currentUserId) ({ error } = await sb.from('exam_reports').update(upd).eq('id', rep.id));
     else {
