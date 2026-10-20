@@ -2890,6 +2890,18 @@ body.omr-noscroll{ overflow:hidden; }
 .tx-tnums span{ min-width:28px; text-align:center; border-radius:7px; padding:2px 5px; font-size:12px; font-weight:800; }
 .tx-tnums .cov{ background:var(--purple-light); color:var(--purple); }
 .tx-tnums .abs{ background:var(--danger-light); color:var(--danger); }
+.tx-tnums .loss{ min-width:32px; border:1px solid currentColor; background:#fff; }
+.loss.pos{ color:#B65A1B; } .loss.neg{ color:#2E7A4C; } .loss.zero{ color:var(--slate); }
+.tx-tname{ display:flex; align-items:center; gap:6px; min-width:0; }
+.tx-tname b{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; }
+.tx-load{ flex-shrink:0; font-size:10.5px; font-weight:700; color:var(--slate); background:var(--sand); border-radius:99px; padding:1px 7px; }
+.tx-trow.on .tx-load{ background:#fff; }
+.tx-legend i.loss{ background:#fff; border:1px solid #B65A1B; margin-inline-start:8px; }
+.tx-legend{ flex-wrap:wrap; }
+.tx-dkpis small{ font-size:10.5px; color:var(--slate); margin-top:1px; }
+.tx-dkpis .loss.pos{ background:#FDEFE3; } .tx-dkpis .loss.neg{ background:var(--green-light); }
+.tx-dkpis .loss.pos b{ color:#B65A1B; } .tx-dkpis .loss.neg b{ color:#2E7A4C; }
+.tx-dkpis .load b{ color:var(--meadow); }
 
 .tx-detail{ padding:18px; min-height:420px; }
 .tx-detail-empty{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; text-align:center; color:var(--slate); min-height:380px; }
@@ -2903,7 +2915,7 @@ body.omr-noscroll{ overflow:hidden; }
 .tx-dname span.ok{ background:var(--green-light); color:#1F6A3C; }
 .tx-dname span.warn{ background:var(--gold-light); color:#A4501A; }
 .tx-dact{ display:flex; gap:6px; }
-.tx-dkpis{ display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:8px; margin:16px 0 14px; }
+.tx-dkpis{ display:grid; grid-template-columns:repeat(auto-fit, minmax(96px, 1fr)); gap:8px; margin:16px 0 14px; }
 .tx-dkpis div{ background:var(--sand); border-radius:11px; padding:10px; text-align:center; display:flex; flex-direction:column; }
 .tx-dkpis b{ font-family:'Tajawal', sans-serif; font-size:22px; color:var(--ink); line-height:1.15; }
 .tx-dkpis span{ font-size:11.5px; color:var(--slate); }

@@ -24,6 +24,7 @@ const AV_COLORS = [['#EAF1FC', '#2455A4'], ['#EFEBFB', '#6249A6'], ['#E3F4F7', '
 
 let rows = [];          // كل السجلات
 let staff = [];         // موظفو المدرسة (لربط الأسماء)
+let loads = { byId: new Map(), byName: [] };   // نصاب كل معلم الأسبوعي من الجدول المدرسي
 let selected = null;    // المعلم المعروضة تفاصيله
 let detailTab = 'cover';
 let selMode = false;            // وضع تحديد عدة حصص للحذف
@@ -70,7 +71,7 @@ export async function loadTeacherAbsenceModule() {
   const box = $('ta-container');
   if (!box.dataset.ready) { box.innerHTML = shellHtml(); wireShell(); box.dataset.ready = '1'; }
   $('tx-board').innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
-  await Promise.all([loadStaff(), loadRows()]);
+  await Promise.all([loadStaff(), loadRows(), loadLoads()]);
   render();
 }
 
@@ -138,6 +139,38 @@ async function loadStaff() {
   });
   staff = (data || []).filter(p => p.full_name);
 }
+
+// النصاب = عدد حصص المعلم في الأسبوع من الجدول المدرسي (class_schedules)
+async function loadLoads() {
+  const all = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await readScopedBySchool(scoped => {
+      let q = sb.from('class_schedules').select('teacher_id, teacher_name, day_of_week, period_number').range(from, from + 999);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q;
+    });
+    if (error) break;
+    all.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  const byId = new Map(), byNm = new Map();
+  all.forEach(r => {
+    const slot = `${r.day_of_week}|${r.period_number}`;
+    if (r.teacher_id) { if (!byId.has(r.teacher_id)) byId.set(r.teacher_id, new Set()); byId.get(r.teacher_id).add(slot); }
+    if (r.teacher_name) { if (!byNm.has(r.teacher_name)) byNm.set(r.teacher_name, new Set()); byNm.get(r.teacher_name).add(slot); }
+  });
+  loads = { byId, byName: [...byNm.entries()].map(([n, set]) => ({ tokens: norm(n).split(' ').filter(w => w && w !== 'بن'), n: set.size })) };
+}
+function loadOf(t) {
+  if (t.teacher_id && loads.byId.has(t.teacher_id)) return loads.byId.get(t.teacher_id).size;
+  const tk = norm(t.name).split(' ').filter(w => w && w !== 'بن');
+  if (!tk.length) return null;
+  const hits = loads.byName.filter(x => x.tokens[0] === tk[0] && tk.every(w => x.tokens.includes(w)));
+  return hits.length === 1 ? hits[0].n : null;
+}
+// الفاقد = حصص الغياب − حصص الإشغال (موجب: عليه حصص، سالب: له حصص زائدة)
+const lossTxt = n => (n > 0 ? String(n) : n < 0 ? `−${Math.abs(n)}` : '0');
+const lossCls = n => (n > 0 ? 'pos' : n < 0 ? 'neg' : 'zero');
 
 async function loadRows() {
   const all = [];
@@ -356,12 +389,15 @@ function summarize(list) {
     absPeriods: t.absence.length,
     coverPeriods: t.cover.length,
     transfers: t.transfer.length,
+    loss: t.absence.length - t.cover.length,
+    load: loadOf(t),
   }));
 }
 
 const SORTS = {
   cover: (a, b) => b.coverPeriods - a.coverPeriods || b.absPeriods - a.absPeriods || a.name.localeCompare(b.name, 'ar'),
   absence: (a, b) => b.absPeriods - a.absPeriods || b.absDays - a.absDays || a.name.localeCompare(b.name, 'ar'),
+  loss: (a, b) => b.loss - a.loss || b.absPeriods - a.absPeriods || a.name.localeCompare(b.name, 'ar'),
   name: (a, b) => a.name.localeCompare(b.name, 'ar'),
 };
 
@@ -399,11 +435,11 @@ function render() {
         <div class="tx-panel-h">
           <h4>المعلمون <small id="tx-tcount"></small></h4>
           <div class="tx-sortseg" role="tablist" aria-label="الترتيب">
-            ${[['cover', 'الإشغال'], ['absence', 'الغياب'], ['name', 'الاسم']].map(([k, l]) => `<button type="button" data-sort="${k}" class="${filt.sort === k ? 'on' : ''}">${l}</button>`).join('')}
+            ${[['cover', 'الإشغال'], ['absence', 'الغياب'], ['loss', 'الفاقد'], ['name', 'الاسم']].map(([k, l]) => `<button type="button" data-sort="${k}" class="${filt.sort === k ? 'on' : ''}">${l}</button>`).join('')}
           </div>
         </div>
         <label class="tx-search">${IC.search}<input type="search" id="tx-q" placeholder="ابحث باسم المعلم" value="${esc(filt.q)}" autocomplete="off" /></label>
-        <div class="tx-legend"><i class="cov"></i>إشغال <i class="abs"></i>غياب</div>
+        <div class="tx-legend"><i class="cov"></i>إشغال <i class="abs"></i>غياب <i class="loss"></i>الفاقد = الغياب − الإشغال</div>
         <div class="tx-tlist" id="tx-tlist"></div>
       </section>
       <section class="tx-panel tx-detail" id="tx-detail" aria-live="polite"></section>
@@ -443,10 +479,10 @@ function renderTeachers(all) {
   box.innerHTML = list.map(t => `
     <button type="button" class="tx-trow${selected === t.name ? ' on' : ''}" data-name="${esc(t.name)}">
       ${avatar(t.name)}
-      <span class="tx-tmain"><b>${esc(t.name)}</b>
+      <span class="tx-tmain"><span class="tx-tname"><b>${esc(t.name)}</b>${t.load != null ? `<span class="tx-load" title="النصاب الأسبوعي من الجدول المدرسي">النصاب ${t.load}</span>` : ''}</span>
         <span class="tx-tbar" aria-hidden="true"><i class="cov" style="width:${(t.coverPeriods / max) * 100}%"></i><i class="abs" style="width:${(t.absPeriods / max) * 100}%"></i></span>
       </span>
-      <span class="tx-tnums"><span class="cov" title="حصص الإشغال">${t.coverPeriods}</span><span class="abs" title="حصص الغياب">${t.absPeriods}</span></span>
+      <span class="tx-tnums"><span class="cov" title="حصص الإشغال">${t.coverPeriods}</span><span class="abs" title="حصص الغياب">${t.absPeriods}</span><span class="loss ${lossCls(t.loss)}" title="الفاقد: الغياب − الإشغال">${lossTxt(t.loss)}</span></span>
     </button>`).join('') || '<p class="tx-none">لا يوجد معلم مطابق</p>';
   box.querySelectorAll('.tx-trow').forEach(b => b.onclick = () => selectTeacher(b.dataset.name, all));
 }
@@ -487,6 +523,8 @@ function renderDetail(all) {
       </div>
     </div>
     <div class="tx-dkpis">
+      <div class="loss ${lossCls(t.loss)}"><b>${lossTxt(t.loss)}</b><span>الفاقد</span><small>${t.loss > 0 ? 'غيابه أكثر من إشغاله' : t.loss < 0 ? 'إشغاله أكثر من غيابه' : 'متوازن'}</small></div>
+      <div class="load"><b>${t.load != null ? t.load : '—'}</b><span>النصاب الأسبوعي</span>${t.load == null ? '<small>غير موجود في الجدول</small>' : ''}</div>
       <div class="cov"><b>${t.coverPeriods}</b><span>حصة إشغال</span></div>
       <div class="abs"><b>${t.absDays}</b><span>${t.absDays === 1 ? 'يوم غياب' : 'أيام غياب'}</span></div>
       <div class="abs"><b>${t.absPeriods}</b><span>حصة غياب</span></div>
@@ -683,7 +721,7 @@ function printReport(onlySelected) {
   const logo = printLogo();
   const tbl = (title, items, cols) => items.length ? `<h4>${title} (${items.length})</h4><table><thead><tr><th>#</th>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr></thead><tbody>${items.map((r, i) => `<tr><td>${i + 1}</td>${cols.map(c => `<td>${esc(c[1](r))}</td>`).join('')}</tr>`).join('')}</tbody></table>` : '';
   const byDate = arr => arr.slice().sort((a, b) => a.entry_date.localeCompare(b.entry_date) || String(a.period).localeCompare(String(b.period), 'en', { numeric: true }));
-  const detail = t => `<div class="kp"><div><b>${t.coverPeriods}</b>حصة إشغال</div><div><b>${t.absDays}</b>يوم غياب</div><div><b>${t.absPeriods}</b>حصة غياب</div><div><b>${t.transfers}</b>نقل/تبديل</div></div>
+  const detail = t => `<div class="kp"><div><b>${t.load != null ? t.load : '—'}</b>النصاب الأسبوعي</div><div><b>${lossTxt(t.loss)}</b>الفاقد</div><div><b>${t.coverPeriods}</b>حصة إشغال</div><div><b>${t.absDays}</b>يوم غياب</div><div><b>${t.absPeriods}</b>حصة غياب</div><div><b>${t.transfers}</b>نقل/تبديل</div></div>
     ${tbl('الإشغال', byDate(t.cover), [['التاريخ', r => fmtLong(r.entry_date)], ['الحصة', r => periodBadge(r.period)], ['الفصل', r => r.classes || ''], ['المادة', r => r.subject || '']])}
     ${tbl('الغياب', byDate(t.absence), [['التاريخ', r => fmtLong(r.entry_date)], ['الحصة', r => periodBadge(r.period)], ['الفصل', r => r.classes || ''], ['السبب', r => r.reason || '']])}`;
   w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${one ? 'تقرير ' + esc(one.name) : 'غياب وإشغال المعلمين'}</title>
@@ -693,8 +731,8 @@ function printReport(onlySelected) {
     table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px}th,td{border:1px solid #c9ced8;padding:5px 6px;text-align:center}th{background:#152238;color:#fff}
     tr:nth-child(even) td{background:#f5f6f8}td.n{text-align:right}.sig{display:flex;justify-content:space-between;margin-top:36px;font-size:12.5px}@media print{table{break-inside:auto}h4{break-after:avoid}}</style></head><body>
     <div class="hd">${logo ? `<img src="${esc(logo)}">` : ''}<div><h1>${one ? 'تقرير غياب وإشغال المعلم' : 'تقرير غياب وإشغال المعلمين'}</h1><div class="sub">${esc(printOrgName())} · ${esc(periodLabel())}</div></div></div>
-    ${one ? `<h2>${esc(one.name)}</h2>${detail(one)}` : `<table><thead><tr><th>#</th><th>المعلم</th><th>حصص الإشغال</th><th>أيام الغياب</th><th>حصص الغياب</th><th>نقل/تبديل</th></tr></thead><tbody>
-      ${all.map((t, i) => `<tr><td>${i + 1}</td><td class="n">${esc(t.name)}</td><td>${t.coverPeriods}</td><td>${t.absDays}</td><td>${t.absPeriods}</td><td>${t.transfers}</td></tr>`).join('')}</tbody></table>`}
+    ${one ? `<h2>${esc(one.name)}</h2>${detail(one)}` : `<table><thead><tr><th>#</th><th>المعلم</th><th>النصاب</th><th>حصص الإشغال</th><th>أيام الغياب</th><th>حصص الغياب</th><th>الفاقد</th><th>نقل/تبديل</th></tr></thead><tbody>
+      ${all.map((t, i) => `<tr><td>${i + 1}</td><td class="n">${esc(t.name)}</td><td>${t.load != null ? t.load : '—'}</td><td>${t.coverPeriods}</td><td>${t.absDays}</td><td>${t.absPeriods}</td><td>${lossTxt(t.loss)}</td><td>${t.transfers}</td></tr>`).join('')}</tbody></table>`}
     <div class="sig"><span>${one ? 'توقيع المعلم: ..................' : ''}</span><span>وكيل الشؤون التعليمية: ..................</span><span>مدير المدرسة: ..................</span></div>
     <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
   w.document.close();
@@ -705,8 +743,8 @@ async function exportExcel() {
   const list = inRange();
   const all = summarize(list).sort(SORTS.name);
   const wb = XLSX.utils.book_new();
-  const sum = all.map((t, i) => ({ '#': i + 1, 'المعلم': t.name, 'حصص الإشغال': t.coverPeriods, 'أيام الغياب': t.absDays, 'حصص الغياب': t.absPeriods, 'نقل/تبديل': t.transfers }));
-  const ws1 = XLSX.utils.json_to_sheet(sum); ws1['!views'] = [{ RTL: true }]; ws1['!cols'] = [{ wch: 4 }, { wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+  const sum = all.map((t, i) => ({ '#': i + 1, 'المعلم': t.name, 'النصاب الأسبوعي': t.load != null ? t.load : '', 'حصص الإشغال': t.coverPeriods, 'أيام الغياب': t.absDays, 'حصص الغياب': t.absPeriods, 'الفاقد': t.loss, 'نقل/تبديل': t.transfers }));
+  const ws1 = XLSX.utils.json_to_sheet(sum); ws1['!views'] = [{ RTL: true }]; ws1['!cols'] = [{ wch: 4 }, { wch: 28 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, ws1, 'الملخص');
   const det = list.slice().sort((a, b) => a.teacher_name.localeCompare(b.teacher_name, 'ar') || a.entry_date.localeCompare(b.entry_date))
     .map(r => ({ 'المعلم': r.teacher_name, 'النوع': KIND_LABEL[r.kind], 'التاريخ': r.entry_date, 'الحصة': r.period || '', 'الفصل': r.classes || '', 'المادة': r.subject || '', 'السبب': r.kind === 'cover' ? '' : reasonText(r), 'المصدر': r.source === 'manual' ? 'يدوي' : 'الملف', 'ملاحظة': r.note || '' }));
