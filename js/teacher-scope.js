@@ -5,15 +5,19 @@
 import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool } from './core.js';
 
 let cache = null;
-export const normSubj = s => String(s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[ًٌٍَُِّْـ]/g, '')
+export const normSubj = s => String(s || '').toLowerCase().replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[ًٌٍَُِّْـ]/g, '')
   .split(/\s+/).map(w => w.replace(/^(وال|بال|لل|ال)/, '')).filter(Boolean).join(' ').trim();
 const ALIASES = [['رقميه', 'حاسب', 'حاسوب', 'تقنيه'], ['اسلاميه', 'قران', 'توحيد', 'فقه', 'حديث', 'تجويد'], ['لغتي', 'عربيه'], ['انجليزي', 'انجليزيه', 'english'], ['اجتماعيات', 'اجتماعيه'], ['بدنيه', 'رياضه بدنيه'], ['فنيه', 'تربيه فنيه'], ['حياتيه', 'اسريه']];
 
+const GENERIC_WORDS = new Set(['لغه', 'دراسات', 'مهارات', 'تربيه', 'ماده', 'مقرر']);
 // هل اسم المادة a يطابق b (جزئيًا أو بمرادف)
 export function subjectMatches(a, b) {
   const x = normSubj(a), y = normSubj(b);
   if (!x || !y) return false;
-  const tx = x.split(' ').filter(w => w.length >= 3), ty = y.split(' ').filter(w => w.length >= 3);
+  // كلمات عامة تتكرر بين مواد مختلفة («اللغة» العربية/الإنجليزية، «الدراسات» الإسلامية/الاجتماعية،
+  // «المهارات» الرقمية/الحياتية، «التربية» البدنية/الفنية): لا تكفي وحدها للمطابقة
+  const generic = w => GENERIC_WORDS.has(w);
+  const tx = x.split(' ').filter(w => w.length >= 3 && !generic(w)), ty = y.split(' ').filter(w => w.length >= 3 && !generic(w));
   if (tx.some(w => y.includes(w)) || ty.some(w => x.includes(w))) return true;
   return ALIASES.some(g => g.some(w => x.includes(w)) && g.some(w => y.includes(w)));
 }
