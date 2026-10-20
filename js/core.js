@@ -266,7 +266,56 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-20i';
+export const ASSET_VERSION = '2026-10-20j';
+
+/* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
+ * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
+ * كل نافذة تُفتح فارغة (window.open('', '_blank')) ثم يُكتب فيها التقرير تأخذ هذا الشريط تلقائيًا،
+ * ويختفي عند الطباعة. يُعاد إدراجه إذا أُعيدت كتابة محتوى النافذة. */
+(function addPrintWindowCloseBar() {
+  if (window.__mudarOpenPatched) return;
+  window.__mudarOpenPatched = true;
+  const nativeOpen = window.open.bind(window);
+  const BAR_ID = 'mudar-print-bar';
+  const inject = w => {
+    const d = w.document;
+    const bar = d.createElement('div');
+    bar.id = BAR_ID;
+    bar.setAttribute('dir', 'rtl');
+    bar.innerHTML = `<style>
+      #${BAR_ID}{position:fixed;top:0;left:0;right:0;z-index:2147483647;display:flex;gap:8px;justify-content:space-between;align-items:center;
+        padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:#0F2447;color:#fff;font:600 14px Tahoma,Arial,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+      #${BAR_ID} button{font:inherit;border:0;border-radius:9px;padding:9px 16px;cursor:pointer}
+      #${BAR_ID} .c{background:#fff;color:#0F2447} #${BAR_ID} .p{background:#0E93A8;color:#fff}
+      #${BAR_ID}-sp{height:calc(56px + env(safe-area-inset-top))}
+      @media print{#${BAR_ID},#${BAR_ID}-sp{display:none!important}}
+    </style><button type="button" class="c">✕ إغلاق</button><span style="flex:1"></span><button type="button" class="p">طباعة</button>`;
+    const sp = d.createElement('div');
+    sp.id = BAR_ID + '-sp';
+    d.body.insertBefore(sp, d.body.firstChild);
+    d.body.insertBefore(bar, d.body.firstChild);
+    bar.querySelector('.p').onclick = () => w.print();
+    bar.querySelector('.c').onclick = () => {
+      try { w.close(); } catch { /* تجاهل */ }
+      setTimeout(() => { try { if (!w.closed) w.location.replace(window.location.href); } catch { /* تجاهل */ } }, 300);
+    };
+  };
+  window.open = function (url, target, features) {
+    const w = nativeOpen(url, target, features);
+    if (w && (!url || url === 'about:blank')) {
+      let ticks = 0;
+      const timer = setInterval(() => {
+        ticks++;
+        try {
+          if (w.closed || ticks > 6000) { clearInterval(timer); return; }   // حتى 30 دقيقة
+          const d = w.document;
+          if (d.readyState === 'complete' && d.body && d.body.childElementCount && !d.getElementById(BAR_ID)) inject(w);
+        } catch { clearInterval(timer); }
+      }, 300);
+    }
+    return w;
+  };
+})();
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
