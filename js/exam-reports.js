@@ -1037,7 +1037,7 @@ function reportCardHtml(r, i) {
           <b>${esc(r.title)}</b>
           <span>${meta || '&nbsp;'}</span>
           <span class="erc-chips">${isTeacherView() && r.created_by !== currentUserId ? '<i class="erc-shared">من الإدارة</i>' : ''}${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : '<i>تشخيصي</i>'}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
-          ${r.exam_type === 'periodic' || r.source !== 'camera' ? `<span class="erc-actions">${r.exam_type === 'periodic' ? `<button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-results-btn" data-rid="${r.id}">استعراض النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button>` : ''}${r.source !== 'camera' && canEditReport(r) ? `<button type="button" class="erc-act er-addsheet-btn" data-rid="${r.id}">➕ ورقة طالب</button>` : ''}</span>` : ''}
+          ${r.exam_type === 'periodic' || r.source !== 'camera' ? `<span class="erc-actions">${r.exam_type === 'periodic' ? `<button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-results-btn" data-rid="${r.id}">استعراض النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button>` : ''}${r.source !== 'camera' ? `<button type="button" class="erc-act er-addsheet-btn" data-rid="${r.id}">➕ ورقة طالب</button>` : ''}</span>` : ''}
         </span>
         ${!isTeacherView() || r.created_by === currentUserId ? `<button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>` : ''}
       </div>`;
@@ -1229,7 +1229,7 @@ async function openReport(id) {
   document.getElementById('er-append-file-btn').classList.toggle('hidden', cam || isTeacherView());
   const asb = document.getElementById('er-add-sheet-btn');
   if (asb) {
-    asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students) || !canEditReport(data));
+    asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students));
     asb.onclick = async () => {
       if (asb.disabled) return;
       const t = asb.textContent; asb.disabled = true; asb.textContent = 'جارٍ الفتح...';
@@ -2343,11 +2343,12 @@ const SHORT_GRADE = { first_intermediate: 'أول', second_intermediate: 'ثان
  * إضافة ورقة طالب يدويًا لتقرير مرفوع (Remark): تختار الطالب وتظلل إجاباته
  * والتقرير ينحسب من جديد. المعلم يختار من طلاب فصوله بس.
  * ========================================================================= */
-// تعديل الدرجات وإضافة الأوراق: لصاحب التقرير وللإدارة فقط، والمعلم لا يعدّل تقارير الإدارة
+// تعديل الدرجات: لصاحب التقرير وللإدارة فقط. المعلم على تقرير الإدارة يضيف ورقة لطالب ليس له ورقة، ولا يعدّل الموجودة
 const canEditReport = r => !!r && (!isTeacherView() || r.created_by === currentUserId);
+const EDIT_BY_ADMIN = 'لهذا الطالب ورقة في التقرير، وتعديلها من صلاحيات الإدارة.';
 
 async function openManualSheet(rep, onDone, presetId = null) {
-  if (!canEditReport(rep)) { alert('هذا التقرير أضافته الإدارة، ولا يمكن تعديل درجاته إلا من صاحبه أو من الإدارة.'); return; }
+  const canEdit = canEditReport(rep);
   const rd = rep.raw_data || {};
   const n = rep.item_count || (rd.choiceCounts || []).length;
   const counts = rd.choiceCounts || [];
@@ -2427,7 +2428,7 @@ async function openManualSheet(rep, onDone, presetId = null) {
       const q = normAr(pq.value);
       const rows = students.filter(x => (!pg.value || x.grade_level === pg.value) && (!ps.value || String(x.class_section) === ps.value) && (!q || normAr(x.full_name).includes(q) || String(x.national_id).includes(q)))
         .sort((a, b) => (have.has(String(a.national_id).trim()) - have.has(String(b.national_id).trim())) || String(a.full_name).localeCompare(String(b.full_name), 'ar')).slice(0, 60);
-      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? ' · له ورقة بالتقرير (تُفتح للتعديل)' : ''}</small></button>`; }).join('') || `<span class="omr-empty">${students.length ? 'لا توجد نتائج' : 'لا يوجد طلاب متاحون لك - تأكد من تسجيل تخصصاتك في «تخصصات المعلمين» أو من وجود حصصك في الجدول الدراسي'}</span>`;
+      list.innerHTML = rows.map(x => { const done = have.has(String(x.national_id).trim()); return `<button type="button" data-id="${esc(x.national_id)}"${done && !canEdit ? ' disabled class="er-man-locked"' : ''}><b>${esc(x.full_name)}</b><small>${esc(gradeLabels[x.grade_level] || '')} ${esc(x.class_section || '')}${done ? (canEdit ? ' · له ورقة بالتقرير (تُفتح للتعديل)' : ' · له ورقة بالتقرير (التعديل من الإدارة)') : ''}</small></button>`; }).join('') || `<span class="omr-empty">${students.length ? 'لا توجد نتائج' : 'لا يوجد طلاب متاحون لك - تأكد من تسجيل تخصصاتك في «تخصصات المعلمين» أو من وجود حصصك في الجدول الدراسي'}</span>`;
       list.querySelectorAll('button').forEach(b => b.onclick = () => pickStudent(students.find(x => String(x.national_id) === b.dataset.id)));
     };
     pg.onchange = () => { fill(); draw(); }; ps.onchange = draw; pq.oninput = draw;
@@ -2457,6 +2458,7 @@ async function openManualSheet(rep, onDone, presetId = null) {
   if (ei) ei.oninput = () => { st.essay = ei.value === '' ? null : Number(ei.value); renderSum(); };
   // اختيار الطالب: لو له ورقة بالتقرير تُحمَّل إجاباته ودرجة مقاليه ونموذجه للتعديل
   function pickStudent(x) {
+    if (x && !canEdit && existingOf(x.national_id)) { alert(EDIT_BY_ADMIN); return; }
     st.student = x || null;
     const ex = x ? existingOf(x.national_id) : null;
     st.existing = ex;
@@ -2477,6 +2479,7 @@ async function openManualSheet(rep, onDone, presetId = null) {
     let x = students.find(p => String(p.national_id).trim() === id);
     // طالب له ورقة بالتقرير لكنه غير موجود بقائمة طلاب المنصة: نعرضه ببيانات ورقته
     if (!x && ex) x = { national_id: id, full_name: ex.name || id, grade_level: gradeFromText(ex.grade) || null, class_section: ex.section || null };
+    if (x && ex && !canEdit) { alert(EDIT_BY_ADMIN); close(); return; }
     if (x) pickStudent(x);
   }
 
@@ -2575,10 +2578,10 @@ async function showResults(reportId) {
         const rows = g.rows.slice().sort((a, b) => ((a.absent ? 1 : 0) - (b.absent ? 1 : 0)) || (a.absent ? 0 : totalOfX(b) - totalOfX(a)) || String(a.name).localeCompare(String(b.name), 'ar'));
         return `<details class="er-abs-sec"${gi === 0 ? ' open' : ''}>
           <summary><span class="er-abs-name">${g.gl ? esc((SHORT_GRADE[g.gl] || gradeLabels[g.gl] || '') + ' ' + (g.section || '')) : 'غير محدد الفصل'}</span><span class="er-abs-of">${pres.length} طالب · المتوسط ${fmtN(avg)}${full ? ' / ' + full : ''}</span></summary>
-          <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th>${canEd ? '<th class="er-res-ed-h"><span class="sr-only">تعديل</span></th>' : ''}</tr></thead><tbody>
+          <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th><th class="er-res-ed-h"><span class="sr-only">تعديل</span></th></tr></thead><tbody>
           ${rows.map((x, i) => x.absent
-            ? `<tr class="abs"><td>${i + 1}</td><td>${esc(x.name)}</td><td colspan="${(d.nMcq ? 1 : 0) + (d.nTf ? 1 : 0) + (d.hasEssay ? 1 : 0) + 1}">غائب</td>${canEd ? `<td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="إضافة ورقة للطالب" aria-label="إضافة ورقة ${esc(x.name)}">＋</button></td>` : ''}</tr>`
-            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${fmtN(x.mcq)}</td>` : ''}${d.nTf ? `<td>${fmtN(x.tf)}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td>${canEd ? `<td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="تعديل إجابات الطالب ودرجته" aria-label="تعديل ورقة ${esc(x.name || x.id)}">✎</button></td>` : ''}</tr>`).join('')}
+            ? `<tr class="abs"><td>${i + 1}</td><td>${esc(x.name)}</td><td colspan="${(d.nMcq ? 1 : 0) + (d.nTf ? 1 : 0) + (d.hasEssay ? 1 : 0) + 1}">غائب</td><td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="إضافة ورقة للطالب" aria-label="إضافة ورقة ${esc(x.name)}">＋</button></td></tr>`
+            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${fmtN(x.mcq)}</td>` : ''}${d.nTf ? `<td>${fmtN(x.tf)}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td><td>${canEd ? `<button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="تعديل إجابات الطالب ودرجته" aria-label="تعديل ورقة ${esc(x.name || x.id)}">✎</button>` : ''}</td></tr>`).join('')}
           </tbody></table>
         </details>`;
       }).join('') || '<p class="er-abs-empty">لا توجد نتائج</p>'}

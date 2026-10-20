@@ -3012,3 +3012,4 @@ body.omr-noscroll{ overflow:hidden; }
 .er-exp input[type=checkbox]{ width:18px; height:18px; margin:0; accent-color:var(--meadow); }
 .er-exp-hint{ font-size:12px; color:var(--slate); margin:10px 2px 0; }
 .er-exp .btn-primary:disabled{ opacity:.55; cursor:not-allowed; }
+.er-man-list button.er-man-locked{ opacity:.55; cursor:not-allowed; }
