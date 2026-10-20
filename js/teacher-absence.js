@@ -6,11 +6,16 @@ import { loadXLSX } from './lib-loader.js';
  * - رفع ملف «تصدير حالات الغياب والاستبدال» (ورقة لكل معلم) - يمكن رفع أكثر من ملف: يُضاف الجديد فقط
  *   ولا يُحذف أي سجل سابق.
  * - الملف يكرر بعض الصفوف (مرة تحت «ديسمبر» ومرة تحت شهرها): الصف المتطابق بكل بياناته يُحسب مرة واحدة.
- * - التصنيف: «سبب غير معروف» = إشغال، أي سبب آخر = غياب، وبلا سبب مع نوع استبدال (نقل...) = نقل/تبديل.
+ * - التصنيف (من بنية الملف): عمود «سبب الغياب» معبأ = غياب المعلم نفسه (ومنه «سبب غير معروف» = غياب بدون سبب)،
+ *   وعمود «نوع الاستبدال» معبأ بلا سبب («نوع غير معروف»...) = إشغال: المعلم أخذ الحصة بدل معلم غائب،
+ *   و«نقل» أو «تبديل» = نقل/تبديل لا يُحسب غيابًا ولا إشغالًا.
+ * - عند رفع ملف جديد يُضاف فقط ما بعد آخر تاريخ تم استيراده، فلا يعود ما حذفه المستخدم سابقًا.
  * - إضافة يدوية للغياب والإشغال، ولوحة: مؤشرات + الأعلى إشغالًا/غيابًا + قائمة المعلمين وتفاصيل كل معلم.
  * ========================================================================= */
 
-const COVER_REASON = 'سبب غير معروف';
+const COVER_TYPE = 'إشغال';                 // نوع الاستبدال للإشغال اليدوي
+const UNKNOWN_REASON = 'سبب غير معروف';
+const TRANSFER_TYPES = new Set(['نقل', 'تبديل']);
 const KIND_LABEL = { absence: 'غياب', cover: 'إشغال', transfer: 'نقل/تبديل' };
 const ABSENCE_REASONS = ['مرضية', 'مولود', 'ورشة عمل', 'اجتماع', 'رحلة مدرسية', 'تصحيح الاختبار', 'اضطرارية', 'أخرى'];
 const PERIODS = [1, 2, 3, 4, 5, 6, 7];
@@ -21,6 +26,8 @@ let rows = [];          // كل السجلات
 let staff = [];         // موظفو المدرسة (لربط الأسماء)
 let selected = null;    // المعلم المعروضة تفاصيله
 let detailTab = 'cover';
+let selMode = false;            // وضع تحديد عدة حصص للحذف
+const picked = new Set();
 const filt = { range: 'all', from: '', to: '', q: '', sort: 'cover' };
 
 const $ = id => document.getElementById(id);
@@ -33,7 +40,10 @@ const fmtDate = iso => dateTxt(iso, { weekday: 'short', day: 'numeric', month: '
 const fmtLong = iso => dateTxt(iso, { day: 'numeric', month: 'long', year: 'numeric' });
 const periodText = p => { const m = String(p || '').match(/^(\d+)\s*->\s*(\d+)$/); return m ? `من الحصة ${m[1]} إلى ${m[2]}` : p ? `الحصة ${p}` : 'حصة غير محددة'; };
 const periodBadge = p => { const m = String(p || '').match(/^(\d+)\s*->\s*(\d+)$/); return m ? `${m[1]}←${m[2]}` : (p || '—'); };
-const kindOf = (reason, subType) => (reason === COVER_REASON ? 'cover' : reason && reason !== 'تبديل' ? 'absence' : (subType || reason) ? 'transfer' : 'absence');
+const kindOf = (reason, subType) => (reason && reason !== 'تبديل' ? 'absence'
+  : TRANSFER_TYPES.has(subType) || reason === 'تبديل' ? 'transfer' : subType ? 'cover' : 'absence');
+const reasonText = r => r.reason || r.sub_type || '';   // الغياب بلا سبب يبقى «سبب غير معروف»
+const lastImportDate = () => rows.reduce((m, r) => (r.source === 'import' && r.entry_date > m ? r.entry_date : m), '');
 const plural = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >= 3 && n <= 10 ? `${n} ${few}` : `${n} ${many}`);
 const initials = name => { const w = String(name || '').split(/\s+/).filter(x => x && x !== 'بن'); return (w[0] ? w[0][0] : '') + (w.length > 1 ? w[w.length - 1][0] : ''); };
 const avColor = name => { let h = 0; for (const ch of String(name)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return AV_COLORS[h % AV_COLORS.length]; };
@@ -51,6 +61,7 @@ const IC = {
   swap: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h13l-3-3M20 17H7l3 3"/></svg>',
   cover: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/><path d="m9 10 2 2 4-4"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16z"/><path d="m13.5 6.5 4 4"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg>',
 };
@@ -220,36 +231,45 @@ async function handleFile(file) {
     const { recs, dupInFile } = parseWorkbook(wb);
     toast('');
     if (!recs.length) { toast('لم يُعثر في الملف على سجلات غياب أو استبدال. تأكد أن الملف هو «تصدير حالات الغياب والاستبدال».', 'err'); return; }
-    // الدمج: يُضاف من الملف ما ليس موجودًا فقط، ولا يُحذف أي سجل سابق (يمكن رفع أكثر من ملف لفترات مختلفة)
+    // الدمج: يُضاف ما بعد آخر تاريخ مستورد فقط (حتى لا يعود ما حُذف سابقًا)، ولا يُحذف أي سجل
     const existing = new Set(rows.map(sigOf));
-    const fresh = recs.filter(r => !existing.has(sigOf(r)));
-    openImportPreview(file.name, recs, fresh, dupInFile);
+    const newOnly = recs.filter(r => !existing.has(sigOf(r)));
+    openImportPreview(file.name, recs, newOnly, dupInFile, lastImportDate());
   } catch (e) {
     toast('تعذر قراءة الملف: ' + (e.message || e), 'err');
   }
 }
 
-function openImportPreview(fileName, recs, fresh, dupInFile) {
+function openImportPreview(fileName, recs, newOnly, dupInFile, last) {
+  const after = newOnly.filter(r => !last || r.entry_date > last);
+  const older = newOnly.length - after.length;   // قبل آخر تحديث وغير موجودة حاليًا (قد تكون محذوفة عمدًا)
+  let withOld = false;
+  const fresh = () => (withOld ? newOnly : after);
   const dates = recs.map(r => r.entry_date).sort();
   const from = dates[0], to = dates[dates.length - 1];
   const teachers = [...new Set(recs.map(r => r.teacher_name))];
   const unmatched = teachers.filter(t => !matchTeacher(t));
-  const cnt = k => fresh.filter(r => r.kind === k).length;
   const back = document.createElement('div');
   back.className = 'er-abs-back';
-  back.innerHTML = `<div class="er-abs tx-modal" role="dialog" aria-modal="true" aria-label="استيراد ملف الغياب">
+  const html = () => {
+    const f = fresh();
+    const cnt = k => f.filter(r => r.kind === k).length;
+    return `<div class="er-abs tx-modal" role="dialog" aria-modal="true" aria-label="استيراد ملف الغياب">
     <div class="er-abs-h"><div><b>استيراد ملف الغياب والاستبدال</b><span>${esc(fileName)}</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
     <div class="er-abs-body">
       <div class="tx-imp-range">${IC.cal}<span>${teachers.length} معلمًا · من ${esc(fmtLong(from))} إلى ${esc(fmtLong(to))}</span></div>
-      ${fresh.length ? `
-      <div class="tx-imp-big"><b>${fresh.length}</b><span>${fresh.length === 1 ? 'سجل جديد سيُضاف' : 'سجلًا جديدًا سيُضاف'}</span></div>
+      ${last ? `<div class="tx-imp-last">آخر تحديث سابق حتى <b>${esc(fmtLong(last))}</b>، ويُضاف من الملف ما بعده فقط.</div>` : ''}
+      ${f.length ? `
+      <div class="tx-imp-big"><b>${f.length}</b><span>${f.length === 1 ? 'سجل جديد سيُضاف' : 'سجلًا جديدًا سيُضاف'}</span></div>
       <div class="tx-imp-tiles">
         <div class="cov"><b>${cnt('cover')}</b><span>حصة إشغال</span></div>
         <div class="abs"><b>${cnt('absence')}</b><span>حصة غياب</span></div>
         <div><b>${cnt('transfer')}</b><span>نقل/تبديل</span></div>
-      </div>` : `<div class="tx-imp-none">كل سجلات الملف موجودة مسبقًا - لا يوجد جديد للإضافة.</div>`}
+      </div>` : `<div class="tx-imp-none">${last && to <= last ? 'تاريخ الملف لا يتجاوز آخر تحديث، فلا يوجد جديد للإضافة.' : 'كل سجلات الملف موجودة مسبقًا، فلا يوجد جديد للإضافة.'}</div>`}
       <ul class="tx-imp-notes">
-        ${recs.length - fresh.length ? `<li>${recs.length - fresh.length} سجلًا موجود مسبقًا ولن يتكرر.</li>` : ''}
+        ${recs.length - newOnly.length ? `<li>${recs.length - newOnly.length} سجلًا موجود مسبقًا ولن يتكرر.</li>` : ''}
+        ${older ? `<li>${older} سجلًا تاريخه قبل آخر تحديث وغير موجود حاليًا (ربما حُذف)، ${withOld ? 'وسيُضاف' : 'ولن يُضاف'}.
+          <label class="tx-imp-old"><input type="checkbox" id="tx-imp-old" ${withOld ? 'checked' : ''}/> إضافتها أيضًا (مثل رفع ملف لفترة سابقة)</label></li>` : ''}
         ${dupInFile ? `<li>${dupInFile} صفًا مكررًا داخل الملف احتُسب مرة واحدة.</li>` : ''}
         <li>لن يُحذف أي سجل سابق.</li>
         ${unmatched.length ? `<li>${unmatched.length} ${unmatched.length === 1 ? 'اسم لم يُربط' : 'اسمًا لم تُربط'} بحساب موظف بالمنصة، وتُحفظ بالاسم كما في الملف. <details><summary>عرض الأسماء</summary><span>${unmatched.map(esc).join('، ')}</span></details></li>` : ''}
@@ -257,21 +277,28 @@ function openImportPreview(fileName, recs, fresh, dupInFile) {
     </div>
     <div class="er-man-foot tx-modal-foot">
       <button type="button" class="tx-btn ghost" data-act="cancel">إلغاء</button>
-      ${fresh.length ? `<button type="button" class="tx-btn primary" data-act="ok">إضافة ${fresh.length} سجلًا</button>` : ''}
+      ${f.length ? `<button type="button" class="tx-btn primary" data-act="ok">إضافة ${f.length} سجلًا</button>` : ''}
     </div>
   </div>`;
-  document.body.appendChild(back);
-  const close = () => back.remove();
-  back.querySelector('.er-abs-x').onclick = close;
-  back.querySelector('[data-act="cancel"]').onclick = close;
-  back.addEventListener('click', e => { if (e.target === back) close(); });
-  const okBtn = back.querySelector('[data-act="ok"]');
-  if (okBtn) okBtn.onclick = async () => {
-    okBtn.disabled = true; okBtn.textContent = 'جارٍ الحفظ...';
-    const saved = await saveImported(fresh);
-    close();
-    if (saved != null) toast(`✓ أُضيف ${saved} سجلًا جديدًا من الملف (${fmtDate(from)} – ${fmtDate(to)})، والسجلات السابقة باقية كما هي.`);
   };
+  const close = () => back.remove();
+  const paint = () => {
+    back.innerHTML = html();
+    back.querySelector('.er-abs-x').onclick = close;
+    back.querySelector('[data-act="cancel"]').onclick = close;
+    const old = back.querySelector('#tx-imp-old');
+    if (old) old.onchange = () => { withOld = old.checked; paint(); };
+    const okBtn = back.querySelector('[data-act="ok"]');
+    if (okBtn) okBtn.onclick = async () => {
+      okBtn.disabled = true; okBtn.textContent = 'جارٍ الحفظ...';
+      const saved = await saveImported(fresh());
+      close();
+      if (saved != null) toast(`✓ أُضيف ${saved} سجلًا جديدًا من الملف، والسجلات السابقة باقية كما هي.`);
+    };
+  };
+  back.addEventListener('click', e => { if (e.target === back) close(); });
+  document.body.appendChild(back);
+  paint();
 }
 
 async function saveImported(fresh) {
@@ -350,7 +377,7 @@ function render() {
   const coverTeachers = all.filter(t => t.coverPeriods).length;
   const avg = coverTeachers ? (tot('cover') / coverTeachers) : 0;
   const reasons = {};
-  list.filter(r => r.kind === 'absence').forEach(r => { const k = r.reason || 'بدون سبب'; reasons[k] = (reasons[k] || 0) + 1; });
+  list.filter(r => r.kind === 'absence').forEach(r => { const k = reasonText(r) || 'بدون سبب'; reasons[k] = (reasons[k] || 0) + 1; });
   const [from, to] = rangeBounds();
   const rangeNote = from || to ? `${from ? fmtLong(from) : 'البداية'} – ${to ? fmtLong(to) : 'اليوم'}` : 'كل السجلات المحفوظة';
 
@@ -425,8 +452,9 @@ function renderTeachers(all) {
 }
 
 function selectTeacher(name, all, tab = null) {
-  selected = name;
   const t = all.find(x => x.name === name);
+  if (selected !== name || tab) { selMode = false; picked.clear(); }
+  selected = name;
   detailTab = tab || (t && !t.coverPeriods && t.absPeriods ? 'absence' : detailTab === 'transfer' && t && !t.transfers ? 'cover' : detailTab);
   document.querySelectorAll('.tx-trow').forEach(b => b.classList.toggle('on', b.dataset.name === name));
   renderDetail(all);
@@ -445,7 +473,7 @@ function renderDetail(all) {
   if (!tabs.some(x => x[0] === detailTab)) detailTab = 'cover';
   const items = t[detailTab];
   const reasons = {};
-  if (detailTab === 'absence') t.absence.forEach(r => { const k = r.reason || 'بدون سبب'; reasons[k] = (reasons[k] || 0) + 1; });
+  if (detailTab === 'absence') t.absence.forEach(r => { const k = reasonText(r) || 'بدون سبب'; reasons[k] = (reasons[k] || 0) + 1; });
   const byDay = new Map();
   items.slice().sort((a, b) => b.entry_date.localeCompare(a.entry_date) || String(a.period).localeCompare(String(b.period), 'en', { numeric: true }))
     .forEach(r => { if (!byDay.has(r.entry_date)) byDay.set(r.entry_date, []); byDay.get(r.entry_date).push(r); });
@@ -464,33 +492,96 @@ function renderDetail(all) {
       <div class="abs"><b>${t.absPeriods}</b><span>حصة غياب</span></div>
       <div><b>${t.transfers}</b><span>نقل/تبديل</span></div>
     </div>
-    <div class="tx-dtabs" role="tablist">${tabs.map(([k, l, n]) => `<button type="button" role="tab" data-tab="${k}" class="${detailTab === k ? 'on' : ''}">${l} <i>${n}</i></button>`).join('')}</div>
+    <div class="tx-dtabs-row">
+      <div class="tx-dtabs" role="tablist">${tabs.map(([k, l, n]) => `<button type="button" role="tab" data-tab="${k}" class="${detailTab === k ? 'on' : ''}">${l} <i>${n}</i></button>`).join('')}</div>
+      ${items.length ? `<button type="button" class="tx-btn ghost sm tx-selbtn${selMode ? ' on' : ''}" id="tx-selmode">${selMode ? 'إنهاء التحديد' : 'تحديد للحذف'}</button>` : ''}
+    </div>
+    ${selMode ? `<div class="tx-selbar"><span>محدد: <b id="tx-selcount">${picked.size}</b> من ${items.length}</span>
+      <button type="button" class="tx-link" id="tx-selall">تحديد الكل</button>
+      <button type="button" class="tx-btn danger sm" id="tx-seldel" ${picked.size ? '' : 'disabled'}>${IC.trash}<span>حذف المحدد</span></button></div>` : ''}
     ${detailTab === 'absence' && Object.keys(reasons).length ? `<div class="tx-reasons">${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `<span>${esc(k)} <b>${v}</b></span>`).join('')}</div>` : ''}
-    <div class="tx-timeline">
+    <div class="tx-timeline${selMode ? ' sel' : ''}">
       ${byDay.size ? [...byDay.entries()].map(([d, rs]) => `
         <div class="tx-day">
-          <div class="tx-day-h"><b>${esc(dateTxt(d, { weekday: 'long' }))}</b><span>${esc(dateTxt(d, { day: 'numeric', month: 'long' }))}</span><small>${plural(rs.length, 'حصة واحدة', 'حصتان', 'حصص', 'حصة')}</small></div>
-          <ul>${rs.map(r => `<li>
+          <div class="tx-day-h">${selMode ? `<input type="checkbox" class="tx-dchk" data-day="${d}" aria-label="تحديد حصص اليوم" ${rs.every(r => picked.has(r.id)) ? 'checked' : ''}/>` : ''}<b>${esc(dateTxt(d, { weekday: 'long' }))}</b><span>${esc(dateTxt(d, { day: 'numeric', month: 'long' }))}</span><small>${plural(rs.length, 'حصة واحدة', 'حصتان', 'حصص', 'حصة')}</small>
+            ${selMode ? '' : `<button type="button" class="tx-dday" data-day="${d}" title="حذف حصص هذا اليوم" aria-label="حذف حصص هذا اليوم">${IC.trash}</button>`}</div>
+          <ul>${rs.map(r => `<li data-id="${r.id}" class="${picked.has(r.id) ? 'picked' : ''}">
+            ${selMode ? `<input type="checkbox" class="tx-rchk" data-id="${r.id}" aria-label="تحديد الحصة" ${picked.has(r.id) ? 'checked' : ''}/>` : ''}
             <span class="tx-pbadge ${r.kind}" title="${esc(periodText(r.period))}">${esc(periodBadge(r.period))}</span>
             <span class="tx-li-main"><span>${esc(periodText(r.period))}</span><span class="tx-li-meta">${[r.classes, r.subject].filter(Boolean).map(esc).join(' · ') || 'بدون فصل أو مادة'}</span>
-              ${r.note ? `<span class="tx-li-note">${esc(r.note)}</span>` : ''}</span>
-            ${r.kind !== 'cover' && (r.reason || r.sub_type) ? `<span class="tx-pill ${r.kind}">${esc(r.reason || r.sub_type)}</span>` : ''}
+              <span class="tx-note-slot">${r.note ? `<span class="tx-li-note">${esc(r.note)}</span>` : ''}</span></span>
+            ${r.kind !== 'cover' && reasonText(r) ? `<span class="tx-pill ${r.kind}">${esc(reasonText(r))}</span>` : ''}
             ${r.source === 'manual' ? '<span class="tx-pill man">يدوي</span>' : ''}
-            <button type="button" class="tx-del" data-id="${r.id}" title="حذف السجل" aria-label="حذف السجل">${IC.trash}</button>
+            ${selMode ? '' : `<button type="button" class="tx-ico tx-note-btn" data-id="${r.id}" title="${r.note ? 'تعديل الملاحظة' : 'إضافة ملاحظة'}" aria-label="${r.note ? 'تعديل الملاحظة' : 'إضافة ملاحظة'}">${IC.note}</button>
+            <button type="button" class="tx-ico tx-del" data-id="${r.id}" title="حذف الحصة" aria-label="حذف الحصة">${IC.trash}</button>`}
           </li>`).join('')}</ul>
         </div>`).join('') : `<p class="tx-none">لا يوجد ${KIND_LABEL[detailTab]} لهذا المعلم في الفترة المحددة</p>`}
     </div>`;
-  box.querySelectorAll('.tx-dtabs button').forEach(b => b.onclick = () => { detailTab = b.dataset.tab; renderDetail(all); });
+  box.querySelectorAll('.tx-dtabs button').forEach(b => b.onclick = () => { detailTab = b.dataset.tab; selMode = false; picked.clear(); renderDetail(all); });
   $('tx-d-print').onclick = () => printReport(true);
   $('tx-d-add').onclick = () => openManualForm(t.name, detailTab === 'absence' ? 'absence' : 'cover');
-  box.querySelectorAll('.tx-del').forEach(b => b.onclick = async () => {
-    if (!confirm('حذف هذا السجل نهائيًا؟')) return;
-    const { error } = await sb.from('teacher_absences').delete().eq('id', b.dataset.id);
-    if (error) { toast('تعذر الحذف: ' + error.message, 'err'); return; }
-    rows = rows.filter(r => r.id !== b.dataset.id);
-    render();
-    toast('تم حذف السجل');
+  const selBtn = $('tx-selmode');
+  if (selBtn) selBtn.onclick = () => { selMode = !selMode; picked.clear(); renderDetail(all); };
+  const refreshSel = () => {
+    $('tx-selcount').textContent = picked.size;
+    $('tx-seldel').disabled = !picked.size;
+    box.querySelectorAll('.tx-timeline li[data-id]').forEach(li => { const on = picked.has(li.dataset.id); li.classList.toggle('picked', on); const c = li.querySelector('.tx-rchk'); if (c) c.checked = on; });
+    box.querySelectorAll('.tx-dchk').forEach(c => { const ids = byDay.get(c.dataset.day).map(r => r.id); c.checked = ids.every(id => picked.has(id)); });
+  };
+  if (selMode) {
+    box.querySelectorAll('.tx-rchk').forEach(c => c.onchange = () => { c.checked ? picked.add(c.dataset.id) : picked.delete(c.dataset.id); refreshSel(); });
+    box.querySelectorAll('.tx-dchk').forEach(c => c.onchange = () => { byDay.get(c.dataset.day).forEach(r => (c.checked ? picked.add(r.id) : picked.delete(r.id))); refreshSel(); });
+    box.querySelectorAll('.tx-timeline li[data-id]').forEach(li => li.onclick = e => { if (e.target.closest('input')) return; const id = li.dataset.id; picked.has(id) ? picked.delete(id) : picked.add(id); refreshSel(); });
+    $('tx-selall').onclick = () => { const allOn = items.every(r => picked.has(r.id)); items.forEach(r => (allOn ? picked.delete(r.id) : picked.add(r.id))); refreshSel(); };
+    $('tx-seldel').onclick = () => deleteRecords([...picked], `حذف ${plural(picked.size, 'الحصة المحددة', 'الحصتين المحددتين', 'حصص محددة', 'حصة محددة')} نهائيًا؟`, () => { selMode = false; picked.clear(); });
+  }
+  box.querySelectorAll('.tx-dday').forEach(b => b.onclick = () => {
+    const rs = byDay.get(b.dataset.day);
+    deleteRecords(rs.map(r => r.id), `حذف ${plural(rs.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')} (${KIND_LABEL[detailTab]}) ليوم ${dateTxt(b.dataset.day, { weekday: 'long', day: 'numeric', month: 'long' })} نهائيًا؟`);
   });
+  box.querySelectorAll('.tx-del').forEach(b => b.onclick = () => deleteRecords([b.dataset.id], 'حذف هذه الحصة نهائيًا؟'));
+  box.querySelectorAll('.tx-note-btn').forEach(b => b.onclick = () => editNote(b.closest('li'), b.dataset.id));
+}
+
+// حذف سجل أو أكثر (حصة، أو حصص يوم، أو المحدد)
+async function deleteRecords(ids, question, after) {
+  if (!ids.length || !confirm(question)) return;
+  for (let i = 0; i < ids.length; i += 200) {
+    const { error } = await sb.from('teacher_absences').delete().in('id', ids.slice(i, i + 200));
+    if (error) { toast('تعذر الحذف: ' + error.message, 'err'); await loadRows(); render(); return; }
+  }
+  const gone = new Set(ids);
+  rows = rows.filter(r => !gone.has(r.id));
+  if (after) after();
+  render();
+  toast(ids.length === 1 ? 'تم حذف الحصة' : `تم حذف ${plural(ids.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')}`);
+}
+
+// ملاحظة على أي حصة غياب أو إشغال: تحرير في مكانها
+function editNote(li, id) {
+  const r = rows.find(x => x.id === id);
+  if (!r || li.querySelector('.tx-note-ed')) return;
+  const slot = li.querySelector('.tx-note-slot');
+  slot.innerHTML = `<span class="tx-note-ed"><input type="text" maxlength="300" placeholder="اكتب ملاحظة على هذه الحصة" value="${esc(r.note || '')}" aria-label="الملاحظة" />
+    <button type="button" class="tx-btn primary sm" data-a="save">حفظ</button><button type="button" class="tx-btn ghost sm" data-a="cancel">إلغاء</button></span>`;
+  const inp = slot.querySelector('input');
+  inp.focus(); inp.select();
+  const restore = () => { slot.innerHTML = r.note ? `<span class="tx-li-note">${esc(r.note)}</span>` : ''; };
+  const save = async () => {
+    const note = inp.value.trim() || null;
+    if (note === (r.note || null)) { restore(); return; }
+    slot.querySelector('[data-a="save"]').disabled = true;
+    const { error } = await sb.from('teacher_absences').update({ note }).eq('id', id);
+    if (error) { toast('تعذر حفظ الملاحظة: ' + error.message, 'err'); slot.querySelector('[data-a="save"]').disabled = false; return; }
+    r.note = note;
+    restore();
+    const btn = li.querySelector('.tx-note-btn');
+    if (btn) { btn.title = note ? 'تعديل الملاحظة' : 'إضافة ملاحظة'; btn.setAttribute('aria-label', btn.title); }
+    toast(note ? 'تم حفظ الملاحظة' : 'تم حذف الملاحظة');
+  };
+  slot.querySelector('[data-a="save"]').onclick = save;
+  slot.querySelector('[data-a="cancel"]').onclick = restore;
+  inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); save(); } else if (e.key === 'Escape') restore(); };
 }
 
 function emptyHtml() {
@@ -560,11 +651,11 @@ function openManualForm(presetName = '', presetKind = 'cover') {
     if (!date) return fail('اختر التاريخ');
     if (!periods.length) return fail('اختر حصة واحدة على الأقل');
     const p = staff.find(s => s.full_name === name) || matchTeacher(name);
-    const reason = kind === 'cover' ? COVER_REASON : $('tx-f-reason').value;
+    const reason = kind === 'cover' ? null : $('tx-f-reason').value;
     const recs = periods.map(per => ({
       teacher_name: name, teacher_id: p ? p.id : null, entry_date: date, period: per,
       classes: $('tx-f-class').value.trim() || null, subject: $('tx-f-subject').value.trim() || null,
-      reason, sub_type: null, kind, source: 'manual', note: $('tx-f-note').value.trim() || null,
+      reason, sub_type: kind === 'cover' ? COVER_TYPE : null, kind, source: 'manual', note: $('tx-f-note').value.trim() || null,
     }));
     $('tx-f-save').disabled = true;
     const { error } = await writeWithSchool(extra => sb.from('teacher_absences').insert(recs.map(r => ({ ...r, ...extra }))));
@@ -618,7 +709,7 @@ async function exportExcel() {
   const ws1 = XLSX.utils.json_to_sheet(sum); ws1['!views'] = [{ RTL: true }]; ws1['!cols'] = [{ wch: 4 }, { wch: 28 }, { wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
   XLSX.utils.book_append_sheet(wb, ws1, 'الملخص');
   const det = list.slice().sort((a, b) => a.teacher_name.localeCompare(b.teacher_name, 'ar') || a.entry_date.localeCompare(b.entry_date))
-    .map(r => ({ 'المعلم': r.teacher_name, 'النوع': KIND_LABEL[r.kind], 'التاريخ': r.entry_date, 'الحصة': r.period || '', 'الفصل': r.classes || '', 'المادة': r.subject || '', 'السبب': r.kind === 'cover' ? '' : (r.reason || r.sub_type || ''), 'المصدر': r.source === 'manual' ? 'يدوي' : 'الملف', 'ملاحظة': r.note || '' }));
+    .map(r => ({ 'المعلم': r.teacher_name, 'النوع': KIND_LABEL[r.kind], 'التاريخ': r.entry_date, 'الحصة': r.period || '', 'الفصل': r.classes || '', 'المادة': r.subject || '', 'السبب': r.kind === 'cover' ? '' : reasonText(r), 'المصدر': r.source === 'manual' ? 'يدوي' : 'الملف', 'ملاحظة': r.note || '' }));
   const ws2 = XLSX.utils.json_to_sheet(det); ws2['!views'] = [{ RTL: true }]; ws2['!cols'] = [{ wch: 26 }, { wch: 10 }, { wch: 12 }, { wch: 8 }, { wch: 10 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 20 }];
   XLSX.utils.book_append_sheet(wb, ws2, 'التفاصيل');
   XLSX.writeFile(wb, `غياب وإشغال المعلمين ${isoOf(new Date())}.xlsx`);
