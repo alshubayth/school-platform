@@ -1037,7 +1037,7 @@ function reportCardHtml(r, i) {
           <b>${esc(r.title)}</b>
           <span>${meta || '&nbsp;'}</span>
           <span class="erc-chips">${isTeacherView() && r.created_by !== currentUserId ? '<i class="erc-shared">من الإدارة</i>' : ''}${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : '<i>تشخيصي</i>'}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
-          ${r.exam_type === 'periodic' || r.source !== 'camera' ? `<span class="erc-actions">${r.exam_type === 'periodic' ? `<button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-results-btn" data-rid="${r.id}">استعراض النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button>` : ''}${r.source !== 'camera' ? `<button type="button" class="erc-act er-addsheet-btn" data-rid="${r.id}">➕ ورقة طالب</button>` : ''}</span>` : ''}
+          ${r.exam_type === 'periodic' || r.source !== 'camera' ? `<span class="erc-actions">${r.exam_type === 'periodic' ? `<button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-results-btn" data-rid="${r.id}">استعراض النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button>` : ''}${r.source !== 'camera' && canEditReport(r) ? `<button type="button" class="erc-act er-addsheet-btn" data-rid="${r.id}">➕ ورقة طالب</button>` : ''}</span>` : ''}
         </span>
         ${!isTeacherView() || r.created_by === currentUserId ? `<button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>` : ''}
       </div>`;
@@ -1229,7 +1229,7 @@ async function openReport(id) {
   document.getElementById('er-append-file-btn').classList.toggle('hidden', cam || isTeacherView());
   const asb = document.getElementById('er-add-sheet-btn');
   if (asb) {
-    asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students));
+    asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students) || !canEditReport(data));
     asb.onclick = async () => {
       if (asb.disabled) return;
       const t = asb.textContent; asb.disabled = true; asb.textContent = 'جارٍ الفتح...';
@@ -2171,7 +2171,7 @@ async function loadPeriodicData(reportId) {
   if (periodicCache.has(reportId)) return periodicCache.get(reportId);
   const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
   const [{ data: rep, error }, platList] = await Promise.all([
-    sb.from('exam_reports').select('id, title, subject_name, key_raw, raw_data').eq('id', reportId).single(),
+    sb.from('exam_reports').select('id, title, subject_name, key_raw, raw_data, created_by').eq('id', reportId).single(),
     allStudents().catch(e => { throw new Error('تعذر تحميل بيانات الطلاب، حدّث الصفحة وحاول مرة أخرى' + (e && e.message ? ` (${e.message})` : '')); }),
   ]);
   if (error || !rep) throw new Error('تعذر تحميل التقرير');
@@ -2216,14 +2216,24 @@ const bySection = (a, b) => (GRADE_ORDER.indexOf(a.gl) - GRADE_ORDER.indexOf(b.g
 
 async function exportPeriodicResults(reportId) {
   const d = await loadPeriodicData(reportId);
+  // الفصول المتاحة (للمعلم: فصوله فقط - loadPeriodicData يحصرها)
+  const all = [...d.scored, ...d.absent];
+  const keyOf = x => (x.gl || '?') + '|' + (Number(x.section) || x.section || '');
+  const groups = new Map();
+  all.slice().sort(bySection).forEach(x => { const k = keyOf(x); if (!groups.has(k)) groups.set(k, { key: k, gl: x.gl, section: x.section, rows: [] }); groups.get(k).rows.push(x); });
+  const classes = [...groups.values()];
+  if (!classes.length) { alert('لا توجد نتائج للتصدير'); return; }
+  const label = g => (g.gl ? (gradeLabels[g.gl] || '') + (g.section ? ' ' + g.section : '') : 'غير محدد الفصل').trim();
+  const picked = classes.length === 1 ? classes : await pickExportClasses(d.rep.title, classes, label);
+  if (!picked || !picked.length) return;
   await loadXLSX();
   const hMcq = `الاختيار من متعدد (من ${d.nMcq})`;
   const hTf = `صح وخطأ (من ${d.nTf})`;
   const hEs = `المقالي${d.essayMax ? ` (من ${d.essayMax})` : ''}`;
   const full = d.nMcq + d.nTf + (d.essayMax || 0);
   const hTot = `المجموع${full ? ` (من ${full})` : ''}`;
-  const rows = [...d.scored, ...d.absent].sort(bySection).map(x => {
-    const r = { 'رقم الهوية': x.id, 'الاسم': x.name, 'المرحلة': x.grade, 'الفصل': x.section ? Number(x.section) || x.section : '' };
+  const toRow = (x, i) => {
+    const r = { 'م': i + 1, 'رقم الهوية': x.id, 'الاسم': x.name, 'المرحلة': x.grade, 'الفصل': x.section ? Number(x.section) || x.section : '' };
     if (x.absent) {
       if (d.nMcq) r[hMcq] = '';
       if (d.nTf) r[hTf] = '';
@@ -2236,14 +2246,66 @@ async function exportPeriodicResults(reportId) {
     if (d.hasEssay) r[hEs] = x.essay == null ? '' : x.essay;
     r[hTot] = x.mcq + x.tf + (x.essay || 0);
     return r;
-  });
-  const ws = XLSX.utils.json_to_sheet(rows);
-  ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({ wch: k === 'الاسم' ? 38 : k === 'رقم الهوية' ? 14 : Math.max(10, k.length + 2) }));
+  };
+  const byName = (a, b) => String(a.name).localeCompare(String(b.name), 'ar');
+  const sheetOf = rowsX => {
+    const rows = rowsX.map(toRow);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = Object.keys(rows[0] || {}).map(k => ({ wch: k === 'الاسم' ? 38 : k === 'رقم الهوية' ? 14 : k === 'م' ? 5 : Math.max(10, k.length + 2) }));
+    return ws;
+  };
   const wb = XLSX.utils.book_new();
   wb.Workbook = { Views: [{ RTL: true }] };
-  XLSX.utils.book_append_sheet(wb, ws, 'النتائج');
+  const used = new Set();
+  const sheetName = g => {
+    let n = label(g).replace(/[\\/:*?\[\]]+/g, ' ').slice(0, 31) || 'فصل';
+    let k = n, i = 2;
+    while (used.has(k)) k = (n.slice(0, 28) + ' ' + i++);
+    used.add(k);
+    return k;
+  };
+  // فصل واحد: شيت واحد. أكثر من فصل: كل فصل في شيت لحاله
+  picked.forEach(g => XLSX.utils.book_append_sheet(wb, sheetOf(g.rows.slice().sort((a, b) => (a.absent ? 1 : 0) - (b.absent ? 1 : 0) || byName(a, b))), sheetName(g)));
   const safe = String(d.rep.title || 'نتائج').replace(/[\\/:*?"<>|]+/g, ' ').trim();
-  XLSX.writeFile(wb, `${safe} - النتائج.xlsx`);
+  const suffix = picked.length === classes.length ? (classes.length > 1 ? 'كل الفصول' : label(picked[0])) : picked.length === 1 ? label(picked[0]) : `${picked.length} فصول`;
+  XLSX.writeFile(wb, `${safe} - ${suffix}.xlsx`);
+}
+
+// نافذة اختيار الفصول للتصدير: «جميع الفصول» أو فصول محددة
+function pickExportClasses(title, classes, label) {
+  return new Promise(resolve => {
+    const back = document.createElement('div');
+    back.className = 'er-abs-back';
+    back.innerHTML = `<div class="er-abs er-exp" role="dialog" aria-modal="true" aria-label="تصدير النتائج">
+      <div class="er-abs-h"><div><b>تصدير النتائج</b><span>${esc(title)}</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+      <div class="er-abs-body">
+        <label class="er-exp-all"><input type="checkbox" checked> <b>جميع الفصول</b> <small>${classes.length} ${classes.length <= 10 ? 'فصول' : 'فصلًا'}</small></label>
+        <div class="er-exp-list">${classes.map((g, i) => `<label><input type="checkbox" data-i="${i}" checked> <span>${esc(label(g))}</span> <small>${(n => (n === 1 ? 'طالب واحد' : n === 2 ? 'طالبان' : n <= 10 ? n + ' طلاب' : n + ' طالبًا'))(g.rows.filter(x => !x.absent).length)}</small></label>`).join('')}</div>
+        <p class="er-exp-hint">كل فصل يُصدَّر في ورقة (شيت) مستقلة داخل ملف Excel واحد.</p>
+      </div>
+      <div class="er-man-foot"><button type="button" class="btn-primary er-exp-go">تصدير</button><button type="button" class="text-action-btn er-exp-cancel">إلغاء</button></div>
+    </div>`;
+    document.body.appendChild(back);
+    const allCb = back.querySelector('.er-exp-all input');
+    const cbs = [...back.querySelectorAll('.er-exp-list input')];
+    const go = back.querySelector('.er-exp-go');
+    const sync = () => {
+      const n = cbs.filter(c => c.checked).length;
+      allCb.checked = n === cbs.length; allCb.indeterminate = n > 0 && n < cbs.length;
+      go.disabled = !n;
+      go.textContent = !n ? 'اختر فصلًا واحدًا على الأقل' : n === 1 ? 'تصدير فصل واحد' : n === cbs.length ? 'تصدير جميع الفصول' : `تصدير ${n} فصول`;
+    };
+    allCb.onchange = () => { cbs.forEach(c => { c.checked = allCb.checked; }); sync(); };
+    cbs.forEach(c => { c.onchange = sync; });
+    const done = v => { back.remove(); document.removeEventListener('keydown', onKey); resolve(v); };
+    const onKey = e => { if (e.key === 'Escape') done(null); };
+    document.addEventListener('keydown', onKey);
+    back.querySelector('.er-abs-x').onclick = () => done(null);
+    back.querySelector('.er-exp-cancel').onclick = () => done(null);
+    back.addEventListener('click', e => { if (e.target === back) done(null); });
+    go.onclick = () => done(cbs.filter(c => c.checked).map(c => classes[+c.dataset.i]));
+    sync();
+  });
 }
 
 async function showAbsence(reportId) {
@@ -2281,7 +2343,11 @@ const SHORT_GRADE = { first_intermediate: 'أول', second_intermediate: 'ثان
  * إضافة ورقة طالب يدويًا لتقرير مرفوع (Remark): تختار الطالب وتظلل إجاباته
  * والتقرير ينحسب من جديد. المعلم يختار من طلاب فصوله بس.
  * ========================================================================= */
+// تعديل الدرجات وإضافة الأوراق: لصاحب التقرير وللإدارة فقط، والمعلم لا يعدّل تقارير الإدارة
+const canEditReport = r => !!r && (!isTeacherView() || r.created_by === currentUserId);
+
 async function openManualSheet(rep, onDone, presetId = null) {
+  if (!canEditReport(rep)) { alert('هذا التقرير أضافته الإدارة، ولا يمكن تعديل درجاته إلا من صاحبه أو من الإدارة.'); return; }
   const rd = rep.raw_data || {};
   const n = rep.item_count || (rd.choiceCounts || []).length;
   const counts = rd.choiceCounts || [];
@@ -2487,6 +2553,7 @@ async function openManualSheet(rep, onDone, presetId = null) {
 // استعراض النتائج: الفصول، وداخل كل فصل الطلاب ومجموع درجاتهم (الغائب مكتوب غائب)
 async function showResults(reportId) {
   const d = await loadPeriodicData(reportId);
+  const canEd = canEditReport(d.rep);
   const full = d.nMcq + d.nTf + (d.essayMax || 0);
   const totalOfX = x => x.mcq + x.tf + (x.essay || 0);
   const groups = new Map();
@@ -2508,10 +2575,10 @@ async function showResults(reportId) {
         const rows = g.rows.slice().sort((a, b) => ((a.absent ? 1 : 0) - (b.absent ? 1 : 0)) || (a.absent ? 0 : totalOfX(b) - totalOfX(a)) || String(a.name).localeCompare(String(b.name), 'ar'));
         return `<details class="er-abs-sec"${gi === 0 ? ' open' : ''}>
           <summary><span class="er-abs-name">${g.gl ? esc((SHORT_GRADE[g.gl] || gradeLabels[g.gl] || '') + ' ' + (g.section || '')) : 'غير محدد الفصل'}</span><span class="er-abs-of">${pres.length} طالب · المتوسط ${fmtN(avg)}${full ? ' / ' + full : ''}</span></summary>
-          <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th><th class="er-res-ed-h"><span class="sr-only">تعديل</span></th></tr></thead><tbody>
+          <table class="er-res-t"><thead><tr><th>#</th><th>الطالب</th>${d.nMcq ? '<th>اختيار</th>' : ''}${d.nTf ? '<th>ص/خ</th>' : ''}${d.hasEssay ? '<th>مقالي</th>' : ''}<th>المجموع</th>${canEd ? '<th class="er-res-ed-h"><span class="sr-only">تعديل</span></th>' : ''}</tr></thead><tbody>
           ${rows.map((x, i) => x.absent
-            ? `<tr class="abs"><td>${i + 1}</td><td>${esc(x.name)}</td><td colspan="${(d.nMcq ? 1 : 0) + (d.nTf ? 1 : 0) + (d.hasEssay ? 1 : 0) + 1}">غائب</td><td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="إضافة ورقة للطالب" aria-label="إضافة ورقة ${esc(x.name)}">＋</button></td></tr>`
-            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${fmtN(x.mcq)}</td>` : ''}${d.nTf ? `<td>${fmtN(x.tf)}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td><td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="تعديل إجابات الطالب ودرجته" aria-label="تعديل ورقة ${esc(x.name || x.id)}">✎</button></td></tr>`).join('')}
+            ? `<tr class="abs"><td>${i + 1}</td><td>${esc(x.name)}</td><td colspan="${(d.nMcq ? 1 : 0) + (d.nTf ? 1 : 0) + (d.hasEssay ? 1 : 0) + 1}">غائب</td>${canEd ? `<td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="إضافة ورقة للطالب" aria-label="إضافة ورقة ${esc(x.name)}">＋</button></td>` : ''}</tr>`
+            : `<tr class="${full && totalOfX(x) < full / 2 ? 'weak' : ''}"><td>${i + 1}</td><td>${esc(x.name || x.id)}</td>${d.nMcq ? `<td>${fmtN(x.mcq)}</td>` : ''}${d.nTf ? `<td>${fmtN(x.tf)}</td>` : ''}${d.hasEssay ? `<td>${x.essay == null ? '—' : fmtN(x.essay)}</td>` : ''}<td><b>${fmtN(totalOfX(x))}</b></td>${canEd ? `<td><button type="button" class="er-res-ed" data-id="${esc(x.id)}" title="تعديل إجابات الطالب ودرجته" aria-label="تعديل ورقة ${esc(x.name || x.id)}">✎</button></td>` : ''}</tr>`).join('')}
           </tbody></table>
         </details>`;
       }).join('') || '<p class="er-abs-empty">لا توجد نتائج</p>'}
