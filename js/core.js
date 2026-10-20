@@ -63,6 +63,7 @@ const icons = {
   budget: '<div class="ic riyal-icon" style="width:18px; height:18px;"></div>',
   visits: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/><path d="M9 3h6v4H9z"/><path d="m14 9 6-6M17 3h3v3"/><path d="M7 13h6M7 17h4"/></svg>',
   substitutes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h13l-3-3"/><path d="M20 17H7l3 3"/></svg>',
+  absence: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5 1.6 0 3 .5 4.2 1.5"/><rect x="14" y="13" width="8" height="8" rx="1.5"/><path d="M14 16h8M17 11.5v3M19 11.5v3"/></svg>',
   computerlab: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
   files: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>',
   examreports: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/><path d="M8 16.5h3l1.2 2.4 1.3-4.8 1 2.4h2"/></svg>',
@@ -75,7 +76,7 @@ const icons = {
 export const GROUPS = [
   { key: 'students', title: 'الطلاب', keys: ['student-data', 'weekly', 'schedule', 'student-lists', 'followups'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>' },
-  { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'achievements', 'weekly-tracking', 'duty', 'substitutes', 'portal'],
+  { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'achievements', 'weekly-tracking', 'duty', 'substitutes', 'teacher-absence', 'portal'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
   { key: 'exams', title: 'الاختبارات', keys: ['exams', 'tracking', 'exam-reports'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>' },
@@ -101,6 +102,7 @@ export const tiles = [
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green', group: 'admin' },
   { key: 'achievements', icon: icons.files, title: 'ملفات الإنجاز', desc: 'اكتمال ملفات إنجاز المعلمين في ون درايف', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
+  { key: 'teacher-absence', icon: icons.absence, title: 'غياب وإشغال المعلمين', desc: 'أيام الغياب وحصص الإشغال لكل معلم من ملف الجداول أو يدويًا', roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
   { key: 'substitutes', icon: icons.substitutes, title: 'جدول اليوم والبدلاء', desc: 'الغياب والاستئذان وتحريك الحصص والبدلاء', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'computerlab', icon: icons.computerlab, title: 'معمل الحاسب الآلي', desc: 'توزيع الطلاب على أجهزة المعمل وطباعة الملصقات', roles: ['admin','deputy'], color: 'diamond-teal', group: 'extra' },
   { key: 'more',   icon: icons.more,   title: 'إضافة قسم جديد',      desc: 'خدمات مستقبلية',               roles: ['admin'], color: 'diamond-gold', group: 'extra' },
@@ -264,7 +266,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-20a';
+export const ASSET_VERSION = '2026-10-20b';
 export const RC_AUTHORITY_NAME = 'الهيئة الملكية للجبيل وينبع';
 const RC_LOGO_URL = new URL('logo-rc.png', window.location.href).href;
 export let schoolBrand = { id: null, slug: null, name: '', principal: '', short: PLATFORM_NAME, logo: null, authority: 'none', authorityName: '', authorityLogo: null, raw: {}, hasColumn: false };
@@ -735,6 +737,7 @@ export function hideAllModules() {
   document.getElementById('budget-module').classList.add('hidden');
   document.getElementById('visits-module').classList.add('hidden');
   document.getElementById('substitutes-module').classList.add('hidden');
+  const tam = document.getElementById('teacher-absence-module'); if (tam) tam.classList.add('hidden');
   document.getElementById('computerlab-module').classList.add('hidden');
   document.getElementById('schools-admin-module').classList.add('hidden');
   document.getElementById('admin-tasks-module').classList.add('hidden');
@@ -841,6 +844,10 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('substitutes-module').classList.remove('hidden');
     const { loadSubstitutionsModule } = await import('./substitutions.js');
     loadSubstitutionsModule();
+  } else if (key === 'teacher-absence') {
+    document.getElementById('teacher-absence-module').classList.remove('hidden');
+    const { loadTeacherAbsenceModule } = await import('./teacher-absence.js?v=' + ASSET_VERSION);
+    loadTeacherAbsenceModule();
   } else if (key === 'computerlab') {
     document.getElementById('computerlab-module').classList.remove('hidden');
     const { loadComputerLabModule } = await import('./computer-lab.js');
@@ -893,6 +900,7 @@ export async function backToTiles() {
 }
 document.getElementById('back-to-tiles').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-2').addEventListener('click', backToTiles);
+document.getElementById('back-to-tiles-ta').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-3').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-4').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-5').addEventListener('click', backToTiles);
