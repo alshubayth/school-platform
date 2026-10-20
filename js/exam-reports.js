@@ -853,7 +853,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     // نحفظ إجابات الطلاب الخام كمان (مو بس النتيجة المحسوبة) عشان لو المدير احتاج يعدّل
     // مفتاح الإجابة بعدين نقدر نعيد الحساب بدون ما يرفع نفس الملف مرة ثانية - وكذلك اتجاه
     // ترميز الاختيارات المستخدم عشان تعديل المفتاح لاحقًا يفهم نفس الحروف صح
-    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder, essayMax: essayMaxOf(parsedData), hasEssay: !!parsedData.hasEssay, ...(parsedData.paper ? { paper: parsedData.paper } : {}), ...(parsedData.points ? { points: parsedData.points } : {}) },
+    raw_data: { students: parsedData.students, choiceCounts: parsedData.choiceCounts, itemTypes: parsedData.itemTypes, reversedOrder, essayMax: essayMaxOf(parsedData), hasEssay: !!parsedData.hasEssay, ...(document.getElementById('er-saved-key').value && !document.getElementById('er-saved-key').disabled ? { keyId: document.getElementById('er-saved-key').value } : {}), ...(parsedData.paper ? { paper: parsedData.paper } : {}), ...(parsedData.points ? { points: parsedData.points } : {}) },
     created_by: currentUserId,
   });
   if (error) { errEl.textContent = 'تعذر الحفظ: ' + error.message; errEl.style.display = 'block'; return; }
@@ -1401,25 +1401,65 @@ async function fetchKeyById(id) {
 }
 
 // تقرير بنموذجين: يعيد التصحيح بآخر نسخة من المفتاح المحفوظ (الإجابات ونموذج كل طالب)
+/* إعادة تصحيح تقرير محفوظ بآخر نسخة من مفتاحه (يدعم السؤال بأكثر من إجابة ودرجات الأسئلة).
+ * نموذج كل طالب يبقى كما حُدِّد وقت الحفظ (st.model)، ولا يُستبدل بتوزيع الطباعة */
+function regradeWithKey(rep, key) {
+  const rd = rep.raw_data || {};
+  const counts = rd.choiceCounts || [];
+  const n = counts.length;
+  if (!n || Number(key.questions) !== n || !Array.isArray(rd.students)) return null;
+  const reversed = rd.reversedOrder !== false;
+  const points = Array.isArray(key.points) && key.points.length === n ? key.points : (rd.points || null);
+  const students = rd.students.map(({ key: _k, ...rest }) => rest);
+  if (rd.models && key.models && key.models.mode) {
+    const map = key.model_map || {};
+    const g = gradeWithModels({
+      parsed: { itemCount: n, choiceCounts: counts, itemTypes: rd.itemTypes || [], students, points },
+      keyA: rawFromIdx(key.answers, counts, reversed), keyB: rawFromIdx(key.models.answers_b, counts, reversed),
+      mode: key.models.mode, orderB: key.models.order_b, reversedOrder: reversed, keyId: key.id,
+      modelOf: st => st.model || fileModel(st, reversed) || map[String(st.id || '').trim()] || MODEL_A,
+    });
+    const raw_data = { ...rd, ...g.raw_data };
+    if (!points) delete raw_data.points;
+    return { key_raw: g.key_raw, stats: g.stats, raw_data };
+  }
+  if (rd.models || (key.models && key.models.mode)) return null;   // تغيّر عدد النماذج: يحتاج رفع الملف من جديد
+  const keyRaw = rawFromIdx(key.answers, counts, reversed);
+  const stats = computeExamStats({ itemCount: n, keyRaw, choiceCounts: counts, students, reversedOrder: reversed, itemTypes: rd.itemTypes || [], points });
+  const raw_data = { ...rd, students, keyId: key.id };
+  if (points) raw_data.points = points; else delete raw_data.points;
+  return { key_raw: keyRaw, stats, raw_data };
+}
+// بعد حفظ مفتاح إجابة: كل التقارير المرتبطة به تُعاد تصحيحها تلقائيًا
+export async function regradeReportsForKey(key) {
+  if (!key || !key.id) return 0;
+  const { data, error } = await sb.from('exam_reports').select('id, item_count, key_raw, raw_data, created_by, source')
+    .or(`raw_data->models->>keyId.eq.${key.id},raw_data->>keyId.eq.${key.id}`);
+  if (error || !data) return 0;
+  let done = 0;
+  for (const rep of data) {
+    if (rep.source === 'camera') continue;
+    const upd = regradeWithKey(rep, key);
+    if (!upd) continue;
+    const { error: e2 } = await sb.from('exam_reports').update(upd).eq('id', rep.id);
+    if (!e2) { done++; periodicCache.delete(rep.id); }
+  }
+  return done;
+}
+
 async function regradeModelReport() {
   const rd = currentReport.raw_data;
   const key = await fetchKeyById(rd.models.keyId);
   if (!key || !key.models) { alert('حُذف المفتاح المحفوظ لهذا الاختبار أو أصبح بنموذج واحد - تتعذّر إعادة التصحيح منه.'); return; }
   if (!confirm('إعادة تصحيح كل الطلاب بآخر نسخة من المفتاح المحفوظ؟')) return;
-  const reversedOrder = rd.reversedOrder !== false;
-  const map = key.model_map || {};
-  const g = gradeWithModels({
-    parsed: { itemCount: rd.choiceCounts.length, choiceCounts: rd.choiceCounts, itemTypes: rd.itemTypes, students: rd.students, points: Array.isArray(key.points) && key.points.length === rd.choiceCounts.length ? key.points : (rd.points || null) },
-    keyA: rawFromIdx(key.answers, rd.choiceCounts, reversedOrder),
-    keyB: rawFromIdx(key.models.answers_b, rd.choiceCounts, reversedOrder),
-    mode: key.models.mode, orderB: key.models.order_b, reversedOrder, keyId: key.id,
-    modelOf: st => fileModel(st, reversedOrder) || map[String(st.id || '').trim()] || st.model || MODEL_A,
-  });
-  const { error } = await sb.from('exam_reports').update({ key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data }).eq('id', currentReport.id);
+  const upd = regradeWithKey(currentReport, key);
+  if (!upd) { alert('عدد أسئلة المفتاح المحفوظ لا يطابق التقرير - تتعذّر إعادة التصحيح منه.'); return; }
+  const { error } = await sb.from('exam_reports').update(upd).eq('id', currentReport.id);
   if (error) { alert('تعذر الحفظ: ' + error.message); return; }
-  currentReport = { ...currentReport, key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data };
+  periodicCache.delete(currentReport.id);
+  currentReport = { ...currentReport, ...upd };
   showErTab('dist');
-  renderReportStats(g.stats);
+  renderReportStats(upd.stats);
 }
 
 document.getElementById('er-edit-key-btn').addEventListener('click', () => {

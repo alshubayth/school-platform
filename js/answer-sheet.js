@@ -891,6 +891,14 @@ async function saveKey() {
   await refreshSavedKeysList();
   updateCurLabel();
   keyStatusMsg(notMine ? `المفتاح الأصلي من الإدارة، فانحفظ "${o.title}" كنسخة خاصة فيك ✓` : `تم حفظ المفتاح "${o.title}" ✓ - يُطبَّق تلقائيًا عند رفع ملف Remark في التقارير`);
+  // التقارير المحفوظة المرتبطة بهذا المفتاح تُعاد تصحيحها بالنسخة الجديدة
+  if (!notMine) {
+    try {
+      const { regradeReportsForKey } = await import('./exam-reports.js');
+      const n = await regradeReportsForKey({ ...row, id: currentKeyId });
+      if (n) keyStatusMsg(`تم حفظ المفتاح "${o.title}" ✓ وأُعيد تصحيح ${n === 1 ? 'التقرير المرتبط به' : n === 2 ? 'التقريرين المرتبطين به' : n + ' تقارير مرتبطة به'}`);
+    } catch (e) { console.error('regradeReportsForKey', e); }
+  }
 }
 
 function loadKeyIntoForm(k) {
