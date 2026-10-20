@@ -3,8 +3,8 @@ import { loadXLSX } from './lib-loader.js';
 
 /* =========================================================================
  * غياب وإشغال المعلمين
- * - رفع ملف «تصدير حالات الغياب والاستبدال» (ورقة لكل معلم) - يتكرر رفعه ويحدّث البيانات:
- *   السجلات المستوردة سابقًا ضمن فترة الملف تُستبدل بما في الملف، والسجلات اليدوية لا تُمس.
+ * - رفع ملف «تصدير حالات الغياب والاستبدال» (ورقة لكل معلم) - يمكن رفع أكثر من ملف: يُضاف الجديد فقط
+ *   ولا يُحذف أي سجل سابق.
  * - الملف يكرر بعض الصفوف (مرة تحت «ديسمبر» ومرة تحت شهرها): الصف المتطابق بكل بياناته يُحسب مرة واحدة.
  * - التصنيف: «سبب غير معروف» = إشغال، أي سبب آخر = غياب، وبلا سبب مع نوع استبدال (نقل...) = نقل/تبديل.
  * - إضافة يدوية للغياب والإشغال، وتقرير لكل معلم بالتفاصيل.
@@ -166,41 +166,47 @@ async function handleFile(file) {
     const teachers = [...new Set(recs.map(r => r.teacher_name))];
     const unmatched = teachers.filter(t => !matchTeacher(t));
     const cnt = k => recs.filter(r => r.kind === k).length;
-    const oldImported = rows.filter(r => r.source === 'import' && r.entry_date >= from && r.entry_date <= to).length;
+    // الدمج: يُضاف من الملف ما ليس موجودًا فقط، ولا يُحذف أي سجل سابق (يمكن رفع أكثر من ملف لفترات مختلفة)
+    const sigOf = r => [r.teacher_name, r.entry_date, r.period || '', r.classes || '', r.subject || '', r.reason || '', r.sub_type || ''].join('|');
+    const existing = new Set(rows.map(sigOf));
+    const fresh = recs.filter(r => !existing.has(sigOf(r)));
+    const cntNew = k => fresh.filter(r => r.kind === k).length;
     showMsg('');
+    if (!fresh.length) { showMsg(`كل سجلات الملف (${recs.length} سجلًا من ${fmtDate(from)} إلى ${fmtDate(to)}) موجودة مسبقًا - لا يوجد جديد للإضافة.`); return; }
     const ok = confirm(
       `الملف يحتوي ${teachers.length} معلمًا و${recs.length} سجلًا من ${fmtDate(from)} إلى ${fmtDate(to)}`
-      + (dupInFile ? ` (حُذف ${dupInFile} سجلًا مكررًا بالملف)` : '') + `:\n`
-      + `• غياب: ${cnt('absence')} حصة\n• إشغال: ${cnt('cover')} حصة\n• نقل/تبديل: ${cnt('transfer')}\n\n`
-      + (oldImported ? `سيُستبدل ${oldImported} سجلًا مستوردًا سابقًا ضمن هذه الفترة بما في الملف (السجلات المضافة يدويًا تبقى كما هي).\n\n` : '')
+      + (dupInFile ? ` (احتُسب المكرر بالملف مرة واحدة: ${dupInFile})` : '') + `.\n\n`
+      + `الجديد الذي سيُضاف: ${fresh.length} سجلًا\n• غياب: ${cntNew('absence')} حصة\n• إشغال: ${cntNew('cover')} حصة\n• نقل/تبديل: ${cntNew('transfer')}\n`
+      + (recs.length - fresh.length ? `\n${recs.length - fresh.length} سجلًا موجود مسبقًا ولن يتكرر.\n` : '')
+      + `لن يُحذف أي سجل سابق.\n\n`
       + (unmatched.length ? `${unmatched.length} اسمًا لم يُربط بحساب موظف بالمنصة، وتُحفظ بالاسم كما في الملف.\n\n` : '')
       + 'هل تريد المتابعة؟');
     if (!ok) return;
     showMsg('جارٍ حفظ السجلات...');
-    // استبدال المستورد سابقًا ضمن فترة الملف
-    const del = await readScopedBySchool(scoped => {
-      let q = sb.from('teacher_absences').delete().eq('source', 'import').gte('entry_date', from).lte('entry_date', to);
-      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
-      return q;
+    const toInsert = fresh.map(r => {
+      const p = matchTeacher(r.teacher_name);
+      return { ...r, period: r.period || null, classes: r.classes || null, subject: r.subject || null, reason: r.reason || null, sub_type: r.sub_type || null, teacher_id: p ? p.id : null, source: 'import' };
     });
-    if (del.error) { showMsg('تعذر تحديث السجلات: ' + del.error.message, true); return; }
-    // لا نضيف سجلًا مستوردًا مطابقًا لسجل يدوي موجود
-    const manualSig = new Set(rows.filter(r => r.source === 'manual').map(r => [r.teacher_name, r.entry_date, r.period || '', r.classes || '', r.subject || '', r.reason || '', r.sub_type || ''].join('|')));
-    const toInsert = recs.filter(r => !manualSig.has([r.teacher_name, r.entry_date, r.period, r.classes, r.subject, r.reason, r.sub_type].join('|')))
-      .map(r => {
-        const p = matchTeacher(r.teacher_name);
-        return { ...r, period: r.period || null, classes: r.classes || null, subject: r.subject || null, reason: r.reason || null, sub_type: r.sub_type || null, teacher_id: p ? p.id : null, source: 'import' };
-      });
     let saved = 0;
     for (let i = 0; i < toInsert.length; i += 400) {
       const chunk = toInsert.slice(i, i + 400);
-      const { error } = await writeWithSchool(extra => sb.from('teacher_absences').insert(chunk.map(r => ({ ...r, ...extra }))));
+      let { error } = await writeWithSchool(extra => sb.from('teacher_absences').insert(chunk.map(r => ({ ...r, ...extra }))));
+      if (error && /duplicate|unique/i.test(error.message || '')) {
+        // سجل أُضيف بالتوازي من جهاز آخر: نحفظ الدفعة سجلًا سجلًا ونتجاوز الموجود
+        error = null;
+        for (const r of chunk) {
+          const res = await writeWithSchool(extra => sb.from('teacher_absences').insert({ ...r, ...extra }));
+          if (res.error && !/duplicate|unique/i.test(res.error.message || '')) { error = res.error; break; }
+          if (!res.error) saved++;
+        }
+        if (!error) continue;
+      }
       if (error) { showMsg(`تعذر حفظ بعض السجلات (${saved} من ${toInsert.length}): ${error.message}`, true); await loadRows(); render(); return; }
       saved += chunk.length;
     }
     await loadRows();
     render();
-    showMsg(`✓ تم تحديث سجلات الغياب والإشغال من الملف: ${saved} سجلًا من ${fmtDate(from)} إلى ${fmtDate(to)}.`);
+    showMsg(`✓ أُضيف ${saved} سجلًا جديدًا من الملف (${fmtDate(from)} – ${fmtDate(to)}). السجلات السابقة باقية كما هي.`);
   } catch (e) {
     showMsg('تعذر قراءة الملف: ' + (e.message || e), true);
   }
@@ -246,7 +252,7 @@ function render() {
     <div class="ta-stat cov"><b>${tot('cover')}</b><span>حصة إشغال</span></div>
     <div class="ta-stat"><b>${tot('transfer')}</b><span>نقل/تبديل</span></div>` : '';
   if (!rows.length) {
-    $('ta-list').innerHTML = `<div class="ex-empty"><b>لا توجد سجلات بعد</b><span>صدّر «حالات الغياب والاستبدال» من برنامج الجداول وارفع الملف هنا، أو أضف الغياب والإشغال يدويًا. يمكنك رفع الملف المحدّث في أي وقت وتتحدّث البيانات تلقائيًا.</span></div>`;
+    $('ta-list').innerHTML = `<div class="ex-empty"><b>لا توجد سجلات بعد</b><span>صدّر «حالات الغياب والاستبدال» من برنامج الجداول وارفع الملف هنا، أو أضف الغياب والإشغال يدويًا. يمكنك رفع أكثر من ملف وفي أي وقت: يُضاف الجديد فقط دون تكرار.</span></div>`;
     return;
   }
   const th = (k, label) => `<th class="ta-sort${filt.sort === k ? ' on' : ''}" data-sort="${k}" title="ترتيب">${label}${filt.sort === k ? ' ▾' : ''}</th>`;
