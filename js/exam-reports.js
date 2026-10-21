@@ -1057,7 +1057,10 @@ function renderFilterBar() {
     <select id="erf-type" aria-label="نوع الاختبار">${opt('', 'كل الأنواع', erFilt.type)}${opt('diagnostic', 'تشخيصي', erFilt.type)}${opt('periodic', 'فتري', erFilt.type)}</select>
     <select id="erf-sem" aria-label="الفصل الدراسي">${opt('', 'كل الفصول الدراسية', erFilt.sem)}${['الفصل الدراسي الأول', 'الفصل الدراسي الثاني', ...sems].filter((x, i, a) => a.indexOf(x) === i).map(x => opt(x, x, erFilt.sem)).join('')}${erListData.some(r => !r.semester) ? opt('-', 'بدون فصل دراسي', erFilt.sem) : ''}</select>
     ${active ? '<button type="button" class="text-action-btn" id="erf-clear">مسح الفلاتر</button>' : ''}
+    ${erListData.length ? '<button type="button" class="er-absrep-btn" id="erf-absrep">🖨 تقرير الغياب</button>' : ''}
   </div>`;
+  const ab = document.getElementById('erf-absrep');
+  if (ab) ab.onclick = () => openAbsenceReport();
   const on = (id, k, ev = 'change') => { const el = document.getElementById(id); el.addEventListener(ev, () => { erFilt[k] = el.value; saveFilt(); renderSavedList(id === 'erf-q'); }); };
   on('erf-subject', 'subject'); on('erf-grade', 'grade'); on('erf-type', 'type'); on('erf-sem', 'sem'); on('erf-q', 'q', 'input');
   const cl = document.getElementById('erf-clear');
@@ -2178,7 +2181,7 @@ async function loadPeriodicData(reportId) {
   if (periodicCache.has(reportId)) return periodicCache.get(reportId);
   const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
   const [{ data: rep, error }, platList] = await Promise.all([
-    sb.from('exam_reports').select('id, title, subject_name, key_raw, raw_data, created_by').eq('id', reportId).single(),
+    sb.from('exam_reports').select('id, title, subject_name, grade_level, exam_type, key_raw, raw_data, created_by').eq('id', reportId).single(),
     allStudents().catch(e => { throw new Error('تعذر تحميل بيانات الطلاب، حدّث الصفحة وحاول مرة أخرى' + (e && e.message ? ` (${e.message})` : '')); }),
   ]);
   if (error || !rep) throw new Error('تعذر تحميل التقرير');
@@ -2344,6 +2347,151 @@ async function showAbsence(reportId) {
   back.querySelector('.er-abs-x').onclick = close;
 }
 const SHORT_GRADE = { first_intermediate: 'أول', second_intermediate: 'ثاني', third_intermediate: 'ثالث' };
+
+/* =========================================================================
+ * تقرير الغياب المجمّع: يختار المستخدم كل الاختبارات أو بعضها، ومرحلة وفصلًا،
+ * ويُطبع الغائبون (الغائب = طالب بالمنصة في فصل له أوراق في الاختبار وليس له ورقة).
+ * العرض حسب الطالب (كم اختبارًا غاب عنه وأيها) أو حسب الاختبار.
+ * ========================================================================= */
+async function openAbsenceReport() {
+  const reps = (filteredReports().length ? filteredReports() : erListData).slice()
+    .sort((a, b) => (GRADE_ORDER.indexOf(repGradeKey(a)) - GRADE_ORDER.indexOf(repGradeKey(b))) || repSubject(a).localeCompare(repSubject(b), 'ar') || String(a.created_at).localeCompare(String(b.created_at)));
+  let plat = [];
+  try { const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION); plat = await allStudents(); } catch { /* الفصول تُستنتج لاحقًا */ }
+  const secsOf = gl => [...new Set(plat.filter(p => !gl || p.grade_level === gl).map(p => String(p.class_section)).filter(Boolean))].sort((a, b) => Number(a) - Number(b));
+  const grades = GRADE_ORDER.filter(g => reps.some(r => repGradeKey(r) === g));
+  const back = document.createElement('div');
+  back.className = 'er-abs-back';
+  back.innerHTML = `<div class="er-abs er-absrep" role="dialog" aria-modal="true" aria-label="تقرير الغياب">
+    <div class="er-abs-h"><div><b>تقرير غياب الطلاب عن الاختبارات</b><span>اختر الاختبارات والمرحلة والفصل</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+    <div class="er-abs-body">
+      <div class="er-ar-row">
+        <label>المرحلة<select id="ar-grade"><option value="">كل المراحل</option>${grades.map(g => `<option value="${g}">${esc(gradeLabels[g])}</option>`).join('')}</select></label>
+        <label>الفصل<select id="ar-sec"><option value="">كل الفصول</option></select></label>
+      </div>
+      <div class="er-ar-row er-ar-mode">
+        <label><input type="radio" name="ar-mode" value="student" checked> حسب الطالب</label>
+        <label><input type="radio" name="ar-mode" value="test"> حسب الاختبار</label>
+      </div>
+      <label class="er-exp-all"><input type="checkbox" id="ar-all" checked> <b>كل الاختبارات</b> <small id="ar-count"></small></label>
+      <div class="er-exp-list" id="ar-list"></div>
+      <p class="er-exp-hint">الغائب: طالب مسجّل بالمنصة في فصل صُحّحت أوراقه في الاختبار، وليس له ورقة فيه.</p>
+      <div class="error-msg" id="ar-err"></div>
+    </div>
+    <div class="er-man-foot"><button type="button" class="btn-primary" id="ar-go">عرض وطباعة</button><button type="button" class="text-action-btn" id="ar-cancel">إلغاء</button></div>
+  </div>`;
+  document.body.appendChild(back);
+  const $b = sel => back.querySelector(sel);
+  const picked = new Set(reps.map(r => r.id));
+  const visible = () => reps.filter(r => !$b('#ar-grade').value || repGradeKey(r) === $b('#ar-grade').value);
+  const paintSecs = () => { const gl = $b('#ar-grade').value; $b('#ar-sec').innerHTML = `<option value="">كل الفصول</option>${secsOf(gl).map(x => `<option value="${esc(x)}">${gl ? '' : 'الفصل '}${esc(x)}</option>`).join('')}`; };
+  const paintList = () => {
+    const vis = visible();
+    let lastG = null;
+    $b('#ar-list').innerHTML = vis.map(r => {
+      const g = repGradeKey(r);
+      const head = g !== lastG ? `<div class="er-ar-gh">${esc(gradeLabels[g] || NO_GRADE)}</div>` : '';
+      lastG = g;
+      return `${head}<label><input type="checkbox" data-id="${r.id}" ${picked.has(r.id) ? 'checked' : ''}> <span>${esc(r.title)}</span> <small>${r.exam_type === 'periodic' ? 'فتري' : 'تشخيصي'}</small></label>`;
+    }).join('') || '<p class="er-abs-empty">لا توجد اختبارات لهذه المرحلة</p>';
+    $b('#ar-list').querySelectorAll('input').forEach(c => c.onchange = () => { c.checked ? picked.add(c.dataset.id) : picked.delete(c.dataset.id); sync(); });
+    sync();
+  };
+  const sync = () => {
+    const vis = visible(), n = vis.filter(r => picked.has(r.id)).length;
+    const all = $b('#ar-all');
+    all.checked = n === vis.length && n > 0; all.indeterminate = n > 0 && n < vis.length;
+    $b('#ar-count').textContent = `${n} من ${vis.length}`;
+    $b('#ar-go').disabled = !n;
+  };
+  $b('#ar-all').onchange = e => { visible().forEach(r => (e.target.checked ? picked.add(r.id) : picked.delete(r.id))); paintList(); };
+  $b('#ar-grade').onchange = () => { paintSecs(); paintList(); };
+  paintSecs(); paintList();
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  $b('.er-abs-x').onclick = close;
+  $b('#ar-cancel').onclick = close;
+  back.addEventListener('click', e => { if (e.target === back) close(); });
+  $b('#ar-go').onclick = async () => {
+    const go = $b('#ar-go');
+    const ids = visible().filter(r => picked.has(r.id)).map(r => r.id);
+    const gl = $b('#ar-grade').value, sec = $b('#ar-sec').value;
+    const mode = back.querySelector('input[name="ar-mode"]:checked').value;
+    // نافذة الطباعة تُفتح فورًا (قبل الانتظار) حتى لا يمنعها المتصفح
+    const win = window.open('', '_blank');
+    if (!win) { $b('#ar-err').textContent = 'اسمح بالنوافذ المنبثقة لطباعة التقرير'; $b('#ar-err').style.display = 'block'; return; }
+    win.document.write('<p dir="rtl" style="font-family:Tahoma;padding:30px">جارٍ تجهيز التقرير...</p>');
+    go.disabled = true; go.textContent = 'جارٍ التجهيز...';
+    try {
+      const tests = [];
+      for (let i = 0; i < ids.length; i += 4) {
+        const part = await Promise.all(ids.slice(i, i + 4).map(id => loadPeriodicData(id).catch(() => null)));
+        part.forEach(d => { if (d) tests.push(d); });
+      }
+      const inScope = x => x.gl && (!gl || x.gl === gl) && (!sec || String(Number(x.section)) === String(Number(sec)));
+      const rows = tests.map(d => ({ rep: d.rep, absent: d.absent.filter(inScope), present: d.scored.filter(inScope).length }))
+        .filter(t => t.absent.length || t.present);
+      printAbsenceReport(win, rows, { gl, sec, mode, nPicked: ids.length });
+      close();
+    } catch (e) {
+      win.close();
+      $b('#ar-err').textContent = 'تعذر تجهيز التقرير: ' + (e.message || e); $b('#ar-err').style.display = 'block';
+      go.disabled = false; go.textContent = 'عرض وطباعة';
+    }
+  };
+}
+
+function printAbsenceReport(win, tests, { gl, sec, mode, nPicked }) {
+  // اسم مختصر للاختبار: المادة ونوعه، ويُميَّز بالعنوان إن تكرر نفس الاسم
+  const short = t => `${t.rep.subject_name ? canonSubject(t.rep.subject_name) : t.rep.title} (${t.rep.exam_type === 'periodic' ? 'فتري' : 'تشخيصي'})`;
+  const dupShort = new Set(tests.map(short).filter((x, i, a) => a.indexOf(x) !== i));
+  const testName = t => (dupShort.has(short(t)) ? t.rep.title : short(t));
+  const scope = [gl ? gradeLabels[gl] : 'كل المراحل', sec ? `الفصل ${sec}` : 'كل الفصول'].join(' · ');
+  const clsName = x => `${SHORT_GRADE[x.gl] || gradeLabels[x.gl] || ''} ${x.section}`;
+  const totalAbs = tests.reduce((a, t) => a + t.absent.length, 0);
+  // حسب الطالب
+  const byStu = new Map();
+  tests.forEach(t => t.absent.forEach(x => {
+    if (!byStu.has(x.id)) byStu.set(x.id, { ...x, tests: [] });
+    byStu.get(x.id).tests.push(testName(t));
+  }));
+  const studs = [...byStu.values()].sort(bySection);
+  const classes = new Map();
+  studs.forEach(x => { const k = clsName(x); if (!classes.has(k)) classes.set(k, []); classes.get(k).push(x); });
+  const nTxt = n => (n === 1 ? 'اختبار واحد' : n === 2 ? 'اختباران' : n <= 10 ? `${n} اختبارات` : `${n} اختبارًا`);
+  const studentHtml = studs.length ? [...classes.entries()].map(([k, list]) => `
+    <h3>فصل ${esc(k)} <small>(${list.length} ${list.length === 1 ? 'طالب' : list.length <= 10 ? 'طلاب' : 'طالبًا'})</small></h3>
+    <table><thead><tr><th style="width:32px">#</th><th>اسم الطالب</th><th style="width:110px">رقم الهوية</th><th style="width:70px">عدد الاختبارات</th><th>الاختبارات التي غاب عنها</th></tr></thead><tbody>
+    ${list.map((x, i) => `<tr><td>${i + 1}</td><td class="n">${esc(x.name)}</td><td>${esc(x.id)}</td><td><b>${x.tests.length}</b></td><td class="n">${x.tests.map(esc).join('، ')}</td></tr>`).join('')}</tbody></table>`).join('')
+    : '<p class="none">لا يوجد غياب في الاختبارات والفصول المختارة.</p>';
+  // حسب الاختبار
+  const testHtml = tests.map(t => {
+    const by = new Map();
+    t.absent.slice().sort(bySection).forEach(x => { const k = clsName(x); if (!by.has(k)) by.set(k, []); by.get(k).push(x); });
+    return `<h3>${esc(t.rep.title)} <small>(غياب ${t.absent.length} من ${t.absent.length + t.present})</small></h3>
+      ${t.absent.length ? `<table><thead><tr><th style="width:32px">#</th><th>اسم الطالب</th><th style="width:110px">رقم الهوية</th><th style="width:80px">الفصل</th></tr></thead><tbody>
+      ${[...by.values()].flat().map((x, i) => `<tr><td>${i + 1}</td><td class="n">${esc(x.name)}</td><td>${esc(x.id)}</td><td>${esc(clsName(x))}</td></tr>`).join('')}</tbody></table>` : '<p class="none">لا يوجد غياب.</p>'}`;
+  }).join('');
+  const logo = printLogo();
+  win.document.open();
+  win.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>تقرير غياب الطلاب عن الاختبارات</title>
+  <style>body{font-family:Tahoma,Arial,sans-serif;margin:24px;color:#152238;font-size:12.5px}.hd{display:flex;align-items:center;gap:14px;border-bottom:2px solid #152238;padding-bottom:10px;margin-bottom:14px}
+  .hd img{height:56px}h1{font-size:18px;margin:0 0 3px}h2{font-size:14px;margin:16px 0 6px}h3{font-size:13.5px;margin:16px 0 6px}h3 small{font-weight:normal;color:#555}.sub{color:#555;font-size:12px}
+  .kp{display:flex;gap:8px;margin:10px 0}.kp div{flex:1;border:1px solid #d6dbe4;border-radius:8px;padding:8px;text-align:center;color:#555;font-size:11px}.kp b{display:block;font-size:18px;color:#152238}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px}th,td{border:1px solid #c9ced8;padding:5px 6px;text-align:center}th{background:#152238;color:#fff}td.n{text-align:right}
+  tr:nth-child(even) td{background:#f5f6f8}.none{color:#555}.sig{display:flex;justify-content:space-between;margin-top:36px}@media print{h3{break-after:avoid}tr{break-inside:avoid}}</style></head><body>
+  <div class="hd">${logo ? `<img src="${esc(logo)}">` : ''}<div><h1>تقرير غياب الطلاب عن الاختبارات</h1><div class="sub">${esc(printOrgName())} · ${esc(scope)}</div></div></div>
+  <div class="kp"><div><b>${nPicked}</b>${nPicked === 1 ? 'اختبار مختار' : 'اختبارًا مختارًا'}</div><div><b>${totalAbs}</b>حالة غياب</div><div><b>${studs.length}</b>${studs.length === 1 ? 'طالب غائب' : 'طالبًا غائبًا'}</div><div><b>${studs.filter(x => x.tests.length > 1).length}</b>غاب عن أكثر من اختبار</div></div>
+  <h2>ملخص الاختبارات</h2>
+  <table><thead><tr><th style="width:32px">#</th><th>الاختبار</th><th>المرحلة</th><th>الحاضرون</th><th>الغائبون</th></tr></thead><tbody>
+  ${tests.map((t, i) => `<tr><td>${i + 1}</td><td class="n">${esc(t.rep.title)}</td><td>${esc(gradeLabels[gradeFromText(t.rep.grade_level)] || t.rep.grade_level || '')}</td><td>${t.present}</td><td><b>${t.absent.length}</b></td></tr>`).join('') || '<tr><td colspan="5">لا توجد بيانات للفصول المختارة</td></tr>'}</tbody></table>
+  <h2>${mode === 'test' ? 'الغائبون في كل اختبار' : 'الغائبون حسب الفصل'}</h2>
+  ${mode === 'test' ? testHtml : studentHtml}
+  <div class="sig"><span>وكيل الشؤون التعليمية: ..................</span><span>مدير المدرسة: ..................</span></div>
+  </body></html>`);
+  win.document.close();
+}
 
 
 /* =========================================================================
