@@ -3192,3 +3192,4 @@ body.omr-noscroll{ overflow:hidden; }
 .er-absrep input[type=checkbox]{ width:16px; height:16px; margin:0; flex:0 0 auto; accent-color:var(--meadow); }
 .er-absrep .er-exp-list label span{ flex:1; min-width:0; }
 .er-absrep .er-exp-all b{ flex:1; }
+.er-auto-title{ background:var(--sand) !important; color:var(--ink); cursor:default; }

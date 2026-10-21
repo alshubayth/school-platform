@@ -842,7 +842,7 @@ async function refreshSavedKeysList() {
 
 async function saveKey() {
   const o = readOptions();
-  if (!o.title) { keyStatusMsg('اكتب عنوان الاختبار بالخطوة ١ (يظهر بقائمة المفاتيح وبالتقارير)', true); return; }
+  if (!o.subject) { keyStatusMsg('اختر المادة بالخطوة ١ (يُكتب منها عنوان الاختبار)', true); return; }
   if (!keyClassChosen()) { keyStatusMsg('حدد المرحلة بالخطوة ١ قبل حفظ المفتاح (أو جميع المراحل)', true); return; }
   if (!o.questions && !o.essayTotal) { keyStatusMsg('حدد عدد الأسئلة', true); return; }
   const prob = keyProblems();
@@ -903,7 +903,7 @@ async function saveKey() {
 
 function loadKeyIntoForm(k) {
   $('as-title').value = k.title || '';
-  $('as-subject').value = k.subject || '';
+  setSubject(k.subject || '');
   $('as-size').value = k.size || 'A4';
   $('as-questions').value = k.questions;
   $('as-choices').value = String(k.choices);
@@ -919,6 +919,7 @@ function loadKeyIntoForm(k) {
     keySections = sc && Array.isArray(sc.classes) && sc.classes.length ? sc.classes.slice() : (Array.isArray(k.sections) && k.sections.length ? k.sections.slice() : null);
     renderKeyGrades(); loadAllStudents().then(renderKeySecs);
   }
+  updateKeyTitle();
   updateQSum();
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
   keyPoints = Array.isArray(k.points) ? k.points.map(ptVal) : [];
@@ -1121,6 +1122,28 @@ async function downloadPdf(builtOverride) {
 /* ---------- مرحلة وفصول الاختبار (تنحفظ مع المفتاح) ---------- */
 let keySections = null;   // null = كل فصول المرحلة، أو مصفوفة أرقام الفصول (لما تكون مرحلة وحدة)
 let keyGrades = [];       // [] = ما اختار، null = جميع المراحل، أو مصفوفة مراحل
+// المادة من قائمة موحّدة، والعنوان يُكتب تلقائيًا: «اختبار الرياضيات - أول متوسط»
+let erMod = null;
+async function fillSubjectSelect() {
+  const sel = $('as-subject');
+  if (!sel || sel.options.length > 1) return;
+  try {
+    erMod = erMod || await import('./exam-reports.js');
+    (await erMod.loadSubjectNames()).forEach(n => sel.add(new Option(n, n)));
+  } catch (e) { console.error('subjects', e); }
+}
+function setSubject(v) {
+  const sel = $('as-subject');
+  const c = v && erMod ? erMod.canonSubject(v) : (v || '');
+  if (c && ![...sel.options].some(o => o.value === c)) sel.add(new Option(c, c));
+  sel.value = c;
+  updateKeyTitle();
+}
+function updateKeyTitle() {
+  const sj = $('as-subject').value;
+  const g = keyGrade();
+  $('as-title').value = sj ? `اختبار ${sj}${g ? ' - ' + (gradeLabels[g] || g) : ''}` : '';
+}
 function keyGrade() { return Array.isArray(keyGrades) && keyGrades.length === 1 ? keyGrades[0] : ''; }
 const keyClassChosen = () => keyGrades === null || keyGrades.length > 0;
 function renderKeyGrades() {
@@ -1138,6 +1161,7 @@ function renderKeyGrades() {
     keySections = null;
     if ($('as-step-msg')) $('as-step-msg').textContent = '';
     renderKeyGrades();
+    updateKeyTitle();
     await loadAllStudents();
     renderKeySecs(); applyKeyClassToPrint();
   }));
@@ -1242,6 +1266,8 @@ export function initAnswerSheetCard() {
   $('as-essay-total').addEventListener('input', updateQSum);
   $('as-essay-on').addEventListener('change', updateQSum);
   renderKeyGrades();
+  fillSubjectSelect();
+  $('as-subject').addEventListener('change', updateKeyTitle);
   showStep(1); updateQSum();
   $('as-grade').innerHTML = GRADES.map(g => `<option value="${g}">${gradeLabels[g] || g}</option>`).join('');
 

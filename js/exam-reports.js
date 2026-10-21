@@ -612,7 +612,7 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
       + (parsedData.dupRemoved ? `<br><span style="color:#A4501A;">⚠ ${parsedData.dupRemoved} ${parsedData.dupRemoved === 1 ? 'ورقة مكررة' : 'أوراق مكررة'} في الملف (نفس الطالب بنفس الإجابات) - احتُسبت مرة واحدة</span>` : '')
       + (parsedData.dupConflicts && parsedData.dupConflicts.length ? `<br><span style="color:#B42318;">⚠ ${parsedData.dupConflicts.length} ${parsedData.dupConflicts.length === 1 ? 'طالب له' : 'طلاب لهم'} أكثر من ورقة بإجابات مختلفة - راجعهم قبل الحفظ: ${parsedData.dupConflicts.slice(0, 5).map(esc).join('، ')}${parsedData.dupConflicts.length > 5 ? '...' : ''}</span>` : '')
       + (enr.unknown.length ? `<br><span style="color:#A4501A;">⚠ ${enr.unknown.length} ${enr.unknown.length === 1 ? 'رقم هوية' : 'أرقام هوية'} غير موجودة ضمن طلاب المنصة: ${enr.unknown.slice(0, 5).map(esc).join('، ')}${enr.unknown.length > 5 ? '...' : ''}</span>` : '');
-    document.getElementById('er-title').value = '';
+    updateAutoTitle();
     await fillUploadSelects();
     setSelectValue('er-subject', canonSubject(parsedData.detected.subject));
     setSelectValue('er-grade', canonGrade(parsedData.detected.grade));
@@ -622,7 +622,6 @@ document.getElementById('er-analyze-btn').addEventListener('click', async () => 
     revEl.disabled = !!parsedData.textCoded || !!paperRes;
     renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
     if (paperRes) {
-      if (!document.getElementById('er-title').value.trim()) document.getElementById('er-title').value = paperRes.paper.title || '';
       if (paperRes.paper.subject) setSelectValue('er-subject', canonSubject(paperRes.paper.subject));
       if (paperRes.paper.grade_level) setSelectValue('er-grade', canonGrade(gradeLabels[paperRes.paper.grade_level] || paperRes.paper.grade_level));
       const ks = document.getElementById('er-saved-key');
@@ -765,7 +764,6 @@ function applySavedKey(k) {
   }
   const observedMax = Math.max(0, ...parsedData.students.flatMap(st => st.answers.filter(v => typeof v === 'number')));
   document.getElementById('er-reversed-order').checked = parsedData.textCoded ? false : k.lang !== 'en';
-  if (!document.getElementById('er-title').value.trim()) document.getElementById('er-title').value = k.title || '';
   if (!document.getElementById('er-subject').value.trim() && k.subject) setSelectValue('er-subject', canonSubject(k.subject));
   if (!document.getElementById('er-grade').value.trim() && k.grade_level) setSelectValue('er-grade', canonGrade(k.grade_level));
   renderKeyForm(parsedData, document.getElementById('er-reversed-order').checked);
@@ -792,9 +790,9 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   const errEl = document.getElementById('er-save-error');
   errEl.style.display = 'none';
   if (!parsedData) { errEl.textContent = 'حلّل الملف أولًا'; errEl.style.display = 'block'; return; }
+  if (!document.getElementById('er-subject').value || !document.getElementById('er-grade').value) { errEl.textContent = 'اختر المادة والمرحلة (يُكتب عنوان التقرير منهما تلقائيًا)'; errEl.style.display = 'block'; return; }
+  updateAutoTitle();
   const title = document.getElementById('er-title').value.trim();
-  if (!title) { errEl.textContent = 'اكتب عنوانًا للتقرير'; errEl.style.display = 'block'; return; }
-  if (!document.getElementById('er-subject').value || !document.getElementById('er-grade').value) { errEl.textContent = 'اختر المادة والمرحلة لتنظيم التقرير في قائمة التقارير'; errEl.style.display = 'block'; return; }
   if (!confirmNoDuplicate(document.getElementById('er-subject').value, document.getElementById('er-grade').value)) return;
 
   if (parsedData.modelKey) {
@@ -883,7 +881,7 @@ async function insertReport(row) {
 /* ===== توحيد اسم المادة والمرحلة: «English» و«انجليزي» = «اللغة الإنجليزية»، «الثالث المتوسط» = «ثالث متوسط» ===== */
 const SUBJECTS_FALLBACK = ['التربية البدنية', 'التربية الفنية', 'التفكير الناقد', 'الدراسات الإسلامية', 'الدراسات الاجتماعية', 'الرياضيات', 'العلوم', 'اللغة الإنجليزية', 'اللغة العربية', 'المهارات الحياتية والأسرية', 'المهارات الرقمية'];
 let subjectNames = null;
-async function loadSubjectNames() {
+export async function loadSubjectNames() {
   if (subjectNames) return subjectNames;
   try {
     const { data } = await sb.from('subjects').select('name');
@@ -908,6 +906,18 @@ export function canonSubject(t) {
   (subjectNames || SUBJECTS_FALLBACK).forEach(n => { const sc = subjScore(v, n); if (sc > bestSc) { best = n; bestSc = sc; } });
   return best || v;
 }
+// عنوان موحّد للاختبار: «اختبار الرياضيات الفتري - أول متوسط»
+export function examTitle(subject, grade, type) {
+  const sj = canonSubject(subject), g = canonGrade(grade);
+  if (!sj) return '';
+  const t = type === 'periodic' ? ' الفتري' : type === 'diagnostic' ? ' التشخيصي' : '';
+  return `اختبار ${sj}${t}${g ? ' - ' + g : ''}`;
+}
+function updateAutoTitle() {
+  const el = document.getElementById('er-title');
+  if (!el) return;
+  el.value = examTitle(document.getElementById('er-subject').value, document.getElementById('er-grade').value, document.getElementById('er-type') ? document.getElementById('er-type').value : 'diagnostic');
+}
 export function canonGrade(t) {
   const g = gradeFromText(t);
   return g ? gradeLabels[g] : String(t || '').trim();
@@ -918,6 +928,7 @@ function setSelectValue(id, v) {
   if (!el) return;
   if (v && ![...el.options].some(o => o.value === v)) el.add(new Option(v, v));
   el.value = v || '';
+  if (id === 'er-subject' || id === 'er-grade') updateAutoTitle();
 }
 async function fillUploadSelects() {
   const names = await loadSubjectNames();
@@ -925,6 +936,8 @@ async function fillUploadSelects() {
   if (sj && sj.tagName === 'SELECT' && sj.options.length <= 1) names.forEach(n => sj.add(new Option(n, n)));
   const gr = document.getElementById('er-grade');
   if (gr && gr.tagName === 'SELECT' && gr.options.length <= 1) Object.values(gradeLabels).forEach(n => gr.add(new Option(n, n)));
+  ['er-subject', 'er-grade', 'er-type'].forEach(id => { const el = document.getElementById(id); if (el && !el.dataset.autoTitle) { el.dataset.autoTitle = '1'; el.addEventListener('change', updateAutoTitle); } });
+  updateAutoTitle();
 }
 // تقرير موجود لنفس المادة والمرحلة والنوع والفصل الدراسي: ننبّه قبل إنشاء تقرير ثانٍ
 function confirmNoDuplicate(subject, grade) {

@@ -1367,7 +1367,7 @@
               </select>
             </div>
             <div class="form-row">
-              <input type="text" id="er-title" placeholder="عنوان التقرير (مثال: رياضيات - ثاني متوسط - الفترة الأولى)" />
+              <input type="text" id="er-title" readonly tabindex="-1" class="er-auto-title" placeholder="العنوان يُكتب تلقائيًا من المادة والمرحلة ونوع الاختبار" aria-label="عنوان التقرير (تلقائي)" />
               <select id="er-subject" aria-label="المادة"><option value="">المادة...</option></select>
             </div>
             <div class="form-row">
@@ -1439,8 +1439,8 @@
                 <!-- ١) بيانات الاختبار -->
                 <div class="as-step" data-step="1">
                   <h5 class="as-step-h">بيانات الاختبار</h5>
-                  <label class="as-f">عنوان الاختبار<input autocomplete="off" type="text" id="as-title" placeholder="مثال: اختبار الفترة الأولى" /></label>
-                  <label class="as-f">المادة<input autocomplete="off" type="text" id="as-subject" placeholder="مثال: العلوم" /></label>
+                  <label class="as-f">المادة<select id="as-subject"><option value="">اختر المادة...</option></select></label>
+                  <label class="as-f">عنوان الاختبار <span class="as-muted">(تلقائي)</span><input autocomplete="off" type="text" id="as-title" readonly tabindex="-1" class="er-auto-title" placeholder="يُكتب من المادة والمرحلة" /></label>
                   <div class="as-f">المرحلة
                     <div id="as-key-grades" class="as-key-secs"></div>
                   </div>
