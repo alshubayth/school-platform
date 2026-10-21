@@ -180,6 +180,71 @@ async function loadOpPlanAdminData() {
 let opGuideFilterGoalId = null;
 let opGuideFilterObjId = null;
 
+/* ---------- تنبيهات المدير أعلى لوحة المتابعة ----------
+ * - ما اعتُمد اليوم: المهام المعتمدة اليوم، والإنجازات المعتمدة اليوم.
+ * - البرامج بلا مسؤول: تطلب من المدير تحديد مسؤول لكل برنامج (ويُضاف للخطة تلقائيًا). */
+const isToday = ts => { if (!ts) return false; const d = new Date(ts), n = new Date(); return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate(); };
+function renderOpAlerts(tasks, comps) {
+  const box = document.getElementById('opplan-alerts');
+  if (!box) return;
+  const tasksToday = tasks.filter(t => t.plan_status === 'approved' && (isToday(t.updated_at) || isToday(t.created_at))).length;
+  const compsToday = comps.filter(c => c.status === 'approved' && isToday(c.reviewed_at)).length;
+  const owned = new Set(opeAssign.map(a => a.program_id));
+  const unowned = programsCache.filter(p => !owned.has(p.id));
+  const plural = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`);
+  box.innerHTML = `
+    <div class="op-alert today">
+      <span class="op-alert-ic">✓</span>
+      <div><b>المعتمد اليوم</b><span>${tasksToday || compsToday ? [tasksToday ? plural(tasksToday, 'مهمة واحدة', 'مهمتان', 'مهام', 'مهمة') : '', compsToday ? plural(compsToday, 'إنجاز واحد', 'إنجازان', 'إنجازات', 'إنجازًا') : ''].filter(Boolean).join(' · ') : 'لم يُعتمد شيء اليوم'}</span></div>
+    </div>
+    ${unowned.length ? `<div class="op-alert warn">
+      <span class="op-alert-ic">!</span>
+      <div><b>${plural(unowned.length, 'برنامج بلا مسؤول', 'برنامجان بلا مسؤول', 'برامج بلا مسؤول', 'برنامجًا بلا مسؤول')}</b><span>${esc(unowned.slice(0, 4).map(p => p.title).join('، '))}${unowned.length > 4 ? '...' : ''}</span></div>
+      <button type="button" class="op-alert-btn" id="op-assign-owners">تحديد المسؤولين</button>
+    </div>` : ''}`;
+  const b = document.getElementById('op-assign-owners');
+  if (b) b.onclick = () => openOwnersModal(unowned);
+}
+
+function openOwnersModal(unowned) {
+  const staff = opeStaff.slice();
+  const back = document.createElement('div');
+  back.className = 'er-abs-back';
+  back.innerHTML = `<div class="er-abs op-own" role="dialog" aria-modal="true" aria-label="تحديد مسؤولي البرامج">
+    <div class="er-abs-h"><div><b>تحديد مسؤولي البرامج</b><span>اختر مسؤولًا لكل برنامج، ويُضاف للخطة تلقائيًا إن لم يكن مشاركًا</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+    <div class="er-abs-body">
+      ${unowned.map(p => `<label class="op-own-row"><span>${esc(p.title)}</span>
+        <select data-prog="${p.id}"><option value="">بدون مسؤول</option>${staff.map(x => `<option value="${x.id}">${esc(x.full_name)}</option>`).join('')}</select></label>`).join('')}
+      <div class="error-msg" id="op-own-err"></div>
+    </div>
+    <div class="er-man-foot"><button type="button" class="btn-primary" id="op-own-save">حفظ</button><button type="button" class="text-action-btn" id="op-own-cancel">إلغاء</button></div>
+  </div>`;
+  document.body.appendChild(back);
+  const close = () => back.remove();
+  back.querySelector('.er-abs-x').onclick = close;
+  back.querySelector('#op-own-cancel').onclick = close;
+  back.addEventListener('click', e => { if (e.target === back) close(); });
+  back.querySelector('#op-own-save').onclick = async e => {
+    const btn = e.currentTarget;
+    const picks = [...back.querySelectorAll('select[data-prog]')].filter(s => s.value).map(s => ({ program_id: s.dataset.prog, profile_id: s.value }));
+    if (!picks.length) { close(); return; }
+    btn.disabled = true; btn.textContent = 'جارٍ الحفظ...';
+    const memberIds = new Set(opeMembers.map(m => m.pid));
+    const newMembers = [...new Set(picks.map(x => x.profile_id))].filter(pid => !memberIds.has(pid));
+    const errs = [];
+    if (newMembers.length) {
+      const { error } = await writeWithSchool(extra => sb.from('operational_plan_members').insert(newMembers.map(pid => ({ profile_id: pid, added_by: currentUserId, ...extra }))));
+      if (error && !/duplicate/i.test(error.message)) errs.push(error.message);
+    }
+    const { error } = await writeWithSchool(extra => sb.from('program_assignments').insert(picks.map(x => ({ ...x, assigned_by: currentUserId, ...extra }))));
+    if (error) errs.push(error.message);
+    if (errs.length) { const el = back.querySelector('#op-own-err'); el.textContent = 'تعذر الحفظ: ' + errs.join(' | '); el.style.display = 'block'; btn.disabled = false; btn.textContent = 'حفظ'; return; }
+    close();
+    await refreshOpEmployees();
+    await renderOpPlanGuide();
+  };
+}
+
 /* ---------- دليل الخطة الرسمية: داشبورد متابعة تنفيذ مدرستنا (مرحلة المتوسط فقط) ---------- */
 // نسبة التنفيذ لكل برنامج = عدد مهامه الأسبوعية (op_tasks) المعتمدة واللي لها إنجاز معتمد، من
 // إجمالي مهامه الأسبوعية المعتمدة - محسوبة تلقائيًا من نفس بيانات المهام الأسبوعية الموجودة،
@@ -212,17 +277,18 @@ async function renderOpPlanGuide() {
 
   const [{ data: allTasks }, { data: allCompletions }] = await Promise.all([
     readScopedBySchool(scoped => {
-      let q = sb.from('op_tasks').select('id, program_id, plan_status');
+      let q = sb.from('op_tasks').select('id, program_id, plan_status, created_at, updated_at');
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q;
     }),
     readScopedBySchool(scoped => {
-      let q = sb.from('op_task_completions').select('id, task_id, status');
+      let q = sb.from('op_task_completions').select('id, task_id, status, reviewed_at');
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q;
     }),
   ]);
 
+  renderOpAlerts(allTasks || [], allCompletions || []);
   const tasksByProgram = new Map();
   (allTasks || []).forEach(t => {
     if (!t.program_id) return;
