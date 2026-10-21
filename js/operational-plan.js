@@ -1,6 +1,6 @@
 import { sb, currentUserId, currentProfile, gradeLabels,
          isOpPlanMember, setOpPlanMember, setupCollapsible,
-         currentSchoolId, readScopedBySchool, writeWithSchool, academicWeekInfo } from './core.js';
+         currentSchoolId, readScopedBySchool, writeWithSchool, academicWeekInfo, ASSET_VERSION } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 /* ================= الخطة التشغيلية ================= */
@@ -61,7 +61,7 @@ function goalColorVar(goalTitle) {
 }
 
 /* ---------- تبويبات لوحة المدير: المتابعة / الإعدادات / اعتماد المهام ---------- */
-const OPPLAN_TABS = ['dashboard', 'employees', 'approvals', 'settings'];
+const OPPLAN_TABS = ['dashboard', 'kpis', 'employees', 'approvals', 'settings'];
 function showOpPlanTab(tab) {
   if (!OPPLAN_TABS.includes(tab)) tab = 'dashboard';
   OPPLAN_TABS.forEach(t => {
@@ -70,6 +70,7 @@ function showOpPlanTab(tab) {
     if (tabBtn) tabBtn.classList.toggle('active', t === tab);
     if (panel) panel.classList.toggle('hidden', t !== tab);
   });
+  if (tab === 'kpis') import('./op-kpis.js?v=' + ASSET_VERSION).then(m => m.loadOpKpis()).catch(e => console.error('op-kpis', e));
 }
 OPPLAN_TABS.forEach(t => onEl(`opplan-tab-${t}`, 'click', () => showOpPlanTab(t)));
 

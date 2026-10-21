@@ -750,6 +750,10 @@
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l4-6 4 3 5-8"/></svg>
               لوحة المتابعة
             </button>
+            <button class="bud-tab" id="opplan-tab-kpis" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5"/></svg>
+              المؤشرات
+            </button>
             <button class="bud-tab" id="opplan-tab-employees" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18 14.3c2.2.6 3.5 2.7 3.5 5.7"/></svg>
               الموظفين
@@ -824,6 +828,9 @@
             <div id="opplan-program-overlay-body" style="margin-top:16px;"></div>
           </div>
         </div>
+
+        <!-- ===== لوحة: مؤشرات الأداء ===== -->
+        <div class="bud-panel hidden" id="opplan-panel-kpis"><div id="op-kpis"></div></div>
 
         <!-- ===== لوحة: الموظفين (متابعة كل مشارك: برامجه ومهامه وإنجازه) ===== -->
       <div class="bud-panel hidden" id="opplan-panel-employees">
