@@ -2200,7 +2200,12 @@ async function loadPeriodicData(reportId) {
     if (p) { x.name = x.name || p.full_name; x.section = String(p.class_section || x.section || ''); x.grade = gradeLabels[p.grade_level] || x.grade; }
   });
   // الغياب: طلاب نفس الفصول بالمنصة اللي ما لهم ورقة
-  const pairs = new Set(scored.filter(x => x.gl && x.section).map(x => x.gl + '|' + Number(x.section)));
+  // فصول الاختبار: من طلاب مرحلة الاختبار فقط. طالب من مرحلة أخرى في الملف (ورقة رُفعت بالخطأ أو رقم هوية
+  // مكتوب خطأ) لا يجعل فصله كله غائبًا. وبلا مرحلة معروفة للتقرير: الفصول التي فيها 3 أوراق فأكثر
+  const repGl = gradeFromText(rep.grade_level) || gradeFromText(rep.title);
+  const secCount = new Map();
+  scored.forEach(x => { if (x.gl && x.section) { const k = x.gl + '|' + Number(x.section); secCount.set(k, (secCount.get(k) || 0) + 1); } });
+  const pairs = new Set([...secCount].filter(([k, n]) => (repGl ? k.startsWith(repGl + '|') : n >= 3)).map(([k]) => k));
   const present = new Set(scored.map(x => x.id));
   const absent = platList.filter(p => pairs.has(p.grade_level + '|' + Number(p.class_section)) && !present.has(String(p.national_id).trim()))
     .map(p => ({ id: String(p.national_id).trim(), name: p.full_name, gl: p.grade_level, grade: gradeLabels[p.grade_level] || '', section: String(p.class_section), absent: true }));
