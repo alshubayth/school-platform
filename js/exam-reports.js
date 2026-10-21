@@ -1344,6 +1344,9 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       }
       const g = gradeWithModels({ parsed: newParsed, keyA, keyB, mode, orderB, reversedOrder, keyId: m.keyId,
         modelOf: st => { const id = String(st.id || '').trim(); return fileModel(st, reversedOrder) || map[id] || oldModel.get(id) || MODEL_A; } });
+      // نحافظ على بقية بيانات التقرير (حد المقالي، ورقة الأسئلة...)؛ وحد المقالي يُضبط من المفتاح في قاعدة البيانات
+      const oldRd = currentReport.raw_data || {};
+      g.raw_data = { ...oldRd, ...g.raw_data, hasEssay: !!(newParsed.hasEssay || oldRd.hasEssay), essayMax: oldRd.essayMax || essayMaxOf(newParsed) };
       const { error } = await sb.from('exam_reports').update({
         item_count: newParsed.itemCount, students_count: newParsed.students.length,
         key_raw: g.key_raw, stats: g.stats, raw_data: g.raw_data,
@@ -1369,7 +1372,8 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
     }
     const newKeyRaw = buildManualKey(letters, newParsed.choiceCounts, reversedOrder);
     const stats = computeExamStats({ ...newParsed, keyRaw: newKeyRaw, reversedOrder });
-    const newRawData = { ...currentReport.raw_data, students: newParsed.students, choiceCounts: newParsed.choiceCounts, itemTypes: newParsed.itemTypes, reversedOrder };
+    const newRawData = { ...currentReport.raw_data, students: newParsed.students, choiceCounts: newParsed.choiceCounts, itemTypes: newParsed.itemTypes, reversedOrder,
+      hasEssay: !!(newParsed.hasEssay || currentReport.raw_data.hasEssay), essayMax: currentReport.raw_data.essayMax || essayMaxOf(newParsed) };
 
     const { error } = await sb.from('exam_reports').update({
       item_count: newParsed.itemCount,
@@ -1571,7 +1575,7 @@ function summaryStatsGrid(s) {
     ${statBox('الانحراف المعياري', fmt2(s.sd))}
     ${statBox('معامل الثبات (KR20)', fmt2(s.kr20))}
     ${statBox('متوسط الدرجة %', pct(s.meanPct))}
-  </div>${s.withEssay ? `<p class="er-essay-note">الدرجات شاملة المقالي: الموضوعي من ${fmt1(s.objMax)} + المقالي من ${fmt1(s.essayMax)} = ${fmt1(s.maxScore)}. تحليل الأسئلة ومعامل الثبات للجزء الموضوعي فقط.</p>` : ''}`;
+  </div>${s.withEssay ? `<p class="er-essay-note">الدرجات شاملة المقالي: الموضوعي من ${fmt1(s.objMax)} + المقالي من ${fmt1(s.essayMax)} = ${fmt1(s.maxScore)}. تحليل الأسئلة ومعامل الثبات للجزء الموضوعي فقط.</p>` : ''}${s.essayOver ? `<p class="er-essay-note" style="color:var(--danger); font-weight:700;">تنبيه: ${s.essayOver} ${s.essayOver === 1 ? 'طالب درجته' : 'طلاب درجاتهم'} في المقالي أعلى من الدرجة العظمى المحفوظة (${fmt1(s.essayMax)})، وأعلاها ${fmt1(s.essayTop)}، فاحتُسبت عند ${fmt1(s.essayMax)}. صحّح الدرجة العظمى للمقالي في مفتاح الإجابة أو من «إضافة ورقة طالب».</p>` : ''}`;
 }
 
 // تقرير اختبار بنموذجين: تبديل بين "كل الطلاب" وكل نموذج لحاله
@@ -2144,6 +2148,9 @@ function statsWithEssay(stats, rep, model) {
   const objMax = Number(stats.maxScore) || Number(stats.itemCount) || 0;
   const maxAll = objMax + essayMax;
   const totals = rows.map(r => r.obj + Math.min(essayMax, Math.max(0, r.essay || 0)));
+  // درجات مقالي أعلى من العظمى المحفوظة: العظمى غير صحيحة غالبًا، ونُظهر ذلك بدل القصّ الصامت
+  const essayOver = rows.filter(r => typeof r.essay === 'number' && r.essay > essayMax);
+  const essayTop = essayOver.length ? Math.max(...essayOver.map(r => r.essay)) : null;
   const n = totals.length;
   const mean = totals.reduce((a, b) => a + b, 0) / n;
   const sorted = totals.slice().sort((a, b) => a - b);
@@ -2159,7 +2166,7 @@ function statsWithEssay(stats, rep, model) {
   totals.forEach(t => { scoreHistogram[Math.min(9, Math.floor(pctOf(t) / 10))].count++; });
   const ranked = rows.map((r, i) => ({ id: r.st.id, name: r.st.name, section: r.st.section, total: totals[i], pct: pctOf(totals[i]) })).sort((a, b) => b.total - a.total);
   return {
-    ...stats, withEssay: true, objMax, essayMax, maxScore: maxAll, n, mean, median, high, low, range: high - low, sd, meanPct: pctOf(mean),
+    ...stats, withEssay: true, objMax, essayMax, essayOver: essayOver.length, essayTop, maxScore: maxAll, n, mean, median, high, low, range: high - low, sd, meanPct: pctOf(mean),
     gradeDistribution, scoreHistogram,
     topStudents: ranked.slice(0, 15),
     weakStudents: ranked.filter(r => r.pct < 50).sort((a, b) => a.total - b.total),
