@@ -902,6 +902,8 @@ async function saveKey() {
 }
 
 function loadKeyIntoForm(k) {
+  // أول شيء: ربط النموذج بالمفتاح المختار، حتى لو تعثّر تعبئة أي حقل لاحقًا لا يُحفظ التعديل على مفتاح سابق
+  currentKeyId = k.id;
   $('as-title').value = k.title || '';
   setSubject(k.subject || '');
   $('as-size').value = k.size || 'A4';

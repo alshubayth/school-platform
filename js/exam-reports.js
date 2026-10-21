@@ -1387,7 +1387,7 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
       return;
     }
     const newKeyRaw = buildManualKey(letters, newParsed.choiceCounts, reversedOrder);
-    const stats = computeExamStats({ ...newParsed, keyRaw: newKeyRaw, reversedOrder });
+    let stats = computeExamStats({ ...newParsed, keyRaw: newKeyRaw, reversedOrder });
     const newRawData = { ...currentReport.raw_data, students: newParsed.students, choiceCounts: newParsed.choiceCounts, itemTypes: newParsed.itemTypes, reversedOrder,
       hasEssay: !!(newParsed.hasEssay || currentReport.raw_data.hasEssay), essayMax: currentReport.raw_data.essayMax || essayMaxOf(newParsed) };
 
@@ -1401,6 +1401,15 @@ document.getElementById('er-updatefile-confirm').addEventListener('click', async
     if (error) { errEl.textContent = 'تعذر تحديث التقرير: ' + error.message; errEl.style.display = 'block'; return; }
 
     currentReport = { ...currentReport, item_count: newParsed.itemCount, students_count: newParsed.students.length, key_raw: newKeyRaw, stats, raw_data: newRawData };
+    // الملف الجديد يُصحَّح بآخر نسخة من مفتاح الإجابة المحفوظ (الإجابات ودرجة كل سؤال)
+    try {
+      const key = await linkedKeyFor(currentReport);
+      const upd = key ? regradeWithKey(currentReport, key) : null;
+      if (upd) {
+        const { error: e3 } = await sb.from('exam_reports').update(upd).eq('id', currentReport.id);
+        if (!e3) { currentReport = { ...currentReport, ...upd }; stats = upd.stats; }
+      }
+    } catch (e) { console.error('regrade after update', e); }
     document.getElementById('er-detail-sub').textContent = `${currentReport.subject_name || '-'} — ${currentReport.grade_level || '-'} — ${currentReport.semester || '-'} — ${currentReport.students_count} طالب`;
     renderReportStats(stats);
     document.getElementById('er-updatefile-card').classList.add('hidden');
@@ -1451,13 +1460,45 @@ function regradeWithKey(rep, key) {
   return { key_raw: keyRaw, stats, raw_data };
 }
 // بعد حفظ مفتاح إجابة: كل التقارير المرتبطة به تُعاد تصحيحها تلقائيًا
+// مراحل المفتاح: من sections.grades (أكثر من مرحلة) أو grade_level
+const keyGrades = key => {
+  const sc = key && key.sections && typeof key.sections === 'object' && !Array.isArray(key.sections) ? key.sections : null;
+  if (sc && Array.isArray(sc.grades) && sc.grades.length) return sc.grades;
+  return key && key.grade_level ? [key.grade_level] : [];
+};
+const repKeyId = rep => { const rd = rep.raw_data || {}; return rd.keyId || (rd.models && rd.models.keyId) || null; };
+// تقارير غير مربوطة بمفتاح (رُفعت بمفتاح من الملف أو يدوي) لكنها لنفس المادة والمرحلة وعدد الأسئلة: تُربط بالمفتاح
+function unlinkedMatches(reps, key) {
+  const sj = canonSubject(key.subject || '');
+  const grades = keyGrades(key);
+  if (!sj || !grades.length) return [];
+  const m = reps.filter(r => r.source !== 'camera' && !repKeyId(r) && canonSubject(r.subject_name) === sj
+    && grades.includes(gradeFromText(r.grade_level) || gradeFromText(r.title)) && Number(r.item_count || ((r.raw_data || {}).choiceCounts || []).length) === Number(key.questions));
+  // تقرير تشخيصي وفتري بنفس عدد الأسئلة: المفتاح المحفوظ للفتري
+  const byGrade = new Map();
+  m.forEach(r => { const g = gradeFromText(r.grade_level) || ''; if (!byGrade.has(g)) byGrade.set(g, []); byGrade.get(g).push(r); });
+  return [...byGrade.values()].flatMap(l => (l.length > 1 && l.some(r => r.exam_type === 'periodic') ? l.filter(r => r.exam_type === 'periodic') : l));
+}
+// المفتاح المحفوظ لتقرير: المربوط به، أو المطابق له بالمادة والمرحلة وعدد الأسئلة
+async function linkedKeyFor(rep) {
+  const id = repKeyId(rep);
+  if (id) return fetchKeyById(id);
+  const { data } = await sb.from('answer_keys').select('id, subject, grade_level, sections, questions, answers, choices, models, model_map, points').eq('questions', Number(rep.item_count || ((rep.raw_data || {}).choiceCounts || []).length));
+  const hit = (data || []).filter(k => unlinkedMatches([rep], k).length);
+  return hit.length === 1 ? hit[0] : null;
+}
 export async function regradeReportsForKey(key) {
   if (!key || !key.id) return 0;
-  const { data, error } = await sb.from('exam_reports').select('id, item_count, key_raw, raw_data, created_by, source')
-    .or(`raw_data->models->>keyId.eq.${key.id},raw_data->>keyId.eq.${key.id}`);
-  if (error || !data) return 0;
+  const cols = 'id, title, subject_name, grade_level, exam_type, item_count, key_raw, raw_data, created_by, source';
+  const [{ data, error }, { data: same }] = await Promise.all([
+    sb.from('exam_reports').select(cols).or(`raw_data->models->>keyId.eq.${key.id},raw_data->>keyId.eq.${key.id}`),
+    sb.from('exam_reports').select(cols).eq('item_count', Number(key.questions) || -1),
+  ]);
+  if (error) return 0;
+  const linked = (data || []).filter(r => repKeyId(r) === key.id);
+  const list = [...linked, ...unlinkedMatches(same || [], key).filter(r => !linked.some(x => x.id === r.id))];
   let done = 0;
-  for (const rep of data) {
+  for (const rep of list) {
     if (rep.source === 'camera') continue;
     const upd = regradeWithKey(rep, key);
     if (!upd) continue;
