@@ -3193,3 +3193,11 @@ body.omr-noscroll{ overflow:hidden; }
 .er-absrep .er-exp-list label span{ flex:1; min-width:0; }
 .er-absrep .er-exp-all b{ flex:1; }
 .er-auto-title{ background:var(--sand) !important; color:var(--ink); cursor:default; }
+.sp-qs{ font-weight:600; color:var(--ink); }
+.sp-ls{ display:block; line-height:1.9; }
+.sp-ls + .sp-ls{ margin-top:2px; }
+.sp-ls em{ font-style:normal; font-size:11.5px; color:var(--slate); margin-inline-end:3px; }
+.sp-qw, .sp-qb{ display:inline-block; font-size:11.5px; font-weight:800; border-radius:6px; padding:0 6px; margin:1px 0; }
+.sp-qw{ background:#FBEAE9; color:#8F312B; }
+.sp-qw.easy{ background:#C0453D; color:#fff; }
+.sp-qb{ background:#FFF4DE; color:#8A5A00; border:1px dashed #E3B65C; }

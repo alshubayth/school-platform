@@ -28,6 +28,7 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const norm = s => String(s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().toLowerCase();
 const keyHit = (v, k) => v != null && (Array.isArray(k) ? k.includes(v) : v === k);
+const isAnswered = v => v != null && v !== '' && !(typeof v === 'number' && v <= 0) && !(Array.isArray(v) && !v.length);
 const idOf = s => String(s || '').trim().replace(/-\d{1,2}$/, '');
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
 const pctTxt = p => (p == null ? '—' : `${Math.round(p)}%`);
@@ -37,6 +38,32 @@ const gradeTxt = gl => gradeLabels[gl] || gl || '';
 const secTxt = s => (s ? `فصل ${s}` : '');
 const dateTxt = iso => { try { return new Date(iso).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', year: 'numeric' }); } catch { return ''; } };
 const qList = idx => idx.map(i => `س${i + 1}`).join('، ');
+// تفصيل الخصم في اختبار: الأسئلة الخطأ والمتروكة ونقص المقالي
+function lossParts(r) {
+  const wrong = r.lost.filter(x => !x.blank), blank = r.lost.filter(x => x.blank);
+  const easy = new Set(r.wrongEasy);
+  const ptsTxt = x => (x.pts !== 1 ? ` (${fmtN(x.pts)})` : '');
+  const essayLost = r.essay != null ? r.rep.essayMax - r.essay : 0;
+  return { wrong, blank, easy, ptsTxt, essayLost, none: !wrong.length && !blank.length && essayLost <= 0 };
+}
+function lossHtml(r) {
+  const L = lossParts(r);
+  if (L.none) return '<span class="sp-ok">الدرجة كاملة</span>';
+  return [
+    L.wrong.length ? `<span class="sp-ls"><em>خطأ:</em> ${L.wrong.map(x => `<span class="sp-qw${L.easy.has(x.j) ? ' easy' : ''}" title="${L.easy.has(x.j) ? `أجاب عنه ${Math.round(r.rep.pVal[x.j] * 100)}% من الصف` : `أجاب عنه ${Math.round(r.rep.pVal[x.j] * 100)}% فقط من الصف`}">س${x.j + 1}${L.ptsTxt(x)}</span>`).join(' ')}</span>` : '',
+    L.blank.length ? `<span class="sp-ls"><em>متروك دون إجابة:</em> ${L.blank.map(x => `<span class="sp-qb">س${x.j + 1}${L.ptsTxt(x)}</span>`).join(' ')}</span>` : '',
+    L.essayLost > 0 ? `<span class="sp-ls"><em>المقالي:</em> نقص ${fmtN(L.essayLost)} من ${fmtN(r.rep.essayMax)}</span>` : '',
+  ].filter(Boolean).join('');
+}
+function lossText(r) {
+  const L = lossParts(r);
+  if (L.none) return 'الدرجة كاملة';
+  return [
+    L.wrong.length ? `خطأ: ${L.wrong.map(x => `س${x.j + 1}${L.ptsTxt(x)}`).join('، ')}` : '',
+    L.blank.length ? `متروك: ${L.blank.map(x => `س${x.j + 1}${L.ptsTxt(x)}`).join('، ')}` : '',
+    L.essayLost > 0 ? `المقالي: نقص ${fmtN(L.essayLost)}` : '',
+  ].filter(Boolean).join(' | ');
+}
 
 let reports = [];               // الاختبارات بعد الحساب
 let students = new Map();       // رقم الطالب -> { id, name, gl, section, recs: [] }
@@ -118,12 +145,22 @@ function scoreReport(rep, platMap) {
     const key = (isB ? m.keyB : (m && Array.isArray(m.keyA) ? m.keyA : rep.key_raw)) || [];
     const toA = i => (isB && m.mode === 'order' && Array.isArray(m.orderB) && m.orderB[i] != null ? m.orderB[i] : i);
     const correct = new Array(n).fill(false);
-    (st.answers || []).forEach((v, i) => { if (i < n && keyHit(v, key[i])) { const j = toA(i); if (j < n) correct[j] = true; } });
+    const blank = new Array(n).fill(true);    // سؤال متروك بلا تظليل
+    (st.answers || []).forEach((v, i) => {
+      if (i >= n) return;
+      const j = toA(i);
+      if (j >= n) return;
+      if (isAnswered(v)) blank[j] = false;
+      if (keyHit(v, key[i])) correct[j] = true;
+    });
     const obj = correct.reduce((s, c, j) => s + (c ? PW(j) : 0), 0);
     const essay = hasEssay ? Math.min(essayMax, Math.max(0, Number(st.essay) || 0)) : null;
     const total = obj + (essay || 0);
     const p = platMap.get(id);
-    recs.push({ repId: rep.id, id, name: st.name || '', section: p ? String(p.class_section || '') : String(st.section || ''), correct, obj, essay, total, max, pct: (total / max) * 100 });
+    // الأسئلة التي خُصمت درجتها: خطأ أو متروك، مع درجة كل سؤال
+    const lost = [];
+    for (let j = 0; j < n; j++) if (!correct[j]) lost.push({ j, blank: blank[j], pts: PW(j) });
+    recs.push({ repId: rep.id, id, name: st.name || '', section: p ? String(p.class_section || '') : String(st.section || ''), correct, lost, obj, essay, total, max, pct: (total / max) * 100 });
   });
   if (!recs.length) return null;
   // صعوبة كل سؤال (نسبة من أجاب عنه صحيحًا) ومتوسط الصف والفصول والمقالي
@@ -304,7 +341,8 @@ function analyze(s) {
     return { k, mine, peers };
   }).filter(Boolean);
   const easyMiss = recsOf(s).reduce((a, r) => a + r.wrongEasy.length, 0);
-  return { o, subs, weak, strong, types, easyMiss };
+  const blanks = recsOf(s).reduce((a, r) => a + r.lost.filter(x => x.blank).length, 0);
+  return { o, subs, weak, strong, types, easyMiss, blanks };
 }
 
 function summaryText(s, a) {
@@ -318,6 +356,7 @@ function summaryText(s, a) {
   else parts.push('لا توجد مادة يقل فيها بوضوح عن مستوى الصف.');
   const gap = types.filter(t => t.peers != null && t.mine < t.peers - 12).sort((x, y) => (x.mine - x.peers) - (y.mine - y.peers))[0];
   if (gap) parts.push(`أضعف أداء له في أسئلة «${ITEM_TYPE[gap.k]}» (${pctTxt(gap.mine)} مقابل ${pctTxt(gap.peers)} للصف).`);
+  if (a.blanks) parts.push(`ترك ${a.blanks === 1 ? 'سؤالًا واحدًا' : a.blanks === 2 ? 'سؤالين' : a.blanks <= 10 ? `${a.blanks} أسئلة` : `${a.blanks} سؤالًا`} دون إجابة في اختباراته، وخُصمت درجتها.`);
   return parts.join(' ');
 }
 
@@ -382,9 +421,9 @@ function renderProfile(id) {
       </div>
 
       <div class="sp-card">
-        <div class="sp-card-h"><b>الاختبارات</b><span>${recsOf(s).length} ${recsOf(s).length <= 10 ? 'اختبارات' : 'اختبارًا'}</span></div>
+        <div class="sp-card-h"><b>الاختبارات</b><span class="sp-legend"><span class="sp-qw easy">س</span> خطأ في سؤال أجاب عنه أغلب الصف <span class="sp-qw">س</span> خطأ <span class="sp-qb">س</span> متروك دون إجابة</span></div>
         <div class="sp-tblwrap"><table class="sp-tbl">
-          <thead><tr><th>الاختبار</th><th>النوع</th><th>الدرجة</th><th>النسبة</th><th>متوسط الصف</th><th>ترتيبه</th><th>أسئلة أخطأ فيها وأجاب عنها أغلب الصف</th></tr></thead>
+          <thead><tr><th>الاختبار</th><th>النوع</th><th>الدرجة</th><th>النسبة</th><th>متوسط الصف</th><th>ترتيبه</th><th>سبب الخصم</th></tr></thead>
           <tbody>${recsOf(s).slice().sort((x, y) => x.rep.subject.localeCompare(y.rep.subject, 'ar') || String(x.rep.date).localeCompare(String(y.rep.date))).map(r => `<tr>
             <td><b>${esc(r.rep.subject)}</b><small>${esc(r.rep.title)}${r.rep.date ? ' · ' + esc(dateTxt(r.rep.date)) : ''}</small></td>
             <td>${esc(TYPE_LABEL[r.rep.type] || r.rep.type)}</td>
@@ -392,7 +431,7 @@ function renderProfile(id) {
             <td><b class="sp-pct ${levelOf(r.pct).cls}">${pctTxt(r.pct)}</b></td>
             <td>${pctTxt(r.rep.meanPct)}</td>
             <td>${r.rank} / ${r.rep.N}</td>
-            <td class="sp-qs">${r.wrongEasy.length ? qList(r.wrongEasy) : '<span class="sp-ok">لا يوجد</span>'}</td>
+            <td class="sp-qs">${lossHtml(r)}</td>
           </tr>`).join('')}</tbody>
         </table></div>
       </div>
@@ -441,8 +480,8 @@ function printProfile(s, a) {
   <table><thead><tr><th>المادة</th><th>نسبة الطالب</th><th>المستوى</th><th>متوسط الفصل</th><th>متوسط الصف</th><th>عدد الاختبارات</th></tr></thead><tbody>
   ${subs.map(x => `<tr><td class="n">${esc(x.subject)}${weak.includes(x) ? ' ⚑' : ''}</td><td>${pctTxt(x.pct)}</td><td>${levelOf(x.pct).label}</td><td>${pctTxt(x.classMean)}</td><td>${pctTxt(x.gradeMean)}</td><td>${x.recs.length}</td></tr>`).join('')}</tbody></table>
   <h4>الاختبارات</h4>
-  <table><thead><tr><th>المادة</th><th>الاختبار</th><th>الدرجة</th><th>النسبة</th><th>متوسط الصف</th><th>الترتيب</th><th>أسئلة أخطأ فيها وأجاب عنها أغلب الصف</th></tr></thead><tbody>
-  ${recsOf(s).map(r => `<tr><td class="n">${esc(r.rep.subject)}</td><td class="n">${esc(r.rep.title)}</td><td>${fmtN(r.total)} / ${fmtN(r.max)}</td><td>${pctTxt(r.pct)}</td><td>${pctTxt(r.rep.meanPct)}</td><td>${r.rank} / ${r.rep.N}</td><td>${r.wrongEasy.length ? qList(r.wrongEasy) : '—'}</td></tr>`).join('')}</tbody></table>
+  <table><thead><tr><th>المادة</th><th>الاختبار</th><th>الدرجة</th><th>النسبة</th><th>متوسط الصف</th><th>الترتيب</th><th>سبب الخصم</th></tr></thead><tbody>
+  ${recsOf(s).map(r => `<tr><td class="n">${esc(r.rep.subject)}</td><td class="n">${esc(r.rep.title)}</td><td>${fmtN(r.total)} / ${fmtN(r.max)}</td><td>${pctTxt(r.pct)}</td><td>${pctTxt(r.rep.meanPct)}</td><td>${r.rank} / ${r.rep.N}</td><td class="n">${esc(lossText(r))}</td></tr>`).join('')}</tbody></table>
   <div class="sig"><span>وكيل الشؤون التعليمية: ..................</span><span>مدير المدرسة: ..................</span></div>
   <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`);
   w.document.close();
