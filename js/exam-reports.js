@@ -1057,7 +1057,7 @@ function renderFilterBar() {
     <select id="erf-type" aria-label="نوع الاختبار">${opt('', 'كل الأنواع', erFilt.type)}${opt('diagnostic', 'تشخيصي', erFilt.type)}${opt('periodic', 'فتري', erFilt.type)}</select>
     <select id="erf-sem" aria-label="الفصل الدراسي">${opt('', 'كل الفصول الدراسية', erFilt.sem)}${['الفصل الدراسي الأول', 'الفصل الدراسي الثاني', ...sems].filter((x, i, a) => a.indexOf(x) === i).map(x => opt(x, x, erFilt.sem)).join('')}${erListData.some(r => !r.semester) ? opt('-', 'بدون فصل دراسي', erFilt.sem) : ''}</select>
     ${active ? '<button type="button" class="text-action-btn" id="erf-clear">مسح الفلاتر</button>' : ''}
-    ${erListData.length ? '<button type="button" class="er-absrep-btn" id="erf-absrep">🖨 تقرير الغياب</button>' : ''}
+    ${erListData.some(r => r.exam_type === 'periodic') ? '<button type="button" class="er-absrep-btn" id="erf-absrep">🖨 تقرير الغياب</button>' : ''}
   </div>`;
   const ab = document.getElementById('erf-absrep');
   if (ab) ab.onclick = () => openAbsenceReport();
@@ -2359,7 +2359,9 @@ const SHORT_GRADE = { first_intermediate: 'أول', second_intermediate: 'ثان
  * العرض حسب الطالب (كم اختبارًا غاب عنه وأيها) أو حسب الاختبار.
  * ========================================================================= */
 async function openAbsenceReport() {
-  const reps = (filteredReports().length ? filteredReports() : erListData).slice()
+  // الغياب للاختبارات الفترية فقط
+  const periodic = r => r.exam_type === 'periodic';
+  const reps = (filteredReports().filter(periodic).length ? filteredReports().filter(periodic) : erListData.filter(periodic)).slice()
     .sort((a, b) => (GRADE_ORDER.indexOf(repGradeKey(a)) - GRADE_ORDER.indexOf(repGradeKey(b))) || repSubject(a).localeCompare(repSubject(b), 'ar') || String(a.created_at).localeCompare(String(b.created_at)));
   let plat = [];
   try { const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION); plat = await allStudents(); } catch { /* الفصول تُستنتج لاحقًا */ }
@@ -2368,7 +2370,7 @@ async function openAbsenceReport() {
   const back = document.createElement('div');
   back.className = 'er-abs-back';
   back.innerHTML = `<div class="er-abs er-absrep" role="dialog" aria-modal="true" aria-label="تقرير الغياب">
-    <div class="er-abs-h"><div><b>تقرير غياب الطلاب عن الاختبارات</b><span>اختر الاختبارات والمرحلة والفصل</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+    <div class="er-abs-h"><div><b>تقرير غياب الطلاب عن الاختبارات الفترية</b><span>اختر الاختبارات والمرحلة والفصل</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
     <div class="er-abs-body">
       <div class="er-ar-row">
         <label>المرحلة<select id="ar-grade"><option value="">كل المراحل</option>${grades.map(g => `<option value="${g}">${esc(gradeLabels[g])}</option>`).join('')}</select></label>
@@ -2378,7 +2380,7 @@ async function openAbsenceReport() {
         <label><input type="radio" name="ar-mode" value="student" checked> حسب الطالب</label>
         <label><input type="radio" name="ar-mode" value="test"> حسب الاختبار</label>
       </div>
-      <label class="er-exp-all"><input type="checkbox" id="ar-all" checked> <b>كل الاختبارات</b> <small id="ar-count"></small></label>
+      <label class="er-exp-all"><input type="checkbox" id="ar-all" checked> <b>كل الاختبارات الفترية</b> <small id="ar-count"></small></label>
       <div class="er-exp-list" id="ar-list"></div>
       <p class="er-exp-hint">الغائب: طالب مسجّل بالمنصة في فصل صُحّحت أوراقه في الاختبار، وليس له ورقة فيه.</p>
       <div class="error-msg" id="ar-err"></div>
@@ -2397,7 +2399,7 @@ async function openAbsenceReport() {
       const g = repGradeKey(r);
       const head = g !== lastG ? `<div class="er-ar-gh">${esc(gradeLabels[g] || NO_GRADE)}</div>` : '';
       lastG = g;
-      return `${head}<label><input type="checkbox" data-id="${r.id}" ${picked.has(r.id) ? 'checked' : ''}> <span>${esc(r.title)}</span> <small>${r.exam_type === 'periodic' ? 'فتري' : 'تشخيصي'}</small></label>`;
+      return `${head}<label><input type="checkbox" data-id="${r.id}" ${picked.has(r.id) ? 'checked' : ''}> <span>${esc(r.title)}</span> <small>${r.created_at ? esc(dateTxt(r.created_at)) : ''}</small></label>`;
     }).join('') || '<p class="er-abs-empty">لا توجد اختبارات لهذه المرحلة</p>';
     $b('#ar-list').querySelectorAll('input').forEach(c => c.onchange = () => { c.checked ? picked.add(c.dataset.id) : picked.delete(c.dataset.id); sync(); });
     sync();
@@ -2449,7 +2451,7 @@ async function openAbsenceReport() {
 
 function printAbsenceReport(win, tests, { gl, sec, mode, nPicked }) {
   // اسم مختصر للاختبار: المادة ونوعه، ويُميَّز بالعنوان إن تكرر نفس الاسم
-  const short = t => `${t.rep.subject_name ? canonSubject(t.rep.subject_name) : t.rep.title} (${t.rep.exam_type === 'periodic' ? 'فتري' : 'تشخيصي'})`;
+  const short = t => (t.rep.subject_name ? canonSubject(t.rep.subject_name) : t.rep.title);
   const dupShort = new Set(tests.map(short).filter((x, i, a) => a.indexOf(x) !== i));
   const testName = t => (dupShort.has(short(t)) ? t.rep.title : short(t));
   const scope = [gl ? gradeLabels[gl] : 'كل المراحل', sec ? `الفصل ${sec}` : 'كل الفصول'].join(' · ');
@@ -2486,7 +2488,7 @@ function printAbsenceReport(win, tests, { gl, sec, mode, nPicked }) {
   .kp{display:flex;gap:8px;margin:10px 0}.kp div{flex:1;border:1px solid #d6dbe4;border-radius:8px;padding:8px;text-align:center;color:#555;font-size:11px}.kp b{display:block;font-size:18px;color:#152238}
   table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:6px}th,td{border:1px solid #c9ced8;padding:5px 6px;text-align:center}th{background:#152238;color:#fff}td.n{text-align:right}
   tr:nth-child(even) td{background:#f5f6f8}.none{color:#555}.sig{display:flex;justify-content:space-between;margin-top:36px}@media print{h3{break-after:avoid}tr{break-inside:avoid}}</style></head><body>
-  <div class="hd">${logo ? `<img src="${esc(logo)}">` : ''}<div><h1>تقرير غياب الطلاب عن الاختبارات</h1><div class="sub">${esc(printOrgName())} · ${esc(scope)}</div></div></div>
+  <div class="hd">${logo ? `<img src="${esc(logo)}">` : ''}<div><h1>تقرير غياب الطلاب عن الاختبارات الفترية</h1><div class="sub">${esc(printOrgName())} · ${esc(scope)}</div></div></div>
   <div class="kp"><div><b>${nPicked}</b>${nPicked === 1 ? 'اختبار مختار' : 'اختبارًا مختارًا'}</div><div><b>${totalAbs}</b>حالة غياب</div><div><b>${studs.length}</b>${studs.length === 1 ? 'طالب غائب' : 'طالبًا غائبًا'}</div><div><b>${studs.filter(x => x.tests.length > 1).length}</b>غاب عن أكثر من اختبار</div></div>
   <h2>ملخص الاختبارات</h2>
   <table><thead><tr><th style="width:32px">#</th><th>الاختبار</th><th>المرحلة</th><th>الحاضرون</th><th>الغائبون</th></tr></thead><tbody>
