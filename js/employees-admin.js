@@ -462,3 +462,94 @@ function renderPermsList() {
     document.getElementById('perm-subject').focus();
   }));
 }
+
+
+/* ---------- متابعة دخول الموظفين: آخر دخول لكل موظف، وتذكير من لم يدخل عبر واتساب ---------- */
+const LG_GROUPS = [
+  ['week', 'دخلوا خلال 7 أيام'],
+  ['old', 'آخر دخول قبل أكثر من أسبوع'],
+  ['never', 'لم يدخلوا المنصة أبدًا'],
+];
+let lgRows = [], lgFilter = 'all', lgQ = '';
+const lgGroup = r => (!r.last_sign_in_at ? 'never' : (Date.now() - new Date(r.last_sign_in_at)) / 864e5 <= 7 ? 'week' : 'old');
+function lgAgo(ts) {
+  if (!ts) return 'لم يدخل';
+  const d = new Date(ts), days = Math.floor((Date.now() - d) / 864e5);
+  const time = d.toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' });
+  if (days < 1 && new Date().toDateString() === d.toDateString()) return `اليوم ${time}`;
+  if (days < 2) return `أمس ${time}`;
+  if (days <= 10) return `قبل ${days} ${days <= 10 ? 'أيام' : 'يومًا'}`;
+  return d.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' });
+}
+function lgWaLink(r) {
+  let ph = String(r.phone || '').replace(/[^\d]/g, '');
+  if (ph.startsWith('00')) ph = ph.slice(2);
+  if (ph.startsWith('05')) ph = '966' + ph.slice(1);
+  else if (ph.startsWith('5') && ph.length === 9) ph = '966' + ph;
+  const first = String(r.full_name || '').split(/\s+/)[0] || '';
+  const msg = r.last_sign_in_at
+    ? `السلام عليكم أستاذ ${first}،\nنذكّركم بمتابعة منصة مُدار للاطلاع على مهامكم وجدولكم وتقارير اختباراتكم:\n${location.origin}`
+    : `السلام عليكم أستاذ ${first}،\nحسابكم في منصة مُدار جاهز، نأمل الدخول للاطلاع على جدولكم ومهامكم وتقارير اختباراتكم:\n${location.origin}\nاسم المستخدم: رقمكم الوظيفي.`;
+  // بلا رقم جوال: واتساب يفتح لاختيار جهة الاتصال
+  return `https://wa.me/${ph || ''}?text=${encodeURIComponent(msg)}`;
+}
+async function openLoginTracker() {
+  const back = document.createElement('div');
+  back.className = 'er-abs-back';
+  back.innerHTML = `<div class="er-abs lg-modal" role="dialog" aria-modal="true" aria-label="متابعة دخول الموظفين">
+    <div class="er-abs-h"><div><b>متابعة دخول الموظفين</b><span id="lg-sub">جارٍ التحميل...</span></div><button type="button" class="er-abs-x" aria-label="إغلاق">✕</button></div>
+    <div class="er-abs-body"><div id="lg-body"><div class="tx-loading"><span></span><span></span><span></span></div></div></div>
+  </div>`;
+  document.body.appendChild(back);
+  const close = () => { back.remove(); document.removeEventListener('keydown', onKey); };
+  const onKey = e => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  back.querySelector('.er-abs-x').onclick = close;
+  back.addEventListener('click', e => { if (e.target === back) close(); });
+  const { data, error } = await sb.rpc('staff_last_login', { p_school: currentSchoolId || null });
+  if (error) { back.querySelector('#lg-body').innerHTML = `<p class="sp-none">تعذر التحميل: ${escP(error.message)}</p>`; return; }
+  lgRows = (data || []).filter(r => r.full_name);
+  lgFilter = 'all'; lgQ = '';
+  renderLoginTracker(back);
+}
+function renderLoginTracker(back) {
+  const cnt = { week: 0, old: 0, never: 0 };
+  lgRows.forEach(r => cnt[lgGroup(r)]++);
+  back.querySelector('#lg-sub').textContent = `${lgRows.length} موظفًا · ${cnt.week} دخلوا هذا الأسبوع · ${cnt.never} لم يدخلوا أبدًا`;
+  const q = lgQ.trim();
+  const list = lgRows.filter(r => (lgFilter === 'all' || lgGroup(r) === lgFilter) && (!q || r.full_name.includes(q)))
+    .sort((a, b) => (b.last_sign_in_at || '').localeCompare(a.last_sign_in_at || '') || a.full_name.localeCompare(b.full_name, 'ar'));
+  const groups = LG_GROUPS.map(([k, t]) => [k, t, list.filter(r => lgGroup(r) === k)]).filter(([, , l]) => l.length);
+  const body = back.querySelector('#lg-body');
+  body.innerHTML = `
+    <div class="lg-tiles">
+      <button type="button" data-f="all" class="${lgFilter === 'all' ? 'on' : ''}"><b>${lgRows.length}</b><span>الكل</span></button>
+      <button type="button" data-f="week" class="ok${lgFilter === 'week' ? ' on' : ''}"><b>${cnt.week}</b><span>خلال 7 أيام</span></button>
+      <button type="button" data-f="old" class="warn${lgFilter === 'old' ? ' on' : ''}"><b>${cnt.old}</b><span>أكثر من أسبوع</span></button>
+      <button type="button" data-f="never" class="bad${lgFilter === 'never' ? ' on' : ''}"><b>${cnt.never}</b><span>لم يدخلوا أبدًا</span></button>
+    </div>
+    <div class="lg-tools"><input type="search" id="lg-q" placeholder="ابحث باسم الموظف" value="${escP(lgQ)}" />
+      ${lgFilter !== 'week' && list.some(r => lgGroup(r) !== 'week') ? '<a class="lg-wa lg-group" id="lg-group" target="_blank" rel="noopener">رسالة للمجموعة</a><button type="button" class="btn-secondary" id="lg-copy">نسخ الأسماء</button>' : ''}</div>
+    ${groups.map(([k, t, l]) => `<h5 class="lg-gh ${k}">${t} <small>${l.length}</small></h5>
+      <ul class="lg-list">${l.map(r => { const wa = lgWaLink(r); return `<li>
+        <span class="lg-dot ${k}"></span>
+        <span class="lg-name"><b>${escP(r.full_name)}</b><small>${escP(roleLabels[r.role] || r.role)}</small></span>
+        <span class="lg-when">${lgAgo(r.last_sign_in_at)}</span>
+        ${k === 'week' ? '' : `<a class="lg-wa" href="${wa}" target="_blank" rel="noopener" title="إرسال تذكير عبر واتساب">تذكير واتساب</a>`}
+      </li>`; }).join('')}</ul>`).join('') || '<p class="sp-none">لا يوجد موظف مطابق</p>'}`;
+  body.querySelectorAll('.lg-tiles button').forEach(b => b.onclick = () => { lgFilter = b.dataset.f; renderLoginTracker(back); });
+  const qi = body.querySelector('#lg-q');
+  qi.oninput = () => { lgQ = qi.value; const pos = qi.selectionStart; renderLoginTracker(back); const n = back.querySelector('#lg-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  const grp = body.querySelector('#lg-group');
+  if (grp) {
+    const names = list.filter(r => lgGroup(r) !== 'week').map((r, i) => `${i + 1}. ${r.full_name}`).join('\n');
+    grp.href = `https://wa.me/?text=${encodeURIComponent(`السلام عليكم ورحمة الله،\nنأمل من الزملاء التالية أسماؤهم الدخول إلى منصة مُدار للاطلاع على جداولهم ومهامهم وتقارير اختباراتهم:\n${names}\n\nرابط المنصة: ${location.origin}\nاسم المستخدم: الرقم الوظيفي.`)}`;
+  }
+  const cp = body.querySelector('#lg-copy');
+  if (cp) cp.onclick = async () => {
+    const txt = list.filter(r => lgGroup(r) !== 'week').map((r, i) => `${i + 1}. ${r.full_name} (${lgAgo(r.last_sign_in_at)})`).join('\n');
+    try { await navigator.clipboard.writeText(txt); cp.textContent = 'تم النسخ ✓'; } catch { cp.textContent = 'تعذر النسخ'; }
+  };
+}
+const lgBtn = document.getElementById('pt-login-btn');
+if (lgBtn) lgBtn.addEventListener('click', openLoginTracker);
