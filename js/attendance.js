@@ -1,11 +1,12 @@
 import { sb, currentSchoolId, currentUserId, currentProfile, isAdminOrDeputy, readScopedBySchool, writeWithSchool, gradeLabels, loadPeriodTimes, periodTime, fmtClock, printOrgName } from './core.js';
 
 /* =========================================================================
- * تحضير الطلاب: المعلم يختار الحصة والفصل، ويحدد الغائب والمتأخر، ويحفظ.
- * - كل حصة لها تحضير واحد لكل فصل (attendance_sessions)، والغائب والمتأخر في attendance_marks.
- * - المعلم يحضّر أي فصل، وتظهر له «حصصي اليوم» من الجدول المدرسي للوصول السريع.
- * - الوكيل والمدير: «غياب اليوم» = ما حُضّر من الحصص، والغائبون، واعتماد رسائل أولياء الأمور
- *   (attendance_messages)، وتُرسل عبر خدمة الرسائل بعد ربطها.
+ * تحضير الطلاب
+ * - المعلم: «حصصي اليوم» من الجدول المدرسي، أو أي فصل آخر. يضغط على بطاقة الطالب للتبديل
+ *   (حاضر ← غائب ← متأخر) ثم يحفظ. كل حصة لها تحضير واحد لكل فصل.
+ * - المدير والوكيل: «متابعة اليوم» = الغائبون (مع خط الحصص لكل طالب) ورسائل أولياء الأمور،
+ *   ومتابعة التحضير لكل فصل وحصة. الرسائل تُرسل عبر تقنيات من قاعدة البيانات.
+ * الجداول: attendance_sessions / attendance_marks / attendance_messages
  * ========================================================================= */
 
 const $ = id => document.getElementById(id);
@@ -14,216 +15,293 @@ const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate
 const SHORT = { first_intermediate: 'أول', second_intermediate: 'ثاني', third_intermediate: 'ثالث' };
 const DAY_KEYS = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
 const PERIODS = [1, 2, 3, 4, 5, 6, 7];
+const ORDER = ['present', 'absent', 'late'];
 const isoOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const todayIso = () => isoOf(new Date());
-const dayName = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
+const shiftIso = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return isoOf(d); };
+const dateLong = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
 const clsName = (g, s) => `${SHORT[g] || gradeLabels[g] || g} ${s}`;
-// وقت الحصة نصًا: «من 9:00 إلى 9:45» (يُقرأ صحيحًا داخل القوائم المنسدلة)
-const timeTxt = (g, p) => { const t = periodTime(g, p); return t ? `من ${fmtClock(t.start)} إلى ${fmtClock(t.end)}` : ''; };
+const timeTxt = (g, p) => { const t = periodTime(g, p); return t ? `${fmtClock(t.start)} – ${fmtClock(t.end)}` : ''; };
+const plural = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`);
+const initials = n => { const w = String(n || '').split(/\s+/).filter(x => x && x !== 'بن'); return (w[0] ? w[0][0] : '') + (w.length > 1 ? w[w.length - 1].replace(/^ال(?=.{2})/, '')[0] : ''); };
 const DEFAULT_TEMPLATE = 'ولي أمر الطالب {الاسم}، نفيدكم بغياب ابنكم عن المدرسة اليوم {اليوم} {التاريخ}. {المدرسة}';
-
-const st = {
-  tab: 'take', date: todayIso(), period: 1, grade: '', section: '',
-  classes: [], students: [], marks: new Map(), session: null, dirty: false,
-  mySlots: [], doneKeys: new Set(),
+const IC = {
+  back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
+  prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
+  next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>',
+  clock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>',
+  msg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4z"/></svg>',
+  grid: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>',
 };
 
+const st = {
+  tab: 'take', date: todayIso(), view: 'pick', period: 1, grade: '', section: '',
+  classes: [], students: [], marks: new Map(), saved: new Map(), session: null, q: '',
+  mySlots: [], done: new Map(),
+};
+const dirty = () => { if (st.marks.size !== st.saved.size) return true; for (const [k, v] of st.marks) if (st.saved.get(k) !== v) return true; return false; };
+
+/* ---------- الدخول ---------- */
 export async function loadAttendanceModule() {
   const box = $('att-container');
-  box.innerHTML = shellHtml();
-  wireShell();
+  box.innerHTML = `<div class="av">
+    <header class="av-hero">
+      <div class="av-hero-t"><h3>تحضير الطلاب</h3><span id="av-hero-date"></span></div>
+      <div class="av-hero-r">
+        <div class="av-datenav" aria-label="اليوم">
+          <button type="button" id="av-d-prev" aria-label="اليوم السابق">${IC.prev}</button>
+          <label class="av-d-lbl"><span id="av-d-txt"></span><input type="date" id="av-d-in" max="${todayIso()}" aria-label="اختيار التاريخ" /></label>
+          <button type="button" id="av-d-next" aria-label="اليوم التالي">${IC.next}</button>
+        </div>
+        ${isAdminOrDeputy() ? `<div class="av-tabs" role="tablist"><button type="button" data-tab="take" class="on">التحضير</button><button type="button" data-tab="day">متابعة اليوم</button></div>` : ''}
+      </div>
+    </header>
+    <section id="av-take"></section>
+    <section id="av-day" class="hidden"></section>
+    <div id="av-toast" class="av-toast hidden" role="status"></div>
+  </div>`;
+  document.querySelectorAll('.av-tabs [data-tab]').forEach(b => b.onclick = async () => {
+    if (st.tab === b.dataset.tab) return;
+    if (st.tab === 'take' && st.view === 'class' && dirty() && !confirm('لم يُحفظ التحضير الحالي، هل تريد المتابعة؟')) return;
+    st.tab = b.dataset.tab;
+    document.querySelectorAll('.av-tabs [data-tab]').forEach(x => x.classList.toggle('on', x === b));
+    $('av-take').classList.toggle('hidden', st.tab !== 'take');
+    $('av-day').classList.toggle('hidden', st.tab !== 'day');
+    if (st.tab === 'day') renderDay(); else { await refreshMySlots(); renderTake(); }
+  });
+  $('av-d-prev').onclick = () => setDate(shiftIso(st.date, -1));
+  $('av-d-next').onclick = () => { if (st.date < todayIso()) setDate(shiftIso(st.date, 1)); };
+  $('av-d-in').onchange = e => setDate(e.target.value || todayIso());
+  paintDate();
   await loadPeriodTimes();
   const { data } = await sb.rpc('attendance_classes', { p_school: currentSchoolId || null });
   st.classes = data || [];
   st.period = currentPeriod();
   await refreshMySlots();
-  if (!st.grade) { const slot = st.mySlots.find(s => s.period === st.period) || null; if (slot) { st.grade = slot.grade; st.section = String(slot.section); } }
-  renderTakeControls();
-  await loadClass();
+  renderTake();
 }
 
-function shellHtml() {
-  return `<div class="att-page">
-    <div class="att-head">
-      <div><h3>تحضير الطلاب</h3><p>اختر الحصة والفصل، وحدد الغائب والمتأخر، ثم احفظ.</p></div>
-      ${isAdminOrDeputy() ? `<div class="sp-seg" role="tablist"><button type="button" data-tab="take" class="on">التحضير</button><button type="button" data-tab="day">غياب اليوم والرسائل</button></div>` : ''}
-    </div>
-    <div id="att-take"></div>
-    <div id="att-day" class="hidden"></div>
-    <div id="att-toast" class="tx-toast hidden" role="status"></div>
-  </div>`;
+function paintDate() {
+  $('av-d-txt').textContent = st.date === todayIso() ? `اليوم · ${dateLong(st.date)}` : dateLong(st.date);
+  $('av-d-in').value = st.date;
+  $('av-d-next').disabled = st.date >= todayIso();
+  $('av-hero-date').textContent = st.date === todayIso() ? 'حدد الغائب والمتأخر في حصتك، وتصل الإدارة النتيجة مباشرة' : 'تعرض تحضير يوم سابق، ويمكن تعديله';
 }
-function wireShell() {
-  document.querySelectorAll('.att-head [data-tab]').forEach(b => b.onclick = async () => {
-    if (st.tab === 'take' && st.dirty && !confirm('لم يُحفظ التحضير الحالي، هل تريد المتابعة؟')) return;
-    st.tab = b.dataset.tab;
-    document.querySelectorAll('.att-head [data-tab]').forEach(x => x.classList.toggle('on', x === b));
-    $('att-take').classList.toggle('hidden', st.tab !== 'take');
-    $('att-day').classList.toggle('hidden', st.tab !== 'day');
-    if (st.tab === 'day') await renderDay();
-  });
+async function setDate(iso) {
+  if (iso > todayIso()) iso = todayIso();
+  if (st.view === 'class' && dirty() && !confirm('لم يُحفظ التحضير الحالي، هل تريد المتابعة؟')) { paintDate(); return; }
+  st.date = iso; st.view = 'pick';
+  paintDate();
+  if (st.tab === 'day') renderDay(); else { await refreshMySlots(); renderTake(); }
 }
+
 let toastT = null;
 function toast(msg, type = 'ok') {
-  const el = $('att-toast'); if (!el) return;
-  clearTimeout(toastT); el.className = 'tx-toast ' + type; el.textContent = msg; el.classList.remove('hidden');
-  toastT = setTimeout(() => el.classList.add('hidden'), 5000);
+  const el = $('av-toast'); if (!el) return;
+  clearTimeout(toastT); el.className = 'av-toast ' + type; el.textContent = msg;
+  toastT = setTimeout(() => el.classList.add('hidden'), 4200);
 }
 
-// الحصة الحالية حسب أوقات الحصص (أو الأولى قبل بداية اليوم)
 function currentPeriod() {
   const now = new Date(), m = now.getHours() * 60 + now.getMinutes();
   for (const p of PERIODS) { const t = periodTime('', p); if (t && m < t.end) return p; }
   return 7;
 }
 
-/* ---------- حصصي اليوم (من الجدول المدرسي) ---------- */
 async function refreshMySlots() {
-  st.mySlots = [];
-  st.doneKeys = new Set();
   const day = DAY_KEYS[new Date(st.date + 'T00:00:00').getDay()];
   const [{ data: sched }, { data: sess }] = await Promise.all([
     readScopedBySchool(sc => { let q = sb.from('class_schedules').select('period_number, grade_level, class_section, subject_name').eq('teacher_id', currentUserId).eq('day_of_week', day); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
-    readScopedBySchool(sc => { let q = sb.from('attendance_sessions').select('period, grade_level, class_section').eq('att_date', st.date); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
+    readScopedBySchool(sc => { let q = sb.from('attendance_sessions').select('period, grade_level, class_section, absent_count, late_count, teacher_name').eq('att_date', st.date); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; }),
   ]);
-  st.mySlots = (sched || []).map(r => ({ period: r.period_number, grade: r.grade_level, section: r.class_section, subject: r.subject_name })).sort((a, b) => a.period - b.period);
-  (sess || []).forEach(s => st.doneKeys.add(`${s.period}|${s.grade_level}|${s.class_section}`));
+  st.mySlots = (sched || []).map(r => ({ period: r.period_number, grade: r.grade_level, section: String(r.class_section), subject: r.subject_name })).sort((a, b) => a.period - b.period);
+  st.done = new Map((sess || []).map(s => [`${s.period}|${s.grade_level}|${s.class_section}`, s]));
 }
 
-/* ---------- التحضير ---------- */
-function renderTakeControls() {
-  const box = $('att-take');
-  const sections = st.classes.filter(c => c.grade_level === st.grade).map(c => String(c.class_section));
+/* ---------- التحضير: اختيار الحصة ---------- */
+function renderTake() { if (st.view === 'class') renderClass(); else renderPick(); }
+
+function renderPick() {
+  const box = $('av-take');
+  const isToday = st.date === todayIso();
+  const nowP = isToday ? currentPeriod() : 0;
+  const pending = st.mySlots.filter(s => !st.done.has(`${s.period}|${s.grade}|${s.section}`));
+  const next = isToday ? pending.find(s => s.period >= nowP) || pending[0] : pending[0];
+  const grades = GRADES.filter(g => st.classes.some(c => c.grade_level === g));
+  const g = st.grade && grades.includes(st.grade) ? st.grade : grades[0] || '';
   box.innerHTML = `
-    ${st.mySlots.length ? `<div class="att-slots"><b>حصصي ${st.date === todayIso() ? 'اليوم' : 'في هذا اليوم'}</b><div>${st.mySlots.map(s => {
-      const k = `${s.period}|${s.grade}|${s.section}`;
-      const on = s.period === st.period && s.grade === st.grade && String(s.section) === st.section;
-      return `<button type="button" class="att-slot${on ? ' on' : ''}${st.doneKeys.has(k) ? ' done' : ''}" data-p="${s.period}" data-g="${s.grade}" data-s="${s.section}">
-        <i>الحصة ${s.period}</i><span>${esc(clsName(s.grade, s.section))}</span><small>${st.doneKeys.has(k) ? '✓ حُضّرت' : esc(s.subject || '')}</small></button>`;
-    }).join('')}</div></div>` : ''}
-    <div class="att-ctrl">
-      <label>التاريخ<input type="date" id="att-date" value="${st.date}" max="${todayIso()}" /></label>
-      <label>الحصة<select id="att-period">${PERIODS.map(p => `<option value="${p}"${p === st.period ? ' selected' : ''}>الحصة ${p}${timeTxt(st.grade, p) ? ' · ' + timeTxt(st.grade, p) : ''}</option>`).join('')}</select></label>
-      <label>المرحلة<select id="att-grade"><option value="">اختر...</option>${GRADES.filter(g => st.classes.some(c => c.grade_level === g)).map(g => `<option value="${g}"${g === st.grade ? ' selected' : ''}>${gradeLabels[g]}</option>`).join('')}</select></label>
-      <label>الفصل<select id="att-section"><option value="">اختر...</option>${sections.map(s => `<option value="${s}"${s === st.section ? ' selected' : ''}>${s}</option>`).join('')}</select></label>
-    </div>
-    <div id="att-list"></div>`;
-  const guard = () => !st.dirty || confirm('لم يُحفظ التحضير الحالي، هل تريد المتابعة؟');
-  box.querySelectorAll('.att-slot').forEach(b => b.onclick = async () => {
-    if (!guard()) return;
-    st.period = +b.dataset.p; st.grade = b.dataset.g; st.section = b.dataset.s;
-    renderTakeControls(); await loadClass();
-  });
-  $('att-date').onchange = async e => { if (!guard()) { e.target.value = st.date; return; } st.date = e.target.value || todayIso(); await refreshMySlots(); renderTakeControls(); await loadClass(); };
-  $('att-period').onchange = async e => { if (!guard()) { e.target.value = st.period; return; } st.period = +e.target.value; renderTakeControls(); await loadClass(); };
-  $('att-grade').onchange = async e => { if (!guard()) { e.target.value = st.grade; return; } st.grade = e.target.value; st.section = ''; renderTakeControls(); await loadClass(); };
-  $('att-section').onchange = async e => { if (!guard()) { e.target.value = st.section; return; } st.section = e.target.value; renderTakeControls(); await loadClass(); };
+    ${st.mySlots.length ? `
+    ${next ? `<button type="button" class="av-next" data-p="${next.period}" data-g="${next.grade}" data-s="${next.section}">
+      <span class="av-next-p"><small>الحصة</small><b>${next.period}</b></span>
+      <span class="av-next-m"><small>${next.period === nowP ? 'حصتك الآن' : 'حصتك القادمة'}</small><b>${esc(gradeLabels[next.grade])} · فصل ${esc(next.section)}</b><span>${esc(next.subject || '')}${timeTxt(next.grade, next.period) ? ' · ' + timeTxt(next.grade, next.period) : ''}</span></span>
+      <span class="av-next-go">ابدأ التحضير ${IC.next}</span>
+    </button>` : `<div class="av-alldone">${IC.check}<b>حضّرت كل حصصك ${isToday ? 'اليوم' : 'في هذا اليوم'}</b></div>`}
+    <div class="av-card">
+      <div class="av-card-h"><b>حصصي ${isToday ? 'اليوم' : ''}</b><span>${plural(st.mySlots.length - pending.length, 'حصة واحدة حُضّرت', 'حصتان حُضّرتا', 'حصص حُضّرت', 'حصة حُضّرت')} من ${st.mySlots.length}</span></div>
+      <ol class="av-slots">${st.mySlots.map(s => {
+        const d = st.done.get(`${s.period}|${s.grade}|${s.section}`);
+        const state = d ? 'done' : isToday && s.period === nowP ? 'now' : isToday && s.period < nowP ? 'late' : 'later';
+        return `<li><button type="button" class="av-slot ${state}" data-p="${s.period}" data-g="${s.grade}" data-s="${s.section}">
+          <span class="av-slot-n">${s.period}</span>
+          <span class="av-slot-m"><b>${esc(clsName(s.grade, s.section))}</b><small>${esc(s.subject || '')}${timeTxt(s.grade, s.period) ? ' · ' + timeTxt(s.grade, s.period) : ''}</small></span>
+          <span class="av-chip ${state}">${d ? (d.absent_count ? `غائب ${d.absent_count}` : 'لا غياب') : state === 'now' ? 'الآن' : state === 'late' ? 'لم تُحضَّر' : 'لاحقًا'}</span>
+        </button></li>`;
+      }).join('')}</ol>
+    </div>` : `<div class="av-card av-noslots">لا توجد لك حصص في الجدول ${isToday ? 'اليوم' : 'في هذا اليوم'}، ويمكنك تحضير أي فصل من الأسفل.</div>`}
+    <div class="av-card">
+      <div class="av-card-h"><b>${st.mySlots.length ? 'فصل آخر' : 'اختر الفصل'}</b><span>للانتظار أو التحضير بدل زميل</span></div>
+      <div class="av-pick-row"><span class="av-lbl">الحصة</span><div class="av-pchips">${PERIODS.map(p => `<button type="button" data-pp="${p}" class="${p === st.period ? 'on' : ''}">${p}</button>`).join('')}</div></div>
+      <div class="av-pick-row"><span class="av-lbl">المرحلة</span><div class="av-seg">${grades.map(x => `<button type="button" data-gg="${x}" class="${x === g ? 'on' : ''}">${esc(gradeLabels[x])}</button>`).join('')}</div></div>
+      <div class="av-secs">${st.classes.filter(c => c.grade_level === g).map(c => {
+        const d = st.done.get(`${st.period}|${g}|${c.class_section}`);
+        return `<button type="button" class="av-sec${d ? ' done' : ''}" data-p="${st.period}" data-g="${g}" data-s="${c.class_section}"><b>${esc(clsName(g, c.class_section))}</b><small>${c.students} طالبًا${d ? ' · ✓' : ''}</small></button>`;
+      }).join('')}</div>
+    </div>`;
+  box.querySelectorAll('[data-p][data-g][data-s]').forEach(b => b.onclick = () => openClass(+b.dataset.p, b.dataset.g, b.dataset.s));
+  box.querySelectorAll('[data-pp]').forEach(b => b.onclick = () => { st.period = +b.dataset.pp; st.grade = g; renderPick(); });
+  box.querySelectorAll('[data-gg]').forEach(b => b.onclick = () => { st.grade = b.dataset.gg; renderPick(); });
 }
 
-async function loadClass() {
-  const box = $('att-list');
-  st.dirty = false; st.session = null; st.marks = new Map(); st.students = [];
-  if (!st.grade || !st.section) { box.innerHTML = '<div class="att-empty">اختر المرحلة والفصل لعرض الطلاب</div>'; return; }
+/* ---------- التحضير: الفصل ---------- */
+async function openClass(p, g, s) {
+  st.period = p; st.grade = g; st.section = String(s); st.view = 'class'; st.q = '';
+  st.marks = new Map(); st.saved = new Map(); st.session = null; st.students = [];
+  const box = $('av-take');
   box.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
   const [{ data: studs, error }, { data: sess }] = await Promise.all([
-    sb.rpc('attendance_class_students', { p_grade: st.grade, p_section: Number(st.section), p_school: currentSchoolId || null }),
-    readScopedBySchool(sc => { let q = sb.from('attendance_sessions').select('*').eq('att_date', st.date).eq('period', st.period).eq('grade_level', st.grade).eq('class_section', Number(st.section)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.maybeSingle(); }),
+    sb.rpc('attendance_class_students', { p_grade: g, p_section: Number(s), p_school: currentSchoolId || null }),
+    readScopedBySchool(sc => { let q = sb.from('attendance_sessions').select('*').eq('att_date', st.date).eq('period', p).eq('grade_level', g).eq('class_section', Number(s)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.maybeSingle(); }),
   ]);
-  if (error) { box.innerHTML = `<div class="att-empty">تعذر تحميل الطلاب: ${esc(error.message)}</div>`; return; }
+  if (error) { box.innerHTML = `<div class="av-card av-noslots">تعذر تحميل الطلاب: ${esc(error.message)}</div>`; return; }
   st.students = studs || [];
   st.session = sess || null;
   if (st.session) {
     const { data: mk } = await sb.from('attendance_marks').select('student_id, status').eq('session_id', st.session.id);
-    (mk || []).forEach(m => st.marks.set(m.student_id, m.status));
+    (mk || []).forEach(m => { st.marks.set(m.student_id, m.status); st.saved.set(m.student_id, m.status); });
   }
-  renderList();
+  renderClass();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-function renderList() {
-  const box = $('att-list');
-  if (!st.students.length) { box.innerHTML = '<div class="att-empty">لا يوجد طلاب في هذا الفصل</div>'; return; }
-  const n = st.students.length;
-  const abs = [...st.marks.values()].filter(v => v === 'absent').length, late = [...st.marks.values()].filter(v => v === 'late').length;
-  const tt = timeTxt(st.grade, st.period);
+function counts() {
+  let a = 0, l = 0;
+  st.marks.forEach(v => { if (v === 'absent') a++; else if (v === 'late') l++; });
+  return { a, l, p: st.students.length - a - l };
+}
+
+function renderClass() {
+  const box = $('av-take');
+  const slot = st.mySlots.find(x => x.period === st.period && x.grade === st.grade && x.section === st.section);
+  const c = counts();
   box.innerHTML = `
-    <div class="att-bar">
-      <div class="att-bar-t"><b>${esc(gradeLabels[st.grade])} · فصل ${esc(st.section)} · الحصة ${st.period}</b>
-        <span>${st.session ? `حُضّرت ${st.session.teacher_name ? 'بواسطة ' + esc(st.session.teacher_name) : ''} · آخر حفظ ${new Date(st.session.updated_at).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' })}` : 'لم تُحضَّر بعد'}${tt ? ' · ' + tt : ''}</span></div>
-      <div class="att-counts"><span class="p"><b>${n - abs - late}</b>حاضر</span><span class="a"><b>${abs}</b>غائب</span><span class="l"><b>${late}</b>متأخر</span></div>
+    <div class="av-class">
+      <div class="av-class-h">
+        <button type="button" class="av-back" id="av-back">${IC.back}<span>الحصص</span></button>
+        <div class="av-class-t"><b>${esc(gradeLabels[st.grade])} · فصل ${esc(st.section)}</b>
+          <span>الحصة ${st.period}${slot && slot.subject ? ' · ' + esc(slot.subject) : ''}${timeTxt(st.grade, st.period) ? ' · ' + timeTxt(st.grade, st.period) : ''}</span></div>
+        <span class="av-saved-badge${st.session ? ' on' : ''}" id="av-saved">${st.session ? `${IC.check} حُضّرت${st.session.teacher_name && st.session.teacher_id !== currentUserId ? ' بواسطة ' + esc(st.session.teacher_name.split(' ')[0]) : ''}` : 'لم تُحضَّر'}</span>
+      </div>
+      <div class="av-stats">
+        <span class="p"><b id="av-c-p">${c.p}</b>حاضر</span>
+        <span class="a"><b id="av-c-a">${c.a}</b>غائب</span>
+        <span class="l"><b id="av-c-l">${c.l}</b>متأخر</span>
+      </div>
+      <div class="av-tools">
+        <label class="av-search">${IC.search}<input type="search" id="av-q" placeholder="ابحث عن طالب" autocomplete="off" /></label>
+        <button type="button" class="av-reset" id="av-reset">الجميع حاضر</button>
+      </div>
+      <p class="av-hint">اضغط على الطالب للتبديل: <i class="p">حاضر</i> ← <i class="a">غائب</i> ← <i class="l">متأخر</i></p>
+      ${st.students.length ? `<div class="av-grid" id="av-grid">${st.students.map((s, i) => cardHtml(s, i)).join('')}</div>` : '<div class="av-card av-noslots">لا يوجد طلاب في هذا الفصل</div>'}
     </div>
-    <div class="att-tools"><button type="button" class="text-action-btn" id="att-all-present">الجميع حاضر</button><span>اضغط على اسم الطالب للتبديل: حاضر ← غائب ← متأخر</span></div>
-    <ol class="att-students">${st.students.map((s, i) => { const m = st.marks.get(s.id) || 'present'; return `<li class="${m}" data-id="${s.id}">
-      <span class="att-n">${i + 1}</span>
-      <button type="button" class="att-name" data-cycle="${s.id}">${esc(s.full_name)}</button>
-      <span class="att-seg" role="group" aria-label="حالة ${esc(s.full_name)}">
-        <button type="button" data-set="present" class="${m === 'present' ? 'on' : ''}">حاضر</button>
-        <button type="button" data-set="absent" class="${m === 'absent' ? 'on' : ''}">غائب</button>
-        <button type="button" data-set="late" class="${m === 'late' ? 'on' : ''}">متأخر</button>
-      </span></li>`; }).join('')}</ol>
-    <div class="att-save"><button type="button" class="btn-primary" id="att-save">${st.session ? 'حفظ التعديل' : 'حفظ التحضير'}</button><span id="att-save-note">${st.dirty ? 'توجد تغييرات لم تُحفظ' : ''}</span></div>`;
-  const setMark = (id, v) => {
-    if (v === 'present') st.marks.delete(id); else st.marks.set(id, v);
-    st.dirty = true;
-    const li = box.querySelector(`li[data-id="${id}"]`);
-    li.className = v;
-    li.querySelectorAll('[data-set]').forEach(b => b.classList.toggle('on', b.dataset.set === v));
-    const a = [...st.marks.values()].filter(x => x === 'absent').length, l = [...st.marks.values()].filter(x => x === 'late').length;
-    box.querySelector('.att-counts .p b').textContent = n - a - l;
-    box.querySelector('.att-counts .a b').textContent = a;
-    box.querySelector('.att-counts .l b').textContent = l;
-    $('att-save-note').textContent = 'توجد تغييرات لم تُحفظ';
-  };
-  box.querySelectorAll('[data-set]').forEach(b => b.onclick = () => setMark(b.closest('li').dataset.id, b.dataset.set));
-  const order = ['present', 'absent', 'late'];
-  box.querySelectorAll('[data-cycle]').forEach(b => b.onclick = () => { const id = b.dataset.cycle; const cur = st.marks.get(id) || 'present'; setMark(id, order[(order.indexOf(cur) + 1) % 3]); });
-  $('att-all-present').onclick = () => { st.students.forEach(s => { if (st.marks.has(s.id)) setMark(s.id, 'present'); }); };
-  $('att-save').onclick = saveAttendance;
+    <div class="av-savebar" id="av-savebar">
+      <span id="av-sum"></span>
+      <button type="button" class="av-save-btn" id="av-save"></button>
+    </div>`;
+  $('av-back').onclick = async () => { if (dirty() && !confirm('لم يُحفظ التحضير الحالي، هل تريد الرجوع؟')) return; st.view = 'pick'; await refreshMySlots(); renderPick(); };
+  $('av-q').oninput = e => { st.q = e.target.value.trim(); box.querySelectorAll('.av-stu').forEach(el => { el.classList.toggle('hidden', !!st.q && !el.dataset.name.includes(st.q)); }); };
+  $('av-reset').onclick = () => { [...st.marks.keys()].forEach(id => setMark(id, 'present')); };
+  box.querySelectorAll('.av-stu').forEach(el => el.onclick = () => { const id = el.dataset.id; const cur = st.marks.get(id) || 'present'; setMark(id, ORDER[(ORDER.indexOf(cur) + 1) % 3]); });
+  $('av-save').onclick = saveAttendance;
+  paintSaveBar();
+}
+
+function cardHtml(s, i) {
+  const m = st.marks.get(s.id) || 'present';
+  return `<button type="button" class="av-stu ${m}" data-id="${s.id}" data-name="${esc(s.full_name)}" aria-label="${esc(s.full_name)}">
+    <span class="av-av">${esc(initials(s.full_name))}</span>
+    <span class="av-nm"><b>${esc(s.full_name)}</b><small>${i + 1}</small></span>
+    <span class="av-st">${m === 'absent' ? IC.x + 'غائب' : m === 'late' ? IC.clock + 'متأخر' : IC.check + 'حاضر'}</span>
+  </button>`;
+}
+
+function setMark(id, v) {
+  if (v === 'present') st.marks.delete(id); else st.marks.set(id, v);
+  const el = document.querySelector(`.av-stu[data-id="${id}"]`);
+  if (el) { const s = st.students.find(x => x.id === id); const i = st.students.indexOf(s); const tmp = document.createElement('div'); tmp.innerHTML = cardHtml(s, i); const n = tmp.firstElementChild; n.classList.toggle('hidden', el.classList.contains('hidden')); n.classList.add('pop'); n.onclick = el.onclick; el.replaceWith(n); }
+  const c = counts();
+  $('av-c-p').textContent = c.p; $('av-c-a').textContent = c.a; $('av-c-l').textContent = c.l;
+  paintSaveBar();
+}
+
+function paintSaveBar() {
+  const c = counts(), d = dirty();
+  $('av-sum').innerHTML = c.a || c.l ? `<b class="a">${plural(c.a, 'غائب واحد', 'غائبان', 'غائبين', 'غائبًا')}</b>${c.l ? ` · <b class="l">${plural(c.l, 'متأخر واحد', 'متأخران', 'متأخرين', 'متأخرًا')}</b>` : ''}` : 'لا يوجد غياب';
+  const btn = $('av-save');
+  btn.disabled = !!st.session && !d;
+  btn.className = 'av-save-btn' + (!!st.session && !d ? ' done' : '');
+  btn.innerHTML = st.session && !d ? `${IC.check} محفوظ` : st.session ? 'حفظ التعديل' : 'حفظ التحضير';
+  $('av-savebar').classList.toggle('dirty', d || !st.session);
 }
 
 async function saveAttendance() {
-  const btn = $('att-save');
+  const btn = $('av-save');
   btn.disabled = true; btn.textContent = 'جارٍ الحفظ...';
   try {
-    const abs = [...st.marks.values()].filter(v => v === 'absent').length, late = [...st.marks.values()].filter(v => v === 'late').length;
-    const slot = st.mySlots.find(s => s.period === st.period && s.grade === st.grade && String(s.section) === st.section);
+    const c = counts();
+    const slot = st.mySlots.find(s => s.period === st.period && s.grade === st.grade && s.section === st.section);
     const row = { att_date: st.date, period: st.period, grade_level: st.grade, class_section: Number(st.section), teacher_id: currentUserId,
       teacher_name: currentProfile.full_name || null, subject_name: slot ? slot.subject : (st.session && st.session.subject_name) || null,
-      absent_count: abs, late_count: late, updated_at: new Date().toISOString() };
-    let sessionId = st.session && st.session.id;
-    if (sessionId) {
-      const { error } = await sb.from('attendance_sessions').update(row).eq('id', sessionId);
+      absent_count: c.a, late_count: c.l, updated_at: new Date().toISOString() };
+    let sid = st.session && st.session.id;
+    if (sid) {
+      const { error } = await sb.from('attendance_sessions').update(row).eq('id', sid);
       if (error) throw error;
-      const { error: e2 } = await sb.from('attendance_marks').delete().eq('session_id', sessionId);
+      const { error: e2 } = await sb.from('attendance_marks').delete().eq('session_id', sid);
       if (e2) throw e2;
     } else {
       const { data, error } = await writeWithSchool(extra => sb.from('attendance_sessions').insert({ ...row, ...extra }).select('*').single());
       if (error) {
-        // حُضّر الفصل للتو من جهاز آخر: نحمّله ونعيد المحاولة كتعديل
-        if (/duplicate|unique/i.test(error.message || '')) { toast('سبق تحضير هذه الحصة من جهاز آخر، أُعيد تحميلها', 'err'); await loadClass(); return; }
+        if (/duplicate|unique/i.test(error.message || '')) { toast('سبق تحضير هذه الحصة من جهاز آخر، أُعيد تحميلها', 'err'); await openClass(st.period, st.grade, st.section); return; }
         throw error;
       }
-      sessionId = data.id; st.session = data;
+      sid = data.id; st.session = data;
     }
-    const marks = [...st.marks.entries()].map(([student_id, status]) => ({ session_id: sessionId, student_id, status, att_date: st.date, period: st.period }));
+    const marks = [...st.marks.entries()].map(([student_id, status]) => ({ session_id: sid, student_id, status, att_date: st.date, period: st.period }));
     if (marks.length) {
       const { error } = await writeWithSchool(extra => sb.from('attendance_marks').insert(marks.map(m => ({ ...m, ...extra }))));
       if (error) throw error;
     }
-    st.dirty = false;
-    st.doneKeys.add(`${st.period}|${st.grade}|${st.section}`);
-    toast(`✓ حُفظ تحضير ${clsName(st.grade, st.section)} الحصة ${st.period}: ${abs ? `غائب ${abs}` : 'لا يوجد غائب'}${late ? `، متأخر ${late}` : ''}`);
-    renderTakeControls();
-    await loadClass();
+    st.session = { ...st.session, ...row, id: sid };
+    st.saved = new Map(st.marks);
+    st.done.set(`${st.period}|${st.grade}|${st.section}`, { ...row });
+    const sb2 = $('av-saved'); if (sb2) { sb2.classList.add('on'); sb2.innerHTML = `${IC.check} حُضّرت`; }
+    paintSaveBar();
+    toast(`✓ حُفظ تحضير ${clsName(st.grade, st.section)} · ${c.a ? plural(c.a, 'غائب واحد', 'غائبان', 'غائبين', 'غائبًا') : 'لا يوجد غياب'}`);
   } catch (e) {
     toast('تعذر الحفظ: ' + (e.message || e), 'err');
-    btn.disabled = false; btn.textContent = 'حفظ التحضير';
+    paintSaveBar();
   }
 }
 
-/* ---------- غياب اليوم واعتماد الرسائل (المدير والوكيل) ---------- */
+/* ---------- متابعة اليوم (المدير والوكيل) ---------- */
 let dayData = null;
+const dv = { sub: 'abs', filter: 'all', sel: new Set() };
+
 async function renderDay() {
-  const box = $('att-day');
+  const box = $('av-day');
   box.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
   const date = st.date;
   const day = DAY_KEYS[new Date(date + 'T00:00:00').getDay()];
@@ -231,89 +309,154 @@ async function renderDay() {
   try { await syncSms(date); } catch { /* */ }
   const [{ data: sess }, { data: marks }, { data: msgs }, { data: sched }] = await Promise.all([
     scoped('attendance_sessions', '*', q => q.eq('att_date', date)),
-    scoped('attendance_marks', 'student_id, status, period, session_id', q => q.eq('att_date', date)),
-    scoped('attendance_messages', 'student_id, status, error, sent_at', q => q.eq('att_date', date)),
-    scoped('class_schedules', 'period_number, grade_level, class_section', q => q.eq('day_of_week', day)),
+    scoped('attendance_marks', 'student_id, status, period', q => q.eq('att_date', date)),
+    scoped('attendance_messages', 'student_id, status, error, sent_at, body', q => q.eq('att_date', date)),
+    scoped('class_schedules', 'period_number, grade_level, class_section, teacher_name, subject_name', q => q.eq('day_of_week', day)),
   ]);
   const ids = [...new Set((marks || []).map(m => m.student_id))];
-  let studs = [];
+  const studs = [];
   for (let i = 0; i < ids.length; i += 200) {
     const { data } = await sb.from('students').select('id, full_name, grade_level, class_section, mobile').in('id', ids.slice(i, i + 200));
     studs.push(...(data || []));
   }
   const sById = new Map(studs.map(s => [s.id, s]));
-  const sessByClass = new Map();
-  (sess || []).forEach(s => { const k = `${s.grade_level}|${s.class_section}`; if (!sessByClass.has(k)) sessByClass.set(k, []); sessByClass.get(k).push(s); });
+  const sessBy = new Map((sess || []).map(s => [`${s.period}|${s.grade_level}|${s.class_section}`, s]));
   const msgBy = new Map((msgs || []).map(m => [m.student_id, m]));
-  const byStu = new Map();
-  (marks || []).forEach(m => { if (!byStu.has(m.student_id)) byStu.set(m.student_id, { abs: [], late: [] }); byStu.get(m.student_id)[m.status === 'absent' ? 'abs' : 'late'].push(m.period); });
-  const rows = [...byStu.entries()].map(([id, v]) => {
+  const per = new Map();
+  (marks || []).forEach(m => { if (!per.has(m.student_id)) per.set(m.student_id, new Map()); per.get(m.student_id).set(m.period, m.status); });
+  const rows = [...per.entries()].map(([id, mp]) => {
     const s = sById.get(id) || { id, full_name: '—' };
-    const done = (sessByClass.get(`${s.grade_level}|${s.class_section}`) || []).length;
-    return { ...s, abs: v.abs.sort((a, b) => a - b), late: v.late.sort((a, b) => a - b), done, msg: msgBy.get(id) || null };
+    const taken = PERIODS.filter(p => sessBy.has(`${p}|${s.grade_level}|${s.class_section}`));
+    const abs = [...mp].filter(([, v]) => v === 'absent').map(([p]) => p), late = [...mp].filter(([, v]) => v === 'late').map(([p]) => p);
+    return { ...s, mp, taken, abs, late, full: abs.length > 0 && abs.length >= taken.length, msg: msgBy.get(id) || null };
   }).sort((a, b) => GRADES.indexOf(a.grade_level) - GRADES.indexOf(b.grade_level) || a.class_section - b.class_section || b.abs.length - a.abs.length || String(a.full_name).localeCompare(String(b.full_name), 'ar'));
-  // الحصص المتوقعة من الجدول، مقابل ما حُضّر
-  const expected = new Set((sched || []).map(r => `${r.period_number}|${r.grade_level}|${r.class_section}`));
-  const doneSet = new Set((sess || []).map(s => `${s.period}|${s.grade_level}|${s.class_section}`));
-  const classes = [...new Set([...st.classes.map(c => `${c.grade_level}|${c.class_section}`)])];
-  dayData = { date, rows, sess: sess || [] };
-  const absentRows = rows.filter(r => r.abs.length);
-  const fullDay = r => r.abs.length && r.abs.length >= r.done;
+  const expected = (sched || []).map(r => ({ ...r, key: `${r.period_number}|${r.grade_level}|${r.class_section}` }));
+  const missing = expected.filter(r => !sessBy.has(r.key) && (date < todayIso() || (periodTime(r.grade_level, r.period_number) || { end: 0 }).end <= new Date().getHours() * 60 + new Date().getMinutes()));
+  dayData = { date, rows, sess: sess || [], sessBy, expected, missing };
+  dv.sel = new Set(rows.filter(r => r.full && !r.msg && r.mobile).map(r => r.id));
+  const absent = rows.filter(r => r.abs.length);
+  const sentN = rows.filter(r => r.msg && r.msg.status === 'sent').length;
+  const doneN = (sess || []).length, expN = new Set(expected.map(r => r.key)).size;
+  const pct = expN ? Math.min(100, Math.round((doneN / expN) * 100)) : 0;
   box.innerHTML = `
-    <div class="att-ctrl"><label>التاريخ<input type="date" id="att-day-date" value="${date}" max="${todayIso()}" /></label><span class="att-dayname">${esc(dayName(date))}</span></div>
-    <div class="kp-tiles att-tiles">
-      <div><b>${doneSet.size}</b><span>حصة حُضّرت${expected.size ? ` من ${expected.size} في الجدول` : ''}</span></div>
-      <div class="behind"><b>${absentRows.length}</b><span>طالبًا غاب حصة أو أكثر</span></div>
-      <div class="near"><b>${absentRows.filter(fullDay).length}</b><span>غائب كل الحصص المحضّرة</span></div>
-      <div class="met"><b>${rows.filter(r => r.msg).length}</b><span>رسالة معتمدة</span></div>
+    <div class="av-kpis">
+      <div class="av-kpi"><span class="av-ring" style="--p:${pct}"><b>${pct}%</b></span><div><b>${doneN}<small> / ${expN || '—'}</small></b><span>حصة حُضّرت</span></div></div>
+      <div class="av-kpi a"><div><b>${absent.length}</b><span>طالبًا غاب حصة أو أكثر</span></div></div>
+      <div class="av-kpi f"><div><b>${absent.filter(r => r.full).length}</b><span>غائب كل الحصص المحضّرة</span></div></div>
+      <div class="av-kpi s"><div><b>${sentN}</b><span>رسالة أُرسلت</span></div></div>
     </div>
-    <details class="att-grid-wrap"${doneSet.size ? '' : ' open'}><summary>متابعة التحضير لكل فصل وحصة</summary>
-      <div class="att-grid"><table><thead><tr><th>الفصل</th>${PERIODS.map(p => `<th>${p}</th>`).join('')}</tr></thead><tbody>
-      ${classes.sort((a, b) => { const [ga, sa] = a.split('|'), [gb, sb2] = b.split('|'); return GRADES.indexOf(ga) - GRADES.indexOf(gb) || sa - sb2; }).map(k => { const [g, s] = k.split('|'); return `<tr><th>${esc(clsName(g, s))}</th>${PERIODS.map(p => {
-        const key = `${p}|${g}|${s}`; const ss = (sess || []).find(x => x.period === p && x.grade_level === g && String(x.class_section) === s);
-        return ss ? `<td class="ok" title="${esc(ss.teacher_name || '')}">${ss.absent_count ? ss.absent_count : '✓'}</td>` : expected.has(key) ? '<td class="miss" title="لم تُحضَّر">—</td>' : '<td></td>';
-      }).join('')}</tr>`; }).join('')}</tbody></table>
-      <p class="att-hint">✓ حُضّرت بلا غياب · الرقم = عدد الغائبين · — حصة في الجدول لم تُحضَّر بعد</p></div>
-    </details>
-    <div class="att-msg-card">
-      <div class="att-msg-h"><b>الغائبون ورسائل أولياء الأمور</b><span>حدد الطلاب ثم اعتمد إرسال الرسائل</span></div>
-      <label class="att-tpl">نص الرسالة<textarea id="att-tpl" rows="2">${esc(loadTpl())}</textarea><small>المتغيرات: {الاسم} (الاسم الأول) {اليوم} {التاريخ} {المدرسة}</small></label>
-      ${absentRows.length ? `<div class="att-msg-tools"><label><input type="checkbox" id="att-sel-all"> تحديد الكل</label><button type="button" class="text-action-btn" id="att-sel-full">تحديد الغائبين كل الحصص</button></div>
-      <ul class="att-abs-list">${absentRows.map(r => `<li class="${r.msg ? 'sent' : ''}">
-        <input type="checkbox" class="att-sel" data-id="${r.id}" ${r.msg ? 'disabled' : fullDay(r) ? 'checked' : ''} aria-label="تحديد ${esc(r.full_name)}" />
-        <span class="att-abs-name"><b>${esc(r.full_name)}</b><small>${esc(clsName(r.grade_level, r.class_section))} · ${fullDay(r) ? `غائب كل الحصص المحضّرة (${r.abs.length})` : `غائب الحصة ${r.abs.join('، ')} من ${r.done} محضّرة`}${r.late.length ? ` · متأخر الحصة ${r.late.join('، ')}` : ''}</small></span>
-        ${r.msg ? `<span class="att-ms ${r.msg.status}" title="${esc(r.msg.error || '')}">${r.msg.status === 'sent' ? 'أُرسلت' : r.msg.status === 'failed' ? 'تعذر الإرسال' : r.msg.status === 'sending' ? 'جارٍ الإرسال' : 'معتمدة، بانتظار الإرسال'}</span>` : r.mobile ? '' : '<span class="att-ms failed">لا يوجد جوال</span>'}
-      </li>`).join('')}</ul>
-      <div class="att-save"><button type="button" class="btn-primary" id="att-send">اعتماد الرسائل</button><span id="att-send-note"></span></div>`
-      : '<p class="att-empty">لا يوجد غياب مسجّل في هذا اليوم.</p>'}
-      ${rows.some(r => r.msg && r.msg.status === 'pending') ? `<button type="button" class="btn-primary att-send-pending" id="att-send-pending">إرسال الرسائل المعتمدة (${rows.filter(r => r.msg && r.msg.status === 'pending').length})</button>` : ''}
-      ${rows.some(r => r.msg && r.msg.status === 'failed' && r.mobile) ? '<button type="button" class="text-action-btn att-retry" id="att-retry">إعادة إرسال الرسائل التي لم تُرسل</button>' : ''}
-      <p class="att-hint" id="att-sms-status"></p>
-      <p class="att-hint">لا تُرسل رسالة ثانية للطالب نفسه في اليوم نفسه.</p>
-    </div>`;
-  $('att-day-date').onchange = async e => { st.date = e.target.value || todayIso(); await refreshMySlots(); renderTakeControls(); await loadClass(); await renderDay(); };
-  const tpl = $('att-tpl');
-  tpl.onchange = () => saveTpl(tpl.value);
-  const sels = () => [...box.querySelectorAll('.att-sel:not(:disabled)')];
-  const syncSend = () => { const n = sels().filter(c => c.checked).length; const b = $('att-send'); if (b) { b.disabled = !n; b.textContent = n ? `اعتماد ${n === 1 ? 'رسالة واحدة' : n === 2 ? 'رسالتين' : n + (n <= 10 ? ' رسائل' : ' رسالة')}` : 'اعتماد الرسائل'; } };
-  box.querySelectorAll('.att-sel').forEach(c => c.onchange = syncSend);
-  const all = $('att-sel-all'); if (all) all.onchange = () => { sels().forEach(c => { c.checked = all.checked; }); syncSend(); };
-  const full = $('att-sel-full'); if (full) full.onclick = () => { sels().forEach(c => { const r = rows.find(x => x.id === c.dataset.id); c.checked = !!(r && fullDay(r)); }); syncSend(); };
-  const sp = $('att-send-pending'); if (sp) sp.onclick = async () => { sp.disabled = true; sp.textContent = 'جارٍ الإرسال...'; const r = await sendPending(date); toast(r.msg, r.ok ? 'ok' : 'err'); await renderDay(); };
-  const rt = $('att-retry'); if (rt) rt.onclick = async () => { rt.disabled = true; rt.textContent = 'جارٍ الإرسال...'; await retryFailed(); };
-  smsStatusLine();
-  const send = $('att-send'); if (send) send.onclick = () => approveMessages(sels().filter(c => c.checked).map(c => c.dataset.id), tpl.value);
-  syncSend();
+    <div class="av-subtabs" role="tablist">
+      <button type="button" data-sub="abs" class="${dv.sub === 'abs' ? 'on' : ''}">${IC.msg}الغائبون والرسائل <i>${absent.length}</i></button>
+      <button type="button" data-sub="track" class="${dv.sub === 'track' ? 'on' : ''}">${IC.grid}متابعة التحضير${missing.length ? ` <i class="warn">${missing.length}</i>` : ''}</button>
+    </div>
+    <div id="av-sub"></div>`;
+  box.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { dv.sub = b.dataset.sub; box.querySelectorAll('[data-sub]').forEach(x => x.classList.toggle('on', x === b)); renderSub(); });
+  renderSub();
 }
 
-// الإرسال عبر خدمة تقنيات (دالة send-attendance-sms على الخادم)
-// الإرسال عبر تقنيات من قاعدة البيانات (عنوان خروج ثابت): الطلب يُرسل ثم تُقرأ ردوده بعد ثوانٍ
+function renderSub() { if (dv.sub === 'track') renderTrack(); else renderAbsent(); }
+
+function dotsHtml(r) {
+  return `<span class="av-dots" aria-hidden="true">${PERIODS.map(p => { const v = r.mp.get(p); const t = r.taken.includes(p); return `<i class="${v === 'absent' ? 'a' : v === 'late' ? 'l' : t ? 'p' : ''}" title="الحصة ${p}: ${v === 'absent' ? 'غائب' : v === 'late' ? 'متأخر' : t ? 'حاضر' : 'لم تُحضَّر'}">${p}</i>`; }).join('')}</span>`;
+}
+const msgPill = r => (r.msg ? `<span class="av-ms ${r.msg.status}" title="${esc(r.msg.error || '')}">${r.msg.status === 'sent' ? 'أُرسلت ✓' : r.msg.status === 'failed' ? 'تعذر الإرسال' : r.msg.status === 'sending' ? 'جارٍ الإرسال' : 'بانتظار الإرسال'}</span>` : !r.mobile ? '<span class="av-ms failed">بلا جوال</span>' : '');
+
+function renderAbsent() {
+  const box = $('av-sub');
+  const all = dayData.rows.filter(r => r.abs.length || r.late.length);
+  const F = { all: () => true, full: r => r.full, part: r => r.abs.length && !r.full, late: r => r.late.length && !r.abs.length };
+  const list = all.filter(F[dv.filter] || F.all);
+  const cnt = k => all.filter(F[k]).length;
+  const groups = new Map();
+  list.forEach(r => { const k = clsName(r.grade_level, r.class_section); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+  const pendingN = dayData.rows.filter(r => r.msg && r.msg.status === 'pending').length;
+  const failedN = dayData.rows.filter(r => r.msg && r.msg.status === 'failed' && r.mobile).length;
+  box.innerHTML = `
+    ${all.length ? `
+    <div class="av-filters">${[['all', 'الكل'], ['full', 'غياب كامل'], ['part', 'غياب جزئي'], ['late', 'متأخرون']].map(([k, l]) => `<button type="button" data-f="${k}" class="${dv.filter === k ? 'on' : ''}">${l} <i>${cnt(k)}</i></button>`).join('')}</div>
+    ${pendingN || failedN ? `<div class="av-banner">${pendingN ? `<span>${plural(pendingN, 'رسالة معتمدة', 'رسالتان معتمدتان', 'رسائل معتمدة', 'رسالة معتمدة')} لم تُرسل بعد</span><button type="button" id="av-send-pending">إرسالها الآن</button>` : ''}${failedN ? `<span>${plural(failedN, 'رسالة تعذر إرسالها', 'رسالتان تعذر إرسالهما', 'رسائل تعذر إرسالها', 'رسالة تعذر إرسالها')}</span><button type="button" id="av-retry">إعادة المحاولة</button>` : ''}</div>` : ''}
+    <div class="av-abs">${[...groups.entries()].map(([k, rs]) => `
+      <div class="av-grp"><div class="av-grp-h"><b>${esc(k)}</b><span>${plural(rs.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')}</span></div>
+      <ul>${rs.map(r => { const can = !r.msg && r.mobile && r.abs.length; return `<li class="${dv.sel.has(r.id) ? 'sel' : ''}${can ? '' : ' nosel'}" data-id="${r.id}">
+        <span class="av-ck">${can ? `<input type="checkbox" data-id="${r.id}" ${dv.sel.has(r.id) ? 'checked' : ''} aria-label="تحديد ${esc(r.full_name)}" />` : ''}</span>
+        <span class="av-abs-m"><b>${esc(r.full_name)}</b><small>${r.full ? `غائب كل الحصص المحضّرة` : r.abs.length ? `غائب ${plural(r.abs.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')} من ${r.taken.length}` : `متأخر ${plural(r.late.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')}`}</small></span>
+        ${dotsHtml(r)}
+        ${msgPill(r)}
+      </li>`; }).join('')}</ul></div>`).join('') || '<div class="av-card av-noslots">لا يوجد طلاب في هذا التصنيف</div>'}</div>
+    <details class="av-card av-tplbox"><summary><b>نص رسالة ولي الأمر</b><span id="av-prev"></span></summary>
+      <textarea id="av-tpl" rows="3">${esc(loadTpl())}</textarea>
+      <div class="av-vars">${['{الاسم}', '{اليوم}', '{التاريخ}', '{المدرسة}'].map(v => `<button type="button" data-v="${v}">${v}</button>`).join('')}<button type="button" class="av-tpl-reset" id="av-tpl-reset">النص الافتراضي</button></div>
+    </details>
+    <p class="av-sms" id="av-sms"></p>
+    <div class="av-actionbar${dv.sel.size ? ' show' : ''}" id="av-actbar"><span id="av-act-t"></span><button type="button" id="av-send">إرسال لأولياء الأمور</button></div>`
+    : `<div class="av-card av-empty-day">${IC.check}<b>لا يوجد غياب مسجّل في هذا اليوم</b><span>${dayData.sess.length ? `حُضّرت ${plural(dayData.sess.length, 'حصة واحدة', 'حصتان', 'حصص', 'حصة')} بلا غياب` : 'لم تُحضَّر أي حصة بعد'}</span></div>`}`;
+  if (!all.length) return;
+  box.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { dv.filter = b.dataset.f; renderAbsent(); });
+  box.querySelectorAll('.av-abs li:not(.nosel)').forEach(li => li.onclick = e => {
+    const id = li.dataset.id; const cb = li.querySelector('input');
+    if (e.target !== cb) cb.checked = !cb.checked;
+    cb.checked ? dv.sel.add(id) : dv.sel.delete(id);
+    li.classList.toggle('sel', cb.checked); paintAct();
+  });
+  const tpl = $('av-tpl');
+  const prev = () => { const r = dayData.rows.find(x => dv.sel.has(x.id)) || dayData.rows[0]; $('av-prev').textContent = r ? bodyFor(r, tpl.value) : ''; };
+  tpl.oninput = () => { saveTpl(tpl.value); prev(); };
+  box.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { const p = tpl.selectionStart || tpl.value.length; tpl.value = tpl.value.slice(0, p) + b.dataset.v + tpl.value.slice(p); tpl.focus(); saveTpl(tpl.value); prev(); });
+  $('av-tpl-reset').onclick = () => { tpl.value = DEFAULT_TEMPLATE; saveTpl(tpl.value); prev(); };
+  prev();
+  $('av-send').onclick = () => approveMessages([...dv.sel], tpl.value);
+  const sp = $('av-send-pending'); if (sp) sp.onclick = async () => { sp.disabled = true; sp.textContent = 'جارٍ الإرسال...'; const r = await sendPending(dayData.date); toast(r.msg, r.ok ? 'ok' : 'err'); renderDay(); };
+  const rt = $('av-retry'); if (rt) rt.onclick = async () => { rt.disabled = true; rt.textContent = 'جارٍ الإرسال...'; await retryFailed(); };
+  paintAct();
+  smsStatusLine();
+}
+function paintAct() {
+  const n = dv.sel.size, bar = $('av-actbar'); if (!bar) return;
+  bar.classList.toggle('show', n > 0);
+  $('av-act-t').textContent = n ? `${plural(n, 'طالب واحد محدد', 'طالبان محددان', 'طلاب محددون', 'طالبًا محددًا')}` : '';
+  $('av-send').textContent = n ? `إرسال ${plural(n, 'رسالة واحدة', 'رسالتين', 'رسائل', 'رسالة')}` : 'إرسال لأولياء الأمور';
+}
+
+function renderTrack() {
+  const box = $('av-sub');
+  const { sessBy, expected, missing } = dayData;
+  const expSet = new Set(expected.map(r => r.key));
+  const classes = st.classes.slice().sort((a, b) => GRADES.indexOf(a.grade_level) - GRADES.indexOf(b.grade_level) || a.class_section - b.class_section);
+  box.innerHTML = `
+    ${missing.length ? (() => {
+      // الحصص المنتهية غير المحضّرة مجمّعة حسب المعلم
+      const byT = new Map();
+      missing.forEach(r => { const t = r.teacher_name || 'بدون معلم'; if (!byT.has(t)) byT.set(t, []); byT.get(t).push(r); });
+      const list = [...byT.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], 'ar'));
+      return `<div class="av-card"><div class="av-card-h"><b>حصص انتهى وقتها ولم تُحضَّر</b><span>${plural(missing.length, 'حصة واحدة', 'حصتان', 'حصص', 'حصة')} · ${plural(list.length, 'معلم واحد', 'معلمان', 'معلمين', 'معلمًا')}</span></div>
+      <ul class="av-miss">${list.map(([t, rs]) => `<li><span class="av-miss-n">${rs.length}</span><span class="av-miss-m"><b>${esc(t)}</b><span>${rs.sort((a, b) => a.period_number - b.period_number).map(r => `<i>ح${r.period_number} · ${esc(clsName(r.grade_level, r.class_section))}</i>`).join('')}</span></span></li>`).join('')}</ul></div>`;
+    })()
+      : `<div class="av-card av-empty-day small">${IC.check}<b>كل الحصص المنتهية حُضّرت</b></div>`}
+    <div class="av-card">
+      <div class="av-card-h"><b>خريطة التحضير</b><span class="av-legend"><i class="ok"></i>حُضّرت <i class="ab"></i>فيها غياب <i class="ms"></i>لم تُحضَّر</span></div>
+      <div class="av-heat"><table><thead><tr><th></th>${PERIODS.map(p => `<th>${p}</th>`).join('')}</tr></thead><tbody>
+      ${classes.map(c => `<tr><th>${esc(clsName(c.grade_level, c.class_section))}</th>${PERIODS.map(p => {
+        const k = `${p}|${c.grade_level}|${c.class_section}`, s = sessBy.get(k);
+        if (s) return `<td class="${s.absent_count ? 'ab' : 'ok'}" title="${esc(s.teacher_name || '')}">${s.absent_count || '✓'}</td>`;
+        return expSet.has(k) ? '<td class="ms" title="لم تُحضَّر">·</td>' : '<td></td>';
+      }).join('')}</tr>`).join('')}</tbody></table></div>
+    </div>`;
+}
+
+/* ---------- الرسائل ---------- */
+const TPL_KEY = 'att-sms-template';
+const loadTpl = () => { try { return localStorage.getItem(TPL_KEY) || DEFAULT_TEMPLATE; } catch { return DEFAULT_TEMPLATE; } };
+const saveTpl = v => { try { localStorage.setItem(TPL_KEY, v); } catch { /* */ } };
+function bodyFor(r, tpl) {
+  const dname = new Date(dayData.date + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long' });
+  const [yy, mm, dd] = dayData.date.split('-');
+  const first = String(r.full_name || '').trim().split(/\s+/)[0] || '';
+  return tpl.replace(/\{الاسم\}/g, first).replace(/\{اليوم\}/g, dname).replace(/\{التاريخ\}/g, `${Number(dd)}/${Number(mm)}/${yy}م`).replace(/\{المدرسة\}/g, printOrgName() || '');
+}
+
 const wait = ms => new Promise(r => setTimeout(r, ms));
 const SCH = () => ({ p_school: currentSchoolId || null });
-async function syncSms(date) {
-  const { data } = await sb.rpc('attendance_sms_sync', { p_date: date, ...SCH() });
-  return data || {};
-}
+async function syncSms(date) { const { data } = await sb.rpc('attendance_sms_sync', { p_date: date, ...SCH() }); return data || {}; }
 async function ensureSender() {
   const { data: q } = await sb.rpc('sms_status_request', SCH());
   if (!q || q.configured === false) return { configured: false };
@@ -329,57 +472,45 @@ async function sendPending(date) {
   try {
     let { data, error } = await sb.rpc('attendance_sms_send', { p_date: date, ...SCH() });
     if (!error && data && /المرسل/.test(data.error || '')) { await ensureSender(); ({ data, error } = await sb.rpc('attendance_sms_send', { p_date: date, ...SCH() })); }
-    if (error) return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الإرسال: ' + error.message };
-    if (data && data.configured === false) return { ok: false, msg: 'اعتُمدت الرسائل، وتُرسل بعد إضافة مفتاح تقنيات' };
-    if (data && data.error) return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الإرسال: ' + data.error };
+    if (error) return { ok: false, msg: 'تعذر الإرسال: ' + error.message };
+    if (data && data.configured === false) return { ok: false, msg: 'خدمة الرسائل غير مربوطة بعد' };
+    if (data && data.error) return { ok: false, msg: 'تعذر الإرسال: ' + data.error };
     let res = {};
     for (let i = 0; i < 5; i++) { await wait(2000); res = await syncSms(date); if (!res.waiting) break; }
     const n = res.sent || 0, f = (res.failed || 0) + (data.invalid || 0);
-    return { ok: !f && !res.waiting, msg: `✓ أُرسلت ${n} ${n === 1 ? 'رسالة' : n <= 10 ? 'رسائل' : 'رسالة'}${f ? `، وتعذر إرسال ${f}` : ''}${res.waiting ? `، و${res.waiting} جارٍ إرسالها` : ''}` };
-  } catch (e) { return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الإرسال: ' + (e.message || e) }; }
+    return { ok: !f && !res.waiting, msg: `✓ أُرسلت ${plural(n, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة')}${f ? `، وتعذر إرسال ${f}` : ''}${res.waiting ? `، و${res.waiting} جارٍ إرسالها` : ''}` };
+  } catch (e) { return { ok: false, msg: 'تعذر الإرسال: ' + (e.message || e) }; }
 }
 async function retryFailed() {
-  if (!dayData) return;
   const ids = dayData.rows.filter(r => r.msg && r.msg.status === 'failed' && r.mobile).map(r => r.id);
   if (!ids.length) return;
   await sb.from('attendance_messages').update({ status: 'pending', error: null }).eq('att_date', dayData.date).in('student_id', ids).eq('status', 'failed');
   const r = await sendPending(dayData.date);
   toast(r.msg, r.ok ? 'ok' : 'err');
-  await renderDay();
+  renderDay();
 }
 async function smsStatusLine() {
-  const el = $('att-sms-status'); if (!el) return;
-  el.innerHTML = '<span class="att-ms pending">خدمة الرسائل</span> جارٍ الفحص...';
+  const el = $('av-sms'); if (!el) return;
+  el.innerHTML = '<span class="av-ms pending">خدمة الرسائل</span> جارٍ الفحص...';
   try {
-    const data = await ensureSender();
-    if (data.configured === false) { el.innerHTML = '<span class="att-ms failed">خدمة الرسائل غير مربوطة</span> أضف مفتاح تقنيات'; return; }
-    if (data.error) { el.innerHTML = `<span class="att-ms failed">خدمة الرسائل</span> ${esc(data.error)}`; return; }
-    const bal = data.balance && data.balance.balance != null ? ` · الرصيد ${esc(data.balance.balance)} ${esc(data.balance.currency || '')}` : '';
-    el.innerHTML = `<span class="att-ms sent">خدمة الرسائل مربوطة</span> المرسل: ${esc(data.sender || '—')}${bal}`;
+    const d = await ensureSender();
+    if (!$('av-sms')) return;
+    if (d.configured === false) { el.innerHTML = '<span class="av-ms failed">خدمة الرسائل غير مربوطة</span>'; return; }
+    if (d.error) { el.innerHTML = `<span class="av-ms failed">خدمة الرسائل</span> ${esc(d.error)}`; return; }
+    const bal = d.balance && d.balance.balance != null ? ` · الرصيد ${esc(Math.round(Number(d.balance.balance) * 100) / 100)} ${esc(d.balance.currency || '')}` : '';
+    el.innerHTML = `<span class="av-ms sent">خدمة الرسائل مربوطة</span> المرسل ${esc(d.sender || '—')}${bal} · لا تُرسل رسالة ثانية للطالب نفسه في اليوم نفسه`;
   } catch { el.textContent = ''; }
 }
-
-const TPL_KEY = 'att-sms-template';
-const loadTpl = () => { try { return localStorage.getItem(TPL_KEY) || DEFAULT_TEMPLATE; } catch { return DEFAULT_TEMPLATE; } };
-const saveTpl = v => { try { localStorage.setItem(TPL_KEY, v); } catch { /* */ } };
-
 async function approveMessages(ids, tpl) {
   if (!ids.length || !dayData) return;
-  const rows = dayData.rows.filter(r => ids.includes(r.id));
-  const noPhone = rows.filter(r => !r.mobile).length;
-  if (!confirm(`اعتماد رسائل غياب لأولياء أمور ${rows.length} ${rows.length <= 10 ? 'طلاب' : 'طالبًا'}؟${noPhone ? `\n(${noPhone} بلا رقم جوال ولن تصلهم رسالة)` : ''}`)) return;
-  const btn = $('att-send'); btn.disabled = true; btn.textContent = 'جارٍ الاعتماد...';
-  const dname = new Date(dayData.date + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long' });
-  const [yy, mm, dd] = dayData.date.split('-');
-  const dtxt = `${Number(dd)}/${Number(mm)}/${yy}م`;
-  // الاسم الأول فقط في الرسالة
-  const first = n => String(n || '').trim().split(/\s+/)[0] || '';
-  const body = r => tpl.replace(/\{الاسم\}/g, first(r.full_name)).replace(/\{اليوم\}/g, dname).replace(/\{التاريخ\}/g, dtxt).replace(/\{المدرسة\}/g, printOrgName() || '');
-  const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile || null, body: body(r), status: r.mobile ? 'pending' : 'failed', error: r.mobile ? null : 'لا يوجد رقم جوال', approved_by: currentUserId }));
+  const rows = dayData.rows.filter(r => ids.includes(r.id) && r.mobile);
+  if (!rows.length) return;
+  if (!confirm(`إرسال رسالة غياب لأولياء أمور ${plural(rows.length, 'طالب واحد', 'طالبين', 'طلاب', 'طالبًا')}؟\n\nمثال:\n${bodyFor(rows[0], tpl)}`)) return;
+  const btn = $('av-send'); btn.disabled = true; btn.textContent = 'جارٍ الإرسال...';
+  const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile, body: bodyFor(r, tpl), status: 'pending', approved_by: currentUserId }));
   const { error } = await writeWithSchool(extra => sb.from('attendance_messages').insert(payload.map(p => ({ ...p, ...extra }))));
-  if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الاعتماد: ' + error.message, 'err'); btn.disabled = false; btn.textContent = 'اعتماد الرسائل'; return; }
-  btn.textContent = 'جارٍ الإرسال...';
+  if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الاعتماد: ' + error.message, 'err'); btn.disabled = false; paintAct(); return; }
   const r = await sendPending(dayData.date);
   toast(r.msg, r.ok ? 'ok' : 'err');
-  await renderDay();
+  renderDay();
 }
