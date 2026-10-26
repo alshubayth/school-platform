@@ -3411,3 +3411,4 @@ body.omr-noscroll{ overflow:hidden; }
 .att-msg-tools label{ white-space:nowrap; }
 .att-retry{ align-self:flex-start; width:auto; padding:0; }
 .att-ms.sending{ background:#EAF1FC; color:#2455A4; }
+.att-send-pending{ align-self:flex-start; width:auto !important; padding:10px 18px !important; margin:0 !important; }

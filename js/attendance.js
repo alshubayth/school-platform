@@ -286,6 +286,7 @@ async function renderDay() {
       </li>`).join('')}</ul>
       <div class="att-save"><button type="button" class="btn-primary" id="att-send">اعتماد الرسائل</button><span id="att-send-note"></span></div>`
       : '<p class="att-empty">لا يوجد غياب مسجّل في هذا اليوم.</p>'}
+      ${rows.some(r => r.msg && r.msg.status === 'pending') ? `<button type="button" class="btn-primary att-send-pending" id="att-send-pending">إرسال الرسائل المعتمدة (${rows.filter(r => r.msg && r.msg.status === 'pending').length})</button>` : ''}
       ${rows.some(r => r.msg && r.msg.status === 'failed' && r.mobile) ? '<button type="button" class="text-action-btn att-retry" id="att-retry">إعادة إرسال الرسائل التي لم تُرسل</button>' : ''}
       <p class="att-hint" id="att-sms-status"></p>
       <p class="att-hint">لا تُرسل رسالة ثانية للطالب نفسه في اليوم نفسه.</p>
@@ -298,6 +299,7 @@ async function renderDay() {
   box.querySelectorAll('.att-sel').forEach(c => c.onchange = syncSend);
   const all = $('att-sel-all'); if (all) all.onchange = () => { sels().forEach(c => { c.checked = all.checked; }); syncSend(); };
   const full = $('att-sel-full'); if (full) full.onclick = () => { sels().forEach(c => { const r = rows.find(x => x.id === c.dataset.id); c.checked = !!(r && fullDay(r)); }); syncSend(); };
+  const sp = $('att-send-pending'); if (sp) sp.onclick = async () => { sp.disabled = true; sp.textContent = 'جارٍ الإرسال...'; const r = await sendPending(date); toast(r.msg, r.ok ? 'ok' : 'err'); await renderDay(); };
   const rt = $('att-retry'); if (rt) rt.onclick = async () => { rt.disabled = true; rt.textContent = 'جارٍ الإرسال...'; await retryFailed(); };
   smsStatusLine();
   const send = $('att-send'); if (send) send.onclick = () => approveMessages(sels().filter(c => c.checked).map(c => c.dataset.id), tpl.value);
