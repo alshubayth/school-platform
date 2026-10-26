@@ -228,6 +228,7 @@ async function renderDay() {
   const date = st.date;
   const day = DAY_KEYS[new Date(date + 'T00:00:00').getDay()];
   const scoped = (t, cols, f) => readScopedBySchool(sc => { let q = f(sb.from(t).select(cols)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
+  try { await syncSms(date); } catch { /* */ }
   const [{ data: sess }, { data: marks }, { data: msgs }, { data: sched }] = await Promise.all([
     scoped('attendance_sessions', '*', q => q.eq('att_date', date)),
     scoped('attendance_marks', 'student_id, status, period, session_id', q => q.eq('att_date', date)),
@@ -281,11 +282,11 @@ async function renderDay() {
       <ul class="att-abs-list">${absentRows.map(r => `<li class="${r.msg ? 'sent' : ''}">
         <input type="checkbox" class="att-sel" data-id="${r.id}" ${r.msg ? 'disabled' : fullDay(r) ? 'checked' : ''} aria-label="تحديد ${esc(r.full_name)}" />
         <span class="att-abs-name"><b>${esc(r.full_name)}</b><small>${esc(clsName(r.grade_level, r.class_section))} · ${fullDay(r) ? `غائب كل الحصص المحضّرة (${r.abs.length})` : `غائب الحصة ${r.abs.join('، ')} من ${r.done} محضّرة`}${r.late.length ? ` · متأخر الحصة ${r.late.join('، ')}` : ''}</small></span>
-        ${r.msg ? `<span class="att-ms ${r.msg.status}" title="${esc(r.msg.error || '')}">${r.msg.status === 'sent' ? 'أُرسلت' : r.msg.status === 'failed' ? 'تعذر الإرسال' : 'معتمدة، بانتظار الإرسال'}</span>` : r.mobile ? '' : '<span class="att-ms failed">لا يوجد جوال</span>'}
+        ${r.msg ? `<span class="att-ms ${r.msg.status}" title="${esc(r.msg.error || '')}">${r.msg.status === 'sent' ? 'أُرسلت' : r.msg.status === 'failed' ? 'تعذر الإرسال' : r.msg.status === 'sending' ? 'جارٍ الإرسال' : 'معتمدة، بانتظار الإرسال'}</span>` : r.mobile ? '' : '<span class="att-ms failed">لا يوجد جوال</span>'}
       </li>`).join('')}</ul>
       <div class="att-save"><button type="button" class="btn-primary" id="att-send">اعتماد الرسائل</button><span id="att-send-note"></span></div>`
       : '<p class="att-empty">لا يوجد غياب مسجّل في هذا اليوم.</p>'}
-      ${rows.some(r => r.msg && r.msg.status !== 'sent' && r.mobile) ? '<button type="button" class="text-action-btn att-retry" id="att-retry">إعادة إرسال الرسائل التي لم تُرسل</button>' : ''}
+      ${rows.some(r => r.msg && r.msg.status === 'failed' && r.mobile) ? '<button type="button" class="text-action-btn att-retry" id="att-retry">إعادة إرسال الرسائل التي لم تُرسل</button>' : ''}
       <p class="att-hint" id="att-sms-status"></p>
       <p class="att-hint">لا تُرسل رسالة ثانية للطالب نفسه في اليوم نفسه.</p>
     </div>`;
@@ -304,35 +305,55 @@ async function renderDay() {
 }
 
 // الإرسال عبر خدمة تقنيات (دالة send-attendance-sms على الخادم)
+// الإرسال عبر تقنيات من قاعدة البيانات (عنوان خروج ثابت): الطلب يُرسل ثم تُقرأ ردوده بعد ثوانٍ
+const wait = ms => new Promise(r => setTimeout(r, ms));
+const SCH = () => ({ p_school: currentSchoolId || null });
+async function syncSms(date) {
+  const { data } = await sb.rpc('attendance_sms_sync', { p_date: date, ...SCH() });
+  return data || {};
+}
+async function ensureSender() {
+  const { data: q } = await sb.rpc('sms_status_request', SCH());
+  if (!q || q.configured === false) return { configured: false };
+  if (q.error) return { error: q.error };
+  for (let i = 0; i < 6; i++) {
+    await wait(1500);
+    const { data: r } = await sb.rpc('sms_status_result', { p_senders_req: q.senders_req, p_balance_req: q.balance_req });
+    if (r && !r.pending) return r;
+  }
+  return { error: 'لم يصل رد من خدمة الرسائل، حاول مرة أخرى' };
+}
 async function sendPending(date) {
   try {
-    const { data, error } = await sb.functions.invoke('send-attendance-sms', { body: { date, school_id: currentSchoolId || null } });
-    if (error) return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الاتصال بخدمة الإرسال: ' + (error.message || error) };
-    if (data && data.configured === false) return { ok: false, msg: 'اعتُمدت الرسائل، وتُرسل بعد إضافة مفتاح تقنيات في إعدادات الخادم' };
+    let { data, error } = await sb.rpc('attendance_sms_send', { p_date: date, ...SCH() });
+    if (!error && data && /المرسل/.test(data.error || '')) { await ensureSender(); ({ data, error } = await sb.rpc('attendance_sms_send', { p_date: date, ...SCH() })); }
+    if (error) return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الإرسال: ' + error.message };
+    if (data && data.configured === false) return { ok: false, msg: 'اعتُمدت الرسائل، وتُرسل بعد إضافة مفتاح تقنيات' };
     if (data && data.error) return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الإرسال: ' + data.error };
-    const n = data.sent || 0, f = data.failed || 0;
-    return { ok: !f, msg: `✓ أُرسلت ${n} ${n === 1 ? 'رسالة' : n <= 10 ? 'رسائل' : 'رسالة'}${f ? `، وتعذر إرسال ${f}` : ''}` };
+    let res = {};
+    for (let i = 0; i < 5; i++) { await wait(2000); res = await syncSms(date); if (!res.waiting) break; }
+    const n = res.sent || 0, f = (res.failed || 0) + (data.invalid || 0);
+    return { ok: !f && !res.waiting, msg: `✓ أُرسلت ${n} ${n === 1 ? 'رسالة' : n <= 10 ? 'رسائل' : 'رسالة'}${f ? `، وتعذر إرسال ${f}` : ''}${res.waiting ? `، و${res.waiting} جارٍ إرسالها` : ''}` };
   } catch (e) { return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الإرسال: ' + (e.message || e) }; }
 }
 async function retryFailed() {
   if (!dayData) return;
-  const ids = dayData.rows.filter(r => r.msg && r.msg.status !== 'sent' && r.mobile).map(r => r.id);
+  const ids = dayData.rows.filter(r => r.msg && r.msg.status === 'failed' && r.mobile).map(r => r.id);
   if (!ids.length) return;
-  await sb.from('attendance_messages').update({ status: 'pending', error: null }).eq('att_date', dayData.date).in('student_id', ids).neq('status', 'sent');
+  await sb.from('attendance_messages').update({ status: 'pending', error: null }).eq('att_date', dayData.date).in('student_id', ids).eq('status', 'failed');
   const r = await sendPending(dayData.date);
   toast(r.msg, r.ok ? 'ok' : 'err');
   await renderDay();
 }
 async function smsStatusLine() {
   const el = $('att-sms-status'); if (!el) return;
+  el.innerHTML = '<span class="att-ms pending">خدمة الرسائل</span> جارٍ الفحص...';
   try {
-    const { data, error } = await sb.functions.invoke('send-attendance-sms', { body: { action: 'status', school_id: currentSchoolId || null } });
-    if (error || !data) { el.innerHTML = `<span class="att-ms failed">خدمة الرسائل</span> تعذر الاتصال بالخدمة: ${esc((error && error.message) || 'لا يوجد رد')}`; return; }
-    if (data.configured === false) { el.innerHTML = '<span class="att-ms failed">خدمة الرسائل غير مربوطة</span> أضف مفتاح تقنيات في إعدادات الخادم'; return; }
+    const data = await ensureSender();
+    if (data.configured === false) { el.innerHTML = '<span class="att-ms failed">خدمة الرسائل غير مربوطة</span> أضف مفتاح تقنيات'; return; }
     if (data.error) { el.innerHTML = `<span class="att-ms failed">خدمة الرسائل</span> ${esc(data.error)}`; return; }
-    const snd = (data.senders || []).map(x => x.senderName).filter(Boolean).join('، ');
     const bal = data.balance && data.balance.balance != null ? ` · الرصيد ${esc(data.balance.balance)} ${esc(data.balance.currency || '')}` : '';
-    el.innerHTML = `<span class="att-ms sent">خدمة الرسائل مربوطة</span> المرسل: ${esc(snd || '—')}${bal}`;
+    el.innerHTML = `<span class="att-ms sent">خدمة الرسائل مربوطة</span> المرسل: ${esc(data.sender || '—')}${bal}`;
   } catch { el.textContent = ''; }
 }
 
