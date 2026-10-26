@@ -281,11 +281,13 @@ async function renderDay() {
       <ul class="att-abs-list">${absentRows.map(r => `<li class="${r.msg ? 'sent' : ''}">
         <input type="checkbox" class="att-sel" data-id="${r.id}" ${r.msg ? 'disabled' : fullDay(r) ? 'checked' : ''} aria-label="تحديد ${esc(r.full_name)}" />
         <span class="att-abs-name"><b>${esc(r.full_name)}</b><small>${esc(clsName(r.grade_level, r.class_section))} · ${fullDay(r) ? `غائب كل الحصص المحضّرة (${r.abs.length})` : `غائب الحصة ${r.abs.join('، ')} من ${r.done} محضّرة`}${r.late.length ? ` · متأخر الحصة ${r.late.join('، ')}` : ''}</small></span>
-        ${r.msg ? `<span class="att-ms ${r.msg.status}">${r.msg.status === 'sent' ? 'أُرسلت' : r.msg.status === 'failed' ? 'تعذر الإرسال' : 'معتمدة، بانتظار الإرسال'}</span>` : r.mobile ? '' : '<span class="att-ms failed">لا يوجد جوال</span>'}
+        ${r.msg ? `<span class="att-ms ${r.msg.status}" title="${esc(r.msg.error || '')}">${r.msg.status === 'sent' ? 'أُرسلت' : r.msg.status === 'failed' ? 'تعذر الإرسال' : 'معتمدة، بانتظار الإرسال'}</span>` : r.mobile ? '' : '<span class="att-ms failed">لا يوجد جوال</span>'}
       </li>`).join('')}</ul>
       <div class="att-save"><button type="button" class="btn-primary" id="att-send">اعتماد الرسائل</button><span id="att-send-note"></span></div>`
       : '<p class="att-empty">لا يوجد غياب مسجّل في هذا اليوم.</p>'}
-      <p class="att-hint">الرسائل المعتمدة تُرسل لأولياء الأمور عبر خدمة الرسائل النصية بعد ربطها بالمنصة، ولا تُرسل رسالة ثانية للطالب نفسه في اليوم نفسه.</p>
+      ${rows.some(r => r.msg && r.msg.status !== 'sent' && r.mobile) ? '<button type="button" class="text-action-btn att-retry" id="att-retry">إعادة إرسال الرسائل التي لم تُرسل</button>' : ''}
+      <p class="att-hint" id="att-sms-status"></p>
+      <p class="att-hint">لا تُرسل رسالة ثانية للطالب نفسه في اليوم نفسه.</p>
     </div>`;
   $('att-day-date').onchange = async e => { st.date = e.target.value || todayIso(); await refreshMySlots(); renderTakeControls(); await loadClass(); await renderDay(); };
   const tpl = $('att-tpl');
@@ -295,8 +297,42 @@ async function renderDay() {
   box.querySelectorAll('.att-sel').forEach(c => c.onchange = syncSend);
   const all = $('att-sel-all'); if (all) all.onchange = () => { sels().forEach(c => { c.checked = all.checked; }); syncSend(); };
   const full = $('att-sel-full'); if (full) full.onclick = () => { sels().forEach(c => { const r = rows.find(x => x.id === c.dataset.id); c.checked = !!(r && fullDay(r)); }); syncSend(); };
+  const rt = $('att-retry'); if (rt) rt.onclick = async () => { rt.disabled = true; rt.textContent = 'جارٍ الإرسال...'; await retryFailed(); };
+  smsStatusLine();
   const send = $('att-send'); if (send) send.onclick = () => approveMessages(sels().filter(c => c.checked).map(c => c.dataset.id), tpl.value);
   syncSend();
+}
+
+// الإرسال عبر خدمة تقنيات (دالة send-attendance-sms على الخادم)
+async function sendPending(date) {
+  try {
+    const { data, error } = await sb.functions.invoke('send-attendance-sms', { body: { date, school_id: currentSchoolId || null } });
+    if (error) return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الاتصال بخدمة الإرسال: ' + (error.message || error) };
+    if (data && data.configured === false) return { ok: false, msg: 'اعتُمدت الرسائل، وتُرسل بعد إضافة مفتاح تقنيات في إعدادات الخادم' };
+    if (data && data.error) return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الإرسال: ' + data.error };
+    const n = data.sent || 0, f = data.failed || 0;
+    return { ok: !f, msg: `✓ أُرسلت ${n} ${n === 1 ? 'رسالة' : n <= 10 ? 'رسائل' : 'رسالة'}${f ? `، وتعذر إرسال ${f}` : ''}` };
+  } catch (e) { return { ok: false, msg: 'اعتُمدت الرسائل، وتعذر الإرسال: ' + (e.message || e) }; }
+}
+async function retryFailed() {
+  if (!dayData) return;
+  const ids = dayData.rows.filter(r => r.msg && r.msg.status !== 'sent' && r.mobile).map(r => r.id);
+  if (!ids.length) return;
+  await sb.from('attendance_messages').update({ status: 'pending', error: null }).eq('att_date', dayData.date).in('student_id', ids).neq('status', 'sent');
+  const r = await sendPending(dayData.date);
+  toast(r.msg, r.ok ? 'ok' : 'err');
+  await renderDay();
+}
+async function smsStatusLine() {
+  const el = $('att-sms-status'); if (!el) return;
+  try {
+    const { data } = await sb.functions.invoke('send-attendance-sms', { body: { action: 'status', school_id: currentSchoolId || null } });
+    if (!data || data.configured === false) { el.innerHTML = '<span class="att-ms failed">خدمة الرسائل غير مربوطة</span> أضف مفتاح تقنيات في إعدادات الخادم'; return; }
+    if (data.error) { el.innerHTML = `<span class="att-ms failed">خدمة الرسائل</span> ${esc(data.error)}`; return; }
+    const snd = (data.senders || []).map(x => x.senderName).filter(Boolean).join('، ');
+    const bal = data.balance && data.balance.balance != null ? ` · الرصيد ${esc(data.balance.balance)} ${esc(data.balance.currency || '')}` : '';
+    el.innerHTML = `<span class="att-ms sent">خدمة الرسائل مربوطة</span> المرسل: ${esc(snd || '—')}${bal}`;
+  } catch { el.textContent = ''; }
 }
 
 const TPL_KEY = 'att-sms-template';
@@ -316,7 +352,8 @@ async function approveMessages(ids, tpl) {
   const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile || null, body: body(r), status: r.mobile ? 'pending' : 'failed', error: r.mobile ? null : 'لا يوجد رقم جوال', approved_by: currentUserId }));
   const { error } = await writeWithSchool(extra => sb.from('attendance_messages').insert(payload.map(p => ({ ...p, ...extra }))));
   if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الاعتماد: ' + error.message, 'err'); btn.disabled = false; btn.textContent = 'اعتماد الرسائل'; return; }
-  // الإرسال الفعلي يتم عبر خدمة الرسائل بعد ربط مزودها (الرسائل المعتمدة محفوظة بحالة «بانتظار الإرسال»)
-  toast(`✓ اعتُمدت ${rows.length} ${rows.length <= 10 ? 'رسائل' : 'رسالة'}`);
+  btn.textContent = 'جارٍ الإرسال...';
+  const r = await sendPending(dayData.date);
+  toast(r.msg, r.ok ? 'ok' : 'err');
   await renderDay();
 }

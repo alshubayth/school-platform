@@ -3409,3 +3409,4 @@ body.omr-noscroll{ overflow:hidden; }
   .att-name{ font-size:13px; white-space:normal; line-height:1.4; }
 }
 .att-msg-tools label{ white-space:nowrap; }
+.att-retry{ align-self:flex-start; width:auto; padding:0; }
