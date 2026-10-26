@@ -298,7 +298,7 @@ async function saveAttendance() {
 
 /* ---------- متابعة اليوم (المدير والوكيل) ---------- */
 let dayData = null;
-const dv = { sub: 'abs', filter: 'all', sel: new Set() };
+const dv = { sub: 'abs', filter: 'all', sel: new Set(), rp: 0 };
 
 async function renderDay() {
   const box = $('av-day');
@@ -347,6 +347,7 @@ async function renderDay() {
     </div>
     <div class="av-subtabs" role="tablist">
       <button type="button" data-sub="abs" class="${dv.sub === 'abs' ? 'on' : ''}">${IC.msg}الغائبون والرسائل <i>${absent.length}</i></button>
+      <button type="button" data-sub="round" class="${dv.sub === 'round' ? 'on' : ''}">${IC.check}جولة الفصول</button>
       <button type="button" data-sub="track" class="${dv.sub === 'track' ? 'on' : ''}">${IC.grid}متابعة التحضير${missing.length ? ` <i class="warn">${missing.length}</i>` : ''}</button>
     </div>
     <div id="av-sub"></div>`;
@@ -354,7 +355,7 @@ async function renderDay() {
   renderSub();
 }
 
-function renderSub() { if (dv.sub === 'track') renderTrack(); else renderAbsent(); }
+function renderSub() { if (dv.sub === 'track') renderTrack(); else if (dv.sub === 'round') renderRound(); else renderAbsent(); }
 
 function dotsHtml(r) {
   return `<span class="av-dots" aria-hidden="true">${PERIODS.map(p => { const v = r.mp.get(p); const t = r.taken.includes(p); return `<i class="${v === 'absent' ? 'a' : v === 'late' ? 'l' : t ? 'p' : ''}" title="الحصة ${p}: ${v === 'absent' ? 'غائب' : v === 'late' ? 'متأخر' : t ? 'حاضر' : 'لم تُحضَّر'}">${p}</i>`; }).join('')}</span>`;
@@ -513,4 +514,110 @@ async function approveMessages(ids, tpl) {
   const r = await sendPending(dayData.date);
   toast(r.msg, r.ok ? 'ok' : 'err');
   renderDay();
+}
+
+
+/* ---------- جولة الفصول: الوكيل أو المرشد يختار الحصة، فتظهر الفصول تحت بعض بغائبيها ----------
+ * لكل طالب غائب أو متأخر زر «حاضر» لتصحيح التحضير، ولكل فصل «إضافة غائب».
+ * إن لم تكن الحصة محضّرة، تُنشأ بإضافة أول غائب باسم من أضافه. */
+async function renderRound() {
+  const box = $('av-sub');
+  if (!dv.rp) dv.rp = st.date === todayIso() ? currentPeriod() : 1;
+  box.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
+  const date = st.date, p = dv.rp;
+  const day = DAY_KEYS[new Date(date + 'T00:00:00').getDay()];
+  const scoped = (t, cols, f) => readScopedBySchool(sc => { let q = f(sb.from(t).select(cols)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
+  const [{ data: sess }, { data: marks }, { data: sched }] = await Promise.all([
+    scoped('attendance_sessions', '*', q => q.eq('att_date', date).eq('period', p)),
+    scoped('attendance_marks', 'id, session_id, student_id, status', q => q.eq('att_date', date).eq('period', p)),
+    scoped('class_schedules', 'grade_level, class_section, teacher_name, subject_name', q => q.eq('day_of_week', day).eq('period_number', p)),
+  ]);
+  const ids = [...new Set((marks || []).map(m => m.student_id))];
+  const names = new Map();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await sb.from('students').select('id, full_name').in('id', ids.slice(i, i + 200));
+    (data || []).forEach(x => names.set(x.id, x.full_name));
+  }
+  const sessBy = new Map((sess || []).map(x => [`${x.grade_level}|${x.class_section}`, x]));
+  const schedBy = new Map((sched || []).map(x => [`${x.grade_level}|${x.class_section}`, x]));
+  const marksBy = new Map();
+  (marks || []).forEach(m => { if (!marksBy.has(m.session_id)) marksBy.set(m.session_id, []); marksBy.get(m.session_id).push(m); });
+  const classes = st.classes.slice().sort((a, b) => GRADES.indexOf(a.grade_level) - GRADES.indexOf(b.grade_level) || a.class_section - b.class_section);
+  const taken = classes.filter(c => sessBy.has(`${c.grade_level}|${c.class_section}`)).length;
+  const absN = (marks || []).filter(m => m.status === 'absent').length;
+  box.innerHTML = `
+    <div class="av-card av-round-top">
+      <div class="av-pick-row"><span class="av-lbl">الحصة</span><div class="av-pchips">${PERIODS.map(x => `<button type="button" data-rp="${x}" class="${x === p ? 'on' : ''}">${x}</button>`).join('')}</div>
+        <span class="av-round-sum">${timeTxt('', p) ? timeTxt('', p) + ' · ' : ''}حُضّر ${taken} من ${classes.length} فصول · ${plural(absN, 'غائب واحد', 'غائبان', 'غائبين', 'غائبًا')}</span></div>
+    </div>
+    <div class="av-round">${classes.map(c => {
+      const k = `${c.grade_level}|${c.class_section}`, ss = sessBy.get(k), sc = schedBy.get(k);
+      const ms = ss ? (marksBy.get(ss.id) || []).slice().sort((a, b) => (a.status === b.status ? String(names.get(a.student_id)).localeCompare(String(names.get(b.student_id)), 'ar') : a.status === 'absent' ? -1 : 1)) : [];
+      return `<div class="av-rc${ss ? '' : ' none'}" data-g="${c.grade_level}" data-s="${c.class_section}">
+        <div class="av-rc-h">
+          <span class="av-rc-n">${esc(clsName(c.grade_level, c.class_section))}</span>
+          <span class="av-rc-t">${sc ? `${esc(sc.subject_name || '')}${sc.teacher_name ? ' · ' + esc(sc.teacher_name) : ''}` : '<em>لا توجد حصة في الجدول</em>'}</span>
+          <span class="av-chip ${ss ? 'done' : 'late'}">${ss ? (ms.filter(m => m.status === 'absent').length ? `غائب ${ms.filter(m => m.status === 'absent').length}` : 'لا غياب') : 'لم تُحضَّر'}</span>
+        </div>
+        ${ms.length ? `<ul class="av-rc-list">${ms.map(m => `<li class="${m.status}">
+          <span class="av-rc-s">${m.status === 'absent' ? 'غائب' : 'متأخر'}</span>
+          <b>${esc(names.get(m.student_id) || '—')}</b>
+          ${m.status === 'absent' ? `<button type="button" class="av-rc-late" data-mark="${m.id}" data-to="late">متأخر</button>` : ''}
+          <button type="button" class="av-rc-ok" data-mark="${m.id}" data-to="present">${IC.check}حاضر</button>
+        </li>`).join('')}</ul>` : ''}
+        <div class="av-rc-add"><button type="button" class="av-rc-addbtn" data-add="${k}">＋ إضافة غائب</button></div>
+      </div>`;
+    }).join('')}</div>`;
+  box.querySelectorAll('[data-rp]').forEach(b => b.onclick = () => { dv.rp = +b.dataset.rp; renderRound(); });
+  box.querySelectorAll('[data-mark]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const m = (marks || []).find(x => x.id === b.dataset.mark);
+    const r = b.dataset.to === 'present' ? await sb.from('attendance_marks').delete().eq('id', m.id) : await sb.from('attendance_marks').update({ status: b.dataset.to }).eq('id', m.id);
+    if (r.error) { toast('تعذر التعديل: ' + r.error.message, 'err'); b.disabled = false; return; }
+    await recountSession(m.session_id);
+    toast(b.dataset.to === 'present' ? `✓ ${names.get(m.student_id) || 'الطالب'} حاضر` : '✓ تم التعديل إلى متأخر');
+    renderRound();
+  });
+  box.querySelectorAll('[data-add]').forEach(b => b.onclick = () => openAddAbsence(b.closest('.av-rc'), b.dataset.add, sessBy.get(b.dataset.add), schedBy.get(b.dataset.add), new Set(((sessBy.get(b.dataset.add) && marksBy.get(sessBy.get(b.dataset.add).id)) || []).map(m => m.student_id))));
+}
+
+async function recountSession(sid) {
+  const { data } = await sb.from('attendance_marks').select('status').eq('session_id', sid);
+  const a = (data || []).filter(x => x.status === 'absent').length, l = (data || []).filter(x => x.status === 'late').length;
+  await sb.from('attendance_sessions').update({ absent_count: a, late_count: l, updated_at: new Date().toISOString() }).eq('id', sid);
+}
+
+async function openAddAbsence(card, key, sess, sched, already) {
+  const old = card.querySelector('.av-rc-pick'); if (old) { old.remove(); return; }
+  const [g, s] = key.split('|');
+  const wrap = document.createElement('div');
+  wrap.className = 'av-rc-pick';
+  wrap.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
+  card.appendChild(wrap);
+  const { data: studs } = await sb.rpc('attendance_class_students', { p_grade: g, p_section: Number(s), p_school: currentSchoolId || null });
+  const list = (studs || []).filter(x => !already.has(x.id));
+  wrap.innerHTML = `<label class="av-search">${IC.search}<input type="search" placeholder="ابحث عن الطالب" autocomplete="off" /></label>
+    <ul>${list.map(x => `<li data-n="${esc(x.full_name)}"><b>${esc(x.full_name)}</b><button type="button" class="av-rc-abs" data-sid="${x.id}" data-st="absent">غائب</button><button type="button" class="av-rc-late" data-sid="${x.id}" data-st="late">متأخر</button></li>`).join('') || '<li><span>كل طلاب الفصل مسجّلون</span></li>'}</ul>`;
+  const inp = wrap.querySelector('input');
+  inp.focus();
+  inp.oninput = () => wrap.querySelectorAll('li[data-n]').forEach(li => li.classList.toggle('hidden', !!inp.value.trim() && !li.dataset.n.includes(inp.value.trim())));
+  wrap.querySelectorAll('[data-sid]').forEach(b => b.onclick = async () => {
+    wrap.querySelectorAll('button').forEach(x => { x.disabled = true; });
+    let sid = sess && sess.id;
+    if (!sid) {
+      const row = { att_date: st.date, period: dv.rp, grade_level: g, class_section: Number(s), teacher_id: currentUserId, teacher_name: currentProfile.full_name || null, subject_name: sched ? sched.subject_name : null, absent_count: 0, late_count: 0 };
+      let { data, error } = await writeWithSchool(extra => sb.from('attendance_sessions').insert({ ...row, ...extra }).select('id').single());
+      if (error && /duplicate|unique/i.test(error.message || '')) {
+        ({ data } = await readScopedBySchool(sc => { let q = sb.from('attendance_sessions').select('id').eq('att_date', st.date).eq('period', dv.rp).eq('grade_level', g).eq('class_section', Number(s)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.maybeSingle(); }));
+        error = null;
+      }
+      if (error || !data) { toast('تعذر الحفظ: ' + ((error && error.message) || ''), 'err'); renderRound(); return; }
+      sid = data.id;
+    }
+    const { error } = await writeWithSchool(extra => sb.from('attendance_marks').insert({ session_id: sid, student_id: b.dataset.sid, status: b.dataset.st, att_date: st.date, period: dv.rp, ...extra }));
+    if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الحفظ: ' + error.message, 'err'); renderRound(); return; }
+    await recountSession(sid);
+    toast(`✓ أُضيف ${b.closest('li').dataset.n.split(' ')[0]} ${b.dataset.st === 'absent' ? 'غائبًا' : 'متأخرًا'}`);
+    renderRound();
+  });
 }
