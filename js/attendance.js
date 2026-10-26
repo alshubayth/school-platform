@@ -277,7 +277,7 @@ async function renderDay() {
     </details>
     <div class="att-msg-card">
       <div class="att-msg-h"><b>الغائبون ورسائل أولياء الأمور</b><span>حدد الطلاب ثم اعتمد إرسال الرسائل</span></div>
-      <label class="att-tpl">نص الرسالة<textarea id="att-tpl" rows="2">${esc(loadTpl())}</textarea><small>المتغيرات: {الاسم} {اليوم} {التاريخ} {المدرسة}</small></label>
+      <label class="att-tpl">نص الرسالة<textarea id="att-tpl" rows="2">${esc(loadTpl())}</textarea><small>المتغيرات: {الاسم} (الاسم الأول) {اليوم} {التاريخ} {المدرسة}</small></label>
       ${absentRows.length ? `<div class="att-msg-tools"><label><input type="checkbox" id="att-sel-all"> تحديد الكل</label><button type="button" class="text-action-btn" id="att-sel-full">تحديد الغائبين كل الحصص</button></div>
       <ul class="att-abs-list">${absentRows.map(r => `<li class="${r.msg ? 'sent' : ''}">
         <input type="checkbox" class="att-sel" data-id="${r.id}" ${r.msg ? 'disabled' : fullDay(r) ? 'checked' : ''} aria-label="تحديد ${esc(r.full_name)}" />
@@ -372,7 +372,9 @@ async function approveMessages(ids, tpl) {
   const dname = new Date(dayData.date + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long' });
   const [yy, mm, dd] = dayData.date.split('-');
   const dtxt = `${Number(dd)}/${Number(mm)}/${yy}م`;
-  const body = r => tpl.replace(/\{الاسم\}/g, r.full_name).replace(/\{اليوم\}/g, dname).replace(/\{التاريخ\}/g, dtxt).replace(/\{المدرسة\}/g, printOrgName() || '');
+  // الاسم الأول فقط في الرسالة
+  const first = n => String(n || '').trim().split(/\s+/)[0] || '';
+  const body = r => tpl.replace(/\{الاسم\}/g, first(r.full_name)).replace(/\{اليوم\}/g, dname).replace(/\{التاريخ\}/g, dtxt).replace(/\{المدرسة\}/g, printOrgName() || '');
   const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile || null, body: body(r), status: r.mobile ? 'pending' : 'failed', error: r.mobile ? null : 'لا يوجد رقم جوال', approved_by: currentUserId }));
   const { error } = await writeWithSchool(extra => sb.from('attendance_messages').insert(payload.map(p => ({ ...p, ...extra }))));
   if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الاعتماد: ' + error.message, 'err'); btn.disabled = false; btn.textContent = 'اعتماد الرسائل'; return; }
