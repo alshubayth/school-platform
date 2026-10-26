@@ -326,8 +326,9 @@ async function retryFailed() {
 async function smsStatusLine() {
   const el = $('att-sms-status'); if (!el) return;
   try {
-    const { data } = await sb.functions.invoke('send-attendance-sms', { body: { action: 'status', school_id: currentSchoolId || null } });
-    if (!data || data.configured === false) { el.innerHTML = '<span class="att-ms failed">خدمة الرسائل غير مربوطة</span> أضف مفتاح تقنيات في إعدادات الخادم'; return; }
+    const { data, error } = await sb.functions.invoke('send-attendance-sms', { body: { action: 'status', school_id: currentSchoolId || null } });
+    if (error || !data) { el.innerHTML = `<span class="att-ms failed">خدمة الرسائل</span> تعذر الاتصال بالخدمة: ${esc((error && error.message) || 'لا يوجد رد')}`; return; }
+    if (data.configured === false) { el.innerHTML = '<span class="att-ms failed">خدمة الرسائل غير مربوطة</span> أضف مفتاح تقنيات في إعدادات الخادم'; return; }
     if (data.error) { el.innerHTML = `<span class="att-ms failed">خدمة الرسائل</span> ${esc(data.error)}`; return; }
     const snd = (data.senders || []).map(x => x.senderName).filter(Boolean).join('، ');
     const bal = data.balance && data.balance.balance != null ? ` · الرصيد ${esc(data.balance.balance)} ${esc(data.balance.currency || '')}` : '';
