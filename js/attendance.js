@@ -310,7 +310,8 @@ async function approveMessages(ids, tpl) {
   if (!confirm(`اعتماد رسائل غياب لأولياء أمور ${rows.length} ${rows.length <= 10 ? 'طلاب' : 'طالبًا'}؟${noPhone ? `\n(${noPhone} بلا رقم جوال ولن تصلهم رسالة)` : ''}`)) return;
   const btn = $('att-send'); btn.disabled = true; btn.textContent = 'جارٍ الاعتماد...';
   const dname = new Date(dayData.date + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long' });
-  const dtxt = new Date(dayData.date + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'numeric', year: 'numeric' });
+  const [yy, mm, dd] = dayData.date.split('-');
+  const dtxt = `${Number(dd)}/${Number(mm)}/${yy}م`;
   const body = r => tpl.replace(/\{الاسم\}/g, r.full_name).replace(/\{اليوم\}/g, dname).replace(/\{التاريخ\}/g, dtxt).replace(/\{المدرسة\}/g, printOrgName() || '');
   const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile || null, body: body(r), status: r.mobile ? 'pending' : 'failed', error: r.mobile ? null : 'لا يوجد رقم جوال', approved_by: currentUserId }));
   const { error } = await writeWithSchool(extra => sb.from('attendance_messages').insert(payload.map(p => ({ ...p, ...extra }))));
