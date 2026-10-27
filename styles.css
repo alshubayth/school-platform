@@ -3673,3 +3673,52 @@ body.omr-noscroll{ overflow:hidden; }
 .db-pick:hover{ background:#FBEAE9; border-color:#F1C3BF; color:#B2382F; }
 .db-pick small{ font-weight:600; opacity:.8; }
 .db-sh-foot{ display:flex; gap:8px; justify-content:space-between; }
+/* نتائج أولياء الأمور (النشر) */
+.er-pubres-btn{ margin-inline-start:auto; border:1px solid #B9D7F0; background:#F2F8FE; color:#1D5A93; font:inherit; font-size:13px; font-weight:700; border-radius:10px; padding:8px 14px; cursor:pointer; white-space:nowrap; width:auto; }
+.er-pubres-btn:hover{ background:#E3F0FC; }
+.er-absrep-btn + .er-pubres-btn{ margin-inline-start:0; }
+.rp-back{ position:fixed; inset:0; background:rgba(15,23,42,.45); z-index:1200; display:flex; align-items:flex-start; justify-content:center; padding:48px 16px; overflow-y:auto; }
+.rp-back.hidden{ display:none; }
+.rp{ background:#fff; border-radius:16px; width:100%; max-width:760px; padding:16px 18px 20px; box-shadow:0 20px 50px rgba(0,0,0,.25); }
+.rp-h{ display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.rp-h b{ flex:1; font-size:16.5px; }
+.rp-ib{ width:auto; margin:0; border:0; background:none; font-size:16px; cursor:pointer; color:var(--slate); padding:4px 6px; }
+.rp-link{ display:flex; flex-direction:column; gap:8px; background:#F7F9FC; border:1px solid var(--border); border-radius:12px; padding:12px; }
+.rp-link b{ display:block; font-size:13.5px; } .rp-link span{ font-size:12px; color:var(--slate); }
+.rp-link-r{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+.rp-link-r code{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; background:#fff; border:1px solid var(--border); border-radius:8px; padding:7px 10px; }
+.rp-btn{ display:inline-flex; align-items:center; justify-content:center; width:auto; margin:0; border:1px solid var(--meadow); background:var(--meadow); color:#fff; font:inherit; font-size:13px; font-weight:800; border-radius:10px; padding:8px 14px; cursor:pointer; text-decoration:none; white-space:nowrap; }
+.rp-btn.ghost{ background:#fff; color:var(--ink); border-color:var(--border); }
+.rp-btn.danger{ background:#FFF5F4; color:#B2382F; border-color:#F1C3BF; }
+.rp-btn.sm{ font-size:12px; padding:6px 10px; border-radius:9px; }
+.rp-btn:disabled{ opacity:.6; cursor:default; }
+.rp-bar{ display:flex; align-items:center; justify-content:space-between; margin:16px 0 8px; }
+.rp-list{ display:flex; flex-direction:column; gap:8px; }
+.rp-item{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+.rp-item.on{ border-color:#B9E0C7; background:#F6FBF8; }
+.rp-item-t{ flex:1; min-width:200px; } .rp-item-t b{ display:block; font-size:14px; } .rp-item-t span{ font-size:12px; color:var(--slate); }
+.rp-item-a{ display:flex; gap:6px; flex-wrap:wrap; }
+.rp-pill{ font-size:11.5px; font-weight:800; border-radius:999px; padding:3px 10px; background:#EEF1F5; color:var(--slate); }
+.rp-pill.on{ background:#1F6A3C; color:#fff; }
+.rp-empty{ text-align:center; color:var(--slate); font-size:13px; padding:18px; border:1px dashed var(--border); border-radius:12px; }
+.rp-empty.sm{ padding:10px; }
+.rp-form{ display:flex; flex-direction:column; gap:12px; }
+.rp-seg{ display:flex; background:#F1F4F8; border-radius:11px; padding:3px; gap:3px; }
+.rp-seg button{ flex:1; width:auto; margin:0; border:0; background:none; font:inherit; font-size:13px; font-weight:800; color:var(--slate); border-radius:9px; padding:8px; cursor:pointer; }
+.rp-seg button.on{ background:#fff; color:var(--ink); box-shadow:0 1px 3px rgba(0,0,0,.08); }
+.rp-row{ display:flex; gap:10px; flex-wrap:wrap; }
+.rp-row label, .rp-full{ flex:1; min-width:200px; display:flex; flex-direction:column; gap:4px; font-size:12.5px; font-weight:700; color:var(--slate); margin:0; }
+.rp-row select, .rp-full select, .rp-full input{ margin:0; }
+.rp-lbl{ font-size:12.5px; font-weight:800; color:var(--slate); } .rp-lbl small{ font-weight:600; }
+.rp-chips{ display:flex; gap:6px; flex-wrap:wrap; }
+.rp-chips button{ width:auto; margin:0; border:1px solid var(--border); background:#fff; font:inherit; font-size:13px; font-weight:700; border-radius:999px; padding:6px 14px; cursor:pointer; }
+.rp-chips button.on{ background:var(--meadow); border-color:var(--meadow); color:#fff; }
+.rp-reps{ display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:6px; max-height:300px; overflow-y:auto; }
+.rp-rep{ display:grid; grid-template-columns:auto 1fr; column-gap:8px; align-items:center; border:1px solid var(--border); border-radius:10px; padding:7px 10px; cursor:pointer; margin:0; }
+.rp-rep input{ grid-row:span 2; width:auto; margin:0; }
+.rp-rep b{ font-size:13px; } .rp-rep span{ font-size:11.5px; color:var(--slate); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rp-chk{ display:flex; align-items:center; gap:6px; font-size:13px; font-weight:700; margin:0; } .rp-chk input{ width:auto; margin:0; }
+.rp-note{ font-size:12px; color:var(--slate); line-height:1.8; margin:0; }
+.rp-err{ color:#B2382F; font-size:13px; font-weight:700; } .rp-err:empty{ display:none; }
+.rp-foot{ display:flex; gap:8px; justify-content:flex-end; }
+@media (max-width:600px){ .rp-back{ padding:0; } .rp{ border-radius:0; min-height:100%; } }

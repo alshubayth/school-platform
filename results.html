@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>نتائج الطلاب</title>
+<meta name="robots" content="noindex">
+<link rel="icon" type="image/svg+xml" href="parent-favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700;800;900&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --ink:#14233A; --slate:#5B6B80; --line:#E3E8EF; --bg:#F4F6FA; --card:#FFFFFF;
+    --brand:#1D4E89; --brand-2:#2E6FB7; --ok:#1F6A3C; --warn:#A4501A; --bad:#B2382F;
+    --l5:#1F6A3C; --l4:#2E7D5B; --l3:#2E6FB7; --l2:#A4501A; --l1:#B2382F;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; }
+  body{ background:var(--bg); color:var(--ink); font-family:'IBM Plex Sans Arabic', Tahoma, sans-serif; font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3,b,.num{ font-family:'Tajawal','IBM Plex Sans Arabic',sans-serif; }
+  .top{ background:linear-gradient(135deg,var(--brand),var(--brand-2)); color:#fff; padding:28px 16px 74px; text-align:center; }
+  .top img{ width:64px; height:64px; object-fit:contain; background:#fff; border-radius:16px; padding:6px; margin-bottom:10px; }
+  .top h1{ margin:0; font-size:22px; font-weight:900; }
+  .top p{ margin:4px 0 0; opacity:.85; font-size:14px; }
+  main{ max-width:760px; margin:-52px auto 40px; padding:0 16px; }
+  .card{ background:var(--card); border-radius:18px; box-shadow:0 8px 30px rgba(20,35,58,.08); padding:22px; }
+  .lookup h2{ margin:0 0 4px; font-size:19px; }
+  .lookup .sub{ margin:0 0 18px; color:var(--slate); font-size:13.5px; }
+  label{ display:block; font-weight:700; font-size:13.5px; margin-bottom:14px; }
+  label small{ display:block; font-weight:500; color:var(--slate); font-size:12px; }
+  input{ width:100%; margin-top:6px; font:inherit; font-size:18px; letter-spacing:2px; text-align:center; direction:ltr; border:1.5px solid var(--line); border-radius:12px; padding:12px; background:#FBFCFE; color:var(--ink); }
+  input:focus{ outline:none; border-color:var(--brand-2); background:#fff; box-shadow:0 0 0 3px rgba(46,111,183,.15); }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; width:100%; border:0; border-radius:12px; padding:13px; font:inherit; font-weight:800; font-size:16px; background:var(--brand); color:#fff; cursor:pointer; }
+  .btn:disabled{ opacity:.6; cursor:default; }
+  .btn.ghost{ background:#fff; color:var(--ink); border:1px solid var(--line); width:auto; padding:9px 16px; font-size:14px; }
+  .msg{ margin-top:12px; font-size:13.5px; font-weight:700; color:var(--bad); text-align:center; }
+  .msg:empty{ display:none; }
+  .privacy{ margin:14px 0 0; font-size:12px; color:var(--slate); text-align:center; }
+  .stu{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
+  .stu .av{ width:48px; height:48px; border-radius:14px; background:#E8F0FA; color:var(--brand); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:20px; font-family:'Tajawal',sans-serif; flex-shrink:0; }
+  .stu b{ display:block; font-size:18px; }
+  .stu span{ color:var(--slate); font-size:13.5px; }
+  .stu .btn{ margin-inline-start:auto; }
+  .res{ margin-top:16px; padding:0; overflow:hidden; }
+  .res-h{ padding:16px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .res-h h3{ margin:0; font-size:17px; flex:1; min-width:200px; }
+  .res-h .meta{ color:var(--slate); font-size:12.5px; }
+  .summary{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; padding:16px 20px 4px; }
+  .sbox{ background:#F7F9FC; border-radius:14px; padding:12px 14px; }
+  .sbox > span{ display:block; color:var(--slate); font-size:12.5px; }
+  .sbox .lvl{ display:inline-block; color:#fff; font-size:14px; padding:4px 14px; margin-top:4px; }
+  .of{ font-weight:600; color:var(--slate); font-size:.8em; white-space:nowrap; }
+  .sbox b{ font-size:24px; font-weight:900; }
+  .sbox b small{ font-size:14px; color:var(--slate); font-weight:700; }
+  .lvl{ display:inline-block; font-size:12px; font-weight:800; border-radius:999px; padding:2px 10px; color:#fff; white-space:nowrap; }
+  .l5{ background:var(--l5); } .l4{ background:var(--l4); } .l3{ background:var(--l3); } .l2{ background:var(--l2); } .l1{ background:var(--l1); } .la{ background:#8A94A3; }
+  table{ width:100%; border-collapse:collapse; }
+  .twrap{ padding:12px 20px 18px; overflow-x:auto; }
+  th{ text-align:start; font-size:12.5px; color:var(--slate); font-weight:700; padding:8px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td{ padding:11px 8px; border-bottom:1px solid #F0F2F6; font-size:14.5px; vertical-align:middle; }
+  tr:last-child td{ border-bottom:0; }
+  td.sub b{ display:block; font-size:15px; }
+  td.sub small{ color:var(--slate); font-size:12px; }
+  .num{ font-weight:800; white-space:nowrap; direction:ltr; unicode-bidi:isolate; }
+  .bar{ position:relative; height:7px; border-radius:6px; background:#EDF1F6; min-width:90px; margin-top:6px; }
+  .bar i{ position:absolute; inset-inline-start:0; top:0; bottom:0; border-radius:6px; background:var(--brand-2); }
+  .bar em{ position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink); opacity:.55; border-radius:2px; }
+  .cmp{ font-size:12px; font-weight:700; white-space:nowrap; }
+  .cmp.up{ color:var(--ok); } .cmp.down{ color:var(--warn); }
+  .legend{ padding:0 20px 16px; font-size:12px; color:var(--slate); display:flex; gap:14px; flex-wrap:wrap; }
+  .legend i{ display:inline-block; width:12px; height:6px; border-radius:3px; background:var(--brand-2); vertical-align:middle; margin-inline-end:4px; }
+  .legend em{ display:inline-block; width:2px; height:12px; background:var(--ink); opacity:.55; vertical-align:middle; margin-inline-end:4px; }
+  .res-f{ padding:0 20px 18px; display:flex; justify-content:flex-end; }
+  .empty{ text-align:center; color:var(--slate); padding:30px 10px; }
+  .empty b{ display:block; color:var(--ink); font-size:16px; margin-bottom:4px; }
+  .foot{ text-align:center; color:var(--slate); font-size:12px; margin-top:22px; }
+  .hidden{ display:none !important; }
+  .nw{ white-space:nowrap; }
+  .avg-sm{ display:none; color:var(--slate); font-size:11.5px; margin-top:3px; white-space:nowrap; }
+  @media (max-width:560px){
+    .card{ padding:18px; } .res{ padding:0; }
+    .res-h, .twrap, .summary, .legend, .res-f{ padding-inline:14px; }
+    .hide-sm{ display:none; }
+    .avg-sm{ display:block; }
+    td{ font-size:14px; padding:10px 6px; }
+  }
+  @media print{
+    body{ background:#fff; }
+    .top{ background:none; color:var(--ink); padding:10px 0; }
+    .top img{ background:none; }
+    main{ margin:0 auto; max-width:none; }
+    .card{ box-shadow:none; border:1px solid var(--line); }
+    .no-print, .lookup{ display:none !important; }
+    .res{ break-inside:avoid; page-break-inside:avoid; }
+    .res.skip-print{ display:none; }
+    .bar i, .lvl, .sbox{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+</head>
+<body>
+<header class="top">
+  <img id="logo" class="hidden" alt="">
+  <h1 id="school-name">نتائج الطلاب</h1>
+  <p>نتائج الاختبارات لأولياء الأمور</p>
+</header>
+<main>
+  <section class="card lookup" id="lookup">
+    <h2>الاستعلام عن النتيجة</h2>
+    <p class="sub">أدخل رقم هوية الطالب وآخر أربعة أرقام من جوال ولي الأمر المسجل لدى المدرسة.</p>
+    <form id="form" autocomplete="off" novalidate>
+      <label>رقم هوية الطالب<input id="nid" inputmode="numeric" maxlength="10" placeholder="1xxxxxxxxx" required></label>
+      <label>آخر أربعة أرقام من جوال ولي الأمر<small>الرقم المسجل لدى المدرسة، الذي تصلكم عليه رسائلها</small><input id="l4" inputmode="numeric" maxlength="4" placeholder="••••" required></label>
+      <button class="btn" id="go" type="submit">عرض النتيجة</button>
+      <div class="msg" id="msg" role="alert"></div>
+    </form>
+    <p class="privacy">لا تُعرض إلا نتيجة الطالب نفسه، ولا تظهر بيانات أي طالب آخر.</p>
+  </section>
+  <section id="out" class="hidden"></section>
+  <p class="foot" id="foot"></p>
+</main>
+<script>
+const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } });
+const slug = new URLSearchParams(location.search).get('school') || 'al-murooj';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const GRADES = { first_intermediate: 'الأول المتوسط', second_intermediate: 'الثاني المتوسط', third_intermediate: 'الثالث المتوسط' };
+const LEVELS = [[90, 'ممتاز', 'l5'], [80, 'جيد جدًا', 'l4'], [65, 'جيد', 'l3'], [50, 'مقبول', 'l2'], [0, 'يحتاج إلى دعم', 'l1']];
+const lvl = p => LEVELS.find(l => p >= l[0]) || LEVELS[LEVELS.length - 1];
+const fmt = v => String(Math.round(Number(v) * 100) / 100);
+const digits = s => String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '');
+let schoolName = '';
+
+(async function initSchool() {
+  const { data } = await sb.from('schools').select('name, branding').eq('slug', slug).maybeSingle();
+  if (!data) return;
+  schoolName = data.name;
+  $('school-name').textContent = data.name;
+  document.title = 'نتائج الطلاب - ' + data.name;
+  $('foot').textContent = data.name;
+  const logo = data.branding && data.branding.school_logo;
+  if (logo) { $('logo').src = logo; $('logo').alt = 'شعار ' + data.name; $('logo').classList.remove('hidden'); }
+})();
+
+['nid', 'l4'].forEach(id => $(id).addEventListener('input', e => { const v = digits(e.target.value).slice(0, id === 'nid' ? 10 : 4); if (e.target.value !== v) e.target.value = v; if (id === 'nid' && v.length === 10) $('l4').focus(); }));
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const nid = digits($('nid').value), l4 = digits($('l4').value), msg = $('msg');
+  msg.textContent = '';
+  if (nid.length !== 10) { msg.textContent = 'رقم الهوية يتكون من عشرة أرقام'; $('nid').focus(); return; }
+  if (l4.length !== 4) { msg.textContent = 'أدخل آخر أربعة أرقام من الجوال'; $('l4').focus(); return; }
+  const btn = $('go'); btn.disabled = true; btn.textContent = 'جارٍ البحث...';
+  const { data, error } = await sb.rpc('parent_results', { p_school_slug: slug, p_nid: nid, p_last4: l4 });
+  btn.disabled = false; btn.textContent = 'عرض النتيجة';
+  if (error) { msg.textContent = 'تعذر الاتصال، حاول مرة أخرى'; return; }
+  if (data.error) {
+    msg.textContent = data.error === 'locked' ? 'تجاوزت عدد المحاولات المسموح بها، حاول مرة أخرى بعد ساعة.'
+      : data.error === 'not_found' ? `البيانات غير مطابقة. تأكد من رقم الهوية وآخر أربعة أرقام من الجوال المسجل لدى المدرسة.${data.left != null && data.left < 3 ? ` (المحاولات المتبقية: ${data.left})` : ''}`
+      : data.error === 'school' ? 'رابط المدرسة غير صحيح، اطلب الرابط من المدرسة.' : 'تحقق من البيانات المدخلة.';
+    return;
+  }
+  render(data);
+});
+
+function render(d) {
+  const st = d.student || {}, list = d.results || [];
+  const out = $('out');
+  const initial = String(st.name || '؟').trim().charAt(0);
+  out.innerHTML = `<div class="card">
+      <div class="stu"><div class="av">${esc(initial)}</div><div><b>${esc(st.name)}</b><span>${esc(GRADES[st.grade] || st.grade || '')}${st.section ? ' · فصل ' + esc(st.section) : ''}</span></div>
+      <button class="btn ghost no-print" id="again" type="button">طالب آخر</button></div>
+    </div>
+    ${list.length ? list.map((r, i) => card(r, i)).join('') : `<div class="card res"><div class="empty"><b>لا توجد نتائج منشورة حتى الآن</b>ستظهر النتائج هنا فور نشرها من المدرسة.</div></div>`}`;
+  $('lookup').classList.add('hidden');
+  out.classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  $('again').onclick = () => { out.classList.add('hidden'); out.innerHTML = ''; $('lookup').classList.remove('hidden'); $('nid').value = ''; $('l4').value = ''; $('nid').focus(); };
+  out.querySelectorAll('[data-print]').forEach(b => b.onclick = () => {
+    const keep = b.dataset.print;
+    out.querySelectorAll('.res').forEach(c => c.classList.toggle('skip-print', c.dataset.i !== keep));
+    window.print();
+    out.querySelectorAll('.res').forEach(c => c.classList.remove('skip-print'));
+  });
+}
+
+function card(r, i) {
+  const p = r.payload || {}, rows = p.rows || [], t = p.total, avg = r.show_class_avg !== false;
+  const many = rows.length > 1;
+  const pubDate = r.published_at ? new Date(r.published_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  const tl = t && t.pct != null ? lvl(t.pct) : null;
+  return `<article class="card res" data-i="${i}">
+    <div class="res-h"><h3>${esc(r.title)}</h3><span class="meta">${esc(r.semester || '')}${r.semester && pubDate ? ' · ' : ''}${pubDate ? 'نُشرت ' + esc(pubDate) : ''}</span></div>
+    ${t && many ? `<div class="summary">
+      <div class="sbox"><span>المجموع</span><b><span class="num">${fmt(t.score)}</span> <small>من ${fmt(t.max)}</small></b></div>
+      <div class="sbox"><span>النسبة العامة</span><b class="num">${fmt(t.pct)}%</b></div>
+      <div class="sbox"><span>التقدير العام</span><span class="lvl ${tl[2]}">${tl[1]}</span></div>
+      ${avg && t.classAvg != null ? `<div class="sbox"><span>متوسط الفصل</span><b class="num">${fmt(t.classAvg)}%</b></div>` : ''}
+    </div>` : ''}
+    <div class="twrap"><table>
+      <thead><tr><th>${many ? 'المادة' : 'الاختبار'}</th><th>الدرجة</th><th>النسبة</th><th>التقدير</th>${avg ? '<th class="hide-sm">متوسط الفصل</th>' : ''}</tr></thead>
+      <tbody>${rows.map(x => {
+        if (x.absent) return `<tr><td class="sub"><b>${esc(x.subject)}</b>${many ? '' : `<small>${esc(x.title)}</small>`}</td><td>— <span class="of">من ${fmt(x.max)}</span></td><td>—</td><td><span class="lvl la">غائب</span></td>${avg ? `<td class="hide-sm num">${x.classAvg != null ? fmt(x.classAvg) + '%' : '—'}</td>` : ''}</tr>`;
+        const l = lvl(x.pct), d = x.classAvg != null ? x.pct - x.classAvg : null;
+        return `<tr>
+          <td class="sub"><b>${esc(x.subject)}</b>${many ? '' : `<small>${esc(x.title)}</small>`}</td>
+          <td class="nw"><span class="num">${fmt(x.score)}</span> <span class="of">من ${fmt(x.max)}</span></td>
+          <td><span class="num">${fmt(x.pct)}%</span><div class="bar" aria-hidden="true"><i style="width:${Math.max(0, Math.min(100, x.pct))}%"></i>${avg && x.classAvg != null ? `<em style="inset-inline-start:${Math.max(0, Math.min(100, x.classAvg))}%"></em>` : ''}</div>${avg && x.classAvg != null ? `<small class="avg-sm">متوسط الفصل ${fmt(x.classAvg)}%</small>` : ''}</td>
+          <td><span class="lvl ${l[2]}">${l[1]}</span></td>
+          ${avg ? `<td class="hide-sm"><span class="num">${x.classAvg != null ? fmt(x.classAvg) + '%' : '—'}</span>${d != null ? `<div class="cmp ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? 'أعلى' : 'أقل'} من المتوسط بـ ${fmt(Math.abs(d))}%</div>` : ''}</td>` : ''}
+        </tr>`;
+      }).join('')}</tbody>
+    </table></div>
+    ${avg ? '<div class="legend"><span><i></i>نسبة الطالب</span><span><em></em>متوسط الفصل</span></div>' : ''}
+    <div class="res-f no-print"><button class="btn ghost" type="button" data-print="${i}">طباعة النتيجة</button></div>
+  </article>`;
+}
+</script>
+</body>
+</html>

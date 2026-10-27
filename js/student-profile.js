@@ -120,7 +120,7 @@ function build(reps, plat) {
   });
 }
 
-function scoreReport(rep, platMap) {
+export function scoreReport(rep, platMap) {
   const rd = rep.raw_data || {};
   if (!Array.isArray(rd.students) || !rd.students.length) return null;
   const types = rd.itemTypes || [];

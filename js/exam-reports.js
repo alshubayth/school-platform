@@ -1073,9 +1073,12 @@ function renderFilterBar() {
     <select id="erf-sem" aria-label="الفصل الدراسي">${opt('', 'كل الفصول الدراسية', erFilt.sem)}${['الفصل الدراسي الأول', 'الفصل الدراسي الثاني', ...sems].filter((x, i, a) => a.indexOf(x) === i).map(x => opt(x, x, erFilt.sem)).join('')}${erListData.some(r => !r.semester) ? opt('-', 'بدون فصل دراسي', erFilt.sem) : ''}</select>
     ${active ? '<button type="button" class="text-action-btn" id="erf-clear">مسح الفلاتر</button>' : ''}
     ${erListData.some(r => r.exam_type === 'periodic') ? '<button type="button" class="er-absrep-btn" id="erf-absrep">🖨 تقرير الغياب</button>' : ''}
+    ${!isTeacherView() ? '<button type="button" class="er-pubres-btn" id="erf-pubres">نتائج أولياء الأمور</button>' : ''}
   </div>`;
   const ab = document.getElementById('erf-absrep');
   if (ab) ab.onclick = () => openAbsenceReport();
+  const pr = document.getElementById('erf-pubres');
+  if (pr) pr.onclick = async () => { const { openResultsPublisher } = await import('./results-publish.js?v=' + ASSET_VERSION); openResultsPublisher(); };
   const on = (id, k, ev = 'change') => { const el = document.getElementById(id); el.addEventListener(ev, () => { erFilt[k] = el.value; saveFilt(); renderSavedList(id === 'erf-q'); }); };
   on('erf-subject', 'subject'); on('erf-grade', 'grade'); on('erf-type', 'type'); on('erf-sem', 'sem'); on('erf-q', 'q', 'input');
   const cl = document.getElementById('erf-clear');
