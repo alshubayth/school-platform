@@ -27,6 +27,8 @@ export let myBudgetAccess = null;
 export function setMyBudgetAccess(v) { myBudgetAccess = v; }
 // هل عند المعلم صلاحية ممنوحة من المدير/الوكيل لرؤية "متابعة الخطة الأسبوعية"؟ (المدير/الوكيل يشوفونه دائمًا بحكم دورهم)
 export let hasWeeklyTrackingAccess = false;
+// صلاحية متابعة غياب الطلاب الممنوحة لمعلم (مثل المرشد): null | 'view' | 'send'
+export let attFollowLevel = null;
 export const isAdminOrDeputy = () => ['admin','deputy'].includes(currentProfile.role);
 export const isStaff = () => ['admin','deputy','teacher'].includes(currentProfile.role);
 export function setupCollapsible(toggleId, bodyId, chevronId) {
@@ -270,7 +272,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-26h';
+export const ASSET_VERSION = '2026-10-27a';
 
 /* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
  * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
@@ -498,6 +500,9 @@ export async function loadProfileAndShowDashboard(userId) {
 
     const { data: wtPerm } = await sb.from('weekly_tracking_permissions').select('id').eq('profile_id', userId).maybeSingle();
     hasWeeklyTrackingAccess = !!wtPerm;
+
+    const { data: afLevel } = await sb.rpc('att_follow_level', { p_school: currentSchoolId });
+    attFollowLevel = afLevel || null;
   }
 
   if (profile.role !== 'admin' && profile.role !== 'parent') {

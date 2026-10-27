@@ -1,4 +1,4 @@
-import { sb, currentSchoolId, currentUserId, currentProfile, isAdminOrDeputy, readScopedBySchool, writeWithSchool, gradeLabels, loadPeriodTimes, periodTime, fmtClock, printOrgName } from './core.js';
+import { sb, currentSchoolId, currentUserId, currentProfile, isAdminOrDeputy, attFollowLevel, readScopedBySchool, writeWithSchool, gradeLabels, loadPeriodTimes, periodTime, fmtClock, printOrgName } from './core.js';
 
 /* =========================================================================
  * تحضير الطلاب
@@ -26,6 +26,7 @@ const plural = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <=
 const initials = n => { const w = String(n || '').split(/\s+/).filter(x => x && x !== 'بن'); return (w[0] ? w[0][0] : '') + (w.length > 1 ? w[w.length - 1].replace(/^ال(?=.{2})/, '')[0] : ''); };
 const DEFAULT_TEMPLATE = 'ولي أمر الطالب {الاسم}، نفيدكم بغياب ابنكم عن المدرسة اليوم {اليوم} {التاريخ}. {المدرسة}';
 const IC = {
+  lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
   prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
   next: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg>',
@@ -42,6 +43,8 @@ const st = {
   classes: [], students: [], marks: new Map(), saved: new Map(), session: null, q: '',
   mySlots: [], done: new Map(),
 };
+const canFollow = () => isAdminOrDeputy() || !!attFollowLevel;
+const canSend = () => isAdminOrDeputy() || attFollowLevel === 'send';
 const dirty = () => { if (st.marks.size !== st.saved.size) return true; for (const [k, v] of st.marks) if (st.saved.get(k) !== v) return true; return false; };
 
 /* ---------- الدخول ---------- */
@@ -56,7 +59,8 @@ export async function loadAttendanceModule() {
           <label class="av-d-lbl"><span id="av-d-txt"></span><input type="date" id="av-d-in" max="${todayIso()}" aria-label="اختيار التاريخ" /></label>
           <button type="button" id="av-d-next" aria-label="اليوم التالي">${IC.next}</button>
         </div>
-        ${isAdminOrDeputy() ? `<div class="av-tabs" role="tablist"><button type="button" data-tab="take" class="on">التحضير</button><button type="button" data-tab="day">متابعة اليوم</button></div>` : ''}
+        ${canFollow() ? `<div class="av-tabs" role="tablist"><button type="button" data-tab="take" class="on">التحضير</button><button type="button" data-tab="day">متابعة اليوم</button></div>` : ''}
+        ${isAdminOrDeputy() ? `<button type="button" class="av-permbtn" id="av-perms" title="صلاحيات متابعة الغياب">${IC.lock}صلاحيات المتابعة</button>` : ''}
       </div>
     </header>
     <section id="av-take"></section>
@@ -72,6 +76,8 @@ export async function loadAttendanceModule() {
     $('av-day').classList.toggle('hidden', st.tab !== 'day');
     if (st.tab === 'day') renderDay(); else { await refreshMySlots(); renderTake(); }
   });
+  const pb = $('av-perms'); if (pb) pb.onclick = openFollowPerms;
+  $('av-day').classList.toggle('av-nosend', !canSend());
   $('av-d-prev').onclick = () => setDate(shiftIso(st.date, -1));
   $('av-d-next').onclick = () => { if (st.date < todayIso()) setDate(shiftIso(st.date, 1)); };
   $('av-d-in').onchange = e => setDate(e.target.value || todayIso());
@@ -393,7 +399,7 @@ function renderAbsent() {
     : `<div class="av-card av-empty-day">${IC.check}<b>لا يوجد غياب مسجّل في هذا اليوم</b><span>${dayData.sess.length ? `حُضّرت ${plural(dayData.sess.length, 'حصة واحدة', 'حصتان', 'حصص', 'حصة')} بلا غياب` : 'لم تُحضَّر أي حصة بعد'}</span></div>`}`;
   if (!all.length) return;
   box.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { dv.filter = b.dataset.f; renderAbsent(); });
-  box.querySelectorAll('.av-abs li:not(.nosel)').forEach(li => li.onclick = e => {
+  if (canSend()) box.querySelectorAll('.av-abs li:not(.nosel)').forEach(li => li.onclick = e => {
     const id = li.dataset.id; const cb = li.querySelector('input');
     if (e.target !== cb) cb.checked = !cb.checked;
     cb.checked ? dv.sel.add(id) : dv.sel.delete(id);
@@ -409,7 +415,7 @@ function renderAbsent() {
   const sp = $('av-send-pending'); if (sp) sp.onclick = async () => { sp.disabled = true; sp.textContent = 'جارٍ الإرسال...'; const r = await sendPending(dayData.date); toast(r.msg, r.ok ? 'ok' : 'err'); renderDay(); };
   const rt = $('av-retry'); if (rt) rt.onclick = async () => { rt.disabled = true; rt.textContent = 'جارٍ الإرسال...'; await retryFailed(); };
   paintAct();
-  smsStatusLine();
+  if (canSend()) smsStatusLine();
 }
 function paintAct() {
   const n = dv.sel.size, bar = $('av-actbar'); if (!bar) return;
@@ -619,5 +625,60 @@ async function openAddAbsence(card, key, sess, sched, already) {
     await recountSession(sid);
     toast(`✓ أُضيف ${b.closest('li').dataset.n.split(' ')[0]} ${b.dataset.st === 'absent' ? 'غائبًا' : 'متأخرًا'}`);
     renderRound();
+  });
+}
+
+
+/* ---------- صلاحيات متابعة الغياب: يمنحها المدير أو الوكيل لمعلم (مثل المرشد الطلابي) ---------- */
+async function openFollowPerms() {
+  let ov = $('av-perm-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'av-perm-ov'; ov.className = 'av-perm-ov'; document.body.appendChild(ov); }
+  ov.innerHTML = `<div class="av-perm" role="dialog" aria-label="صلاحيات متابعة الغياب"><div class="av-perm-h"><b>صلاحيات متابعة الغياب</b><button type="button" class="av-perm-x" aria-label="إغلاق">✕</button></div><div class="tx-loading"><span></span><span></span><span></span></div></div>`;
+  ov.classList.remove('hidden');
+  const close = () => ov.classList.add('hidden');
+  ov.onclick = e => { if (e.target === ov) close(); };
+  ov.querySelector('.av-perm-x').onclick = close;
+  let tq = sb.from('profiles').select('id, full_name').eq('role', 'teacher').order('full_name');
+  if (currentSchoolId) tq = tq.eq('school_id', currentSchoolId);
+  let fq = sb.from('attendance_followers').select('id, profile_id, can_send');
+  if (currentSchoolId) fq = fq.eq('school_id', currentSchoolId);
+  const [{ data: teachers }, { data: fol, error }] = await Promise.all([tq, fq]);
+  if (error) { ov.querySelector('.tx-loading').outerHTML = `<p class="av-perm-err">تعذر تحميل الصلاحيات: ${esc(error.message)}</p>`; return; }
+  const nameOf = new Map((teachers || []).map(t => [t.id, t.full_name]));
+  const granted = new Set((fol || []).map(f => f.profile_id));
+  const avail = (teachers || []).filter(t => !granted.has(t.id));
+  ov.querySelector('.av-perm').innerHTML = `
+    <div class="av-perm-h"><b>صلاحيات متابعة الغياب</b><button type="button" class="av-perm-x" aria-label="إغلاق">✕</button></div>
+    <p class="av-perm-d">تتيح للمعلم (مثل المرشد الطلابي) تبويب «متابعة اليوم»: عرض الغائبين وجولة الفصول وتعديل التحضير. ويمكن السماح له أيضًا باعتماد رسائل أولياء الأمور وإرسالها.</p>
+    <div class="av-perm-add">
+      <select id="av-perm-who">${avail.length ? avail.map(t => `<option value="${t.id}">${esc(t.full_name)}</option>`).join('') : '<option value="">لا يوجد معلمون متاحون</option>'}</select>
+      <label class="av-perm-chk"><input type="checkbox" id="av-perm-send" /> إرسال الرسائل</label>
+      <button type="button" id="av-perm-addbtn"${avail.length ? '' : ' disabled'}>منح الصلاحية</button>
+    </div>
+    <ul class="av-perm-list">${(fol || []).length ? fol.map(f => `<li data-id="${f.id}">
+      <b>${esc(nameOf.get(f.profile_id) || '—')}</b>
+      <label class="av-perm-chk"><input type="checkbox" data-send ${f.can_send ? 'checked' : ''} /> إرسال الرسائل</label>
+      <button type="button" class="av-perm-del" data-del>إلغاء</button></li>`).join('') : '<li class="empty">لم تُمنح الصلاحية لأحد بعد</li>'}</ul>`;
+  ov.querySelector('.av-perm-x').onclick = close;
+  const addBtn = $('av-perm-addbtn');
+  addBtn.onclick = async () => {
+    const pid = $('av-perm-who').value; if (!pid) return;
+    addBtn.disabled = true;
+    const { error: e } = await writeWithSchool(extra => sb.from('attendance_followers').insert({ profile_id: pid, can_send: $('av-perm-send').checked, granted_by: currentUserId, ...extra }));
+    if (e) toast(/duplicate|unique/i.test(e.message) ? 'لدى هذا المعلم الصلاحية بالفعل' : 'تعذر منح الصلاحية: ' + e.message, 'err');
+    else toast('✓ مُنحت الصلاحية، وتظهر للمعلم عند دخوله التالي');
+    openFollowPerms();
+  };
+  ov.querySelectorAll('.av-perm-list li[data-id]').forEach(li => {
+    li.querySelector('[data-send]').onchange = async e => {
+      const { error: x } = await sb.from('attendance_followers').update({ can_send: e.target.checked }).eq('id', li.dataset.id);
+      toast(x ? 'تعذر التعديل: ' + x.message : '✓ حُفظ التعديل', x ? 'err' : 'ok');
+    };
+    li.querySelector('[data-del]').onclick = async () => {
+      if (!confirm('هل تريد إلغاء صلاحية المتابعة لهذا المعلم؟')) return;
+      const { error: x } = await sb.from('attendance_followers').delete().eq('id', li.dataset.id);
+      if (x) toast('تعذر الإلغاء: ' + x.message, 'err');
+      openFollowPerms();
+    };
   });
 }
