@@ -7,6 +7,10 @@
  * لا يظهر لولي الأمر اسم أي طالب آخر ولا ترتيب، فقط درجة ابنه ومتوسط فصله.
  * ========================================================================= */
 import { sb, currentSchoolId, currentUserId, readScopedBySchool, writeWithSchool, gradeLabels, ASSET_VERSION } from './core.js';
+import { loadPdfJs, loadPdfLib } from './lib-loader.js';
+
+const PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+const BUCKET = 'result-docs';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -64,11 +68,11 @@ function renderList() {
     <div class="rp-bar"><b>النتائج المحفوظة</b><button type="button" class="rp-btn" id="rp-new">＋ نشر نتائج جديدة</button></div>
     <div class="rp-list">${pubs.length ? pubs.map(p => `<div class="rp-item${p.published ? ' on' : ''}" data-id="${p.id}">
       <div class="rp-item-t"><b>${esc(p.title)}</b>
-        <span>${p.mode === 'single' ? 'تقرير واحد' : `${p.report_ids.length} اختبارات`} · ${(p.grade_levels || []).map(g => esc(gradeLabels[g] || g)).join('، ') || '—'} · ${p.students_count} طالبًا</span></div>
+        <span>${p.kind === 'documents' ? 'تقارير PDF من نور' : p.mode === 'single' ? 'تقرير واحد' : `${p.report_ids.length} اختبارات`} · ${(p.grade_levels || []).map(g => esc(gradeLabels[g] || g)).join('، ') || '—'} · ${p.students_count} طالبًا</span></div>
       <span class="rp-pill ${p.published ? 'on' : ''}">${p.published ? 'منشورة' : 'مسودة'}</span>
       <div class="rp-item-a">
         <button type="button" class="rp-btn sm${p.published ? ' ghost' : ''}" data-act="toggle">${p.published ? 'إيقاف النشر' : 'نشر'}</button>
-        <button type="button" class="rp-btn sm ghost" data-act="refresh" title="إعادة حساب الدرجات من التقارير بعد أي تعديل">تحديث الدرجات</button>
+        ${p.kind === 'documents' ? '' : '<button type="button" class="rp-btn sm ghost" data-act="refresh" title="إعادة حساب الدرجات من التقارير بعد أي تعديل">تحديث الدرجات</button>'}
         <button type="button" class="rp-btn sm ghost" data-act="edit">تعديل</button>
         <button type="button" class="rp-btn sm danger" data-act="del">حذف</button>
       </div></div>`).join('') : '<div class="rp-empty">لم تُنشر نتائج بعد. اضغط «نشر نتائج جديدة» واختر الاختبارات.</div>'}</div>`;
@@ -84,15 +88,17 @@ function renderList() {
       if (error) { alert('تعذر الحفظ: ' + error.message); e.target.disabled = false; return; }
       p.published = on; if (on) p.published_at = new Date().toISOString(); renderList();
     };
-    row.querySelector('[data-act=refresh]').onclick = async e => {
+    const rf = row.querySelector('[data-act=refresh]');
+    if (rf) rf.onclick = async e => {
       const b = e.target; b.disabled = true; b.textContent = 'جارٍ التحديث...';
       const r = await generate(p);
       if (r.error) { alert(r.error); b.disabled = false; b.textContent = 'تحديث الدرجات'; return; }
       p.students_count = r.count; renderList();
     };
-    row.querySelector('[data-act=edit]').onclick = () => renderForm(p);
+    row.querySelector('[data-act=edit]').onclick = () => (p.kind === 'documents' ? renderDocsForm(p) : renderForm(p));
     row.querySelector('[data-act=del]').onclick = async () => {
       if (!confirm(`هل تريد حذف «${p.title}»؟ لن تظهر لأولياء الأمور بعد الحذف.`)) return;
+      if (p.kind === 'documents') await removeDocFiles(p);
       const { error } = await sb.from('result_publications').delete().eq('id', p.id);
       if (error) { alert('تعذر الحذف: ' + error.message); return; }
       pubs = pubs.filter(x => x.id !== p.id); renderList();
@@ -125,7 +131,7 @@ function renderForm(edit) {
     const list = matching();
     box.innerHTML = `${head(edit ? 'تعديل النتائج' : 'نشر نتائج جديدة', true)}
       <div class="rp-form">
-        <div class="rp-seg" role="tablist"><button type="button" data-mode="combined" class="${f.mode === 'combined' ? 'on' : ''}">نتائج مجمّعة لعدة اختبارات</button><button type="button" data-mode="single" class="${f.mode === 'single' ? 'on' : ''}">نتيجة تقرير واحد</button></div>
+        ${segHtml(f.mode, !!edit)}
         ${f.mode === 'combined' ? `
           <div class="rp-row">
             <label>نوع الاختبار<select id="rp-type">${typesAvail.map(t => `<option value="${t}"${t === f.type ? ' selected' : ''}>${esc(TYPE_LABEL[t] || t)}</option>`).join('')}</select></label>
@@ -143,7 +149,7 @@ function renderForm(edit) {
         <div class="rp-foot"><button type="button" class="rp-btn ghost" id="rp-draft">حفظ كمسودة</button><button type="button" class="rp-btn" id="rp-pub">حفظ ونشر</button></div>
       </div>`;
     wireHead(box);
-    box.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { f.mode = b.dataset.mode; draw(); });
+    box.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { if (b.dataset.mode === 'docs') { renderDocsForm(null); return; } f.mode = b.dataset.mode; draw(); });
     const t = $('rp-type'); if (t) t.onchange = () => { f.type = t.value; f.picked = new Set(matching().map(r => r.id)); draw(); };
     const s = $('rp-sem'); if (s) s.onchange = () => { f.sem = s.value; f.picked = new Set(matching().map(r => r.id)); draw(); };
     box.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { f.grades.has(b.dataset.g) ? f.grades.delete(b.dataset.g) : f.grades.add(b.dataset.g); matching().forEach(r => f.picked.add(r.id)); draw(); });
@@ -241,4 +247,186 @@ function entryOf(map, p) {
   const id = String(p.national_id).trim();
   if (!map.has(id)) map.set(id, { id, name: p.full_name, gl: p.grade_level, section: p.class_section != null ? String(p.class_section) : '', rows: [] });
   return map.get(id);
+}
+
+function segHtml(mode, editing) {
+  const tabs = [['combined', 'نتائج مجمّعة لعدة اختبارات'], ['single', 'نتيجة تقرير واحد'], ['docs', 'تقارير نور (PDF)']];
+  // عند التعديل لا يتغير نوع النتيجة
+  const list = editing ? tabs.filter(([k]) => (mode === 'docs' ? k === 'docs' : k !== 'docs')) : tabs;
+  return `<div class="rp-seg" role="tablist">${list.map(([k, l]) => `<button type="button" data-mode="${k}" class="${mode === k ? 'on' : ''}">${l}</button>`).join('')}</div>`;
+}
+
+/* =========================================================================
+ * تقارير نور (PDF): كل طالب صفحة، ورقم الهوية مكتوب فيها.
+ * يُقرأ نص كل صفحة، ويُبحث فيه عن رقم هوية طالب مسجل في المنصة، فتُقسم الملفات
+ * إلى ملف لكل طالب ويُرفع إلى مخزن خاص، والصفحات التي لم يُعرف صاحبها تُحدد يدويًا.
+ * ========================================================================= */
+const toLatin = s => String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d));
+function idsInText(text, known) {
+  const runs = (toLatin(text).match(/\d+/g) || []);
+  const cands = new Set();
+  runs.forEach((r, i) => {
+    if (r.length >= 10) for (let k = 0; k + 10 <= r.length; k++) cands.add(r.slice(k, k + 10));
+    // رقم مقسوم على أكثر من قطعة نصية
+    let acc = r;
+    for (let j = i + 1; j < runs.length && acc.length < 10; j++) { acc += runs[j]; if (acc.length === 10) cands.add(acc); }
+  });
+  const hits = new Set();
+  cands.forEach(c => { if (known.has(c)) hits.add(c); const rv = c.split('').reverse().join(''); if (known.has(rv)) hits.add(rv); });
+  return [...hits];
+}
+
+function renderDocsForm(edit) {
+  const box = $('rp-back').querySelector('.rp');
+  const st = { title: edit ? edit.title : 'تقرير نتائج الطالب - الفصل الدراسي الأول', sem: edit ? (edit.semester || '') : SEMS[0], files: [], pages: [], plat: null, known: null, busy: false };
+  const draw = () => {
+    const matched = new Map();
+    st.pages.forEach(pg => { const id = pg.manual || pg.nid; if (id) { if (!matched.has(id)) matched.set(id, []); matched.get(id).push(pg); } });
+    const unmatched = st.pages.filter(pg => !(pg.manual || pg.nid));
+    const dup = [...matched.values()].filter(v => v.length > 1).length;
+    box.innerHTML = `${head(edit ? 'تحديث تقارير نور' : 'نشر نتائج جديدة', true)}
+      <div class="rp-form">
+        ${segHtml('docs', !!edit)}
+        <div class="rp-row">
+          <label>العنوان الظاهر لولي الأمر<input type="text" id="rd-title" value="${esc(st.title)}" maxlength="120"></label>
+          <label>الفصل الدراسي<select id="rd-sem">${SEMS.map(x => `<option${x === st.sem ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select></label>
+        </div>
+        <label class="rp-drop" id="rd-drop"><input type="file" id="rd-files" accept="application/pdf,.pdf" multiple hidden>
+          <b>${st.files.length ? `${st.files.length} ملف · ${st.pages.length} صفحة` : 'اختر ملفات PDF المصدّرة من نور'}</b>
+          <span>${st.files.length ? 'اضغط لإضافة ملفات أخرى' : 'يمكن اختيار عدة ملفات (فصل أو أكثر في كل ملف). كل صفحة تقرير طالب.'}</span></label>
+        ${edit && !st.files.length ? `<p class="rp-note">مرفوع حاليًا ${edit.students_count} تقريرًا. الملفات الجديدة تُضاف، ومن له تقرير سابق يُستبدل تقريره.</p>` : ''}
+        <div id="rd-status" class="rp-note"></div>
+        ${st.pages.length ? `<div class="rd-sum">
+            <div class="ok"><b>${matched.size}</b><span>طالبًا عُرف من رقم الهوية</span></div>
+            <div class="${unmatched.length ? 'warn' : ''}"><b>${unmatched.length}</b><span>صفحة لم يُعرف صاحبها</span></div>
+            ${dup ? `<div><b>${dup}</b><span>طالبًا له أكثر من صفحة (تُجمع في ملف واحد)</span></div>` : ''}
+          </div>
+          ${unmatched.length ? `<div class="rp-lbl">حدد صاحب كل صفحة أو اتركها (لن تُرفع)</div>
+            <div class="rd-un">${unmatched.map(pg => `<div class="rd-pg" data-k="${pg.k}"><canvas></canvas><div><b>${esc(pg.fileName)} · صفحة ${pg.page}</b>
+              <input list="rd-dl" placeholder="اكتب اسم الطالب أو رقم هويته" data-k="${pg.k}"></div></div>`).join('')}</div>
+            <datalist id="rd-dl">${(st.plat || []).filter(p => p.national_id).map(p => `<option value="${esc(String(p.national_id).trim())}">${esc(p.full_name)} · ${esc(gradeLabels[p.grade_level] || '')} ${esc(p.class_section || '')}</option>`).join('')}</datalist>` : ''}` : ''}
+        <div class="rp-err" id="rp-err"></div>
+        <div class="rp-foot"><button type="button" class="rp-btn ghost" id="rp-draft"${matched.size ? '' : ' disabled'}>رفع كمسودة</button><button type="button" class="rp-btn" id="rp-pub"${matched.size ? '' : ' disabled'}>رفع ونشر${matched.size ? ` (${matched.size})` : ''}</button></div>
+      </div>`;
+    wireHead(box);
+    box.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { if (b.dataset.mode !== 'docs') renderForm(null); });
+    $('rd-title').oninput = e => { st.title = e.target.value; };
+    $('rd-sem').onchange = e => { st.sem = e.target.value; };
+    $('rd-files').onchange = e => { const fs = [...e.target.files]; e.target.value = ''; if (fs.length) analyze(fs); };
+    box.querySelectorAll('.rd-un input').forEach(inp => inp.onchange = () => {
+      const pg = st.pages.find(x => x.k === inp.dataset.k); const v = toLatin(inp.value).replace(/\D/g, '');
+      if (st.known.has(v)) { pg.manual = v; draw(); } else { inp.value = ''; inp.placeholder = 'لم يُعثر على الطالب، اختر من القائمة'; }
+    });
+    unmatched.forEach(pg => thumb(pg, box.querySelector(`.rd-pg[data-k="${pg.k}"] canvas`)));
+    $('rp-draft').onclick = () => upload(false, matched);
+    $('rp-pub').onclick = () => upload(true, matched);
+  };
+  const status = t => { const el = $('rd-status'); if (el) el.textContent = t; };
+
+  const analyze = async fs => {
+    try {
+      status('جارٍ تجهيز القراءة...');
+      await loadPdfJs(); window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDF_WORKER;
+      if (!st.plat) {
+        const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
+        st.plat = (await allStudents()).filter(p => p.national_id);
+        st.known = new Set(st.plat.map(p => String(p.national_id).trim()));
+      }
+      for (const file of fs) {
+        if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') continue;
+        const buf = await file.arrayBuffer();
+        const fi = st.files.length;
+        st.files.push({ name: file.name, buf });
+        const doc = await window.pdfjsLib.getDocument({ data: buf.slice(0) }).promise;
+        for (let i = 1; i <= doc.numPages; i++) {
+          status(`جارٍ قراءة «${file.name}»: صفحة ${i} من ${doc.numPages}`);
+          const page = await doc.getPage(i);
+          const tc = await page.getTextContent();
+          const text = tc.items.map(x => x.str).join(' ');
+          const hits = idsInText(text, st.known);
+          st.pages.push({ k: fi + '-' + i, fi, page: i, fileName: file.name, nid: hits.length === 1 ? hits[0] : null, noText: !text.trim(), doc });
+        }
+      }
+      const noText = st.pages.filter(p => p.noText).length;
+      draw();
+      status(noText === st.pages.length ? 'الملفات صور بلا نص، فلا يمكن قراءة رقم الهوية منها تلقائيًا. صدّر التقرير من نور بصيغة PDF عادية، أو حدد صاحب كل صفحة يدويًا.' : '');
+    } catch (e) { status('تعذر قراءة الملف: ' + (e.message || e)); }
+  };
+
+  const thumb = async (pg, cv) => {
+    if (!cv) return;
+    try {
+      const page = await pg.doc.getPage(pg.page);
+      const v0 = page.getViewport({ scale: 1 });
+      const vp = page.getViewport({ scale: (110 * (window.devicePixelRatio || 1)) / v0.width });
+      cv.width = vp.width; cv.height = vp.height;
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+    } catch (e) { /* معاينة فقط */ }
+  };
+
+  const upload = async (publish, matched) => {
+    if (st.busy) return;
+    const err = $('rp-err'); err.textContent = '';
+    if (!currentSchoolId) { err.textContent = 'لم تُحدد المدرسة'; return; }
+    st.busy = true;
+    ['rp-draft', 'rp-pub'].forEach(id => { $(id).disabled = true; });
+    try {
+      await loadPdfLib();
+      const grades = [...new Set([...matched.keys()].map(id => (st.plat.find(p => String(p.national_id).trim() === id) || {}).grade_level).filter(Boolean))];
+      const row = { title: (st.title || '').trim() || 'تقرير نتائج الطالب', semester: st.sem || null, kind: 'documents', mode: 'single', updated_at: new Date().toISOString() };
+      if (publish) { row.published = true; row.published_at = new Date().toISOString(); }
+      let pub;
+      if (edit) {
+        row.grade_levels = [...new Set([...(edit.grade_levels || []), ...grades])];
+        const { data, error } = await sb.from('result_publications').update(row).eq('id', edit.id).select('*').single();
+        if (error) throw error; pub = data;
+      } else {
+        row.grade_levels = grades;
+        const { data, error } = await writeWithSchool(extra => sb.from('result_publications').insert({ ...row, created_by: currentUserId, ...extra }).select('*').single());
+        if (error) throw error; pub = data;
+      }
+      const srcs = [];
+      for (const f of st.files) srcs.push(await window.PDFLib.PDFDocument.load(f.buf.slice(0), { ignoreEncryption: true }));
+      const items = [...matched.entries()];
+      let done = 0; const fails = [];
+      const worker = async () => {
+        while (items.length) {
+          const [nid, pages] = items.shift();
+          try {
+            const out = await window.PDFLib.PDFDocument.create();
+            for (const pg of pages) { const [cp] = await out.copyPages(srcs[pg.fi], [pg.page - 1]); out.addPage(cp); }
+            const bytes = await out.save();
+            const path = `${currentSchoolId}/${pub.id}/${nid}.pdf`;
+            const { error } = await sb.storage.from(BUCKET).upload(path, new Blob([bytes], { type: 'application/pdf' }), { upsert: true, contentType: 'application/pdf' });
+            if (error) throw error;
+            const p = st.plat.find(x => String(x.national_id).trim() === nid);
+            const { error: e2 } = await writeWithSchool(extra => sb.from('result_documents').upsert({ publication_id: pub.id, national_id: nid, student_name: p ? p.full_name : null, storage_path: path, pages: pages.length, ...extra }, { onConflict: 'publication_id,national_id' }));
+            if (e2) throw e2;
+          } catch (e) { fails.push(nid); }
+          done++; status(`جارٍ الرفع: ${done} من ${matched.size}`);
+        }
+      };
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      const { count } = await sb.from('result_documents').select('id', { count: 'exact', head: true }).eq('publication_id', pub.id);
+      await sb.from('result_publications').update({ students_count: count || 0 }).eq('id', pub.id);
+      pub.students_count = count || 0;
+      pubs = [pub, ...pubs.filter(x => x.id !== pub.id)];
+      if (fails.length) { st.busy = false; err.textContent = `رُفع ${matched.size - fails.length} تقريرًا، وتعذر رفع ${fails.length}. أعد المحاولة لاحقًا من «تعديل».`; status(''); return; }
+      renderList();
+    } catch (e) {
+      st.busy = false; err.textContent = 'تعذر الرفع: ' + (e.message || e);
+      ['rp-draft', 'rp-pub'].forEach(id => { const b = $(id); if (b) b.disabled = false; });
+    }
+  };
+  draw();
+}
+
+async function removeDocFiles(p) {
+  const dir = `${p.school_id || currentSchoolId}/${p.id}`;
+  for (let i = 0; i < 50; i++) {
+    const { data } = await sb.storage.from(BUCKET).list(dir, { limit: 1000 });
+    if (!data || !data.length) break;
+    const { error } = await sb.storage.from(BUCKET).remove(data.map(f => `${dir}/${f.name}`));
+    if (error) break;
+  }
 }

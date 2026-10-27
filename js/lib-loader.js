@@ -32,3 +32,8 @@ export function loadJSZip() {
   if (window.JSZip) return Promise.resolve();
   return loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
 }
+
+export function loadPdfLib() {
+  if (window.PDFLib) return Promise.resolve();
+  return loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js');
+}

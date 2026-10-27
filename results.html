@@ -77,6 +77,11 @@
   .empty b{ display:block; color:var(--ink); font-size:16px; margin-bottom:4px; }
   .foot{ text-align:center; color:var(--slate); font-size:12px; margin-top:22px; }
   .hidden{ display:none !important; }
+  .doc-view{ padding:14px 20px 6px; display:flex; flex-direction:column; gap:10px; }
+  .doc-view canvas{ width:100%; height:auto; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 2px 10px rgba(20,35,58,.06); }
+  .doc-load{ text-align:center; color:var(--slate); font-size:13.5px; padding:30px 10px; background:#F7F9FC; border-radius:12px; }
+  .doc-actions{ gap:8px; }
+  a.btn{ text-decoration:none; }
   .nw{ white-space:nowrap; }
   .avg-sm{ display:none; color:var(--slate); font-size:11.5px; margin-top:3px; white-space:nowrap; }
   @media (max-width:560px){
@@ -133,6 +138,7 @@ const lvl = p => LEVELS.find(l => p >= l[0]) || LEVELS[LEVELS.length - 1];
 const fmt = v => String(Math.round(Number(v) * 100) / 100);
 const digits = s => String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[۰-۹]/g, d => '۰۱۲۳۴۵۶۷۸۹'.indexOf(d)).replace(/\D/g, '');
 let schoolName = '';
+let cred = null;   // للاستعلام عن ملفات التقارير بعد التحقق
 
 (async function initSchool() {
   const { data } = await sb.from('schools').select('name, branding').eq('slug', slug).maybeSingle();
@@ -163,6 +169,7 @@ $('form').addEventListener('submit', async e => {
       : data.error === 'school' ? 'رابط المدرسة غير صحيح، اطلب الرابط من المدرسة.' : 'تحقق من البيانات المدخلة.';
     return;
   }
+  cred = { nid, l4 };
   render(data);
 });
 
@@ -174,17 +181,63 @@ function render(d) {
       <div class="stu"><div class="av">${esc(initial)}</div><div><b>${esc(st.name)}</b><span>${esc(GRADES[st.grade] || st.grade || '')}${st.section ? ' · فصل ' + esc(st.section) : ''}</span></div>
       <button class="btn ghost no-print" id="again" type="button">طالب آخر</button></div>
     </div>
-    ${list.length ? list.map((r, i) => card(r, i)).join('') : `<div class="card res"><div class="empty"><b>لا توجد نتائج منشورة حتى الآن</b>ستظهر النتائج هنا فور نشرها من المدرسة.</div></div>`}`;
+    ${list.length ? list.map((r, i) => (r.kind === 'documents' ? docCard(r, i) : card(r, i))).join('') : `<div class="card res"><div class="empty"><b>لا توجد نتائج منشورة حتى الآن</b>ستظهر النتائج هنا فور نشرها من المدرسة.</div></div>`}`;
   $('lookup').classList.add('hidden');
   out.classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  $('again').onclick = () => { out.classList.add('hidden'); out.innerHTML = ''; $('lookup').classList.remove('hidden'); $('nid').value = ''; $('l4').value = ''; $('nid').focus(); };
+  $('again').onclick = () => { cred = null; out.classList.add('hidden'); out.innerHTML = ''; $('lookup').classList.remove('hidden'); $('nid').value = ''; $('l4').value = ''; $('nid').focus(); };
+  out.querySelectorAll('.res.doc').forEach(loadDoc);
   out.querySelectorAll('[data-print]').forEach(b => b.onclick = () => {
     const keep = b.dataset.print;
     out.querySelectorAll('.res').forEach(c => c.classList.toggle('skip-print', c.dataset.i !== keep));
     window.print();
     out.querySelectorAll('.res').forEach(c => c.classList.remove('skip-print'));
   });
+}
+
+const pubDateOf = r => (r.published_at ? new Date(r.published_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
+function docCard(r, i) {
+  const d = pubDateOf(r);
+  return `<article class="card res doc" data-i="${i}" data-pub="${esc(r.id)}">
+    <div class="res-h"><h3>${esc(r.title)}</h3><span class="meta">${esc(r.semester || '')}${r.semester && d ? ' · ' : ''}${d ? 'نُشر ' + esc(d) : ''}</span></div>
+    <div class="doc-view"><div class="doc-load">جارٍ تحميل التقرير...</div></div>
+    <div class="res-f no-print doc-actions hidden"><a class="btn ghost" data-open target="_blank" rel="noopener">فتح الملف</a><a class="btn ghost" data-dl download>تنزيل التقرير</a></div>
+  </article>`;
+}
+let pdfReady = null;
+function loadPdf() {
+  if (!pdfReady) pdfReady = new Promise((res, rej) => { const sc = document.createElement('script'); sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js'; sc.onload = () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js'; res(); }; sc.onerror = rej; document.head.appendChild(sc); });
+  return pdfReady;
+}
+async function loadDoc(el) {
+  const view = el.querySelector('.doc-view');
+  const fail = t => { view.innerHTML = `<div class="doc-load">${t}</div>`; };
+  if (!cred) return fail('أعد الاستعلام لعرض التقرير');
+  let url;
+  try {
+    const res = await fetch(SUPABASE_URL + '/functions/v1/result-doc', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY }, body: JSON.stringify({ slug, nid: cred.nid, last4: cred.l4, publication: el.dataset.pub }) });
+    const j = await res.json();
+    if (!j.url) return fail('تعذر تحميل التقرير، حاول مرة أخرى لاحقًا');
+    url = j.url;
+  } catch (e) { return fail('تعذر الاتصال، حاول مرة أخرى'); }
+  const acts = el.querySelector('.doc-actions');
+  acts.querySelector('[data-open]').href = url;
+  const dl = acts.querySelector('[data-dl]'); dl.href = url + (url.includes('?') ? '&' : '?') + 'download=' + encodeURIComponent('تقرير الطالب.pdf');
+  acts.classList.remove('hidden');
+  try {
+    await loadPdf();
+    const doc = await window.pdfjsLib.getDocument(url).promise;
+    view.innerHTML = '';
+    for (let i = 1; i <= doc.numPages; i++) {
+      const page = await doc.getPage(i);
+      const v0 = page.getViewport({ scale: 1 });
+      const w = Math.min(view.clientWidth || 700, 900) * (window.devicePixelRatio || 1);
+      const vp = page.getViewport({ scale: Math.min(3, w / v0.width) });
+      const cv = document.createElement('canvas'); cv.width = vp.width; cv.height = vp.height;
+      view.appendChild(cv);
+      await page.render({ canvasContext: cv.getContext('2d'), viewport: vp }).promise;
+    }
+  } catch (e) { fail('لا يمكن عرض التقرير هنا، استخدم «فتح الملف» أو «تنزيل التقرير».'); }
 }
 
 function card(r, i) {
