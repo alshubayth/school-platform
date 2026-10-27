@@ -1,4 +1,4 @@
-import { sb, SUPABASE_URL, currentUserId, roleLabels, gradeLabels,
+import { sb, SUPABASE_URL, currentUserId, roleLabels, staffRoleLabels, roleLabelOf, gradeLabels,
          isAdminOrDeputy, toLoginEmail, STAFF_ID_DOMAIN, setupCollapsible,
          currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
 import { loadXLSX } from './lib-loader.js';
@@ -54,7 +54,7 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
   }
 
   await loadXLSX();
-  const roleTextMap = { 'معلم': 'teacher', 'وكيل': 'deputy', 'مدير': 'admin' };
+  const roleTextMap = { 'معلم': 'teacher', 'وكيل': 'deputy', 'مدير': 'admin', 'موجه طلابي': 'teacher:counselor', 'موجه': 'teacher:counselor', 'مرشد طلابي': 'teacher:counselor', 'مساعد إداري': 'teacher:admin_assistant', 'مساعد اداري': 'teacher:admin_assistant' };
   const uploadBtn = document.getElementById('portal-excel-upload');
   const file = fileInput.files[0];
   const reader = new FileReader();
@@ -83,7 +83,7 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
           failedRows.push(`"${full_name}" — كلمة المرور ناقصة أو أقل من 6 أحرف`);
           continue;
         }
-        const role = roleTextMap[roleText] || 'teacher';
+        const [role, staffRole] = (roleTextMap[roleText] || 'teacher').split(':');
 
         uploadBtn.textContent = `جارٍ الإنشاء... (${created + failedRows.length + 1}/${rows.length})`;
 
@@ -96,8 +96,9 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
           const result = await res.json();
           if (!res.ok) { failedRows.push(`"${full_name}" — ${result.error || 'خطأ غير معروف'}`); continue; }
 
+          if (staffRole) await sb.rpc('set_staff_role', { p_profile: result.id, p_staff_role: staffRole });
           if (['admin', 'deputy', 'teacher'].includes(role)) {
-            await writeWithSchool(extra => sb.from('employees').insert({ full_name, job_title: roleLabels[role], profile_id: result.id, ...extra }));
+            await writeWithSchool(extra => sb.from('employees').insert({ full_name, job_title: staffRoleLabels[staffRole] || roleLabels[role], profile_id: result.id, ...extra }));
           }
           created++;
         } catch (err) {
@@ -144,7 +145,7 @@ document.getElementById('portal-submit').addEventListener('click', async () => {
 async function refreshPortalList() {
   const [{ data: emps }, { data: profs }] = await Promise.all([
     readScopedBySchool(scoped => {
-      let q = sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role, login_email)');
+      let q = sb.from('employees').select('id, full_name, job_title, profile_id, profiles(full_name, role, staff_role, login_email)');
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q;
     }),
@@ -184,7 +185,7 @@ function renderPortalRows() {
     const loginEmail = linked && emp.profiles ? emp.profiles.login_email : null;
     const loginDisplay = loginEmail ? (loginEmail.endsWith(STAFF_ID_DOMAIN) ? loginEmail.replace(STAFF_ID_DOMAIN, '') : loginEmail) : null;
     const initials = (emp.full_name || '؟').trim().split(' ').slice(0, 2).map(w => w.charAt(0)).join(' ');
-    const role = linked && emp.profiles ? roleLabels[emp.profiles.role] || '' : '';
+    const role = linked && emp.profiles ? roleLabelOf(emp.profiles) || '' : '';
     return `<div class="pt-row ${linked ? '' : 'is-unlinked'}" data-id="${emp.id}">
       <span class="cvt-av">${escP(initials)}</span>
       <span class="pt-main"><b>${escP(emp.full_name)}</b><span>${escP(emp.job_title || '')}</span></span>
@@ -270,7 +271,7 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
   const name = document.getElementById('newuser-name').value.trim();
   const email = document.getElementById('newuser-email').value.trim();
   const password = document.getElementById('newuser-password').value.trim();
-  const role = document.getElementById('newuser-role').value;
+  const [role, staffRole] = document.getElementById('newuser-role').value.split(':');
   const errEl = document.getElementById('newuser-error');
   const successEl = document.getElementById('newuser-success');
   errEl.style.display = 'none';
@@ -310,7 +311,8 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
       return;
     }
 
-    successEl.textContent = `تم إنشاء حساب "${name}" بنجاح بدور ${roleLabels[role]}`;
+    if (staffRole) await sb.rpc('set_staff_role', { p_profile: result.id, p_staff_role: staffRole });
+    successEl.textContent = `تم إنشاء حساب "${name}" بنجاح بدور ${staffRoleLabels[staffRole] || roleLabels[role]}`;
     successEl.style.display = 'block';
     document.getElementById('newuser-name').value = '';
     document.getElementById('newuser-email').value = '';
@@ -320,13 +322,14 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
     if (['admin', 'deputy', 'teacher'].includes(role)) {
       await writeWithSchool(extra => sb.from('employees').insert({
         full_name: name,
-        job_title: roleLabels[role],
+        job_title: staffRoleLabels[staffRole] || roleLabels[role],
         profile_id: result.id,
         ...extra,
       }));
     }
 
     if (role === 'teacher') await loadPermsModule();
+    loadStaffRoles();
   } catch (e) {
     errEl.textContent = 'تعذر الاتصال بالخادم: ' + e.message;
     errEl.style.display = 'block';
@@ -361,6 +364,7 @@ export async function loadPermsModule() {
   (subjects || []).forEach(s => { const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; subjectSelect.appendChild(o); });
 
   await refreshPermsList();
+  loadStaffRoles();
 }
 document.querySelectorAll('#pm-tabs button').forEach(b => b.addEventListener('click', () => {
   document.querySelectorAll('#pm-tabs button').forEach(x => x.classList.toggle('active', x === b));
@@ -553,3 +557,45 @@ function renderLoginTracker(back) {
 }
 const lgBtn = document.getElementById('pt-login-btn');
 if (lgBtn) lgBtn.addEventListener('click', openLoginTracker);
+
+
+/* ---------- الأدوار الإدارية: موجه طلابي / مساعد إداري فوق حساب المعلم ---------- */
+let srRows = [];
+async function loadStaffRoles() {
+  const list = document.getElementById('pm-sr-list');
+  if (!list) return;
+  const { data, error } = await readScopedBySchool(scoped => {
+    let q = sb.from('profiles').select('id, full_name, staff_role').eq('role', 'teacher');
+    if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+    return q.order('full_name');
+  });
+  if (error) { list.innerHTML = `<p class="pm-sr-empty">تعذر تحميل الحسابات: ${escP(error.message)}</p>`; return; }
+  srRows = data || [];
+  renderStaffRoles();
+}
+function renderStaffRoles() {
+  const list = document.getElementById('pm-sr-list');
+  const q = (document.getElementById('pm-sr-search').value || '').trim();
+  const rows = srRows.filter(r => !q || String(r.full_name || '').includes(q))
+    .sort((a, b) => (b.staff_role ? 1 : 0) - (a.staff_role ? 1 : 0));
+  list.innerHTML = rows.length ? rows.map(r => `<div class="pm-sr-row${r.staff_role ? ' on' : ''}" data-id="${r.id}">
+      <b>${escP(r.full_name)}</b>
+      <select aria-label="الدور">
+        <option value="">معلم</option>
+        <option value="counselor"${r.staff_role === 'counselor' ? ' selected' : ''}>موجه طلابي</option>
+        <option value="admin_assistant"${r.staff_role === 'admin_assistant' ? ' selected' : ''}>مساعد إداري</option>
+      </select><span class="pm-sr-st"></span></div>`).join('')
+    : '<p class="pm-sr-empty">لا توجد حسابات مطابقة</p>';
+  list.querySelectorAll('.pm-sr-row select').forEach(sel => sel.addEventListener('change', async () => {
+    const row = sel.closest('.pm-sr-row'), st = row.querySelector('.pm-sr-st');
+    sel.disabled = true; st.textContent = 'جارٍ الحفظ...'; st.className = 'pm-sr-st';
+    const { error } = await sb.rpc('set_staff_role', { p_profile: row.dataset.id, p_staff_role: sel.value || null });
+    sel.disabled = false;
+    if (error) { st.textContent = 'تعذر الحفظ: ' + error.message; st.className = 'pm-sr-st err'; return; }
+    const r = srRows.find(x => x.id === row.dataset.id); if (r) r.staff_role = sel.value || null;
+    row.classList.toggle('on', !!sel.value);
+    await writeWithSchool(extra => sb.from('employees').update({ job_title: staffRoleLabels[sel.value] || roleLabels.teacher, ...extra }).eq('profile_id', row.dataset.id));
+    st.textContent = '✓ حُفظ، ويسري عند دخوله التالي'; st.className = 'pm-sr-st ok';
+  }));
+}
+document.getElementById('pm-sr-search').addEventListener('input', renderStaffRoles);

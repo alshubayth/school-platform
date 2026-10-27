@@ -484,6 +484,8 @@ let parsedData = null; // { itemCount, choiceCounts, students, detectedKeyRaw, d
 let currentReport = null; // آخر تقرير محفوظ تم فتحه بشاشة التفاصيل
 
 const isTeacherView = () => !!(currentProfile && currentProfile.role === 'teacher');
+// الموجه الطلابي يطّلع على كل التقارير والفصول، ويبقى تعديله على تقاريره هو فقط
+const isScopedTeacher = () => isTeacherView() && currentProfile.staff_role !== 'counselor';
 export async function loadExamReportsModule(sub = null) {
   document.getElementById('er-detail-view').classList.add('hidden');
   document.getElementById('er-list-view').classList.remove('hidden');
@@ -978,7 +980,7 @@ async function loadSavedList() {
   }
   if (error) { listEl.innerHTML = '<p style="color:var(--danger); font-size:12.5px;">تعذر تحميل التقارير</p>'; return 0; }
   // المعلم: تقاريره + تقارير مواده وصفوفه
-  if (isTeacherView()) {
+  if (isScopedTeacher()) {
     const { myTeachingScope, subjectMatches, gradeFromText } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
     const sc = await myTeachingScope();
     data = (data || []).filter(r => {
@@ -2265,7 +2267,7 @@ async function loadPeriodicData(reportId) {
     .map(p => ({ id: String(p.national_id).trim(), name: p.full_name, gl: p.grade_level, grade: gradeLabels[p.grade_level] || '', section: String(p.class_section), absent: true }));
   // المعلم: فصوله بس
   let scoredF = scored, absentF = absent;
-  if (isTeacherView()) {
+  if (isScopedTeacher()) {
     const { myTeachingScope, inMyClasses } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
     const sc = await myTeachingScope();
     if (sc.classes.length || sc.grades.size) {
@@ -2581,7 +2583,7 @@ async function openManualSheet(rep, onDone, presetId = null) {
     const { allStudents } = await import('./students-cache.js?v=' + ASSET_VERSION);
     const data = await allStudents();
     students = (data || []).filter(x => x.national_id);
-    if (isTeacherView()) {
+    if (isScopedTeacher()) {
       const { myTeachingScope, inMyClasses } = await import('./teacher-scope.js?v=' + ASSET_VERSION);
       const sc = await myTeachingScope();
       const mine = students.filter(x => inMyClasses(sc, x.grade_level, x.class_section));

@@ -47,8 +47,12 @@ function fmtAmount(n) {
 }
 function accessLevel() {
   if (currentProfile.role === 'admin') return 'full';
+  if (myBudgetAccess === 'full') return 'full';
+  if (isAssistant()) return 'request_only';
   return myBudgetAccess; // 'full' | 'request_only' | null
 }
+// المساعد الإداري: يرفع طلبات صرف لأي مستفيد ويطّلع على كل طلبات الصرف (دون اعتمادها)
+const isAssistant = () => currentProfile.role === 'teacher' && currentProfile.staff_role === 'admin_assistant';
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -71,7 +75,7 @@ export async function loadBudgetModule() {
   document.getElementById('budget-dashboard-section').classList.toggle('hidden', !hasFull);
   document.getElementById('budget-settings-extra').classList.toggle('hidden', !hasFull);
   document.getElementById('budget-expense-form-section').classList.remove('hidden');
-  document.getElementById('budget-expenses-title').textContent = hasFull ? 'طلبات وحركات الصرف' : 'طلباتي';
+  document.getElementById('budget-expenses-title').textContent = hasFull ? 'طلبات وحركات الصرف' : isAssistant() ? 'طلبات الصرف' : 'طلباتي';
 
   // من عنده صلاحية كاملة يشوف كل التبويبات؛ غيره (طلبات فقط أو بدون صلاحية) يشوف "طلبات الصرف" بس
   document.getElementById('bud-tab-overview').classList.toggle('hidden', !hasFull);
@@ -732,7 +736,7 @@ async function loadExpensesList(canManage) {
         confirmer:profiles!budget_expense_requests_confirmed_by_fkey(full_name),
         budget_expense_items(id, invoice_number, invoice_date, source, description, amount, sort_order)`)
       .order('created_at', { ascending: false });
-    if (!canManage) query = query.eq('requested_by', currentUserId);
+    if (!canManage && !isAssistant()) query = query.eq('requested_by', currentUserId);
     if (scoped && currentSchoolId) query = query.eq('school_id', currentSchoolId);
     return query;
   });
@@ -781,7 +785,7 @@ async function loadExpensesList(canManage) {
             يُصرف لـ: ${esc(r.beneficiary_name)} — جهة الصرف: ${esc(r.funding_source === 'أخرى' ? (r.funding_source_other || 'أخرى') : r.funding_source)}
           </div>
           <div style="font-size:11.5px; color:var(--slate); margin-top:4px;">
-            ${canManage ? `مقدّم الطلب: ${esc(reqName)} — ` : ''}${fmtDate(r.request_date)} — ${items.length} فاتورة/فواتير${r.semester ? ` — ${esc(r.semester)}` : ''}
+            ${canManage || isAssistant() ? `مقدّم الطلب: ${esc(reqName)} — ` : ''}${fmtDate(r.request_date)} — ${items.length} فاتورة/فواتير${r.semester ? ` — ${esc(r.semester)}` : ''}
           </div>
         </div>
         <div style="text-align:left; flex-shrink:0;">

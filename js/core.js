@@ -17,6 +17,10 @@ export function toLoginEmail(value) {
 export let currentProfile = null;
 export let currentUserId = null;
 export const roleLabels = { admin: 'مدير', deputy: 'وكيل', teacher: 'معلم', parent: 'ولي أمر' };
+// أدوار إدارية فوق حساب المعلم: تحتفظ بصلاحيات المعلم وتضيف أقسامًا محددة
+export const staffRoleLabels = { counselor: 'موجه طلابي', admin_assistant: 'مساعد إداري' };
+export const roleLabelOf = p => (p && p.role === 'teacher' && staffRoleLabels[p.staff_role]) || roleLabels[p && p.role] || (p && p.role) || '';
+export const myStaffRole = () => (currentProfile && currentProfile.role === 'teacher' && currentProfile.staff_role) || null;
 export const gradeLabels = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
 export let isOpPlanMember = false;
 export function setOpPlanMember(v) { isOpPlanMember = v; }
@@ -91,9 +95,9 @@ export const GROUPS = [
 export const tiles = [
   { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal', group: 'students' },
   { key: 'schedule', icon: icons.schedule, title: 'الجدول الدراسي', desc: 'جدول الحصص لكل فصل',            roles: ['admin','deputy'], color: 'diamond-teal', group: 'admin' },
-  { key: 'student-data', icon: icons.studentData, title: 'بيانات الطلاب', desc: 'ابحث عن طالب في المدرسة أو مرحلة أو فصل', roles: ['admin','deputy'], color: 'diamond-navy', group: 'students' },
+  { key: 'student-data', icon: icons.studentData, title: 'بيانات الطلاب', desc: 'ابحث عن طالب في المدرسة أو مرحلة أو فصل', roles: ['admin','deputy'], staff: ['counselor'], color: 'diamond-navy', group: 'students' },
   { key: 'attendance', icon: icons.attendance, title: 'تحضير الطلاب', desc: 'تحضير الحصة وغياب الطلاب ورسائل أولياء الأمور', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'students' },
-  { key: 'student-profile', icon: icons.studentProfile, title: 'ملف الطالب', desc: 'المستوى الدراسي لكل طالب ومقارنته بأقرانه ومواطن إخفاقه', roles: ['admin','deputy'], color: 'diamond-navy', group: 'students' },
+  { key: 'student-profile', icon: icons.studentProfile, title: 'ملف الطالب', desc: 'المستوى الدراسي لكل طالب ومقارنته بأقرانه ومواطن إخفاقه', roles: ['admin','deputy'], staff: ['counselor'], color: 'diamond-navy', group: 'students' },
   { key: 'student-lists', icon: icons.followups, title: 'كشوف الطلاب', desc: 'صمّم كشف رصد أو حضور أو متابعة واطبعه', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'students' },
   { key: 'followups', icon: icons.followups, title: 'كشوف متابعة الطلاب', desc: 'ملاحظات وسلوك ودرجات مشاركة/اختبارات لكل فصل', roles: ['admin','deputy'], color: 'diamond-gold', group: 'students' },
   { key: 'weekly-tracking', icon: icons.weekly, title: 'متابعة الخطة الأسبوعية', desc: 'المواد الناقصة كل أسبوع',   roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
@@ -272,7 +276,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-27a';
+export const ASSET_VERSION = '2026-10-27b';
 
 /* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
  * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
@@ -449,7 +453,7 @@ function finishShowingDashboard(schoolNameOverride) {
   document.getElementById('school-picker-screen').classList.add('hidden');
   document.getElementById('dashboard-screen').classList.remove('hidden');
   document.getElementById('user-name').textContent = currentProfile.full_name;
-  document.getElementById('user-role-badge').textContent = isOwnerAccount ? 'مالك النظام' : (roleLabels[currentProfile.role] || currentProfile.role);
+  document.getElementById('user-role-badge').textContent = isOwnerAccount ? 'مالك النظام' : roleLabelOf(currentProfile);
   document.getElementById('user-avatar').textContent = (currentProfile.full_name || '؟').trim().charAt(0);
   document.getElementById('switch-school-btn').classList.toggle('hidden', !isOwnerAccount);
   applyBrandToShell();
@@ -467,7 +471,7 @@ export async function loadProfileAndShowDashboard(userId) {
   // نحاول نجيب school_id واسم المدرسة (موجودين بس بعد تنفيذ SQL ترقية تعدد المدارس) - ولو فشل
   // (عمود/جدول لسا ما انضاف) نرجع تلقائيًا لنفس الاستعلام القديم عشان تسجيل الدخول يستمر يشتغل عادي
   let profile, error;
-  ({ data: profile, error } = await sb.from('profiles').select('full_name, role, school_id, schools(name)').eq('id', userId).single());
+  ({ data: profile, error } = await sb.from('profiles').select('full_name, role, school_id, staff_role, schools(name)').eq('id', userId).single());
   if (error) {
     ({ data: profile, error } = await sb.from('profiles').select('full_name, role').eq('id', userId).single());
   }
@@ -650,7 +654,7 @@ export function isTileAllowed(t) {
   // تبويب "إدارة المدارس والخدمات" خاص بالدور الحقيقي "owner" بس (بدون تحويله لـ"admin")
   if (t.key === 'schools-admin') return isOwnerAccount;
   const role = effectiveRoleForTiles();
-  if (!t.roles.includes(role)) return false;
+  if (!t.roles.includes(role) && !(t.staff && myStaffRole() && t.staff.includes(myStaffRole()))) return false;
   if (t.key === 'plan' && role === 'teacher' && !isOpPlanMember) return false;
   if (t.key === 'tracking' && role === 'teacher' && !hasExamAssignment) return false;
   if (t.key === 'weekly-tracking' && role === 'teacher' && !hasWeeklyTrackingAccess) return false;

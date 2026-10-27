@@ -621,6 +621,8 @@
           <input type="text" id="newuser-name" placeholder="الاسم الكامل" style="margin-bottom:10px;" />
           <select id="newuser-role">
             <option value="teacher">معلم</option>
+            <option value="teacher:counselor">موجه طلابي</option>
+            <option value="teacher:admin_assistant">مساعد إداري</option>
             <option value="deputy">وكيل</option>
             <option value="admin">مدير</option>
             <option value="parent">ولي أمر</option>
@@ -633,6 +635,13 @@
         <div class="error-msg" id="newuser-error"></div>
         <div id="newuser-success" style="display:none; color:var(--meadow); background:var(--meadow-light); padding:10px 14px; border-radius:8px; font-size:13px; margin-bottom:14px;"></div>
         <button class="btn-primary" id="newuser-submit">إنشاء الحساب</button>
+      </div>
+
+      <div class="form-card pm-staffroles">
+        <h4>الأدوار الإدارية</h4>
+        <p class="pm-sr-d">حدد الموجه الطلابي والمساعد الإداري من حسابات المعلمين. يحتفظ كل منهما بصلاحيات المعلم، ويُضاف للموجه: متابعة الغياب ورسائل أولياء الأمور، وبيانات الطلاب وملف الطالب، وتقارير الاختبارات كاملة. ويُضاف للمساعد: رفع طلبات الصرف لأي مستفيد والاطلاع على جميع طلبات الصرف.</p>
+        <input type="search" id="pm-sr-search" class="cv-search" placeholder="ابحث باسم الموظف" />
+        <div id="pm-sr-list" class="pm-sr-list"></div>
       </div>
 
       </div>
