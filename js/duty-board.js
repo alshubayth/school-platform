@@ -2,7 +2,8 @@
  * المناوبات (الإصدار الجديد)
  *
  * كل مناوبة = موقع (duty_posts) مربوط بوقت ثابت (الصباح، التعليق، الفسحة، الصلاة ١ و٢، الانصراف).
- * التوزيع أسبوعي ثابت (duty_plan): معلم واحد لكل موقع بكل يوم، يتكرر كل أسبوع.
+ * التوزيع أسبوعي ثابت (duty_plan): معلم أو أكثر لكل موقع بكل يوم، يتكرر كل أسبوع.
+ * المعلم الواحد له موقع واحد فقط في الوقت نفسه.
  * الإدخال بطريقتين على نفس البيانات:
  *   • «التوزيع»: جدول المواقع × الأيام، تضغط الخانة وتختار المعلم (مع عدد مناوباته وتنبيه الحصة والتعارض)
  *   • «بالمعلم»: تختار المعلم ويطلع جدوله (الأوقات × الأيام) وتضغط الخانة وتختار الموقع
@@ -108,7 +109,9 @@ async function loadScheduleMap() {
 const postById = id => S.posts.find(p => p.id === id);
 const teacherById = id => S.teachers.find(t => t.id === id);
 const activePosts = slot => S.posts.filter(p => p.slot === slot && p.active);
-const cellOf = (postId, day) => S.plan.find(x => x.post_id === postId && x.day_of_week === day);
+const cellsOf = (postId, day) => S.plan.filter(x => x.post_id === postId && x.day_of_week === day);
+const cellOf = (postId, day) => cellsOf(postId, day)[0];
+const hasTeacher = (postId, day, tid) => S.plan.some(x => x.post_id === postId && x.day_of_week === day && x.teacher_id === tid);
 const loadOf = tid => S.plan.filter(x => x.teacher_id === tid && postById(x.post_id)).length;
 const shortName = n => { const w = String(n || '').trim().split(/\s+/).filter(x => !['بن', 'ابن'].includes(x)); return w.length > 2 ? w[0] + ' ' + w[w.length - 1] : w.join(' '); };
 // حصص المعلم اللي تتقاطع مع وقت المناوبة
@@ -129,18 +132,18 @@ const clashText = cl => cl.map(p => `حصة ${p.period}${p.grade ? ' ' + (gradeL
 /* ---------- الكتابة ---------- */
 async function assign(postId, days, teacherId) {
   const rows = days.map(d => ({ post_id: postId, day_of_week: d, teacher_id: teacherId, updated_at: new Date().toISOString() }));
-  const { error } = await writeWithSchool(extra => sb.from('duty_plan').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'post_id,day_of_week' }));
+  const { error } = await writeWithSchool(extra => sb.from('duty_plan').upsert(rows.map(r => ({ ...r, ...extra })), { onConflict: 'post_id,day_of_week,teacher_id' }));
   if (error) { toast('لم يُحفظ: ' + error.message, true); return false; }
-  days.forEach(d => {
-    const c = cellOf(postId, d);
-    if (c) c.teacher_id = teacherId; else S.plan.push({ id: 'tmp' + Math.random(), post_id: postId, day_of_week: d, teacher_id: teacherId });
-  });
+  days.forEach(d => { if (!hasTeacher(postId, d, teacherId)) S.plan.push({ id: 'tmp' + Math.random(), post_id: postId, day_of_week: d, teacher_id: teacherId }); });
   return true;
 }
-async function unassign(postId, days) {
-  const { error } = await sb.from('duty_plan').delete().eq('post_id', postId).in('day_of_week', days);
+// إزالة معلم محدد من الموقع، أو كل المناوبين إذا لم يُحدَّد
+async function unassign(postId, days, teacherId = null) {
+  let q = sb.from('duty_plan').delete().eq('post_id', postId).in('day_of_week', days);
+  if (teacherId) q = q.eq('teacher_id', teacherId);
+  const { error } = await q;
   if (error) { toast('لم يُحذف: ' + error.message, true); return false; }
-  S.plan = S.plan.filter(x => !(x.post_id === postId && days.includes(x.day_of_week)));
+  S.plan = S.plan.filter(x => !(x.post_id === postId && days.includes(x.day_of_week) && (!teacherId || x.teacher_id === teacherId)));
   return true;
 }
 
@@ -230,12 +233,12 @@ function renderBoard(body, readOnly) {
     let fill = 0; posts.forEach(p => days.forEach(([d]) => { if (cellOf(p.id, d)) fill++; }));
     const total = posts.length * days.length;
     const rows = posts.map(p => `<tr><th class="db-post">${esc(p.name)}</th>${days.map(([d]) => {
-      const c = cellOf(p.id, d);
-      const t = c && teacherById(c.teacher_id);
-      if (!c) return `<td><button type="button" class="db-cell empty" data-post="${p.id}" data-day="${d}" ${readOnly ? 'disabled' : ''} aria-label="إسناد ${esc(p.name)} يوم ${DAY_LABEL[d]}">${readOnly ? '—' : '＋'}</button></td>`;
-      const cl = t ? periodClash(t.id, d, s.key) : [];
-      const nm = t ? (single ? t.full_name : shortName(t.full_name)) : 'حساب محذوف';
-      return `<td><button type="button" class="db-cell filled${cl.length ? ' clash' : ''}${c.teacher_id === currentUserId ? ' me' : ''}" data-post="${p.id}" data-day="${d}" ${readOnly ? 'disabled' : ''} title="${esc(t ? t.full_name : '')}${cl.length ? ' — لديه ' + esc(clashText(cl)) : ''}">${esc(nm)}${cl.length ? '<i class="db-dot" aria-hidden="true"></i>' : ''}</button></td>`;
+      const cs = cellsOf(p.id, d);
+      if (!cs.length) return `<td><button type="button" class="db-cell empty" data-post="${p.id}" data-day="${d}" ${readOnly ? 'disabled' : ''} aria-label="إسناد ${esc(p.name)} يوم ${DAY_LABEL[d]}">${readOnly ? '—' : '＋'}</button></td>`;
+      const ppl = cs.map(c => { const t = teacherById(c.teacher_id); return { t, cl: t ? periodClash(t.id, d, s.key) : [], me: c.teacher_id === currentUserId }; });
+      const anyCl = ppl.some(x => x.cl.length);
+      const title = ppl.map(x => (x.t ? x.t.full_name : 'حساب محذوف') + (x.cl.length ? ' — لديه ' + clashText(x.cl) : '')).join('\n');
+      return `<td><button type="button" class="db-cell filled${ppl.length > 1 ? ' multi' : ''}${anyCl ? ' clash' : ''}${ppl.some(x => x.me) ? ' me' : ''}" data-post="${p.id}" data-day="${d}" ${readOnly ? 'disabled' : ''} title="${esc(title)}">${ppl.map(x => `<span class="db-cn${x.cl.length ? ' cl' : ''}">${esc(x.t ? (single ? x.t.full_name : shortName(x.t.full_name)) : 'حساب محذوف')}${x.cl.length ? '<i class="db-dot" aria-hidden="true"></i>' : ''}</span>`).join('')}</button></td>`;
     }).join('')}</tr>`).join('');
     return `<section class="db-slot" style="--c:${s.c};--bg:${s.bg}">
       <header class="db-slot-h"><span class="db-slot-t">${esc(s.title)}</span><span class="db-slot-time">${r.label}</span>${s.note ? `<span class="db-slot-note">${esc(s.note)}</span>` : ''}<span class="db-slot-count${fill === total ? ' full' : ''}">${fill}/${total}</span></header>
@@ -243,7 +246,7 @@ function renderBoard(body, readOnly) {
     </section>`;
   }).join('');
   body.innerHTML = `${dayChips(S.day)}
-    ${readOnly ? '' : '<div class="db-hint">اضغط أي خانة واختر المعلم. <span class="db-dot inline"></span> = لدى المعلم حصة في الوقت نفسه.</div>'}
+    ${readOnly ? '' : '<div class="db-hint">اضغط أي خانة واختر معلمًا أو أكثر للموقع نفسه. <span class="db-dot inline"></span> = لدى المعلم حصة في الوقت نفسه.</div>'}
     ${sections || '<div class="db-empty">لا توجد مواقع مفعّلة. أضفها من تبويب «المواقع».</div>'}`;
   body.querySelectorAll('.db-daybar .db-chip').forEach(b => b.onclick = () => { S.day = b.dataset.day; renderBoard(body, readOnly); });
   if (!readOnly) body.querySelectorAll('.db-cell').forEach(b => b.onclick = () => openTeacherPicker(b.dataset.post, b.dataset.day));
@@ -296,7 +299,8 @@ function openTeacherPicker(postId, day) {
     ${sheetDays(sel)}
     <input type="search" class="db-search" placeholder="ابحث عن معلم..." autocomplete="off">
     <div class="db-tlist" role="listbox"></div>
-    ${cur ? `<div class="db-sh-foot"><button type="button" class="db-btn danger" data-act="clear">إزالة المناوب من الأيام المحددة</button></div>` : ''}`,
+    <div class="db-sh-picked"></div>
+    <div class="db-sh-foot"><button type="button" class="db-btn danger" data-act="clear"${cur ? '' : ' hidden'}>إزالة جميع المناوبين من الأيام المحددة</button><button type="button" class="db-btn" data-close>تم</button></div>`,
   el => {
     el.dataset.day = day;
     const list = el.querySelector('.db-tlist');
@@ -305,14 +309,14 @@ function openTeacherPicker(postId, day) {
       const items = S.teachers.filter(t => !q || norm(t.full_name).includes(norm(q))).map(t => {
         const busy = days.map(d => [d, busyElsewhere(t.id, d, post.slot, postId)]).filter(x => x[1]);
         const clash = days.map(d => [d, periodClash(t.id, d, post.slot)]).filter(x => x[1].length);
-        const isCur = days.every(d => (cellOf(postId, d) || {}).teacher_id === t.id);
+        const isCur = days.every(d => hasTeacher(postId, d, t.id));
         const rank = isCur ? 0 : busy.length === days.length ? 4 : busy.length ? 3 : clash.length ? 2 : 1;
         return { t, busy, clash, isCur, rank, load: loadOf(t.id) };
       }).sort((a, b) => a.rank - b.rank || a.load - b.load || a.t.full_name.localeCompare(b.t.full_name, 'ar'));
       const multi = days.length > 1;
       list.innerHTML = items.map(({ t, busy, clash, isCur, rank, load }) => {
         const tags = [];
-        if (isCur) tags.push('<span class="db-tag cur">المناوب الحالي</span>');
+        if (isCur) tags.push('<span class="db-tag cur">✓ مناوب في الموقع</span>');
         busy.forEach(([d, x]) => tags.push(`<span class="db-tag busy">مناوب في «${esc((postById(x.post_id) || {}).name || '')}»${multi ? ' ' + DAY_LABEL[d] : ''}</span>`));
         clash.forEach(([d, c]) => tags.push(`<span class="db-tag clash">لديه ${esc(clashText(c))}${multi ? ' ' + DAY_LABEL[d] : ''}</span>`));
         return `<button type="button" class="db-trow${isCur ? ' cur' : ''}" data-id="${t.id}" ${rank === 4 ? 'disabled' : ''} role="option">
@@ -321,19 +325,39 @@ function openTeacherPicker(postId, day) {
           ${tags.length ? `<span class="db-tags">${tags.join('')}</span>` : ''}
         </button>`;
       }).join('') || '<div class="db-empty sm">لا توجد نتائج</div>';
-      list.querySelectorAll('.db-trow').forEach(b => b.onclick = async () => {
-        const tid = b.dataset.id;
-        const okDays = days.filter(d => !busyElsewhere(tid, d, post.slot, postId));
-        const skipped = days.filter(d => !okDays.includes(d));
-        if (!okDays.length) return;
+      // المناوبون الحاليون في الموقع للأيام المحددة
+      const names = [...new Set(days.flatMap(d => cellsOf(postId, d).map(c => c.teacher_id)))];
+      el.querySelector('.db-sh-picked').innerHTML = names.length
+        ? `<span>المناوبون:</span>${names.map(id => { const t = teacherById(id); const n = days.filter(d => hasTeacher(postId, d, id)).length; return `<button type="button" class="db-pick" data-rm="${id}" title="إزالة">${esc(t ? shortName(t.full_name) : 'حساب محذوف')}${multi && n < days.length ? ` <small>(${n} من ${days.length})</small>` : ''} ✕</button>`; }).join('')}`
+        : '<span>لا يوجد مناوب بعد، اختر معلمًا أو أكثر من القائمة</span>';
+      el.querySelector('[data-act="clear"]').hidden = !names.length;
+      el.querySelectorAll('.db-sh-picked [data-rm]').forEach(b => b.onclick = async () => {
         b.disabled = true;
+        if (await unassign(postId, days, b.dataset.rm)) { changed = true; draw(); toast('أُزيل من الموقع'); } else b.disabled = false;
+      });
+      list.querySelectorAll('.db-trow').forEach(b => b.onclick = async () => {
+        const tid = b.dataset.id; const t = teacherById(tid);
+        b.disabled = true;
+        // الضغط على مناوب موجود يزيله، وعلى غيره يضيفه مع المناوبين الحاليين
+        if (days.every(d => hasTeacher(postId, d, tid))) {
+          if (await unassign(postId, days, tid)) { changed = true; draw(); toast(`أُزيل ${shortName(t.full_name)} من ${post.name}`); } else b.disabled = false;
+          return;
+        }
+        const okDays = days.filter(d => !hasTeacher(postId, d, tid) && !busyElsewhere(tid, d, post.slot, postId));
+        const skipped = days.filter(d => !hasTeacher(postId, d, tid) && busyElsewhere(tid, d, post.slot, postId));
+        if (!okDays.length) { b.disabled = false; return; }
         if (await assign(postId, okDays, tid)) {
-          closeSheet(); refresh();
-          const t = teacherById(tid);
-          toast(`${shortName(t.full_name)} ← ${post.name}${okDays.length > 1 ? ` (${okDays.length} أيام)` : ''}${skipped.length ? ` · لم يُحدَّد ${skipped.map(d => DAY_LABEL[d]).join('، ')} لأنه مناوب بموقع ثاني` : ''}`);
+          changed = true; draw();
+          toast(`${shortName(t.full_name)} ← ${post.name}${okDays.length > 1 ? ` (${okDays.length} أيام)` : ''}${skipped.length ? ` · لم يُحدَّد ${skipped.map(d => DAY_LABEL[d]).join('، ')} لأنه مناوب في موقع آخر` : ''}`);
         } else b.disabled = false;
       });
     };
+    let changed = false;
+    const back = $('db-sheet');
+    const done = () => { if (changed) refresh(); };
+    back.addEventListener('click', e => { if (e.target === back) done(); });
+    back.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', done));
+    document.addEventListener('keydown', function k(e) { if (e.key === 'Escape') { document.removeEventListener('keydown', k); done(); } });
     wireSheetDays(el, sel, draw);
     const s = el.querySelector('.db-search');
     s.oninput = () => { q = s.value; draw(); };
@@ -407,12 +431,12 @@ function openPostPicker(tid, slotKey, day) {
       const cl = days.map(d => [d, periodClash(tid, d, slotKey)]).filter(x => x[1].length);
       el.querySelector('.db-clash-note').innerHTML = cl.length ? `<div class="db-warn">⚠ لديه ${cl.map(([d, c]) => esc(clashText(c)) + (multi ? ' ' + DAY_LABEL[d] : '')).join('، ')} في الوقت نفسه</div>` : '';
       el.querySelector('.db-plist').innerHTML = activePosts(slotKey).map(p => {
-        const holders = days.map(d => [d, cellOf(p.id, d)]).filter(([, c]) => c && c.teacher_id !== tid);
-        const isMine = days.every(d => (cellOf(p.id, d) || {}).teacher_id === tid);
+        const holders = days.flatMap(d => cellsOf(p.id, d).filter(c => c.teacher_id !== tid).map(c => [d, c]));
+        const isMine = days.every(d => hasTeacher(p.id, d, tid));
         const who = holders.length ? holders.map(([d, c]) => { const h = teacherById(c.teacher_id); return `${esc(shortName(h ? h.full_name : '—'))}${multi ? ' (' + DAY_LABEL[d] + ')' : ''}`; }).join('، ') : '';
         return `<button type="button" class="db-prow${isMine ? ' on' : ''}${holders.length ? ' taken' : ''}" data-post="${p.id}">
           <span class="db-pname">${esc(p.name)}</span>
-          <span class="db-pwho">${isMine ? '✓ مسندة له' : holders.length ? 'بدل: ' + who : 'شاغرة'}</span>
+          <span class="db-pwho">${isMine ? '✓ مسندة له' + (holders.length ? ' · معه: ' + who : '') : holders.length ? 'معه: ' + who : 'شاغرة'}</span>
         </button>`;
       }).join('');
       el.querySelector('[data-act="clear"]').hidden = !days.some(d => mineOn(d));
@@ -522,7 +546,7 @@ function renderMine(body) {
     const items = mine.filter(x => x.day_of_week === d).map(x => postById(x.post_id))
       .sort((a, b) => SLOTS.findIndex(s => s.key === a.slot) - SLOTS.findIndex(s => s.key === b.slot));
     return `<div class="db-mday${d === tk ? ' today' : ''}"><div class="db-mday-h">${l}${d === tk ? '<span>اليوم</span>' : ''}</div>
-      ${items.length ? items.map(p => { const s = SLOT[p.slot]; return `<div class="db-mitem" style="--c:${s.c};--bg:${s.bg}"><span class="db-mtime">${slotRange(p.slot).label}</span><span><b>${esc(p.name)}</b><small>${esc(s.title)}${s.key === 'suspension' ? ' (أيام التعليق فقط)' : ''}</small></span></div>`; }).join('') : '<div class="db-mnone">—</div>'}
+      ${items.length ? items.map(p => { const s = SLOT[p.slot]; const mates = cellsOf(p.id, d).filter(c => c.teacher_id !== currentUserId).map(c => teacherById(c.teacher_id)).filter(Boolean).map(t => shortName(t.full_name)); return `<div class="db-mitem" style="--c:${s.c};--bg:${s.bg}"><span class="db-mtime">${slotRange(p.slot).label}</span><span><b>${esc(p.name)}</b><small>${esc(s.title)}${s.key === 'suspension' ? ' (أيام التعليق فقط)' : ''}${mates.length ? ' · معك: ' + esc(mates.join('، ')) : ''}</small></span></div>`; }).join('') : '<div class="db-mnone">—</div>'}
     </div>`;
   }).join('')}</div>`;
 }
