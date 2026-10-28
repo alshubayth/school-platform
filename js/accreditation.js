@@ -22,11 +22,13 @@ const IC = {
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>',
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>',
 };
 
-let D = { inds: [], evs: [], staff: [] };
-let V = { domain: 0, filter: 'all', q: '', open: null, mine: false };
+let D = { inds: [], evs: [], staff: [], visit: null };
+let V = { domain: 0, filter: 'all', q: '', open: null, mine: false, member: null };
 const mgr = () => isAdminOrDeputy() || (currentProfile && currentProfile.role === 'owner');
 const R = build => readScopedBySchool(sc => { let q = build(); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
 const nameOf = id => (D.staff.find(p => p.id === id) || {}).full_name || '—';
@@ -53,102 +55,183 @@ function toast(msg, bad) {
 export async function loadAccreditationModule() {
   const box = $('acc-container');
   box.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
-  const [inds, evs, staff] = await Promise.all([
+  const [inds, evs, staff, set] = await Promise.all([
     R(() => sb.from('acc_indicators').select('*').order('sort')),
     R(() => sb.from('acc_evidence').select('*').order('created_at')),
     R(() => sb.from('profiles').select('id, full_name, role').in('role', ['admin', 'deputy', 'teacher']).order('full_name')),
+    R(() => sb.from('acc_settings').select('visit_date')),
   ]);
   if (inds.error) { box.innerHTML = `<div class="ac-empty">تعذر تحميل المؤشرات: ${esc(inds.error.message)}</div>`; return; }
-  D = { inds: inds.data || [], evs: evs.data || [], staff: (staff.data || []).filter(p => p.full_name) };
+  D = { inds: inds.data || [], evs: evs.data || [], staff: (staff.data || []).filter(p => p.full_name), visit: ((set.data || [])[0] || {}).visit_date || null };
   if (!mgr()) V.mine = true;
   render();
 }
 
-/* ---------- الواجهة ---------- */
+/* ---------- الواجهة: «مدار الجاهزية» ----------
+ * كل مؤشر نقطة تدور في مدار مجاله (٤ مدارات)، ولونها حالته، والمركز نسبة الجاهزية. */
+const SCOL = { done: '#2FC1B2', pending: '#6FA4F2', returned: '#F2A65A', empty: 'rgba(255,255,255,.22)', na: 'rgba(255,255,255,.08)' };
+const daysLeft = () => { if (!D.visit) return null; const t = new Date(D.visit + 'T00:00:00'), n = new Date(); n.setHours(0, 0, 0, 0); return Math.round((t - n) / 864e5); };
+const arDate = iso => new Date(iso + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long' });
+
+function orbitSvg() {
+  const cx = 210, cy = 210, radii = { 1: 86, 2: 122, 3: 158, 4: 194 };
+  let rings = '', dots = '';
+  [1, 2, 3, 4].forEach(d => {
+    const ii = D.inds.filter(i => i.domain_no === d), r = radii[d], n = ii.length || 1;
+    rings += `<circle class="orb-ring" cx="${cx}" cy="${cy}" r="${r}" style="--c:${DCOL[d]}"/>`;
+    dots += `<g class="orb-g orb-${d}" style="transform-origin:${cx}px ${cy}px">${ii.map((i, k) => {
+      const a = (k / n) * Math.PI * 2 + d * 0.6, x = cx + r * Math.cos(a), y = cy + r * Math.sin(a), s = statusOf(i);
+      return `<circle class="orb-dot ${s}${V.open === i.id ? ' on' : ''}" data-ind="${i.id}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${s === 'done' ? 7 : 6}" fill="${SCOL[s]}" style="animation-delay:${(0.4 + k * 0.03 + d * 0.15).toFixed(2)}s"><title>${esc(i.code)} · ${esc(ST[s].t)}</title></circle>`;
+    }).join('')}</g>`;
+  });
+  return `<svg class="orbit" viewBox="0 0 420 420" role="img" aria-label="مدار الجاهزية">${rings}${dots}</svg>`;
+}
+
+function teamHtml() {
+  const ids = [...new Set(D.inds.flatMap(i => i.owner_ids || []))];
+  if (!ids.length) return '';
+  const rows = ids.map(id => {
+    const mine = D.inds.filter(i => (i.owner_ids || []).includes(id) && !i.not_applicable);
+    const dn = mine.filter(i => statusOf(i) === 'done').length;
+    return { id, n: mine.length, dn, p: mine.length ? dn / mine.length : 0 };
+  }).sort((a, b) => b.p - a.p || b.n - a.n);
+  return `<section class="ac-team"><header><b>فريق التميز</b><span>إنجاز كل عضو في مؤشراته</span></header><div class="ac-team-row">${rows.map((r, k) => {
+    const C = 2 * Math.PI * 21;
+    return `<button type="button" class="ac-mem${r.id === currentUserId ? ' me' : ''}${V.member === r.id ? ' on' : ''}" data-mem="${r.id}" style="animation-delay:${(k * 0.05).toFixed(2)}s">
+      <span class="ring"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="21" class="bg"/><circle cx="25" cy="25" r="21" class="fg" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - r.p)}"/></svg><i>${esc(String(nameOf(r.id)).trim().charAt(0))}</i></span>
+      <b>${esc(short(nameOf(r.id)))}</b><small>${r.dn}/${r.n}</small></button>`;
+  }).join('')}</div></section>`;
+}
+
 function render() {
   const box = $('acc-container');
   const app = D.inds.filter(i => !i.not_applicable);
-  const done = app.filter(i => statusOf(i) === 'done').length;
+  const cnt = s => app.filter(i => statusOf(i) === s).length;
+  const done = cnt('done');
   const pct = app.length ? Math.round(done / app.length * 100) : 0;
   const pend = D.evs.filter(e => e.status === 'submitted').length;
   const noOwner = D.inds.filter(i => !i.not_applicable && !(i.owner_ids || []).length).length;
-  const mineN = D.inds.filter(isMine).length;
-  const R2 = 52, C = 2 * Math.PI * R2;
+  const dl = daysLeft();
   box.innerHTML = `<div class="ac">
-    <header class="ac-hero">
-      <div class="ac-ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="${R2}" class="bg"/><circle cx="60" cy="60" r="${R2}" class="fg" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - pct / 100)}"/></svg><b>${pct}%</b><span>الجاهزية</span></div>
-      <div class="ac-hero-t">
-        <h3>الاعتماد المدرسي</h3>
-        <p>شواهد مؤشرات التقويم المدرسي لزيارة فريق التقويم الخارجي</p>
-        <div class="ac-stats">
-          <span><b>${done}</b> من ${app.length} مؤشرًا مكتمل</span>
-          <span><b>${D.evs.length}</b> شاهدًا مرفوعًا</span>
-          ${mgr() ? `<span class="${pend ? 'warn' : ''}"><b>${pend}</b> بانتظار المراجعة</span>` : ''}
-          ${mgr() && noOwner ? `<span class="warn"><b>${noOwner}</b> مؤشرًا بلا مسؤول</span>` : ''}
-          ${mineN ? `<span><b>${mineN}</b> مسندة إليك</span>` : ''}
+    <header class="ac-sky">
+      <div class="ac-stars" aria-hidden="true"></div>
+      <div class="ac-sky-t">
+        <span class="ac-kicker">التقويم المدرسي · فريق التميز</span>
+        <h3>مدار الجاهزية</h3>
+        <p>كل نقطة مؤشر يدور في مدار مجاله، وتضيء حين يكتمل بشاهد معتمد.</p>
+        <div class="ac-count">
+          ${D.visit ? `<div class="ac-days${dl != null && dl <= 7 ? ' soon' : ''}"><b>${dl > 0 ? dl : dl === 0 ? 'اليوم' : '—'}</b><span>${dl > 0 ? (dl === 1 ? 'يوم على الزيارة' : dl === 2 ? 'يومان على الزيارة' : 'يومًا على الزيارة') : dl === 0 ? 'موعد الزيارة' : 'انتهى الموعد'}</span><small>${esc(arDate(D.visit))}</small></div>` : (mgr() ? '<div class="ac-days empty"><b>؟</b><span>حدّد موعد زيارة فريق التقويم</span></div>' : '')}
+          ${mgr() ? `<label class="ac-date" title="موعد الزيارة">${IC.cal}<span>موعد الزيارة</span><input type="date" id="ac-visit-date" value="${D.visit || ''}"></label>` : ''}
+        </div>
+        <div class="ac-legend">${[['done', 'مكتمل'], ['pending', 'بانتظار المراجعة'], ['returned', 'معاد للتعديل'], ['empty', 'بلا شواهد']].map(([k, t]) => `<button type="button" data-f="${k}" class="${V.filter === k ? 'on' : ''}"><i style="background:${SCOL[k]}"></i>${t}<b>${cnt(k)}</b></button>`).join('')}</div>
+        <div class="ac-sky-a">
+          <button type="button" class="ac-btn glow" id="ac-visit">${IC.eye}وضع الزيارة</button>
+          <button type="button" class="ac-btn light" id="ac-print">${IC.print}فهرس الشواهد</button>
         </div>
       </div>
-      <div class="ac-hero-a">
-        <button type="button" class="ac-btn light" id="ac-visit">${IC.eye}وضع الزيارة</button>
-        <button type="button" class="ac-btn light" id="ac-print">${IC.print}فهرس الشواهد</button>
+      <div class="ac-orbit">
+        ${orbitSvg()}
+        <div class="ac-core"><b data-count="${pct}">0</b><span>%</span><small>جاهزية المدرسة</small><em>${done} من ${app.length}</em></div>
       </div>
     </header>
-    <div class="ac-domains">${[1, 2, 3, 4].map(d => {
+    ${mgr() && (pend || noOwner) ? `<div class="ac-alerts">${pend ? `<button type="button" data-f="pending">${pend} ${pend === 1 ? 'شاهد ينتظر' : 'شواهد تنتظر'} مراجعتك ←</button>` : ''}${noOwner ? `<button type="button" data-f="noowner">${noOwner} مؤشرًا بلا مسؤول ←</button>` : ''}</div>` : ''}
+    <div class="ac-planets">${[1, 2, 3, 4].map(d => {
       const ii = D.inds.filter(i => i.domain_no === d && !i.not_applicable);
-      const dn = ii.filter(i => statusOf(i) === 'done').length, p = ii.length ? Math.round(dn / ii.length * 100) : 0;
-      return `<button type="button" class="ac-dom${V.domain === d ? ' on' : ''}" data-dom="${d}" style="--c:${DCOL[d]}"><span class="n">${d}</span><b>${DOMAINS[d]}</b><small>${dn} من ${ii.length} مؤشرًا</small><i><em style="width:${p}%"></em></i><span class="p">${p}%</span></button>`;
+      const dn = ii.filter(i => statusOf(i) === 'done').length, p = ii.length ? dn / ii.length : 0, C = 2 * Math.PI * 26;
+      return `<button type="button" class="ac-planet${V.domain === d ? ' on' : ''}" data-dom="${d}" style="--c:${DCOL[d]}">
+        <span class="pr"><svg viewBox="0 0 60 60"><circle cx="30" cy="30" r="26" class="bg"/><circle cx="30" cy="30" r="26" class="fg" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - p)}"/></svg><i>${d}</i></span>
+        <span class="pt"><b>${DOMAINS[d]}</b><small>${dn} من ${ii.length} مكتمل</small></span><span class="pp">${Math.round(p * 100)}%</span></button>`;
     }).join('')}</div>
+    ${teamHtml()}
     <div class="ac-tools">
-      <div class="ac-chips">${[['all', 'الكل'], ['empty', 'بلا شواهد'], ['pending', 'بانتظار المراجعة'], ['returned', 'معاد للتعديل'], ['done', 'مكتمل']].map(([k, t]) => `<button type="button" data-f="${k}" class="${V.filter === k ? 'on' : ''}">${t}</button>`).join('')}</div>
-      <label class="ac-mine"><input type="checkbox" id="ac-mine"${V.mine ? ' checked' : ''}> مؤشراتي فقط</label>
-      <input type="search" id="ac-q" class="ac-q" placeholder="ابحث في المؤشرات..." value="${esc(V.q)}">
+      <div class="ac-search">${IC.search}<input type="search" id="ac-q" placeholder="ابحث برقم المؤشر أو نصه..." value="${esc(V.q)}"></div>
+      <label class="ac-switch"><input type="checkbox" id="ac-mine"${V.mine ? ' checked' : ''}><span></span>مؤشراتي فقط</label>
+      ${V.filter !== 'all' || V.domain || V.member ? '<button type="button" class="ac-clear" id="ac-clear">مسح التصفية ✕</button>' : ''}
     </div>
     <div id="ac-list"></div>
-  </div>`;
+  </div>
+  <aside class="ac-drawer${V.open ? ' open' : ''}" id="ac-drawer" aria-hidden="${V.open ? 'false' : 'true'}"></aside>
+  <div class="ac-scrim${V.open ? ' open' : ''}" id="ac-scrim"></div>`;
   box.querySelectorAll('[data-dom]').forEach(b => b.onclick = () => { V.domain = V.domain === +b.dataset.dom ? 0 : +b.dataset.dom; render(); });
-  box.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { V.filter = b.dataset.f; render(); });
+  box.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { V.filter = V.filter === b.dataset.f ? 'all' : b.dataset.f; render(); $('ac-list').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  box.querySelectorAll('[data-mem]').forEach(b => b.onclick = () => { V.member = V.member === b.dataset.mem ? null : b.dataset.mem; render(); });
+  box.querySelectorAll('.orb-dot').forEach(c => c.onclick = () => openDrawer(c.dataset.ind));
   $('ac-mine').onchange = e => { V.mine = e.target.checked; renderList(); };
   $('ac-q').oninput = e => { V.q = e.target.value; renderList(); };
+  const cl = $('ac-clear'); if (cl) cl.onclick = () => { V.filter = 'all'; V.domain = 0; V.member = null; render(); };
   $('ac-visit').onclick = openVisit;
   $('ac-print').onclick = printIndex;
+  $('ac-scrim').onclick = () => openDrawer(null);
+  const vd = $('ac-visit-date');
+  if (vd) vd.onchange = async () => {
+    const v = vd.value || null;
+    const { error } = await writeWithSchool(extra => sb.from('acc_settings').upsert({ visit_date: v, updated_at: new Date().toISOString(), ...extra }, { onConflict: 'school_id' }));
+    if (error) { toast('تعذر حفظ الموعد: ' + error.message, true); return; }
+    D.visit = v; render(); toast('حُفظ موعد الزيارة ✓');
+  };
+  box.querySelectorAll('[data-count]').forEach(el => { const to = +el.dataset.count, t0 = performance.now(); const st = n => { const p = Math.min(1, (n - t0) / 1100), e = 1 - Math.pow(1 - p, 3); el.textContent = Math.round(to * e); if (p < 1) requestAnimationFrame(st); }; requestAnimationFrame(st); });
   renderList();
+  if (V.open) drawDrawer();
 }
 
 function renderList() {
   const el = $('ac-list');
   const q = V.q.trim();
   const list = D.inds.filter(i => (!V.domain || i.domain_no === V.domain)
-    && (V.filter === 'all' || statusOf(i) === V.filter)
+    && (V.filter === 'all' || (V.filter === 'noowner' ? !i.not_applicable && !(i.owner_ids || []).length : statusOf(i) === V.filter))
     && (!V.mine || isMine(i))
+    && (!V.member || (i.owner_ids || []).includes(V.member))
     && (!q || i.text.includes(q) || i.code.includes(q) || i.standard.includes(q)));
   if (!list.length) { el.innerHTML = `<div class="ac-empty">${V.mine && !D.inds.some(isMine) ? 'لا توجد مؤشرات مسندة إليك' : 'لا توجد مؤشرات مطابقة'}</div>`; return; }
   const groups = [];
   list.forEach(i => { let g = groups.find(x => x.std === i.standard && x.d === i.domain_no); if (!g) { g = { std: i.standard, d: i.domain_no, items: [] }; groups.push(g); } g.items.push(i); });
-  el.innerHTML = groups.map(g => {
+  el.innerHTML = groups.map((g, gi) => {
     const all = D.inds.filter(i => i.standard === g.std && i.domain_no === g.d && !i.not_applicable);
     const dn = all.filter(i => statusOf(i) === 'done').length;
-    return `<section class="ac-std" style="--c:${DCOL[g.d]}">
-      <header><span class="dom">${DOMAINS[g.d]}</span><b>${esc(g.std)}</b><span class="cnt">${dn}/${all.length}</span></header>
-      ${g.items.map(rowHtml).join('')}
+    return `<section class="ac-std" style="--c:${DCOL[g.d]};animation-delay:${(gi * 0.06).toFixed(2)}s">
+      <header><span class="dom">${g.d}</span><b>${esc(g.std)}</b><span class="seg">${all.map(i => `<i class="${statusOf(i)}"></i>`).join('')}</span><span class="cnt">${dn}/${all.length}</span></header>
+      <div class="ac-cards">${g.items.map(cardHtml).join('')}</div>
     </section>`;
   }).join('');
-  el.querySelectorAll('.ac-ind > .ac-row').forEach(r => r.onclick = () => { const id = r.parentElement.dataset.id; V.open = V.open === id ? null : id; renderList(); if (V.open) setTimeout(() => { const x = el.querySelector(`.ac-ind[data-id="${V.open}"]`); if (x) x.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); }, 30); });
-  el.querySelectorAll('.ac-ind.open').forEach(wireDetail);
+  el.querySelectorAll('.ac-card').forEach(c => c.onclick = () => openDrawer(c.dataset.id));
 }
 
-function rowHtml(i) {
-  const s = ST[statusOf(i)], ev = evsOf(i), open = V.open === i.id;
-  const owners = i.owner_ids || [];
-  return `<div class="ac-ind${open ? ' open' : ''}${i.not_applicable ? ' na' : ''}" data-id="${i.id}">
-    <div class="ac-row" role="button" tabindex="0">
-      <span class="code">${esc(i.code)}</span>
-      <div class="txt"><b>${esc(i.text)}${i.star ? ' <i class="star" title="مؤشر مميز بعلامة (*) في الإطار">*</i>' : ''}</b>
-        <span class="own">${owners.length ? owners.map(o => `<em${o === currentUserId ? ' class="me"' : ''}>${esc(short(nameOf(o)))}</em>`).join('') : (i.not_applicable ? '' : '<em class="none">بلا مسؤول</em>')}</span></div>
-      <span class="evn" title="عدد الشواهد">${ev.length}</span>
-      <span class="ac-st ${s.c}">${s.t}</span>
-    </div>
-    ${open ? detailHtml(i) : ''}
-  </div>`;
+function cardHtml(i) {
+  const s = statusOf(i), ev = evsOf(i), owners = i.owner_ids || [];
+  const ap = ev.filter(e => e.status === 'approved').length;
+  return `<button type="button" class="ac-card ${s}${V.open === i.id ? ' on' : ''}${isMine(i) ? ' mine' : ''}" data-id="${i.id}">
+    <span class="top"><span class="code">${esc(i.code)}</span>${i.star ? '<i class="star" title="مؤشر مميز بعلامة (*) في الإطار">★</i>' : ''}<span class="ac-st ${ST[s].c}">${ST[s].t}</span></span>
+    <span class="txt">${esc(i.text)}</span>
+    <span class="bot">
+      <span class="own">${owners.length ? owners.slice(0, 3).map(o => `<em title="${esc(nameOf(o))}"${o === currentUserId ? ' class="me"' : ''}>${esc(String(nameOf(o)).trim().charAt(0))}</em>`).join('') + (owners.length > 3 ? `<em>+${owners.length - 3}</em>` : '') : (i.not_applicable ? '' : '<em class="none" title="بلا مسؤول">؟</em>')}</span>
+      <span class="evc">${ev.length ? `${IC.file}${ap}/${ev.length}` : 'لا شواهد'}</span>
+    </span>
+  </button>`;
+}
+
+function openDrawer(id) {
+  V.open = id;
+  document.querySelectorAll('.orb-dot.on, .ac-card.on').forEach(x => x.classList.remove('on'));
+  if (id) document.querySelectorAll(`[data-ind="${id}"], .ac-card[data-id="${id}"]`).forEach(x => x.classList.add('on'));
+  $('ac-drawer').classList.toggle('open', !!id);
+  $('ac-scrim').classList.toggle('open', !!id);
+  $('ac-drawer').setAttribute('aria-hidden', id ? 'false' : 'true');
+  document.body.classList.toggle('ac-lock', !!id);
+  if (id) drawDrawer();
+}
+function drawDrawer() {
+  const i = D.inds.find(x => x.id === V.open); if (!i) return;
+  const dr = $('ac-drawer'), s = statusOf(i);
+  dr.dataset.id = i.id;
+  dr.style.setProperty('--c', DCOL[i.domain_no]);
+  dr.innerHTML = `<div class="ac-dh">
+      <button type="button" class="ac-dx" aria-label="إغلاق">✕</button>
+      <span class="crumb">${DOMAINS[i.domain_no]} · ${esc(i.standard)}</span>
+      <div class="ac-dh-t"><span class="code">${esc(i.code)}</span><span class="ac-st ${ST[s].c}">${ST[s].t}</span></div>
+      <h4>${esc(i.text)}${i.star ? ' <i class="star">★</i>' : ''}</h4>
+    </div>${detailHtml(i)}`;
+  dr.querySelector('.ac-dx').onclick = () => openDrawer(null);
+  wireDetail(dr);
 }
 
 function detailHtml(i) {
@@ -165,7 +248,7 @@ function detailHtml(i) {
       <div class="ac-seg"><button type="button" data-k="file" class="on">${IC.up}ملف أو صورة</button><button type="button" data-k="link">${IC.link}رابط</button></div>
       <input type="text" name="title" placeholder="عنوان الشاهد (مثل: محضر اجتماع مجلس المدرسة)" maxlength="160">
       <textarea name="desc" rows="2" placeholder="وصف مختصر (اختياري)" maxlength="500"></textarea>
-      <label class="ac-drop" data-pane="file"><input type="file" name="files" multiple hidden><span>${IC.up}<b>اختر الملفات</b><small>PDF أو صور أو ملفات Office، حتى ٢٥ ميجابايت للملف</small></span></label>
+      <label class="ac-drop" data-pane="file"><input type="file" name="files" multiple hidden><span>${IC.up}<b>اختر الملفات أو اسحبها هنا</b><small>PDF أو صور أو ملفات Office، حتى ٢٥ ميجابايت للملف. الصور الكبيرة تُصغَّر تلقائيًا</small></span></label>
       <input type="url" name="url" data-pane="link" class="hidden" placeholder="https://..." dir="ltr">
       <div class="ac-add-f"><span class="ac-err"></span><button type="submit" class="ac-btn">رفع الشاهد</button></div>
     </form>` : ''}
@@ -232,12 +315,20 @@ function wireDetail(box) {
     form.querySelector('[data-pane="link"]').classList.toggle('hidden', kind !== 'link');
   });
   const fin = form.querySelector('input[type=file]');
-  fin.onchange = () => {
-    const n = fin.files.length;
-    form.querySelector('.ac-drop b').textContent = n ? (n === 1 ? fin.files[0].name : `${n} ملفات`) : 'اختر الملفات';
+  const drop = form.querySelector('.ac-drop');
+  let picked = [];
+  const setPicked = fs => {
+    picked = [...fs];
+    const n = picked.length;
+    drop.querySelector('b').textContent = n ? (n === 1 ? picked[0].name : `${n} ملفات`) : 'اختر الملفات أو اسحبها هنا';
+    drop.classList.toggle('has', !!n);
     const t = form.querySelector('[name=title]');
-    if (n === 1 && !t.value) t.value = fin.files[0].name.replace(/\.[^.]+$/, '');
+    if (n === 1 && !t.value) t.value = picked[0].name.replace(/\.[^.]+$/, '');
   };
+  fin.onchange = () => setPicked(fin.files);
+  ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) setPicked(e.dataTransfer.files); });
   form.onsubmit = async ev => {
     ev.preventDefault();
     const err = form.querySelector('.ac-err'); err.textContent = '';
@@ -255,7 +346,8 @@ function wireDetail(box) {
       if (error) { err.textContent = 'تعذر الحفظ: ' + error.message; return; }
       D.evs.push(data); render(); toast('أُضيف الشاهد ✓'); return;
     }
-    const files = [...fin.files];
+    const files = [];
+    for (const f of picked) files.push(await shrinkImage(f));
     if (!files.length) { err.textContent = 'اختر ملفًا واحدًا على الأقل'; return; }
     const big = files.find(f => f.size > 25 * 1024 * 1024);
     if (big) { err.textContent = `الملف «${big.name}» أكبر من ٢٥ ميجابايت`; return; }
@@ -349,4 +441,18 @@ function printIndex() {
   const w = window.open('', '_blank');
   if (!w) { alert('اسمح بالنوافذ المنبثقة للطباعة'); return; }
   w.document.open(); w.document.write(doc); w.document.close();
+}
+
+/* الصور الكبيرة تُصغَّر قبل الرفع (أقصى بُعد ٢٢٠٠ بكسل) لتوفير المساحة */
+async function shrinkImage(f) {
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 700 * 1024) return f;
+  try {
+    const bmp = await createImageBitmap(f);
+    const k = Math.min(1, 2200 / Math.max(bmp.width, bmp.height));
+    const cv = document.createElement('canvas'); cv.width = Math.round(bmp.width * k); cv.height = Math.round(bmp.height * k);
+    cv.getContext('2d').drawImage(bmp, 0, 0, cv.width, cv.height);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.82));
+    if (!blob || blob.size >= f.size) return f;
+    return new File([blob], f.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (e) { return f; }
 }
