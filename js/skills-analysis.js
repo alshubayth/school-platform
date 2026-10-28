@@ -5,7 +5,7 @@
  * - المستوى: متقن (٨٠٪ فأكثر)، متوسط (٦٠–٧٩٪)، يحتاج إلى علاج (أقل من ٦٠٪).
  * - لكل مهارة: الطلاب دون ٦٠٪، وخريطة الطلاب × المهارات، وخطة علاجية مطبوعة.
  * ========================================================================= */
-import { sb, printOrgName, printLogo, ASSET_VERSION } from './core.js';
+import { sb, printOrgName, printLogo, ASSET_VERSION, currentProfile, currentUserId } from './core.js';
 
 const MASTER = 80, WEAK = 60;
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -28,7 +28,7 @@ export async function renderSkillsPanel(rep, panel, tabBtn) {
   const keyId = rep.key_id || (rd.models && rd.models.keyId) || null;
   panel.innerHTML = '';
   if (!keyId || !Array.isArray(rd.students)) return;
-  const { data: key } = await sb.from('answer_keys').select('id, subject, skills, exam_kind, models').eq('id', keyId).maybeSingle();
+  const { data: key } = await sb.from('answer_keys').select('id, subject, skills, exam_kind, models, pass_pct, created_by').eq('id', keyId).maybeSingle();
   if (!key || !Array.isArray(key.skills) || !key.skills.some(x => x && x.k)) return;
   tabBtn.classList.remove('hidden');
   panel.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
@@ -59,17 +59,28 @@ export async function renderSkillsPanel(rep, panel, tabBtn) {
     const p = platMap.get(r.id);
     const by = {};
     list.forEach(g => { by[g.id] = (g.qs.reduce((a, j) => a + (r.correct[j] ? PW(j) : 0), 0) / g.w) * 100; });
-    return { id: r.id, name: p ? p.full_name : r.name, section: String(r.section || ''), pct: r.pct, by };
+    // نافس: نسبة الطالب في كل مادة (من أسئلتها المربوطة)
+    const subj = {};
+    [...new Set(list.map(g => g.s))].forEach(sj => {
+      const gs = list.filter(g => g.s === sj); const w = gs.reduce((a, g) => a + g.w, 0);
+      subj[sj] = w ? gs.reduce((a, g) => a + g.qs.reduce((x, j) => x + (r.correct[j] ? PW(j) : 0), 0), 0) / w * 100 : null;
+    });
+    return { id: r.id, name: p ? p.full_name : r.name, section: String(r.section || ''), pct: r.pct, by, subj };
   }).sort((a, b) => String(a.name).localeCompare(String(b.name), 'ar'));
   const unlinked = key.skills.slice(0, n).filter(x => !(x && x.k)).length + Math.max(0, n - key.skills.length);
-  A = { rep, key, nafes, list, students, unlinked, differentB, grade: sr.gl || '' };
-  view = { sec: 'all', subj: 'all', open: null };
+  const passPct = Number.isFinite(+key.pass_pct) && +key.pass_pct > 0 ? +key.pass_pct : 50;
+  A = { rep, key, nafes, list, students, unlinked, differentB, grade: sr.gl || '', passPct };
+  view = { sec: 'all', subj: 'all', open: null, pass: 'all' };
   draw(panel);
 }
 
 function filtered() {
   return A.students.filter(s => view.sec === 'all' || s.section === view.sec);
 }
+// نافس: يجتاز الطالب إذا حقق النسبة المطلوبة في كل مادة من مواد الاختبار
+const failedSubjects = s => Object.entries(s.subj).filter(([, v]) => v != null && Math.round(v * 10) / 10 < A.passPct).map(([k]) => k);
+const passed = s => !failedSubjects(s).length;
+const canEditKey = () => currentProfile && (['admin', 'deputy', 'owner'].includes(currentProfile.role) || A.key.created_by === currentUserId);
 function skillStats(g, studs) {
   const vals = studs.map(s => s.by[g.id]).filter(v => v != null);
   const weak = studs.filter(s => s.by[g.id] < WEAK).sort((a, b) => a.by[g.id] - b.by[g.id]);
@@ -90,6 +101,9 @@ function draw(panel) {
   });
   const weakest = [...A.list].map(g => ({ g, m: stats.get(g.id).m })).filter(x => x.m != null).sort((a, b) => a.m - b.m).slice(0, 3);
   const needs = A.list.filter(g => stats.get(g.id).m < MASTER || stats.get(g.id).weak.length);
+  const nPass = A.nafes ? studs.filter(passed).length : 0;
+  const passBySubj = A.nafes ? Object.fromEntries(subjects.map(sj => [sj, studs.filter(s => s.subj[sj] != null && Math.round(s.subj[sj] * 10) / 10 >= A.passPct).length])) : {};
+  const heatStuds = A.nafes && view.pass !== 'all' ? studs.filter(s => (view.pass === 'pass') === passed(s)) : studs;
 
   panel.innerHTML = `<div class="sk">
     <div class="sk-bar">
@@ -98,6 +112,11 @@ function draw(panel) {
     </div>
     ${A.unlinked ? `<div class="sk-note">${A.unlinked} من أسئلة الاختبار غير مربوطة بمهارة، فلا تدخل في التحليل. يمكن ربطها من «إعداد نموذج الإجابة».</div>` : ''}
     ${A.differentB ? '<div class="sk-note">أسئلة النموذج ب مختلفة عن النموذج أ، فالتحليل لطلاب النموذج أ فقط.</div>' : ''}
+    ${A.nafes ? `<div class="sk-pass">
+      <div class="sk-pass-n"><span>المجتازون</span><b>${nPass} <small>من ${studs.length}</small></b><em>${studs.length ? r1(nPass / studs.length * 100) : 0}%</em></div>
+      <div class="sk-pass-t">يجتاز الطالب إذا حقق <label><input type="number" id="sk-pass-pct" min="1" max="100" step="1" value="${A.passPct}" ${canEditKey() ? '' : 'disabled'}>%</label> فأكثر في كل مادة من: ${subjects.map(esc).join('، ')}<span id="sk-pass-msg"></span></div>
+      <div class="sk-pass-s">${subjects.map(sj => `<span>${esc(sj)}: <b>${passBySubj[sj]}</b> اجتازوا المادة</span>`).join('')}</div>
+    </div>` : ''}
     <div class="sk-cards">
       ${bySubj.map(x => { const l = lvl(x.m); return `<button type="button" class="sk-card ${l.c}${view.subj === x.s ? ' on' : ''}" data-subj="${esc(x.s)}"><span>${esc(x.s || 'الاختبار')}</span><b>${r1(x.m)}%</b><small>${l.t} · ${x.n} ${x.n === 1 ? 'مهارة' : x.n === 2 ? 'مهارتان' : 'مهارات'}</small></button>`; }).join('')}
       <div class="sk-card"><span>الطلاب المحللون</span><b>${studs.length}</b><small>${view.sec === 'all' ? 'كل الفصول' : 'فصل ' + esc(view.sec)}</small></div>
@@ -118,16 +137,25 @@ function draw(panel) {
         </tr>${open && st.weak.length ? `<tr class="sk-sub"><td colspan="${A.nafes ? 6 : 5}"><div class="sk-names">${st.weak.map(s => `<span>${esc(s.name)} <small>فصل ${esc(s.section)} · ${r1(s.by[g.id])}%</small></span>`).join('')}</div></td></tr>` : ''}`;
       }).join('')}</tbody>
     </table></div>
-    <h5 class="sk-h">خريطة الطلاب والمهارات <small>نسبة إتقان كل طالب في كل مهارة</small></h5>
+    <div class="sk-hrow"><h5 class="sk-h">خريطة الطلاب والمهارات <small>نسبة إتقان كل طالب في كل مهارة</small></h5>
+      ${A.nafes ? `<div class="sk-chips">${[['all', 'الكل'], ['pass', 'المجتازون'], ['fail', 'غير المجتازين']].map(([k, t]) => `<button type="button" data-pass="${k}" class="${view.pass === k ? 'on' : ''}">${t}</button>`).join('')}</div>` : ''}</div>
     <div class="sk-twrap sk-heatwrap"><table class="sk-heat">
-      <thead><tr><th>الطالب</th>${shown.map(g => `<th title="${esc((A.nafes ? g.s + ' · ' : '') + g.k)}"><span>${esc(g.k)}</span></th>`).join('')}<th>الدرجة</th></tr></thead>
-      <tbody>${studs.map(s => `<tr><td class="sk-nm">${esc(s.name)}<small>فصل ${esc(s.section)}</small></td>${shown.map(g => { const v = s.by[g.id]; return `<td class="h ${lvl(v).c}">${Math.round(v)}</td>`; }).join('')}<td class="sk-tot">${r1(s.pct)}%</td></tr>`).join('')}</tbody>
+      <thead><tr><th>الطالب</th>${shown.map(g => `<th title="${esc((A.nafes ? g.s + ' · ' : '') + g.k)}"><span>${esc(g.k)}</span></th>`).join('')}${A.nafes ? subjects.map(sj => `<th class="sj"><span>${esc(sj)}</span></th>`).join('') + '<th>الاجتياز</th>' : ''}<th>الدرجة</th></tr></thead>
+      <tbody>${heatStuds.map(s => { const fl = A.nafes ? failedSubjects(s) : []; return `<tr><td class="sk-nm">${esc(s.name)}<small>فصل ${esc(s.section)}</small></td>${shown.map(g => { const v = s.by[g.id]; return `<td class="h ${lvl(v).c}">${Math.round(v)}</td>`; }).join('')}${A.nafes ? subjects.map(sj => { const v = s.subj[sj]; return `<td class="h sj ${v == null ? '' : Math.round(v * 10) / 10 >= A.passPct ? 'ok' : 'bad'}">${v == null ? '—' : Math.round(v)}</td>`; }).join('') + `<td class="sk-ps ${fl.length ? 'no' : 'yes'}">${fl.length ? `لم يجتز<small>${esc(fl.join('، '))}</small>` : '✓ اجتاز'}</td>` : ''}<td class="sk-tot">${r1(s.pct)}%</td></tr>`; }).join('') || `<tr><td colspan="99" class="sk-empty">لا يوجد طلاب</td></tr>`}</tbody>
     </table></div>
     <div class="sk-legend"><span><i class="ok"></i>متقن ${MASTER}% فأكثر</span><span><i class="mid"></i>متوسط ${WEAK}–${MASTER - 1}%</span><span><i class="bad"></i>يحتاج إلى علاج أقل من ${WEAK}%</span></div>
   </div>`;
   panel.querySelectorAll('[data-sec]').forEach(b => b.onclick = () => { view.sec = b.dataset.sec; view.open = null; draw(panel); });
   panel.querySelectorAll('[data-subj]').forEach(b => b.onclick = () => { view.subj = view.subj === b.dataset.subj ? 'all' : b.dataset.subj; draw(panel); });
   panel.querySelectorAll('[data-open]').forEach(b => b.onclick = () => { view.open = view.open === b.dataset.open ? null : b.dataset.open; draw(panel); });
+  panel.querySelectorAll('[data-pass]').forEach(b => b.onclick = () => { view.pass = b.dataset.pass; draw(panel); });
+  const pp = panel.querySelector('#sk-pass-pct');
+  if (pp) pp.onchange = async () => {
+    const v = Math.max(1, Math.min(100, Math.round(+pp.value || 50)));
+    A.passPct = v;
+    const { error } = await sb.from('answer_keys').update({ pass_pct: v }).eq('id', A.key.id);
+    setTimeout(() => { draw(panel); const m = panel.querySelector('#sk-pass-msg'); if (m) m.textContent = error ? ' · تعذر حفظ النسبة' : ' · حُفظت للاختبار ✓'; }, 0);
+  };
   panel.querySelector('#sk-plan').onclick = () => printPlan(needs, stats, studs);
 }
 
@@ -161,6 +189,7 @@ function printPlan(needs, stats, studs) {
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   </style></head><body>
   <div class="hd">${logo ? `<img src="${esc(logo)}" alt="">` : ''}<div><h1>الخطة العلاجية للمهارات</h1><p>${esc(printOrgName())} · ${esc(A.rep.title)} · ${esc(secTxt)} · ${studs.length} طالبًا</p></div></div>
+  ${A.nafes ? failHtml(studs) : ''}
   ${body}
   <div class="sign"><div>معلم المادة<i></i></div><div>الموجه الطلابي<i></i></div><div>مدير المدرسة<i></i></div></div>
   <script>window.onload=()=>setTimeout(()=>window.print(),300)<\/script></body></html>`;
@@ -169,3 +198,11 @@ function printPlan(needs, stats, studs) {
   w.document.open(); w.document.write(html); w.document.close();
 }
 
+
+function failHtml(studs) {
+  const fails = studs.filter(s => !passed(s)).sort((a, b) => failedSubjects(b).length - failedSubjects(a).length || String(a.name).localeCompare(String(b.name), 'ar'));
+  const subjects = [...new Set(A.list.map(g => g.s))];
+  return `<section class="it"><div class="it-h"><b>الطلاب غير المجتازين (${fails.length} من ${studs.length})</b><span class="lv mid">حد الاجتياز ${A.passPct}% في كل مادة</span></div>
+    ${fails.length ? `<table><thead><tr><th>#</th><th>الطالب</th><th>الفصل</th>${subjects.map(sj => `<th>${esc(sj)}</th>`).join('')}<th>مواد لم يجتزها</th></tr></thead><tbody>${fails.map((s, k) => `<tr><td>${k + 1}</td><td>${esc(s.name)}</td><td>${esc(s.section)}</td>${subjects.map(sj => `<td>${s.subj[sj] == null ? '—' : r1(s.subj[sj]) + '%'}</td>`).join('')}<td>${esc(failedSubjects(s).join('، '))}</td></tr>`).join('')}</tbody></table>` : '<div class="meta">اجتاز جميع الطلاب.</div>'}
+  </section>`;
+}
