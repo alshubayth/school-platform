@@ -23,6 +23,8 @@ export const roleLabelOf = p => (p && p.role === 'teacher' && staffRoleLabels[p.
 export const myStaffRole = () => (currentProfile && currentProfile.role === 'teacher' && currentProfile.staff_role) || null;
 export const gradeLabels = { first_intermediate: 'أول متوسط', second_intermediate: 'ثاني متوسط', third_intermediate: 'ثالث متوسط' };
 export let isOpPlanMember = false;
+// عضو فريق التميز: مسند إليه مؤشر واحد على الأقل في الاعتماد المدرسي
+export let hasAccAssignment = false;
 export function setOpPlanMember(v) { isOpPlanMember = v; }
 // هل عند المعلم أي مهمة فعلية في متابعة الاختبارات (مسؤول مادة، أو ضمن فريق كنترول/تدقيق) بأي فترة اختبار؟
 export let hasExamAssignment = false;
@@ -65,6 +67,7 @@ const icons = {
   tracking: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
   schedule: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 10h18"/><path d="M7.5 14.5h2M7.5 17.5h2M12 14.5h2M12 17.5h2M16.5 14.5h1M16.5 17.5h1"/></svg>',
   studentData: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="10" r="2.2"/><path d="M5.2 16.5c.7-1.8 2-2.7 3.3-2.7s2.6.9 3.3 2.7M14 9h4.5M14 12.5h4.5"/></svg>',
+  accreditation: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.9 4.3-1.5 7.5-5.3 7.5-9.9V6z"/><path d="m8.8 12 2.2 2.2 4.4-4.6"/></svg>',
   attendance: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M9 3v2h6V3"/><path d="m8.5 12 2 2 4-4.5"/><path d="M8.5 17.5h7"/></svg>',
   studentProfile: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7.5" r="3.2"/><path d="M3 19.5c1-3.3 3.3-5 6-5 1.4 0 2.6.4 3.6 1.2"/><path d="M15 20v-4M18 20v-7M21 20v-9"/></svg>',
   followups: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="7" r="3.2"/><path d="M3.5 20c1.2-3.6 4-5.3 5.5-5.3s4.3 1.7 5.5 5.3"/><path d="M16 5h5M16 9h5M15 13.5h6M15 17.5h6"/></svg>',
@@ -88,7 +91,7 @@ export const GROUPS = [
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
   { key: 'exams', title: 'الاختبارات', keys: ['exams', 'tracking', 'exam-reports'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>' },
-  { key: 'admin', title: 'الإدارة', keys: ['plan', 'admin-tasks', 'budget', 'computerlab', 'schools-admin', 'more'],
+  { key: 'admin', title: 'الإدارة', keys: ['accreditation', 'plan', 'admin-tasks', 'budget', 'computerlab', 'schools-admin', 'more'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 20V9"/></svg>' },
 ];
 
@@ -96,6 +99,7 @@ export const tiles = [
   { key: 'weekly', icon: icons.weekly, title: 'الخطة الأسبوعية',    desc: 'الدروس والمهام والواجبات لكل مرحلة', roles: ['admin','deputy','teacher','parent'], color: 'diamond-teal', group: 'students' },
   { key: 'schedule', icon: icons.schedule, title: 'الجدول الدراسي', desc: 'جدول الحصص لكل فصل',            roles: ['admin','deputy'], color: 'diamond-teal', group: 'admin' },
   { key: 'student-data', icon: icons.studentData, title: 'بيانات الطلاب', desc: 'ابحث عن طالب في المدرسة أو مرحلة أو فصل', roles: ['admin','deputy'], staff: ['counselor'], color: 'diamond-navy', group: 'students' },
+  { key: 'accreditation', icon: icons.accreditation, title: 'الاعتماد المدرسي', desc: 'شواهد مؤشرات التقويم المدرسي وجاهزية الزيارة', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'admin' },
   { key: 'attendance', icon: icons.attendance, title: 'تحضير الطلاب', desc: 'تحضير الحصة وغياب الطلاب ورسائل أولياء الأمور', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'students' },
   { key: 'student-profile', icon: icons.studentProfile, title: 'ملف الطالب', desc: 'المستوى الدراسي لكل طالب ومقارنته بأقرانه ومواطن إخفاقه', roles: ['admin','deputy'], staff: ['counselor'], color: 'diamond-navy', group: 'students' },
   { key: 'student-lists', icon: icons.followups, title: 'كشوف الطلاب', desc: 'صمّم كشف رصد أو حضور أو متابعة واطبعه', roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'students' },
@@ -276,7 +280,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-28c';
+export const ASSET_VERSION = '2026-10-28d';
 
 /* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
  * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
@@ -495,6 +499,10 @@ export async function loadProfileAndShowDashboard(userId) {
   if (profile.role === 'teacher') {
     const { data: membership } = await sb.from('operational_plan_members').select('id').eq('profile_id', userId).maybeSingle();
     isOpPlanMember = !!membership;
+    try {
+      const { data: accMine } = await sb.from('acc_indicators').select('id').contains('owner_ids', [userId]).limit(1);
+      hasAccAssignment = !!(accMine && accMine.length);
+    } catch (e) { hasAccAssignment = false; }
 
     const [{ data: subjectAssign }, { data: teamAssign }] = await Promise.all([
       sb.from('exam_subject_assignments').select('id').eq('responsible_teacher_id', userId).limit(1),
@@ -656,6 +664,7 @@ export function isTileAllowed(t) {
   const role = effectiveRoleForTiles();
   if (!t.roles.includes(role) && !(t.staff && myStaffRole() && t.staff.includes(myStaffRole()))) return false;
   if (t.key === 'plan' && role === 'teacher' && !isOpPlanMember) return false;
+  if (t.key === 'accreditation' && role === 'teacher' && !hasAccAssignment) return false;
   if (t.key === 'tracking' && role === 'teacher' && !hasExamAssignment) return false;
   if (t.key === 'weekly-tracking' && role === 'teacher' && !hasWeeklyTrackingAccess) return false;
   // فلترة حسب الخدمات المفعّلة لهذي المدرسة (المرحلة الأولى من دعم تعدد المدارس) - لو ما فيه
@@ -802,6 +811,7 @@ export function hideAllModules() {
   const tam = document.getElementById('teacher-absence-module'); if (tam) tam.classList.add('hidden');
   const spm = document.getElementById('student-profile-module'); if (spm) spm.classList.add('hidden');
   const atm = document.getElementById('attendance-module'); if (atm) atm.classList.add('hidden');
+  const acm = document.getElementById('accreditation-module'); if (acm) acm.classList.add('hidden');
   document.getElementById('computerlab-module').classList.add('hidden');
   document.getElementById('schools-admin-module').classList.add('hidden');
   document.getElementById('admin-tasks-module').classList.add('hidden');
@@ -908,6 +918,10 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('substitutes-module').classList.remove('hidden');
     const { loadSubstitutionsModule } = await import('./substitutions.js');
     loadSubstitutionsModule();
+  } else if (key === 'accreditation') {
+    document.getElementById('accreditation-module').classList.remove('hidden');
+    const { loadAccreditationModule } = await import('./accreditation.js?v=' + ASSET_VERSION);
+    loadAccreditationModule();
   } else if (key === 'attendance') {
     document.getElementById('attendance-module').classList.remove('hidden');
     const { loadAttendanceModule } = await import('./attendance.js?v=' + ASSET_VERSION);
@@ -975,6 +989,7 @@ document.getElementById('back-to-tiles-2').addEventListener('click', backToTiles
 document.getElementById('back-to-tiles-ta').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-sp').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-att').addEventListener('click', backToTiles);
+document.getElementById('back-to-tiles-acc').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-3').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-4').addEventListener('click', backToTiles);
 document.getElementById('back-to-tiles-5').addEventListener('click', backToTiles);
