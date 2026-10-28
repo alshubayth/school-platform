@@ -10,8 +10,8 @@ import { sb, currentSchoolId, readScopedBySchool, gradeLabels, printOrgName, pri
  * ========================================================================= */
 
 const MODEL_B = 'ب';
-const TYPE_LABEL = { periodic: 'فتري', diagnostic: 'تشخيصي', final: 'نهائي' };
-const TYPE_PLURAL = { all: 'كل الاختبارات', periodic: 'الفترية', diagnostic: 'التشخيصية', final: 'النهائية' };
+const TYPE_LABEL = { periodic: 'فتري', diagnostic: 'تشخيصي', final: 'نهائي', nafes: 'نافس' };
+const TYPE_PLURAL = { all: 'كل الاختبارات', periodic: 'الفترية', diagnostic: 'التشخيصية', final: 'النهائية', nafes: 'نافس' };
 const ITEM_TYPE = { mcq: 'اختيار من متعدد', tf: 'صح وخطأ', essay: 'مقالي' };
 const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 const GRADE_CODE = Object.fromEntries(Object.entries(gradeLabels).map(([k, v]) => [v, k]));
@@ -160,7 +160,7 @@ export function scoreReport(rep, platMap) {
     // الأسئلة التي خُصمت درجتها: خطأ أو متروك، مع درجة كل سؤال
     const lost = [];
     for (let j = 0; j < n; j++) if (!correct[j]) lost.push({ j, blank: blank[j], pts: PW(j) });
-    recs.push({ repId: rep.id, id, name: st.name || '', section: p ? String(p.class_section || '') : String(st.section || ''), correct, lost, obj, essay, total, max, pct: (total / max) * 100 });
+    recs.push({ repId: rep.id, id, model: st.model || null, name: st.name || '', section: p ? String(p.class_section || '') : String(st.section || ''), correct, lost, obj, essay, total, max, pct: (total / max) * 100 });
   });
   if (!recs.length) return null;
   // صعوبة كل سؤال (نسبة من أجاب عنه صحيحًا) ومتوسط الصف والفصول والمقالي

@@ -646,7 +646,7 @@ async function saveScan(it) {
   if (!S.report) {
     const all = new Map(S.scans); all.set(id, row);
     const payload = reportPayload([...all.values()]);
-    const { data, error } = await writeWithSchool(extra => sb.from('exam_reports').insert({ ...payload, created_by: currentUserId, source: 'camera', key_id: k.id, ...extra }).select('id, title, students_count, created_at').single());
+    const { data, error } = await writeWithSchool(extra => sb.from('exam_reports').insert({ ...payload, created_by: currentUserId, source: 'camera', key_id: k.id, ...(k.exam_kind === 'nafes' || k.subject === 'نافس' ? { exam_type: 'nafes' } : {}), ...extra }).select('id, title, students_count, created_at').single());
     if (error) return error.message;
     S.report = data;
   }

@@ -17,7 +17,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 const GRADE_CODE = Object.fromEntries(Object.entries(gradeLabels).map(([k, v]) => [v, k]));
 const glOf = g => (GRADE_ORDER.includes(g) ? g : GRADE_CODE[g] || null);
-const TYPE_LABEL = { periodic: 'الفترية', diagnostic: 'التشخيصية', final: 'النهائية' };
+const TYPE_LABEL = { periodic: 'الفترية', diagnostic: 'التشخيصية', final: 'النهائية', nafes: 'التجريبية لنافس' };
 const SEMS = ['الفصل الدراسي الأول', 'الفصل الدراسي الثاني'];
 const r2 = v => Math.round(v * 100) / 100;
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);

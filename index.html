@@ -1382,6 +1382,7 @@
               <select id="er-type" style="width:auto; margin:0;">
                 <option value="diagnostic">تشخيصي</option>
                 <option value="periodic">فتري (تصدير النتائج والغياب)</option>
+                <option value="nafes">نافس (تجريبي)</option>
               </select>
             </div>
             <div class="form-row">
@@ -1566,6 +1567,22 @@
                       <span class="as-points-sum" id="as-points-sum"></span>
                     </div>
                   </div>
+                  <div class="as-skills-box">
+                    <label class="as-models-on"><input autocomplete="off" type="checkbox" id="as-skills-on" /> ربط كل سؤال بمهارة (لتحليل مواطن الضعف وعلاجها)</label>
+                    <div id="as-skills-opts" class="hidden">
+                      <div class="as-sk-bar">
+                        <span>الأسئلة من</span><input type="number" id="as-sk-from" min="1" value="1" aria-label="من السؤال" />
+                        <span>إلى</span><input type="number" id="as-sk-to" min="1" value="1" aria-label="إلى السؤال" />
+                        <select id="as-sk-subj" class="hidden" aria-label="المادة"></select>
+                        <input type="text" id="as-sk-name" list="as-sk-dl" placeholder="اختر المهارة أو اكتبها" aria-label="المهارة" autocomplete="off" />
+                        <datalist id="as-sk-dl"></datalist>
+                        <button type="button" class="btn-primary" id="as-sk-apply">ربط</button>
+                        <button type="button" class="text-action-btn" id="as-sk-clear">إلغاء الربط</button>
+                      </div>
+                      <small class="as-models-hint">اضغط رقم أي سؤال في الشبكة لتحديده، أو حدد مدى من الأسئلة واختر مهارتها.</small>
+                      <div id="as-sk-sum" class="as-sk-sum"></div>
+                    </div>
+                  </div>
                   <label class="as-models-on as-multi-row"><input autocomplete="off" type="checkbox" id="as-multi-on" /> السماح بأكثر من إجابة صحيحة للسؤال (اضغط كل الحروف المقبولة)</label>
                   <div id="as-key-grid" style="display:flex; flex-wrap:wrap; gap:6px; max-height:300px; overflow-y:auto;"></div>
                   <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px;">
@@ -1731,6 +1748,7 @@
             <button class="bud-tab" id="er-tab-summary" type="button">تقرير موجز</button>
             <button class="bud-tab" id="er-tab-itemstats" type="button">إحصاءات البنود</button>
             <button class="bud-tab" id="er-tab-analysis" type="button">تحليل شامل</button>
+            <button class="bud-tab hidden" id="er-tab-skills" type="button">المهارات والعلاج</button>
           </div>
         </div>
 
@@ -1740,6 +1758,7 @@
         <div class="bud-panel hidden" id="er-panel-summary"></div>
         <div class="bud-panel hidden" id="er-panel-itemstats"></div>
         <div class="bud-panel hidden" id="er-panel-analysis"></div>
+        <div class="bud-panel hidden" id="er-panel-skills"></div>
       </div>
     </div>
 

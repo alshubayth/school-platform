@@ -874,7 +874,8 @@ function essayMaxOf(parsed) {
 }
 // حفظ تقرير مع نوع الاختبار (تشخيصي/فتري) - لو عمود exam_type ما انضاف بقاعدة البيانات نحفظ بدونه
 async function insertReport(row) {
-  const exam_type = document.getElementById('er-type') ? document.getElementById('er-type').value : 'diagnostic';
+  let exam_type = document.getElementById('er-type') ? document.getElementById('er-type').value : 'diagnostic';
+  if (canonSubject(row.subject_name) === 'نافس') exam_type = 'nafes';
   let res = await writeWithSchool(extra => sb.from('exam_reports').insert({ ...row, exam_type, ...extra }));
   if (res.error && /exam_type/i.test(res.error.message || '')) res = await writeWithSchool(extra => sb.from('exam_reports').insert({ ...row, ...extra }));
   return res;
@@ -890,6 +891,8 @@ export async function loadSubjectNames() {
     subjectNames = [...new Set((data || []).map(x => x.name).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
   } catch { /* نستخدم القائمة الافتراضية */ }
   if (!subjectNames || !subjectNames.length) subjectNames = SUBJECTS_FALLBACK.slice();
+  // «نافس» اختبار تجريبي يجمع الرياضيات والعلوم ولغتي
+  if (!subjectNames.includes('نافس')) subjectNames.push('نافس');
   return subjectNames;
 }
 function subjScore(a, b) {
@@ -912,6 +915,7 @@ export function canonSubject(t) {
 export function examTitle(subject, grade, type) {
   const sj = canonSubject(subject), g = canonGrade(grade);
   if (!sj) return '';
+  if (sj === 'نافس' || type === 'nafes') return `اختبار نافس التجريبي${sj && sj !== 'نافس' ? ' - ' + sj : ''}${g ? ' - ' + g : ''}`;
   const t = type === 'periodic' ? ' الفتري' : type === 'diagnostic' ? ' التشخيصي' : '';
   return `اختبار ${sj}${t}${g ? ' - ' + g : ''}`;
 }
@@ -1051,7 +1055,7 @@ function reportCardHtml(r, i) {
         <span class="erc-main">
           <b>${esc(r.title)}</b>
           <span>${meta || '&nbsp;'}</span>
-          <span class="erc-chips">${isTeacherView() && r.created_by !== currentUserId ? '<i class="erc-shared">من الإدارة</i>' : ''}${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : '<i>تشخيصي</i>'}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
+          <span class="erc-chips">${isTeacherView() && r.created_by !== currentUserId ? '<i class="erc-shared">من الإدارة</i>' : ''}${r.exam_type === 'periodic' ? '<i class="erc-periodic">فتري</i>' : r.exam_type === 'nafes' ? '<i class="erc-nafes">نافس</i>' : '<i>تشخيصي</i>'}${r.source === 'camera' ? '<i class="erc-cam">📷 بالجوال</i>' : ''}${r.students_count != null ? `<i>${r.students_count} طالب</i>` : ''}${r.item_count != null ? `<i>${r.item_count} سؤال</i>` : ''}${r.created_at ? `<i>${dateTxt(r.created_at)}</i>` : ''}${names[r.created_by] && r.source === 'camera' ? `<i>صححه: ${esc(names[r.created_by])}</i>` : ''}</span>
           ${r.exam_type === 'periodic' || r.source !== 'camera' ? `<span class="erc-actions">${r.exam_type === 'periodic' ? `<button type="button" class="erc-act er-export-btn" data-rid="${r.id}">⬇ تصدير النتائج</button><button type="button" class="erc-act er-results-btn" data-rid="${r.id}">استعراض النتائج</button><button type="button" class="erc-act er-absence-btn" data-rid="${r.id}">الغياب</button>` : ''}${r.source !== 'camera' ? `<button type="button" class="erc-act er-addsheet-btn" data-rid="${r.id}">➕ ورقة طالب</button>` : ''}</span>` : ''}
         </span>
         ${!isTeacherView() || r.created_by === currentUserId ? `<button type="button" class="er-delete-btn" data-id="${r.id}" title="حذف التقرير" aria-label="حذف التقرير">✕</button>` : ''}
@@ -1069,7 +1073,7 @@ function renderFilterBar() {
     <input type="search" id="erf-q" placeholder="ابحث بعنوان الاختبار..." value="${esc(erFilt.q)}" autocomplete="off" />
     <select id="erf-subject" aria-label="المادة">${opt('', 'كل المواد', erFilt.subject)}${subjects.map(x => opt(x, x, erFilt.subject)).join('')}</select>
     <select id="erf-grade" aria-label="المرحلة">${opt('', 'كل المراحل', erFilt.grade)}${GRADE_ORDER.map(g => opt(g, gradeLabels[g], erFilt.grade)).join('')}</select>
-    <select id="erf-type" aria-label="نوع الاختبار">${opt('', 'كل الأنواع', erFilt.type)}${opt('diagnostic', 'تشخيصي', erFilt.type)}${opt('periodic', 'فتري', erFilt.type)}</select>
+    <select id="erf-type" aria-label="نوع الاختبار">${opt('', 'كل الأنواع', erFilt.type)}${opt('diagnostic', 'تشخيصي', erFilt.type)}${opt('periodic', 'فتري', erFilt.type)}${opt('nafes', 'نافس', erFilt.type)}</select>
     <select id="erf-sem" aria-label="الفصل الدراسي">${opt('', 'كل الفصول الدراسية', erFilt.sem)}${['الفصل الدراسي الأول', 'الفصل الدراسي الثاني', ...sems].filter((x, i, a) => a.indexOf(x) === i).map(x => opt(x, x, erFilt.sem)).join('')}${erListData.some(r => !r.semester) ? opt('-', 'بدون فصل دراسي', erFilt.sem) : ''}</select>
     ${active ? '<button type="button" class="text-action-btn" id="erf-clear">مسح الفلاتر</button>' : ''}
     ${erListData.some(r => r.exam_type === 'periodic') ? '<button type="button" class="er-absrep-btn" id="erf-absrep">🖨 تقرير الغياب</button>' : ''}
@@ -1263,6 +1267,10 @@ async function openReport(id) {
   cc.onclick = () => { cameraKeyId = data.key_id; document.getElementById('er-detail-view').classList.add('hidden'); document.getElementById('er-list-view').classList.remove('hidden'); setMode('camera'); };
   document.getElementById('er-editkey-card').classList.add('hidden');
   document.getElementById('er-updatefile-card').classList.add('hidden');
+  // تحليل المهارات: يظهر إذا كانت أسئلة المفتاح مربوطة بمهارات
+  const skTab = document.getElementById('er-tab-skills');
+  skTab.classList.add('hidden');
+  import('./skills-analysis.js?v=' + ASSET_VERSION).then(m => m.renderSkillsPanel(data, document.getElementById('er-panel-skills'), skTab)).catch(e => console.error('skills', e));
   renderReportStats(data.stats);
 }
 
@@ -1610,7 +1618,7 @@ document.getElementById('er-back-to-list').addEventListener('click', () => {
   setSubRoute(null);
 });
 
-const ER_TABS = ['dist', 'hist', 'items', 'summary', 'itemstats', 'analysis'];
+const ER_TABS = ['dist', 'hist', 'items', 'summary', 'itemstats', 'analysis', 'skills'];
 function showErTab(tab) {
   ER_TABS.forEach(t => {
     document.getElementById(`er-tab-${t}`).classList.toggle('active', t === tab);
