@@ -12,122 +12,192 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <style>
   :root{
-    --ink:#14233A; --slate:#5B6B80; --line:#E3E8EF; --bg:#F4F6FA; --card:#FFFFFF;
-    --brand:#1D4E89; --brand-2:#2E6FB7; --ok:#1F6A3C; --warn:#A4501A; --bad:#B2382F;
-    --l5:#1F6A3C; --l4:#2E7D5B; --l3:#2E6FB7; --l2:#A4501A; --l1:#B2382F;
+    --ink:#152238; --navy:#0F2447; --slate:#6B7684; --line:#E7E8EC; --bg:#F3F6FB; --card:#FFFFFF;
+    --brand:#2455A4; --brand-2:#3B6FC2; --teal:#2FC1B2; --ok:#1F7A45; --warn:#A4501A; --bad:#B2382F;
+    --l5:#1F7A45; --l4:#2E8A62; --l3:#2455A4; --l2:#C27A1E; --l1:#B2382F;
+    --shadow:0 18px 50px rgba(12,33,71,.14);
   }
   *{ box-sizing:border-box; }
   html,body{ margin:0; }
-  body{ background:var(--bg); color:var(--ink); font-family:'IBM Plex Sans Arabic', Tahoma, sans-serif; font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  body{ background:var(--bg); color:var(--ink); font-family:'IBM Plex Sans Arabic', Tahoma, sans-serif; font-size:15px; line-height:1.6; -webkit-font-smoothing:antialiased; min-height:100vh; display:flex; flex-direction:column; }
   h1,h2,h3,b,.num{ font-family:'Tajawal','IBM Plex Sans Arabic',sans-serif; }
-  .top{ background:linear-gradient(135deg,var(--brand),var(--brand-2)); color:#fff; padding:28px 16px 74px; text-align:center; }
-  .top img{ width:64px; height:64px; object-fit:contain; background:#fff; border-radius:16px; padding:6px; margin-bottom:10px; }
-  .top h1{ margin:0; font-size:22px; font-weight:900; }
-  .top p{ margin:4px 0 0; opacity:.85; font-size:14px; }
-  main{ max-width:760px; margin:-52px auto 40px; padding:0 16px; }
-  .card{ background:var(--card); border-radius:18px; box-shadow:0 8px 30px rgba(20,35,58,.08); padding:22px; }
-  .lookup h2{ margin:0 0 4px; font-size:19px; }
-  .lookup .sub{ margin:0 0 18px; color:var(--slate); font-size:13.5px; }
-  label{ display:block; font-weight:700; font-size:13.5px; margin-bottom:14px; }
-  label small{ display:block; font-weight:500; color:var(--slate); font-size:12px; }
-  input{ width:100%; margin-top:6px; font:inherit; font-size:18px; letter-spacing:2px; text-align:center; direction:ltr; border:1.5px solid var(--line); border-radius:12px; padding:12px; background:#FBFCFE; color:var(--ink); }
-  input:focus{ outline:none; border-color:var(--brand-2); background:#fff; box-shadow:0 0 0 3px rgba(46,111,183,.15); }
-  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; width:100%; border:0; border-radius:12px; padding:13px; font:inherit; font-weight:800; font-size:16px; background:var(--brand); color:#fff; cursor:pointer; }
-  .btn:disabled{ opacity:.6; cursor:default; }
-  .btn.ghost{ background:#fff; color:var(--ink); border:1px solid var(--line); width:auto; padding:9px 16px; font-size:14px; }
-  .msg{ margin-top:12px; font-size:13.5px; font-weight:700; color:var(--bad); text-align:center; }
+
+  /* ===== الهوية: لوحة مُدار ===== */
+  .top{ position:relative; overflow:hidden; isolation:isolate; color:#fff; padding:22px 16px 96px;
+    background: radial-gradient(120% 120% at 85% 0%, #1E4A8E 0%, #13336A 48%, #0C2147 100%); }
+  .traces{ position:absolute; inset:0; width:100%; height:100%; z-index:-1; }
+  .traces .t{ fill:none; stroke:var(--teal); stroke-width:2; opacity:.5; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1100; stroke-dashoffset:1100; animation:draw 2.4s cubic-bezier(.65,0,.35,1) forwards; }
+  .traces .t2, .traces .t5{ stroke:#6FA4F2; opacity:.4; }
+  .traces .t2{ animation-delay:.15s; } .traces .t3{ animation-delay:.35s; } .traces .t4{ animation-delay:.5s; } .traces .t5{ animation-delay:.25s; }
+  .traces circle{ fill:#0C2147; stroke:var(--teal); stroke-width:2.5; opacity:0; animation:pop .45s ease-out 1.7s forwards; }
+  @keyframes draw{ to{ stroke-dashoffset:0; } }
+  @keyframes pop{ to{ opacity:.9; } }
+  .top-in{ max-width:760px; margin:0 auto; }
+  .bar-top{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  .bar-top .word{ height:26px; width:auto; display:block; opacity:.95; }
+  .bar-top .tag{ font-size:12px; font-weight:700; color:#BFD3F0; border:1px solid rgba(191,211,240,.35); border-radius:999px; padding:3px 12px; }
+  .school{ display:flex; align-items:center; gap:14px; margin-top:30px; animation:up .7s cubic-bezier(.2,.8,.2,1) both .1s; }
+  .school .logo{ width:58px; height:58px; border-radius:16px; background:#fff; display:flex; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 6px 18px rgba(0,0,0,.18); overflow:hidden; }
+  .school .logo img{ width:46px; height:46px; object-fit:contain; }
+  .school h1{ margin:0; font-size:24px; font-weight:900; line-height:1.3; }
+  .school p{ margin:2px 0 0; color:#BFD3F0; font-size:14px; }
+  .school p b{ color:#fff; font-weight:800; }
+
+  main{ width:100%; max-width:760px; margin:-62px auto 30px; padding:0 16px; flex:1; }
+  .card{ background:var(--card); border-radius:20px; box-shadow:var(--shadow); padding:24px; }
+  .rise{ animation:up .65s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes up{ from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:none; } }
+
+  /* ===== الاستعلام ===== */
+  .lookup h2{ margin:0 0 4px; font-size:21px; color:var(--navy); font-weight:900; }
+  .lookup .sub{ margin:0 0 20px; color:var(--slate); font-size:14px; }
+  .field{ display:block; margin-bottom:16px; }
+  .field > span{ display:flex; align-items:center; gap:8px; font-weight:800; font-size:14px; color:var(--navy); font-family:'Tajawal',sans-serif; }
+  .field > span i{ width:26px; height:26px; border-radius:8px; background:#EAF1FC; color:var(--brand); display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .field > span i svg{ width:15px; height:15px; }
+  .field small{ display:block; font-weight:500; color:var(--slate); font-size:12px; margin:2px 0 0; }
+  .inp{ position:relative; margin-top:8px; }
+  input{ width:100%; font:inherit; font-family:'Tajawal',sans-serif; font-weight:800; font-size:21px; letter-spacing:4px; text-align:center; direction:ltr; border:1.5px solid var(--line); border-radius:14px; padding:13px; background:#F8FAFD; color:var(--navy); transition:border-color .2s, box-shadow .2s, background .2s; }
+  input::placeholder{ color:#B4BCC8; letter-spacing:3px; font-weight:700; }
+  input:focus{ outline:none; border-color:var(--brand); background:#fff; box-shadow:0 0 0 4px rgba(36,85,164,.12); }
+  .inp .cnt{ position:absolute; inset-inline-start:14px; top:50%; transform:translateY(-50%); font-size:11.5px; font-weight:700; color:#A3ACB9; direction:ltr; transition:color .2s; }
+  .inp.done .cnt{ color:var(--ok); }
+  .inp.done input{ border-color:#9FD3B3; }
+  .shake{ animation:shake .4s; }
+  @keyframes shake{ 20%,60%{ transform:translateX(-6px); } 40%,80%{ transform:translateX(6px); } }
+  .btn{ position:relative; display:inline-flex; align-items:center; justify-content:center; gap:8px; width:100%; border:0; border-radius:14px; padding:14px; font:inherit; font-family:'Tajawal',sans-serif; font-weight:800; font-size:17px; color:#fff; cursor:pointer; overflow:hidden;
+    background:linear-gradient(135deg, #2455A4, #1A3F7E); box-shadow:0 8px 20px rgba(36,85,164,.28); transition:transform .15s, box-shadow .2s, filter .2s; }
+  .btn:hover{ filter:brightness(1.07); box-shadow:0 10px 26px rgba(36,85,164,.34); }
+  .btn:active{ transform:scale(.985); }
+  .btn:disabled{ cursor:default; filter:saturate(.8); }
+  .btn .spin{ width:18px; height:18px; border:2.5px solid rgba(255,255,255,.35); border-top-color:#fff; border-radius:50%; animation:spin .8s linear infinite; display:none; }
+  .btn.loading .spin{ display:inline-block; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .btn.ghost{ background:#fff; color:var(--navy); border:1px solid var(--line); box-shadow:none; width:auto; padding:9px 16px; font-size:14px; }
+  .btn.ghost:hover{ border-color:var(--brand); color:var(--brand); filter:none; }
+  .msg{ margin-top:14px; font-size:13.5px; font-weight:700; color:var(--bad); text-align:center; background:#FBEAE9; border-radius:12px; padding:10px 12px; }
   .msg:empty{ display:none; }
-  .privacy{ margin:14px 0 0; font-size:12px; color:var(--slate); text-align:center; }
-  .stu{ display:flex; align-items:center; gap:12px; margin-bottom:14px; }
-  .stu .av{ width:48px; height:48px; border-radius:14px; background:#E8F0FA; color:var(--brand); display:flex; align-items:center; justify-content:center; font-weight:900; font-size:20px; font-family:'Tajawal',sans-serif; flex-shrink:0; }
-  .stu b{ display:block; font-size:18px; }
+
+  /* ===== النتيجة ===== */
+  .stu{ display:flex; align-items:center; gap:14px; }
+  .stu .av{ width:52px; height:52px; border-radius:16px; background:linear-gradient(135deg,#2455A4,#0E93A8); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:900; font-size:22px; font-family:'Tajawal',sans-serif; flex-shrink:0; box-shadow:0 6px 14px rgba(36,85,164,.25); }
+  .stu b{ display:block; font-size:19px; color:var(--navy); }
   .stu span{ color:var(--slate); font-size:13.5px; }
-  .stu .btn{ margin-inline-start:auto; }
+  .stu .btn{ margin-inline-start:auto; white-space:nowrap; flex-shrink:0; }
+  .stu > div:nth-child(2){ min-width:0; }
   .res{ margin-top:16px; padding:0; overflow:hidden; }
-  .res-h{ padding:16px 20px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-  .res-h h3{ margin:0; font-size:17px; flex:1; min-width:200px; }
+  .res-h{ padding:16px 22px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; flex-wrap:wrap; position:relative; }
+  .res-h::before{ content:''; position:absolute; inset-inline-start:0; top:14px; bottom:14px; width:4px; border-radius:0 4px 4px 0; background:linear-gradient(var(--brand), var(--teal)); }
+  .res-h h3{ margin:0; font-size:17.5px; flex:1; min-width:200px; color:var(--navy); }
   .res-h .meta{ color:var(--slate); font-size:12.5px; }
-  .summary{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; padding:16px 20px 4px; }
-  .sbox{ background:#F7F9FC; border-radius:14px; padding:12px 14px; }
-  .sbox > span{ display:block; color:var(--slate); font-size:12.5px; }
-  .sbox .lvl{ display:inline-block; color:#fff; font-size:14px; padding:4px 14px; margin-top:4px; }
-  .of{ font-weight:600; color:var(--slate); font-size:.8em; white-space:nowrap; }
-  .sbox b{ font-size:24px; font-weight:900; }
+  .summary{ display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:10px; padding:18px 22px 4px; }
+  .sbox{ background:#F5F8FC; border:1px solid #EBF0F7; border-radius:16px; padding:12px 14px; }
+  .sbox > span{ display:block; color:var(--slate); font-size:12.5px; font-weight:600; }
+  .sbox b{ font-size:26px; font-weight:900; color:var(--navy); }
   .sbox b small{ font-size:14px; color:var(--slate); font-weight:700; }
-  .lvl{ display:inline-block; font-size:12px; font-weight:800; border-radius:999px; padding:2px 10px; color:#fff; white-space:nowrap; }
+  .sbox > span.lvl{ display:inline-block; color:#fff; font-size:14px; font-weight:800; padding:4px 14px; margin-top:6px; }
+  .of{ font-weight:600; color:var(--slate); font-size:.8em; white-space:nowrap; }
+  .lvl{ display:inline-block; font-size:12px; font-weight:800; border-radius:999px; padding:3px 11px; color:#fff; white-space:nowrap; }
   .l5{ background:var(--l5); } .l4{ background:var(--l4); } .l3{ background:var(--l3); } .l2{ background:var(--l2); } .l1{ background:var(--l1); } .la{ background:#8A94A3; }
   table{ width:100%; border-collapse:collapse; }
-  .twrap{ padding:12px 20px 18px; overflow-x:auto; }
-  th{ text-align:start; font-size:12.5px; color:var(--slate); font-weight:700; padding:8px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
-  td{ padding:11px 8px; border-bottom:1px solid #F0F2F6; font-size:14.5px; vertical-align:middle; }
+  .twrap{ padding:12px 22px 18px; overflow-x:auto; }
+  th{ text-align:start; font-size:12.5px; color:var(--slate); font-weight:700; padding:8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+  td{ padding:12px 8px; border-bottom:1px solid #F0F2F6; font-size:14.5px; vertical-align:middle; }
+  tbody tr{ animation:up .5s cubic-bezier(.2,.8,.2,1) both; }
   tr:last-child td{ border-bottom:0; }
-  td.sub b{ display:block; font-size:15px; }
+  td.sub b{ display:block; font-size:15px; color:var(--navy); }
   td.sub small{ color:var(--slate); font-size:12px; }
   .num{ font-weight:800; white-space:nowrap; direction:ltr; unicode-bidi:isolate; }
-  .bar{ position:relative; height:7px; border-radius:6px; background:#EDF1F6; min-width:90px; margin-top:6px; }
-  .bar i{ position:absolute; inset-inline-start:0; top:0; bottom:0; border-radius:6px; background:var(--brand-2); }
-  .bar em{ position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--ink); opacity:.55; border-radius:2px; }
+  .bar{ position:relative; height:8px; border-radius:6px; background:#EDF1F6; min-width:90px; margin-top:6px; }
+  .bar i{ position:absolute; inset-inline-start:0; top:0; bottom:0; width:var(--w); border-radius:6px; background:linear-gradient(90deg, var(--teal), var(--brand)); animation:grow 1.1s cubic-bezier(.2,.8,.2,1) both .25s; }
+  @keyframes grow{ from{ width:0; } }
+  .bar em{ position:absolute; top:-3px; bottom:-3px; width:2px; background:var(--navy); opacity:.6; border-radius:2px; }
   .cmp{ font-size:12px; font-weight:700; white-space:nowrap; }
   .cmp.up{ color:var(--ok); } .cmp.down{ color:var(--warn); }
-  .legend{ padding:0 20px 16px; font-size:12px; color:var(--slate); display:flex; gap:14px; flex-wrap:wrap; }
-  .legend i{ display:inline-block; width:12px; height:6px; border-radius:3px; background:var(--brand-2); vertical-align:middle; margin-inline-end:4px; }
-  .legend em{ display:inline-block; width:2px; height:12px; background:var(--ink); opacity:.55; vertical-align:middle; margin-inline-end:4px; }
-  .res-f{ padding:0 20px 18px; display:flex; justify-content:flex-end; }
-  .empty{ text-align:center; color:var(--slate); padding:30px 10px; }
-  .empty b{ display:block; color:var(--ink); font-size:16px; margin-bottom:4px; }
-  .foot{ text-align:center; color:var(--slate); font-size:12px; margin-top:22px; }
+  .legend{ padding:0 22px 16px; font-size:12px; color:var(--slate); display:flex; gap:14px; flex-wrap:wrap; }
+  .legend i{ display:inline-block; width:14px; height:6px; border-radius:3px; background:linear-gradient(90deg, var(--teal), var(--brand)); vertical-align:middle; margin-inline-end:4px; }
+  .legend em{ display:inline-block; width:2px; height:12px; background:var(--navy); opacity:.6; vertical-align:middle; margin-inline-end:4px; }
+  .res-f{ padding:0 22px 18px; display:flex; justify-content:flex-end; }
+  .empty{ text-align:center; color:var(--slate); padding:34px 10px; }
+  .empty b{ display:block; color:var(--navy); font-size:16px; margin-bottom:4px; }
   .hidden{ display:none !important; }
-  .doc-view{ padding:14px 20px 6px; display:flex; flex-direction:column; gap:10px; }
-  .doc-view canvas{ width:100%; height:auto; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 2px 10px rgba(20,35,58,.06); }
-  .doc-frame{ width:100%; aspect-ratio:1 / 1.414; min-height:420px; border:1px solid var(--line); border-radius:10px; background:#fff; }
-  .doc-open{ display:flex; flex-direction:column; align-items:center; gap:4px; text-decoration:none; color:var(--ink); background:#F2F7FD; border:1.5px dashed #B9D7F0; border-radius:14px; padding:26px 12px; text-align:center; }
+  .doc-view{ padding:16px 22px 6px; display:flex; flex-direction:column; gap:10px; }
+  .doc-frame{ width:100%; aspect-ratio:1 / 1.414; min-height:420px; border:1px solid var(--line); border-radius:12px; background:#fff; }
+  .doc-open{ display:flex; flex-direction:column; align-items:center; gap:4px; text-decoration:none; color:var(--ink); background:#F2F7FD; border:1.5px dashed #B9D7F0; border-radius:16px; padding:28px 12px; text-align:center; transition:background .2s, border-color .2s; }
+  .doc-open:hover{ background:#EAF1FC; border-color:var(--brand); }
   .doc-open span{ font-size:34px; } .doc-open b{ font-size:16px; color:var(--brand); } .doc-open small{ color:var(--slate); font-size:12.5px; }
-  .doc-load{ text-align:center; color:var(--slate); font-size:13.5px; padding:30px 10px; background:#F7F9FC; border-radius:12px; }
+  .doc-load{ text-align:center; color:var(--slate); font-size:13.5px; padding:30px 10px; background:#F5F8FC; border-radius:12px; }
   .doc-actions{ gap:8px; }
   a.btn{ text-decoration:none; }
   .nw{ white-space:nowrap; }
   .avg-sm{ display:none; color:var(--slate); font-size:11.5px; margin-top:3px; white-space:nowrap; }
+
+  .site-foot{ display:flex; align-items:center; justify-content:center; gap:8px; color:#9AA3B2; font-size:12px; font-weight:600; padding:6px 16px 22px; }
+  .site-foot img{ height:16px; width:auto; opacity:.55; }
+
   @media (max-width:560px){
-    .card{ padding:18px; } .res{ padding:0; }
-    .res-h, .twrap, .summary, .legend, .res-f{ padding-inline:14px; }
+    .top{ padding-bottom:88px; }
+    .school{ margin-top:22px; } .school h1{ font-size:20px; } .school .logo{ width:50px; height:50px; } .school .logo img{ width:40px; height:40px; }
+    .card{ padding:20px 18px; } .res{ padding:0; }
+    .res-h, .twrap, .summary, .legend, .res-f, .doc-view{ padding-inline:14px; }
     .hide-sm{ display:none; }
     .avg-sm{ display:block; }
     td{ font-size:14px; padding:10px 6px; }
+    .stu b{ font-size:17px; } .stu .btn{ padding:8px 12px; font-size:13px; }
+  }
+  @media (prefers-reduced-motion: reduce){
+    *, *::before, *::after{ animation:none !important; transition:none !important; }
+    .traces .t{ stroke-dashoffset:0; } .traces circle{ opacity:.9; }
   }
   @media print{
-    body{ background:#fff; }
+    body{ background:#fff; display:block; }
     .top{ background:none; color:var(--ink); padding:10px 0; }
-    .top img{ background:none; }
+    .traces, .bar-top{ display:none; }
+    .school p{ color:var(--slate); }
     main{ margin:0 auto; max-width:none; }
     .card{ box-shadow:none; border:1px solid var(--line); }
-    .no-print, .lookup{ display:none !important; }
+    .no-print, .lookup, .site-foot{ display:none !important; }
     .res{ break-inside:avoid; page-break-inside:avoid; }
     .res.skip-print{ display:none; }
-    .bar i, .lvl, .sbox{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    *{ animation:none !important; }
+    .bar i, .lvl, .sbox, .stu .av{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
 </style>
 </head>
 <body>
 <header class="top">
-  <img id="logo" class="hidden" alt="">
-  <h1 id="school-name">نتائج الطلاب</h1>
-  <p>نتائج الاختبارات لأولياء الأمور</p>
+  <svg class="traces" viewBox="0 0 1200 360" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <path class="t t1" d="M-20 300 H240 L300 240 H470 L520 190"/>
+    <path class="t t2" d="M-20 340 H360 L410 290 H640 L690 240 H900"/>
+    <path class="t t3" d="M1220 120 H1020 L970 70 H860"/>
+    <path class="t t4" d="M1220 260 H1080 L1030 210 H930 L890 170"/>
+    <path class="t t5" d="M700 -20 V40 L750 90 H820"/>
+    <circle cx="520" cy="190" r="6"/><circle cx="860" cy="70" r="6"/><circle cx="890" cy="170" r="5"/><circle cx="820" cy="90" r="5"/><circle cx="470" cy="240" r="4"/>
+  </svg>
+  <div class="top-in">
+    <div class="bar-top"><img class="word" src="wordmark-white.svg" alt="مُدار Mudaar"><span class="tag">بوابة أولياء الأمور</span></div>
+    <div class="school">
+      <div class="logo"><img id="logo" src="mark.svg" alt=""></div>
+      <div><h1 id="school-name">نتائج الطلاب</h1><p>نتائج الاختبارات <b>لأولياء الأمور</b></p></div>
+    </div>
+  </div>
 </header>
 <main>
-  <section class="card lookup" id="lookup">
+  <section class="card lookup rise" id="lookup">
     <h2>الاستعلام عن النتيجة</h2>
     <p class="sub">أدخل رقم هوية الطالب وآخر أربعة أرقام من جوال ولي الأمر المسجل لدى المدرسة.</p>
     <form id="form" autocomplete="off" novalidate>
-      <label>رقم هوية الطالب<input id="nid" inputmode="numeric" maxlength="10" placeholder="1xxxxxxxxx" required></label>
-      <label>آخر أربعة أرقام من جوال ولي الأمر<small>الرقم المسجل لدى المدرسة، الذي تصلكم عليه رسائلها</small><input id="l4" inputmode="numeric" maxlength="4" placeholder="••••" required></label>
-      <button class="btn" id="go" type="submit">عرض النتيجة</button>
+      <label class="field"><span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg></i>رقم هوية الطالب</span>
+        <div class="inp"><input id="nid" inputmode="numeric" maxlength="10" placeholder="1xxxxxxxxx" required><span class="cnt" id="nid-c">0/10</span></div></label>
+      <label class="field"><span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/></svg></i>آخر أربعة أرقام من جوال ولي الأمر</span><small>الرقم المسجل لدى المدرسة، الذي تصلكم عليه رسائلها</small>
+        <div class="inp"><input id="l4" inputmode="numeric" maxlength="4" placeholder="••••" required><span class="cnt" id="l4-c">0/4</span></div></label>
+      <button class="btn" id="go" type="submit"><span class="spin" aria-hidden="true"></span><span id="go-t">عرض النتيجة</span></button>
       <div class="msg" id="msg" role="alert"></div>
     </form>
-    <p class="privacy">لا تُعرض إلا نتيجة الطالب نفسه، ولا تظهر بيانات أي طالب آخر.</p>
   </section>
   <section id="out" class="hidden"></section>
-  <p class="foot" id="foot"></p>
 </main>
+<footer class="site-foot"><span id="foot"></span><img src="mark.svg" alt="مُدار"></footer>
 <script>
 const SUPABASE_URL = 'https://sovfrlvcvcyjcyauurpl.supabase.co';
 const SUPABASE_KEY = 'sb_publishable_jWUr3tDZL-Bg_Qjr-iH5bg_xSEipTmA';
@@ -151,21 +221,30 @@ let cred = null;   // للاستعلام عن ملفات التقارير بعد
   document.title = 'نتائج الطلاب - ' + data.name;
   $('foot').textContent = data.name;
   const logo = data.branding && data.branding.school_logo;
-  if (logo) { $('logo').src = logo; $('logo').alt = 'شعار ' + data.name; $('logo').classList.remove('hidden'); }
+  if (logo) { $('logo').src = logo; $('logo').alt = 'شعار ' + data.name; }
 })();
 
-['nid', 'l4'].forEach(id => $(id).addEventListener('input', e => { const v = digits(e.target.value).slice(0, id === 'nid' ? 10 : 4); if (e.target.value !== v) e.target.value = v; if (id === 'nid' && v.length === 10) $('l4').focus(); }));
+['nid', 'l4'].forEach(id => $(id).addEventListener('input', e => {
+  const max = id === 'nid' ? 10 : 4;
+  const v = digits(e.target.value).slice(0, max); if (e.target.value !== v) e.target.value = v;
+  $(id + '-c').textContent = `${v.length}/${max}`;
+  e.target.closest('.inp').classList.toggle('done', v.length === max);
+  if (id === 'nid' && v.length === 10) $('l4').focus();
+}));
+const shake = el => { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); };
+const setBusy = on => { const b = $('go'); b.disabled = on; b.classList.toggle('loading', on); $('go-t').textContent = on ? 'جارٍ البحث...' : 'عرض النتيجة'; };
 
 $('form').addEventListener('submit', async e => {
   e.preventDefault();
   const nid = digits($('nid').value), l4 = digits($('l4').value), msg = $('msg');
   msg.textContent = '';
-  if (nid.length !== 10) { msg.textContent = 'رقم الهوية يتكون من عشرة أرقام'; $('nid').focus(); return; }
-  if (l4.length !== 4) { msg.textContent = 'أدخل آخر أربعة أرقام من الجوال'; $('l4').focus(); return; }
-  const btn = $('go'); btn.disabled = true; btn.textContent = 'جارٍ البحث...';
+  if (nid.length !== 10) { msg.textContent = 'رقم الهوية يتكون من عشرة أرقام'; shake($('nid').closest('.inp')); $('nid').focus(); return; }
+  if (l4.length !== 4) { msg.textContent = 'أدخل آخر أربعة أرقام من الجوال'; shake($('l4').closest('.inp')); $('l4').focus(); return; }
+  setBusy(true);
   const { data, error } = await sb.rpc('parent_results', { p_school_slug: slug, p_nid: nid, p_last4: l4 });
-  btn.disabled = false; btn.textContent = 'عرض النتيجة';
+  setBusy(false);
   if (error) { msg.textContent = 'تعذر الاتصال، حاول مرة أخرى'; return; }
+  if (data.error) shake($('lookup'));
   if (data.error) {
     msg.textContent = data.error === 'locked' ? 'تجاوزت عدد المحاولات المسموح بها، حاول مرة أخرى بعد ساعة.'
       : data.error === 'not_found' ? `البيانات غير مطابقة. تأكد من رقم الهوية وآخر أربعة أرقام من الجوال المسجل لدى المدرسة.${data.left != null && data.left < 3 ? ` (المحاولات المتبقية: ${data.left})` : ''}`
@@ -180,7 +259,7 @@ function render(d) {
   const st = d.student || {}, list = d.results || [];
   const out = $('out');
   const initial = String(st.name || '؟').trim().charAt(0);
-  out.innerHTML = `<div class="card">
+  out.innerHTML = `<div class="card rise">
       <div class="stu"><div class="av">${esc(initial)}</div><div><b>${esc(st.name)}</b><span>${esc(GRADES[st.grade] || st.grade || '')}${st.section ? ' · فصل ' + esc(st.section) : ''}</span></div>
       <button class="btn ghost no-print" id="again" type="button">طالب آخر</button></div>
     </div>
@@ -188,7 +267,10 @@ function render(d) {
   $('lookup').classList.add('hidden');
   out.classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  $('again').onclick = () => { cred = null; out.classList.add('hidden'); out.innerHTML = ''; $('lookup').classList.remove('hidden'); $('nid').value = ''; $('l4').value = ''; $('nid').focus(); };
+  $('again').onclick = () => { cred = null; out.classList.add('hidden'); out.innerHTML = ''; $('lookup').classList.remove('hidden'); ['nid', 'l4'].forEach(id => { $(id).value = ''; $(id).dispatchEvent(new Event('input')); }); $('nid').focus(); };
+  // ظهور البطاقات تباعًا، وعدّاد للأرقام
+  out.querySelectorAll('.res').forEach((c, k) => { c.classList.add('rise'); c.style.animationDelay = (0.12 + k * 0.1) + 's'; c.querySelectorAll('tbody tr').forEach((tr, j) => { tr.style.animationDelay = (0.25 + k * 0.1 + j * 0.05) + 's'; }); });
+  out.querySelectorAll('[data-count]').forEach(countUp);
   out.querySelectorAll('.res.doc').forEach(loadDoc);
   out.querySelectorAll('[data-print]').forEach(b => b.onclick = () => {
     const keep = b.dataset.print;
@@ -198,6 +280,12 @@ function render(d) {
   });
 }
 
+function countUp(el) {
+  const to = +el.dataset.count; if (!Number.isFinite(to) || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const t0 = performance.now(), dur = 900;
+  const step = now => { const p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(Math.round(to * e * 10) / 10); if (p < 1) requestAnimationFrame(step); else el.textContent = fmt(to); };
+  requestAnimationFrame(step);
+}
 const pubDateOf = r => (r.published_at ? new Date(r.published_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) : '');
 function docCard(r, i) {
   const d = pubDateOf(r);
@@ -239,10 +327,10 @@ function card(r, i) {
   return `<article class="card res" data-i="${i}">
     <div class="res-h"><h3>${esc(r.title)}</h3><span class="meta">${esc(r.semester || '')}${r.semester && pubDate ? ' · ' : ''}${pubDate ? 'نُشرت ' + esc(pubDate) : ''}</span></div>
     ${t && many ? `<div class="summary">
-      <div class="sbox"><span>المجموع</span><b><span class="num">${fmt(t.score)}</span> <small>من ${fmt(t.max)}</small></b></div>
-      <div class="sbox"><span>النسبة العامة</span><b class="num">${fmt(t.pct)}%</b></div>
+      <div class="sbox"><span>المجموع</span><b><span class="num" data-count="${t.score}">${fmt(t.score)}</span> <small>من ${fmt(t.max)}</small></b></div>
+      <div class="sbox"><span>النسبة العامة</span><b class="num"><span data-count="${t.pct}">${fmt(t.pct)}</span>%</b></div>
       <div class="sbox"><span>التقدير العام</span><span class="lvl ${tl[2]}">${tl[1]}</span></div>
-      ${avg && t.classAvg != null ? `<div class="sbox"><span>متوسط الفصل</span><b class="num">${fmt(t.classAvg)}%</b></div>` : ''}
+      ${avg && t.classAvg != null ? `<div class="sbox"><span>متوسط الفصل</span><b class="num"><span data-count="${t.classAvg}">${fmt(t.classAvg)}</span>%</b></div>` : ''}
     </div>` : ''}
     <div class="twrap"><table>
       <thead><tr><th>${many ? 'المادة' : 'الاختبار'}</th><th>الدرجة</th><th>النسبة</th><th>التقدير</th>${avg ? '<th class="hide-sm">متوسط الفصل</th>' : ''}</tr></thead>
@@ -252,7 +340,7 @@ function card(r, i) {
         return `<tr>
           <td class="sub"><b>${esc(x.subject)}</b>${many ? '' : `<small>${esc(x.title)}</small>`}</td>
           <td class="nw"><span class="num">${fmt(x.score)}</span> <span class="of">من ${fmt(x.max)}</span></td>
-          <td><span class="num">${fmt(x.pct)}%</span><div class="bar" aria-hidden="true"><i style="width:${Math.max(0, Math.min(100, x.pct))}%"></i>${avg && x.classAvg != null ? `<em style="inset-inline-start:${Math.max(0, Math.min(100, x.classAvg))}%"></em>` : ''}</div>${avg && x.classAvg != null ? `<small class="avg-sm">متوسط الفصل ${fmt(x.classAvg)}%</small>` : ''}</td>
+          <td><span class="num">${fmt(x.pct)}%</span><div class="bar" aria-hidden="true"><i style="--w:${Math.max(0, Math.min(100, x.pct))}%"></i>${avg && x.classAvg != null ? `<em style="inset-inline-start:${Math.max(0, Math.min(100, x.classAvg))}%"></em>` : ''}</div>${avg && x.classAvg != null ? `<small class="avg-sm">متوسط الفصل ${fmt(x.classAvg)}%</small>` : ''}</td>
           <td><span class="lvl ${l[2]}">${l[1]}</span></td>
           ${avg ? `<td class="hide-sm"><span class="num">${x.classAvg != null ? fmt(x.classAvg) + '%' : '—'}</span>${d != null ? `<div class="cmp ${d >= 0 ? 'up' : 'down'}">${d >= 0 ? 'أعلى' : 'أقل'} من المتوسط بـ ${fmt(Math.abs(d))}%</div>` : ''}</td>` : ''}
         </tr>`;
