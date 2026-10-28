@@ -3813,3 +3813,32 @@ button.sk-card{ cursor:pointer; } button.sk-card:hover, .sk-card.on{ border-colo
 .sk-heat td.sj{ border-inline-start:2px solid #fff; }
 .sk-ps{ white-space:nowrap; font-weight:800; font-size:12px; text-align:center; } .sk-ps.yes{ color:#1F6A3C; } .sk-ps.no{ color:#B2382F; }
 .sk-ps small{ display:block; font-weight:600; font-size:11px; }
+/* نافس: أجزاء الاختبار والمعلم المشرف */
+.as-parts{ display:flex; flex-direction:column; gap:6px; border-bottom:1px dashed var(--border); padding-bottom:8px; margin-bottom:4px; }
+.as-parts-h b{ display:block; font-size:13px; } .as-parts-h small{ font-size:11.5px; color:var(--slate); }
+.as-part{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; }
+.as-part > b{ min-width:62px; color:#2455A4; }
+.as-part input{ width:60px; margin:0; padding:5px 6px; }
+.as-part select{ flex:1; min-width:150px; margin:0; padding:5px 8px; }
+.as-pp{ font-size:11.5px; color:#A4501A; font-weight:700; } .as-pp.ok{ color:#1F6A3C; }
+.nf-as{ border:1px solid #B9D7F0; background:#F4F9FE; border-radius:14px; padding:12px 14px; margin-bottom:14px; display:flex; flex-direction:column; gap:8px; }
+.nf-as-h b{ display:block; font-size:14.5px; } .nf-as-h span{ font-size:12px; color:var(--slate); }
+.nf-as-it{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; background:#fff; border:1px solid var(--border); border-radius:12px; padding:10px 12px; }
+.nf-as-it > div{ flex:1; min-width:200px; } .nf-as-it b{ display:block; font-size:13.5px; } .nf-as-it span{ font-size:12px; color:var(--slate); }
+.nf-as-it .btn-primary{ width:auto; margin:0; padding:8px 14px; }
+.nf-as-it.done{ border-color:#B9E0C7; }
+.nf-pg{ font-size:12px; font-weight:800; color:#A4501A; } .nf-pg.ok, .nf-as-it.done .nf-pg{ color:#1F6A3C; }
+.nf-ed{ max-width:640px; }
+.nf-bulk{ display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:12.5px; margin:8px 0; } .nf-bulk select{ width:auto; margin:0; flex:1; min-width:160px; }
+.nf-rows{ display:flex; flex-direction:column; gap:4px; max-height:55vh; overflow-y:auto; }
+.nf-row{ display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:10px; padding:5px 8px; }
+.nf-qn{ display:flex; align-items:center; gap:4px; margin:0; min-width:48px; } .nf-qn input{ width:auto; margin:0; }
+.nf-ch{ display:flex; gap:4px; }
+.nf-ch button{ width:30px; height:30px; border-radius:50%; border:1.5px solid #C9CED8; background:#fff; font:inherit; font-size:12.5px; font-weight:800; padding:0; margin:0; cursor:pointer; }
+.nf-ch button.on{ background:var(--meadow); border-color:var(--meadow); color:#fff; }
+.nf-row select{ flex:1; min-width:140px; margin:0; padding:5px 8px; } .nf-row select.miss{ border-color:#F0C08F; background:#FFFBF5; }
+.nf-foot{ display:flex; align-items:center; gap:10px; margin-top:10px; } .nf-foot .rp-err{ flex:1; }
+.sk-heat td.h small{ font-weight:600; opacity:.7; font-size:10.5px; }
+.rp, .rp *{ box-sizing:border-box; }
+@media (max-width:480px){ .nf-row{ flex-wrap:wrap; } .nf-row select{ flex-basis:100%; } .nf-ch button{ width:34px; height:34px; } }
+@media (max-width:899px){ #er-mode-tabs{ flex-wrap:wrap; border-radius:14px; } #er-mode-tabs button{ flex:1 1 45%; min-width:0; white-space:normal; } }

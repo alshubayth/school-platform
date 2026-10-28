@@ -21,12 +21,16 @@ const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate
  * القوائم مقترحات قابلة للتعديل، ويمكن كتابة أي مهارة أخرى. */
 export const NAFES = 'نافس';
 export const NAFES_SUBJECTS = ['الرياضيات', 'العلوم', 'لغتي'];
-const SKILL_SUGGEST = {
-  'الرياضيات': ['الأعداد والعمليات عليها', 'الجبر والدوال', 'الهندسة والقياس', 'الإحصاء والاحتمالات'],
-  'العلوم': ['العلوم الحياتية', 'العلوم الفيزيائية', 'علوم الأرض والفضاء'],
-  'لغتي': ['استرجاع المعلومات من النص', 'الاستنتاج المباشر', 'التفسير والتكامل', 'التقييم والنقد', 'الفهم القرائي للنص الأدبي', 'الفهم القرائي للنص المعلوماتي'],
+export const SKILL_SUGGEST = {
+  'الرياضيات': ['الأعداد والعمليات عليها', 'البيانات والاحتمالات', 'الجبر', 'الهندسة والقياس'],
+  'العلوم': ['العلوم الفيزيائية والكيميائية', 'علم الأرض والفلك', 'علوم الحياة'],
+  'لغتي': ['استيعاب المقروء', 'دلالات الألفاظ'],
 };
+// نافس: ٦٠ فقرة، ٢٠ لكل مادة، ويجتاز المادة من حقق ١٥ فأعلى، ويجتاز الاختبار من اجتاز المواد كلها
+export const NAFES_DEFAULT = { questions: 60, passScore: 15 };
 let keySkills = [];   // لكل سؤال: { s, k } أو null
+let keyParts = [];    // نافس: [{ s, from, to, teacher_id }] - معلم مشرف لكل مادة يدخل إجابات أسئلتها ومهاراتها
+let staffList = null; // المعلمون (لاختيار المشرف)
 
 /* ---------- أبعاد كل ورقة طالب (بالمليمتر) ----------
  * "A4L2" = ورقة A4 بالعرض فيها ورقتين A5 (طالبين) تُقص من النص - كل نصف نسخة طبق الأصل من ورقة A5،
@@ -823,6 +827,7 @@ const isTeacherRole = () => !!(currentProfile && currentProfile.role === 'teache
 export async function fetchSavedKeys() {
   // نجرب الأعمدة الأحدث أول، ولو قاعدة البيانات أقدم نرجع للأعمدة اللي قبلها
   const colsets = [
+    'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, created_by, points, skills, exam_kind, parts, pass_pct, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, created_by, points, skills, exam_kind, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, created_by, points, updated_at',
     'id, title, subject, grade_level, size, questions, choices, lang, essay_total, answers, models, model_map, tf_count, tf_first, sections, created_by, updated_at',
@@ -840,7 +845,7 @@ export async function fetchSavedKeys() {
     });
     if (!error) return { data: data || [], error: null };
     last = error;
-    if (!/points|skills|exam_kind|tf_count|tf_first|sections|models|model_map|column/i.test(error.message || '')) break;
+    if (!/points|skills|exam_kind|parts|pass_pct|tf_count|tf_first|sections|models|model_map|column/i.test(error.message || '')) break;
   }
   const missing = /answer_keys|relation|does not exist|schema cache/i.test((last && last.message) || '');
   return { data: [], error: missing ? 'جدول المفاتيح غير موجود بقاعدة البيانات بعد - شغّل أمر SQL الخاص به في Supabase' : (last && last.message) };
@@ -863,7 +868,9 @@ async function saveKey() {
   if (!keyClassChosen()) { keyStatusMsg('حدد المرحلة بالخطوة ١ قبل حفظ المفتاح (أو جميع المراحل)', true); return; }
   if (!o.questions && !o.essayTotal) { keyStatusMsg('حدد عدد الأسئلة', true); return; }
   const prob = keyProblems();
-  if (prob) { keyStatusMsg(prob + ' - يُرجى إكمال المفتاح قبل الحفظ', true); return; }
+  // نافس: يُحفظ النموذج ناقصًا، ويكمل كل معلم مشرف إجابات مادته من حسابه
+  if (prob && !(isNafes() && keyParts.some(p => p.teacher_id))) { keyStatusMsg(prob + ' - يُرجى إكمال المفتاح قبل الحفظ', true); return; }
+  if (isNafes()) { const bad = partsProblem(o.questions); if (bad) { keyStatusMsg(bad, true); return; } }
   const row = {
     title: o.title, subject: o.subject || null,
     grade_level: keyGrade() || null,
@@ -875,7 +882,8 @@ async function saveKey() {
   const prevKey = currentKeyId ? (savedKeys.find(k => k.id === currentKeyId) || {}) : {};
   if (skillsOn() && keySkills.some(Boolean)) row.skills = keySkills.map(x => (x ? { s: x.s || o.subject, k: x.k } : null));
   else if (prevKey.skills) row.skills = null;
-  if (isNafes()) row.exam_kind = 'nafes'; else if (prevKey.exam_kind) row.exam_kind = null;
+  if (isNafes()) { row.exam_kind = 'nafes'; row.parts = keyParts.map(p => ({ s: p.s, from: p.from, to: p.to, teacher_id: p.teacher_id || null })); if (!prevKey.pass_pct) row.pass_pct = Math.round(NAFES_DEFAULT.passScore / Math.max(1, Math.round(o.questions / NAFES_SUBJECTS.length)) * 10000) / 100; }
+  else if (prevKey.exam_kind) { row.exam_kind = null; row.parts = null; }
   const hadPoints = currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).points;
   if (pointsOn() && keyPoints.some(v => v !== 1)) row.points = keyPoints.slice();
   else if (hadPoints) row.points = null;
@@ -900,7 +908,7 @@ async function saveKey() {
   $('as-key-save-btn').disabled = false;
   if (res.error) {
     const msg = res.error.message || '';
-    if (/skills|exam_kind/i.test(msg)) { keyStatusMsg('ربط المهارات يحتاج تحديث قاعدة البيانات - تواصل مع الدعم الفني', true); return; }
+    if (/skills|exam_kind|parts|pass_pct/i.test(msg)) { keyStatusMsg('ربط المهارات يحتاج تحديث قاعدة البيانات - تواصل مع الدعم الفني', true); return; }
     if (/points/i.test(msg)) { keyStatusMsg('درجات الأسئلة تحتاج تحديث قاعدة البيانات - تواصل مع الدعم الفني', true); return; }
     if (/tf_count|tf_first|sections/i.test(msg)) { keyStatusMsg('أسئلة الصح والخطأ تحتاج تشغيل ملف sql/answer_keys_tf.sql في قاعدة البيانات أولًا', true); return; }
     const missingCols = /models|model_map/i.test(msg);
@@ -948,6 +956,7 @@ function loadKeyIntoForm(k) {
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
   keySkills = Array.isArray(k.skills) ? k.skills.map(x => (x && x.k ? { s: x.s || '', k: x.k } : null)) : [];
   if ($('as-skills-on')) $('as-skills-on').checked = keySkills.some(Boolean) || k.exam_kind === 'nafes';
+  keyParts = Array.isArray(k.parts) ? k.parts.map(p => ({ s: p.s, from: +p.from, to: +p.to, teacher_id: p.teacher_id || '' })) : [];
   keyPoints = Array.isArray(k.points) ? k.points.map(ptVal) : [];
   if ($('as-points-on')) $('as-points-on').checked = Array.isArray(k.points) && k.points.length > 0;
   const m = k.models && k.models.mode ? k.models : null;
@@ -979,7 +988,7 @@ function resetKeyForm() {
   $('as-models-on').checked = false; $('as-models-mode').value = 'choices'; $('as-models-assign').value = 'auto';
   if ($('as-points-on')) $('as-points-on').checked = false;
   if ($('as-multi-on')) $('as-multi-on').checked = false;
-  keyAnswers = []; keyAnswersB = []; orderB = []; modelMap = {}; keyPoints = []; keySkills = []; activeModel = MODEL_A;
+  keyAnswers = []; keyAnswersB = []; orderB = []; modelMap = {}; keyPoints = []; keySkills = []; keyParts = []; activeModel = MODEL_A;
   if ($('as-skills-on')) $('as-skills-on').checked = false;
   currentKeyId = null;
   keyGrades = []; keySections = null;
@@ -1174,6 +1183,10 @@ function updateKeyTitle() {
   $('as-title').value = sj ? `اختبار ${name}${g ? ' - ' + (gradeLabels[g] || g) : ''}` : '';
   // نافس: ربط المهارات أساسي، ولكل سؤال مادته
   if (sj === NAFES && $('as-skills-on') && !$('as-skills-on').checked) $('as-skills-on').checked = true;
+  // نافس: ٦٠ فقرة اختيار من متعدد افتراضيًا
+  if (sj === NAFES && !currentKeyId && num('as-questions') === 20 && !num('as-tf')) {
+    $('as-questions').value = NAFES_DEFAULT.questions; $('as-mcq').value = NAFES_DEFAULT.questions; $('as-choices').value = '4'; updateQSum();
+  }
 }
 function keyGrade() { return Array.isArray(keyGrades) && keyGrades.length === 1 ? keyGrades[0] : ''; }
 const keyClassChosen = () => keyGrades === null || keyGrades.length > 0;
@@ -1430,7 +1443,49 @@ function skColor(x) {
   const keys = [...new Set(keySkills.filter(Boolean).map(skKey))];
   return SK_COLORS[Math.max(0, keys.indexOf(skKey(x))) % SK_COLORS.length];
 }
-function skSubject() { return isNafes() ? ($('as-sk-subj').value || NAFES_SUBJECTS[0]) : ($('as-subject').value || ''); }
+function partOf(q1) { return keyParts.find(p => q1 >= p.from && q1 <= p.to) || null; }
+function skSubject() {
+  if (!isNafes()) return $('as-subject').value || '';
+  const p = partOf(parseInt($('as-sk-from').value, 10) || 1);
+  return p ? p.s : ($('as-sk-subj').value || NAFES_SUBJECTS[0]);
+}
+function defaultParts(n) {
+  const per = Math.floor(n / NAFES_SUBJECTS.length) || 1;
+  return NAFES_SUBJECTS.map((s, i) => ({ s, from: i * per + 1, to: i === NAFES_SUBJECTS.length - 1 ? n : (i + 1) * per, teacher_id: '' }));
+}
+function partsProblem(n) {
+  const seen = new Array(n + 1).fill(0);
+  for (const p of keyParts) { if (!(p.from >= 1 && p.to <= n && p.from <= p.to)) return `مدى أسئلة ${p.s} غير صحيح`; for (let q = p.from; q <= p.to; q++) seen[q]++; }
+  if (seen.slice(1).some(v => v > 1)) return 'يوجد تداخل بين أسئلة المواد في أجزاء الاختبار';
+  return null;
+}
+async function loadStaff() {
+  if (staffList) return staffList;
+  const { data } = await readScopedBySchool(scoped => { let q = sb.from('profiles').select('id, full_name, role').in('role', ['teacher', 'deputy', 'admin']); if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q.order('full_name'); });
+  staffList = (data || []).filter(p => p.full_name);
+  return staffList;
+}
+function renderParts(n) {
+  const box = $('as-parts'); if (!box) return;
+  box.classList.toggle('hidden', !isNafes());
+  if (!isNafes()) return;
+  if (!keyParts.length || keyParts.some(p => p.to > n)) keyParts = defaultParts(n).map((p, i) => ({ ...p, teacher_id: (keyParts[i] || {}).teacher_id || '' }));
+  const staff = staffList || [];
+  const prog = p => { let a = 0, k = 0; for (let q = p.from - 1; q < p.to; q++) { if (keyAnswers[q] != null) a++; if (keySkills[q]) k++; } const t = p.to - p.from + 1; return `<span class="as-pp${a === t && k === t ? ' ok' : ''}">الإجابات ${a}/${t} · المهارات ${k}/${t}</span>`; };
+  box.innerHTML = `<div class="as-parts-h"><b>أجزاء الاختبار والمعلم المشرف</b><small>يظهر لكل معلم مشرف النموذج في حسابه، فيدخل إجابات أسئلة مادته ومهاراتها.</small></div>
+    ${keyParts.map((p, i) => `<div class="as-part" data-i="${i}"><b>${escHtml(p.s)}</b>
+      <span>من</span><input type="number" data-f="from" min="1" max="${n}" value="${p.from}"><span>إلى</span><input type="number" data-f="to" min="1" max="${n}" value="${p.to}">
+      <select data-f="teacher_id"><option value="">المعلم المشرف...</option>${staff.map(t => `<option value="${t.id}"${t.id === p.teacher_id ? ' selected' : ''}>${escHtml(t.full_name)}</option>`).join('')}</select>
+      ${prog(p)}</div>`).join('')}`;
+  box.querySelectorAll('.as-part').forEach(row => row.querySelectorAll('[data-f]').forEach(inp => inp.onchange = () => {
+    const p = keyParts[+row.dataset.i];
+    p[inp.dataset.f] = inp.dataset.f === 'teacher_id' ? inp.value : Math.max(1, Math.min(n, parseInt(inp.value, 10) || 1));
+    // مهارات أسئلة الجزء تأخذ مادته
+    for (let q = p.from - 1; q < p.to; q++) if (keySkills[q] && keySkills[q].s !== p.s) keySkills[q] = null;
+    renderKeyGrid();
+  }));
+  if (!staffList) loadStaff().then(() => renderParts(n));
+}
 function fillSkillList() {
   const sj = skSubject();
   const used = keySkills.filter(x => x && (!isNafes() || x.s === sj)).map(x => x.k);
@@ -1444,8 +1499,9 @@ function renderSkillsBox(n) {
   $('as-skills-on').disabled = isNafes();
   box.classList.toggle('hidden', !on);
   if (!on) return;
+  renderParts(n);
   const subjSel = $('as-sk-subj');
-  subjSel.classList.toggle('hidden', !isNafes());
+  subjSel.classList.toggle('hidden', true);
   if (isNafes() && !subjSel.options.length) subjSel.innerHTML = NAFES_SUBJECTS.map(x => `<option>${x}</option>`).join('');
   $('as-sk-from').max = $('as-sk-to').max = String(Math.max(1, n));
   fillSkillList();
@@ -1468,11 +1524,13 @@ function initSkillsBox() {
     if (b < a) [a, b] = [b, a];
     const k = $('as-sk-name').value.trim();
     if (!clear && !k) { $('as-sk-name').focus(); return; }
+    if (isNafes() && partOf(a) !== partOf(b)) { keyStatusMsg('المدى المحدد يشمل أسئلة من أكثر من مادة، حدد أسئلة مادة واحدة', true); return; }
     for (let q = a - 1; q < b; q++) keySkills[q] = clear ? null : { s: skSubject(), k };
     // المدى التالي يبدأ بعد آخر سؤال
     if (!clear && b < n) { $('as-sk-from').value = b + 1; $('as-sk-to').value = b + 1; }
     renderKeyGrid();
   };
+  $('as-sk-from').addEventListener('change', fillSkillList);
   $('as-sk-apply').addEventListener('click', () => apply(false));
   $('as-sk-clear').addEventListener('click', () => apply(true));
   $('as-sk-name').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); apply(false); } });
@@ -1487,5 +1545,7 @@ function initSkillsBox() {
     const x = keySkills[q - 1];
     if (x) { if (isNafes() && x.s) $('as-sk-subj').value = x.s; fillSkillList(); $('as-sk-name').value = x.k; }
     $('as-key-grid').querySelectorAll('.as-qn').forEach(el => { const v = +el.dataset.qn + 1; el.classList.toggle('sel', v >= +$('as-sk-from').value && v <= +$('as-sk-to').value); });
+    fillSkillList(); if (!x) $('as-sk-name').value = '';
+    $('as-sk-name').focus();
   });
 }

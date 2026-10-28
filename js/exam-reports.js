@@ -496,6 +496,7 @@ export async function loadExamReportsModule(sub = null) {
   // المعلم: التصحيح بالجوال وتقاريره هو بس (بدون تصميم الأوراق ورفع ملفات Remark)
   document.getElementById('exam-reports-module').classList.toggle('er-teacher', isTeacherView());
   initAnswerSheetCard();
+  import('./nafes-teacher.js?v=' + ASSET_VERSION).then(m => m.renderNafesAssignments(document.getElementById('er-nafes-assign'))).catch(e => console.error('nafes', e));
   if (sub === 'sheet') { setMode('sheet', false); loadSavedList(); return; }
   if (sub === 'camera') { setMode('camera', false); loadSavedList(); return; }
   if (sub === 'paper') { setMode('paper', false); loadSavedList(); return; }
