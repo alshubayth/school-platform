@@ -304,6 +304,7 @@ async function saveAttendance() {
 
 /* ---------- متابعة اليوم (المدير والوكيل) ---------- */
 let dayData = null;
+const MIN_TAKEN = 2;   // أقل عدد حصص محضّرة لفصل الطالب قبل تحديد رسالته تلقائيًا
 const dv = { sub: 'abs', filter: 'all', sel: new Set(), rp: 0 };
 
 async function renderDay() {
@@ -339,7 +340,8 @@ async function renderDay() {
   const expected = (sched || []).map(r => ({ ...r, key: `${r.period_number}|${r.grade_level}|${r.class_section}` }));
   const missing = expected.filter(r => !sessBy.has(r.key) && (date < todayIso() || (periodTime(r.grade_level, r.period_number) || { end: 0 }).end <= new Date().getHours() * 60 + new Date().getMinutes()));
   dayData = { date, rows, sess: sess || [], sessBy, expected, missing };
-  dv.sel = new Set(rows.filter(r => r.full && !r.msg && r.mobile).map(r => r.id));
+  // لا يُحدَّد تلقائيًا من حُضّرت له حصة واحدة فقط (قد يكون متأخرًا وصل بعد الحصة الأولى)
+  dv.sel = new Set(rows.filter(r => r.full && r.taken.length >= MIN_TAKEN && !r.msg && r.mobile).map(r => r.id));
   const absent = rows.filter(r => r.abs.length);
   const sentN = rows.filter(r => r.msg && r.msg.status === 'sent').length;
   const doneN = (sess || []).length, expN = new Set(expected.map(r => r.key)).size;
@@ -357,7 +359,12 @@ async function renderDay() {
       <button type="button" data-sub="track" class="${dv.sub === 'track' ? 'on' : ''}">${IC.grid}متابعة التحضير${missing.length ? ` <i class="warn">${missing.length}</i>` : ''}</button>
     </div>
     <div id="av-sub"></div>`;
-  box.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => { dv.sub = b.dataset.sub; box.querySelectorAll('[data-sub]').forEach(x => x.classList.toggle('on', x === b)); renderSub(); });
+  box.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => {
+    const from = dv.sub; dv.sub = b.dataset.sub;
+    // العودة من جولة الفصول أو المتابعة: تُحمَّل البيانات من جديد حتى لا تُعرض حالة قديمة
+    if (dv.sub === 'abs' && from !== 'abs') { renderDay(); return; }
+    box.querySelectorAll('[data-sub]').forEach(x => x.classList.toggle('on', x === b)); renderSub();
+  });
   renderSub();
 }
 
@@ -386,7 +393,7 @@ function renderAbsent() {
       <div class="av-grp"><div class="av-grp-h"><b>${esc(k)}</b><span>${plural(rs.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')}</span></div>
       <ul>${rs.map(r => { const can = !r.msg && r.mobile && r.abs.length; return `<li class="${dv.sel.has(r.id) ? 'sel' : ''}${can ? '' : ' nosel'}" data-id="${r.id}">
         <span class="av-ck">${can ? `<input type="checkbox" data-id="${r.id}" ${dv.sel.has(r.id) ? 'checked' : ''} aria-label="تحديد ${esc(r.full_name)}" />` : ''}</span>
-        <span class="av-abs-m"><b>${esc(r.full_name)}</b><small>${r.full ? `غائب كل الحصص المحضّرة` : r.abs.length ? `غائب ${plural(r.abs.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')} من ${r.taken.length}` : `متأخر ${plural(r.late.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')}`}</small></span>
+        <span class="av-abs-m"><b>${esc(r.full_name)}</b><small>${r.full && r.taken.length < MIN_TAKEN ? `<span class="av-one">غائب الحصة ${r.abs[0]} فقط (الوحيدة المحضّرة)، قد يكون متأخرًا</span>` : r.full ? `غائب كل الحصص المحضّرة` : r.abs.length ? `غائب ${plural(r.abs.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')} من ${r.taken.length}` : `متأخر ${plural(r.late.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')}`}</small></span>
         ${dotsHtml(r)}
         ${msgPill(r)}
       </li>`; }).join('')}</ul></div>`).join('') || '<div class="av-card av-noslots">لا يوجد طلاب في هذا التصنيف</div>'}</div>
@@ -510,10 +517,32 @@ async function smsStatusLine() {
 }
 async function approveMessages(ids, tpl) {
   if (!ids.length || !dayData) return;
-  const rows = dayData.rows.filter(r => ids.includes(r.id) && r.mobile);
-  if (!rows.length) return;
-  if (!confirm(`إرسال رسالة غياب لأولياء أمور ${plural(rows.length, 'طالب واحد', 'طالبين', 'طلاب', 'طالبًا')}؟\n\nمثال:\n${bodyFor(rows[0], tpl)}`)) return;
-  const btn = $('av-send'); btn.disabled = true; btn.textContent = 'جارٍ الإرسال...';
+  const btn = $('av-send'); btn.disabled = true; btn.textContent = 'جارٍ التحقق من التحضير...';
+  // تحقق أخير من قاعدة البيانات قبل الإرسال: قد يكون الغياب أُلغي أو تحوّل إلى تأخر بعد فتح الصفحة
+  const scoped = (t, cols, f) => readScopedBySchool(sc => { let q = f(sb.from(t).select(cols)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
+  const [{ data: fm, error: e1 }, { data: fs, error: e2 }, { data: fmsg }] = await Promise.all([
+    scoped('attendance_marks', 'student_id, status, period', q => q.eq('att_date', dayData.date).in('student_id', ids)),
+    scoped('attendance_sessions', 'period, grade_level, class_section', q => q.eq('att_date', dayData.date)),
+    scoped('attendance_messages', 'student_id', q => q.eq('att_date', dayData.date).in('student_id', ids)),
+  ]);
+  if (e1 || e2) { toast('تعذر التحقق من التحضير، حاول مرة أخرى', 'err'); btn.disabled = false; paintAct(); return; }
+  const already = new Set((fmsg || []).map(m => m.student_id));
+  const changed = [], one = [];
+  const rows = dayData.rows.filter(r => ids.includes(r.id) && r.mobile).filter(r => {
+    const abs = (fm || []).filter(m => m.student_id === r.id && m.status === 'absent').map(m => m.period);
+    const taken = (fs || []).filter(x => x.grade_level === r.grade_level && x.class_section === r.class_section).map(x => x.period);
+    if (already.has(r.id)) return false;
+    if (!abs.length) { changed.push(r.full_name); return false; }
+    if (taken.length < MIN_TAKEN) one.push(r.full_name);
+    return true;
+  });
+  btn.disabled = false; paintAct();
+  if (changed.length) toast(`استُبعد ${plural(changed.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')} أُلغي غيابهم بعد فتح الصفحة`, 'err');
+  if (!rows.length) { renderDay(); return; }
+  const warn = one.length ? `\n\nتنبيه: ${plural(one.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')} حُضّرت لفصولهم حصة واحدة فقط، وقد يكونون متأخرين لا غائبين:\n${one.slice(0, 8).join('\n')}${one.length > 8 ? '\n...' : ''}` : '';
+  const ex = changed.length ? `\n\nاستُبعد ${changed.length} لأن غيابهم أُلغي: ${changed.slice(0, 5).join('، ')}${changed.length > 5 ? '...' : ''}` : '';
+  if (!confirm(`إرسال رسالة غياب لأولياء أمور ${plural(rows.length, 'طالب واحد', 'طالبين', 'طلاب', 'طالبًا')}؟${ex}${warn}\n\nمثال:\n${bodyFor(rows[0], tpl)}`)) { if (changed.length) renderDay(); return; }
+  btn.disabled = true; btn.textContent = 'جارٍ الإرسال...';
   const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile, body: bodyFor(r, tpl), status: 'pending', approved_by: currentUserId }));
   const { error } = await writeWithSchool(extra => sb.from('attendance_messages').insert(payload.map(p => ({ ...p, ...extra }))));
   if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الاعتماد: ' + error.message, 'err'); btn.disabled = false; paintAct(); return; }
