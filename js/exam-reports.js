@@ -1222,9 +1222,10 @@ async function healReport(rep) {
   if (isTeacherView() && rep.created_by !== currentUserId) return { rep, removed: 0 };
   const { list, removed } = dedupeSheets(rd.students);
   const statsN = rep.stats && Number(rep.stats.n);
-  if (!removed && (!statsN || statsN === list.length)) return { rep, removed: 0 };
+  if (!removed && !rd.needsRecalc && (!statsN || statsN === list.length)) return { rep, removed: 0 };
   try {
     const upd = recomputeSavedReport(rep, list);
+    if (upd.raw_data) delete upd.raw_data.needsRecalc;
     const { error } = await sb.from('exam_reports').update(upd).eq('id', rep.id);
     if (error) return { rep, removed: 0 };
     periodicCache.delete(rep.id);
@@ -2611,7 +2612,17 @@ async function openManualSheet(rep, onDone, presetId = null) {
   const gradesInReport = new Set((rd.students || []).map(st => {
     const p = students.find(x => String(x.national_id).trim() === String(st.id).trim()); return p && p.grade_level;
   }).filter(Boolean));
-  const st = { student: null, answers: Array(n).fill(null), essay: null, model: 'أ', existing: null };
+  const st = { student: null, answers: Array(n).fill(null), essay: null, model: 'أ', existing: null, perm: null };
+  // ورقة أسئلة من المنصة: لكل طالب ترتيب أسئلة وخيارات خاص به (perms)، فتُدخل إجاباته بترتيب ورقته
+  // وتُحوَّل إلى الترتيب الأصلي قبل التصحيح
+  let paperPerms = null;
+  if (rd.paper && rd.paper.id) {
+    const { data: pp } = await sb.from('exam_papers').select('perms').eq('id', rd.paper.id).maybeSingle();
+    paperPerms = (pp && pp.perms) || {};
+  }
+  const permFor = id => { const pm = paperPerms && paperPerms[String(id || '').trim()]; return pm && Array.isArray(pm.q) && pm.q.length === n && Array.isArray(pm.o) ? pm : null; };
+  const canon = pos => (st.perm ? st.perm.q[pos] : pos);                 // رقم السؤال الأصلي لموضع الورقة
+  const origSlot = (pos, j) => (st.perm && j != null ? (st.perm.o[pos] || [])[j] : j); // الخيار الأصلي للخيار المطبوع
   // ورقة الطالب المحفوظة (للتعديل): القيمة الخام ← رقم الخيار
   const fromRaw = (i, v) => {
     if (typeof v !== 'number' || v <= 0) return null;
@@ -2620,6 +2631,8 @@ async function openManualSheet(rep, onDone, presetId = null) {
   };
   const existingOf = id => (rd.students || []).find(s2 => String(s2.id || '').trim() === String(id || '').trim()) || null;
   const lettersOf = i => (types[i] === 'tf' ? ['صح', 'خطأ'] : ARABIC_LETTERS.slice(0, counts[i] || 4));
+  const qsHtml = () => `${paperPerms ? `<div class="er-man-paper${st.student && !st.perm ? ' warn' : ''}">${!st.student ? 'ورقة أسئلة من المنصة: اختر الطالب أولًا لتظهر الأسئلة بترتيب ورقته.' : st.perm ? 'الأسئلة والخيارات بترتيب ورقة هذا الطالب كما طُبعت له. أدخل ما ظلّله كما هو في ورقته، وتُحوَّل تلقائيًا إلى الترتيب الأصلي عند التصحيح.' : 'لم تُطبع لهذا الطالب ورقة من المنصة، فالأسئلة بترتيبها الأصلي.'}</div>` : ''}
+    ${Array.from({ length: n }, (_, pos) => `<div class="er-man-q" data-q="${pos}"><small>${pos + 1}</small>${lettersOf(canon(pos)).map((l, j) => `<button type="button" data-v="${j}">${esc(l)}</button>`).join('')}</div>`).join('')}`;
   const back = document.createElement('div');
   back.className = 'er-abs-back';
   back.innerHTML = `<div class="er-abs er-man" role="dialog" aria-modal="true" aria-label="إضافة ورقة طالب">
@@ -2627,7 +2640,7 @@ async function openManualSheet(rep, onDone, presetId = null) {
     <div class="er-abs-body">
       <div class="er-man-st"></div>
       ${models ? `<div class="er-man-model"><span>النموذج:</span><button type="button" data-m="أ" class="on">أ</button><button type="button" data-m="ب">ب</button></div>` : ''}
-      <div class="er-man-qs">${Array.from({ length: n }, (_, i) => `<div class="er-man-q" data-q="${i}"><small>${i + 1}</small>${lettersOf(i).map((l, j) => `<button type="button" data-v="${j}">${esc(l)}</button>`).join('')}</div>`).join('')}</div>
+      <div class="er-man-qs">${qsHtml()}</div>
       ${hasEssay ? `<label class="er-man-essay">درجة المقالي <input type="number" class="er-man-essay-v" min="0" step="0.25" inputmode="decimal"${essayMax ? ` max="${essayMax}"` : ''}> من <input type="number" class="er-man-essay-max" min="0" step="0.5" inputmode="decimal" placeholder="العظمى" title="الدرجة العظمى للمقالي (تُحفظ للتقرير كله)"${essayMax ? ` value="${essayMax}"` : ''}></label>` : ''}
       <div class="er-man-sum"></div>
     </div>
@@ -2669,18 +2682,19 @@ async function openManualSheet(rep, onDone, presetId = null) {
   const renderSum = () => {
     const key = keyFor();
     let ok = 0, blank = 0;
-    st.answers.forEach((j, i) => { if (j == null) blank++; else if (keyHit(toRaw(i, j), key[i])) ok++; });
+    st.answers.forEach((j, pos) => { const i = canon(pos); if (j == null) blank++; else if (keyHit(toRaw(i, origSlot(pos, j)), key[i])) ok++; });
     $b('.er-man-sum').innerHTML = `<b>${ok}</b> / ${n} صحيحة${blank ? ` · ${blank} بدون إجابة` : ''}${hasEssay && st.essay != null ? ` · مقالي ${st.essay}` : ''}`;
     back.querySelectorAll('.er-man-q').forEach(row => {
-      const i = +row.dataset.q;
+      const pos = +row.dataset.q, i = canon(pos);
       row.querySelectorAll('button').forEach(b => {
         const j = +b.dataset.v;
-        b.classList.toggle('on', st.answers[i] === j);
-        b.classList.toggle('key', keyHit(toRaw(i, j), key[i]));
+        b.classList.toggle('on', st.answers[pos] === j);
+        b.classList.toggle('key', keyHit(toRaw(i, origSlot(pos, j)), key[i]));
       });
     });
   };
-  back.querySelectorAll('.er-man-q button').forEach(b => b.onclick = () => { const i = +b.closest('.er-man-q').dataset.q, j = +b.dataset.v; st.answers[i] = st.answers[i] === j ? null : j; renderSum(); });
+  const wireQs = () => back.querySelectorAll('.er-man-q button').forEach(b => b.onclick = () => { const pos = +b.closest('.er-man-q').dataset.q, j = +b.dataset.v; st.answers[pos] = st.answers[pos] === j ? null : j; renderSum(); });
+  wireQs();
   back.querySelectorAll('.er-man-model button').forEach(b => b.onclick = () => { st.model = b.dataset.m; back.querySelectorAll('.er-man-model button').forEach(x => x.classList.toggle('on', x === b)); renderSum(); });
   const em = $b('.er-man-essay-max');
   if (em) em.oninput = () => { essayMax = Number(em.value) > 0 ? Number(em.value) : null; if (ei) { if (essayMax) ei.max = essayMax; else ei.removeAttribute('max'); } };
@@ -2692,7 +2706,16 @@ async function openManualSheet(rep, onDone, presetId = null) {
     st.student = x || null;
     const ex = x ? existingOf(x.national_id) : null;
     st.existing = ex;
-    st.answers = Array.from({ length: n }, (_, i) => (ex ? fromRaw(i, (ex.answers || [])[i]) : null));
+    st.perm = x ? permFor(x.national_id) : null;
+    // الإجابات المحفوظة بالترتيب الأصلي ← ترتيب ورقة الطالب
+    st.answers = Array.from({ length: n }, (_, pos) => {
+      if (!ex) return null;
+      const i = canon(pos), o = fromRaw(i, (ex.answers || [])[i]);
+      if (o == null || !st.perm) return o;
+      const j = (st.perm.o[pos] || []).indexOf(o);
+      return j >= 0 ? j : null;
+    });
+    $b('.er-man-qs').innerHTML = qsHtml(); wireQs();
     st.essay = ex && typeof ex.essay === 'number' ? ex.essay : null;
     st.model = ex && ex.model === 'ب' ? 'ب' : 'أ';
     back.querySelectorAll('.er-man-model button').forEach(b => b.classList.toggle('on', b.dataset.m === st.model));
@@ -2720,7 +2743,12 @@ async function openManualSheet(rep, onDone, presetId = null) {
     const x = st.student;
     const row = {
       id: String(x.national_id).trim(), name: x.full_name, grade: gradeLabels[x.grade_level] || '', section: String(x.class_section || ''),
-      subject: rep.subject_name || '', modelRaw: null, answers: st.answers.map((j, i) => toRaw(i, j)), essay: st.essay, manual: true,
+      subject: rep.subject_name || '', modelRaw: null, answers: (() => {
+        // ترتيب ورقة الطالب ← الترتيب الأصلي
+        const out = Array(n).fill(-2);
+        st.answers.forEach((j, pos) => { const i = canon(pos); out[i] = toRaw(i, origSlot(pos, j)); });
+        return out;
+      })(), essay: st.essay, manual: true, ...(st.perm ? { paperMapped: true } : {}),
     };
     if (models) row.model = st.model;
     const list = (rd.students || []).filter(s2 => String(s2.id).trim() !== row.id).map(s2 => { const { key, ...rest } = s2; return rest; });
