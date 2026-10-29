@@ -22,12 +22,13 @@ const IC = {
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
   up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m6 10 6-6 6 6"/><path d="M4 20h16"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  team: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M16 14.2c2.9.3 5 2.6 5 5.8"/></svg>',
   search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
   cal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/></svg>',
   print: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg>',
 };
 
-let D = { inds: [], evs: [], staff: [], visit: null };
+let D = { inds: [], evs: [], staff: [], visit: null, leads: [] };
 let V = { domain: 0, filter: 'all', q: '', open: null, mine: false, member: null };
 const mgr = () => isAdminOrDeputy() || (currentProfile && currentProfile.role === 'owner');
 const R = build => readScopedBySchool(sc => { let q = build(); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
@@ -42,7 +43,13 @@ function statusOf(ind) {
   if (ev.some(e => e.status === 'returned')) return 'returned';
   return 'empty';
 }
-const isMine = ind => (ind.owner_ids || []).includes(currentUserId);
+// المسؤولية على ثلاثة مستويات: المجال كاملًا، أو المعيار، أو المؤشر نفسه
+const stdKey = i => i.domain_no + '|' + i.standard;
+const leadOf = (scope, key) => (D.leads.find(l => l.scope === scope && l.scope_key === String(key)) || {}).owner_ids || [];
+const domainOwners = i => leadOf('domain', i.domain_no);
+const stdOwners = i => leadOf('standard', stdKey(i));
+const effOwners = i => [...new Set([...domainOwners(i), ...stdOwners(i), ...(i.owner_ids || [])])];
+const isMine = ind => effOwners(ind).includes(currentUserId);
 const canUpload = ind => mgr() || isMine(ind);
 
 function toast(msg, bad) {
@@ -55,14 +62,15 @@ function toast(msg, bad) {
 export async function loadAccreditationModule() {
   const box = $('acc-container');
   box.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
-  const [inds, evs, staff, set] = await Promise.all([
+  const [inds, evs, staff, set, leads] = await Promise.all([
     R(() => sb.from('acc_indicators').select('*').order('sort')),
     R(() => sb.from('acc_evidence').select('*').order('created_at')),
     R(() => sb.from('profiles').select('id, full_name, role').in('role', ['admin', 'deputy', 'teacher']).order('full_name')),
     R(() => sb.from('acc_settings').select('visit_date')),
+    R(() => sb.from('acc_leads').select('*')),
   ]);
   if (inds.error) { box.innerHTML = `<div class="ac-empty">تعذر تحميل المؤشرات: ${esc(inds.error.message)}</div>`; return; }
-  D = { inds: inds.data || [], evs: evs.data || [], staff: (staff.data || []).filter(p => p.full_name), visit: ((set.data || [])[0] || {}).visit_date || null };
+  D = { inds: inds.data || [], evs: evs.data || [], staff: (staff.data || []).filter(p => p.full_name), visit: ((set.data || [])[0] || {}).visit_date || null, leads: leads.data || [] };
   if (!mgr()) V.mine = true;
   render();
 }
@@ -88,10 +96,10 @@ function orbitSvg() {
 }
 
 function teamHtml() {
-  const ids = [...new Set(D.inds.flatMap(i => i.owner_ids || []))];
+  const ids = [...new Set(D.inds.flatMap(effOwners))];
   if (!ids.length) return '';
   const rows = ids.map(id => {
-    const mine = D.inds.filter(i => (i.owner_ids || []).includes(id) && !i.not_applicable);
+    const mine = D.inds.filter(i => effOwners(i).includes(id) && !i.not_applicable);
     const dn = mine.filter(i => statusOf(i) === 'done').length;
     return { id, n: mine.length, dn, p: mine.length ? dn / mine.length : 0 };
   }).sort((a, b) => b.p - a.p || b.n - a.n);
@@ -110,7 +118,7 @@ function render() {
   const done = cnt('done');
   const pct = app.length ? Math.round(done / app.length * 100) : 0;
   const pend = D.evs.filter(e => e.status === 'submitted').length;
-  const noOwner = D.inds.filter(i => !i.not_applicable && !(i.owner_ids || []).length).length;
+  const noOwner = D.inds.filter(i => !i.not_applicable && !effOwners(i).length).length;
   const dl = daysLeft();
   box.innerHTML = `<div class="ac">
     <header class="ac-sky">
@@ -134,7 +142,7 @@ function render() {
         <div class="ac-core"><b data-count="${pct}">0</b><span>%</span><small>جاهزية المدرسة</small><em>${done} من ${app.length}</em></div>
       </div>
     </header>
-    ${mgr() && (pend || noOwner) ? `<div class="ac-alerts">${pend ? `<button type="button" data-f="pending">${pend} ${pend === 1 ? 'شاهد ينتظر' : 'شواهد تنتظر'} مراجعتك ←</button>` : ''}${noOwner ? `<button type="button" data-f="noowner">${noOwner} مؤشرًا بلا مسؤول ←</button>` : ''}</div>` : ''}
+    ${mgr() && (pend || noOwner) ? `<div class="ac-alerts">${pend ? `<button type="button" data-f="pending">${pend} ${pend === 1 ? 'شاهد ينتظر' : 'شواهد تنتظر'} مراجعتك ←</button>` : ''}${noOwner ? `<button type="button" id="ac-assign2">${noOwner} مؤشرًا بلا مسؤول، وزّعها ←</button>` : ''}</div>` : ''}
     <div class="ac-planets">${[1, 2, 3, 4].map(d => {
       const ii = D.inds.filter(i => i.domain_no === d && !i.not_applicable);
       const dn = ii.filter(i => statusOf(i) === 'done').length, p = ii.length ? dn / ii.length : 0, C = 2 * Math.PI * 26;
@@ -145,6 +153,7 @@ function render() {
     ${teamHtml()}
     <div class="ac-tools">
       <div class="ac-search">${IC.search}<input type="search" id="ac-q" placeholder="ابحث برقم المؤشر أو نصه..." value="${esc(V.q)}"></div>
+      ${mgr() ? `<button type="button" class="ac-assign-btn" id="ac-assign">${IC.team}توزيع المسؤوليات</button>` : ''}
       <label class="ac-switch"><input type="checkbox" id="ac-mine"${V.mine ? ' checked' : ''}><span></span>مؤشراتي فقط</label>
       ${V.filter !== 'all' || V.domain || V.member ? '<button type="button" class="ac-clear" id="ac-clear">مسح التصفية ✕</button>' : ''}
     </div>
@@ -160,6 +169,8 @@ function render() {
   $('ac-q').oninput = e => { V.q = e.target.value; renderList(); };
   const cl = $('ac-clear'); if (cl) cl.onclick = () => { V.filter = 'all'; V.domain = 0; V.member = null; render(); };
   $('ac-visit').onclick = openVisit;
+  const asg = $('ac-assign'); if (asg) asg.onclick = openAssign;
+  const asg2 = $('ac-assign2'); if (asg2) asg2.onclick = openAssign;
   $('ac-print').onclick = printIndex;
   $('ac-scrim').onclick = () => openDrawer(null);
   const vd = $('ac-visit-date');
@@ -178,9 +189,9 @@ function renderList() {
   const el = $('ac-list');
   const q = V.q.trim();
   const list = D.inds.filter(i => (!V.domain || i.domain_no === V.domain)
-    && (V.filter === 'all' || (V.filter === 'noowner' ? !i.not_applicable && !(i.owner_ids || []).length : statusOf(i) === V.filter))
+    && (V.filter === 'all' || (V.filter === 'noowner' ? !i.not_applicable && !effOwners(i).length : statusOf(i) === V.filter))
     && (!V.mine || isMine(i))
-    && (!V.member || (i.owner_ids || []).includes(V.member))
+    && (!V.member || effOwners(i).includes(V.member))
     && (!q || i.text.includes(q) || i.code.includes(q) || i.standard.includes(q)));
   if (!list.length) { el.innerHTML = `<div class="ac-empty">${V.mine && !D.inds.some(isMine) ? 'لا توجد مؤشرات مسندة إليك' : 'لا توجد مؤشرات مطابقة'}</div>`; return; }
   const groups = [];
@@ -197,7 +208,7 @@ function renderList() {
 }
 
 function cardHtml(i) {
-  const s = statusOf(i), ev = evsOf(i), owners = i.owner_ids || [];
+  const s = statusOf(i), ev = evsOf(i), owners = effOwners(i);
   const ap = ev.filter(e => e.status === 'approved').length;
   return `<button type="button" class="ac-card ${s}${V.open === i.id ? ' on' : ''}${isMine(i) ? ' mine' : ''}" data-id="${i.id}">
     <span class="top"><span class="code">${esc(i.code)}</span>${i.star ? '<i class="star" title="مؤشر مميز بعلامة (*) في الإطار">★</i>' : ''}<span class="ac-st ${ST[s].c}">${ST[s].t}</span></span>
@@ -237,9 +248,11 @@ function drawDrawer() {
 function detailHtml(i) {
   const ev = evsOf(i);
   const owners = i.owner_ids || [];
+  const inh = [['مسؤول المجال', domainOwners(i)], ['مسؤول المعيار', stdOwners(i)]].filter(x => x[1].length);
   return `<div class="ac-det">
+    ${inh.length ? `<div class="ac-inh">${inh.map(([t, ids]) => `<span><i>${t}</i>${ids.map(o => `<b${o === currentUserId ? ' class="me"' : ''}>${esc(nameOf(o))}</b>`).join('')}</span>`).join('')}</div>` : ''}
     ${mgr() ? `<div class="ac-admin">
-      <div class="ac-owners"><span>المسؤولون:</span>${owners.map(o => `<button type="button" class="ac-own" data-rm="${o}">${esc(nameOf(o))} ✕</button>`).join('')}
+      <div class="ac-owners"><span>مسؤول المؤشر:</span>${owners.map(o => `<button type="button" class="ac-own" data-rm="${o}">${esc(nameOf(o))} ✕</button>`).join('')}
         <select data-add><option value="">＋ إسناد إلى...</option>${D.staff.filter(p => !owners.includes(p.id)).map(p => `<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select></div>
       <label class="ac-na"><input type="checkbox" data-na${i.not_applicable ? ' checked' : ''}> لا ينطبق على المدرسة</label>
     </div>` : ''}
@@ -455,4 +468,56 @@ async function shrinkImage(f) {
     if (!blob || blob.size >= f.size) return f;
     return new File([blob], f.name.replace(/\.[^.]+$/, '') + '.jpg', { type: 'image/jpeg' });
   } catch (e) { return f; }
+}
+
+/* ---------- توزيع المسؤوليات: المجال كاملًا، أو المعيار، أو المؤشر ---------- */
+function openAssign() {
+  let back = $('ac-asg');
+  if (!back) { back = document.createElement('div'); back.id = 'ac-asg'; back.className = 'ac-asg-back'; document.body.appendChild(back); }
+  document.body.classList.add('ac-lock');
+  const close = () => { back.remove(); document.body.classList.remove('ac-lock'); render(); };
+  const chips = (ids, scope, key) => `${ids.map(o => `<button type="button" class="ac-chip" data-rm="${o}" data-scope="${scope}" data-key="${esc(key)}">${esc(short(nameOf(o)))}<i>✕</i></button>`).join('')}
+    <select class="ac-pick" data-scope="${scope}" data-key="${esc(key)}"><option value="">＋ إضافة</option>${D.staff.filter(p => !ids.includes(p.id)).map(p => `<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select>`;
+  const draw = () => {
+    back.innerHTML = `<div class="ac-asg" role="dialog" aria-modal="true" aria-label="توزيع المسؤوليات">
+      <div class="ac-asg-h"><div><b>توزيع المسؤوليات</b><span>حدّد مسؤولًا عن مجال كامل، أو معيار، أو مؤشر بعينه. المسؤول يرى كل المؤشرات التي تحت مسؤوليته ويرفع شواهدها.</span></div><button type="button" class="ac-dx" data-x>✕</button></div>
+      <div class="ac-asg-b">${[1, 2, 3, 4].map(d => {
+        const ii = D.inds.filter(i => i.domain_no === d);
+        const stds = [...new Set(ii.map(i => i.standard))];
+        return `<section class="ac-asg-d" style="--c:${DCOL[d]}">
+          <header><span class="n">${d}</span><div><b>${DOMAINS[d]}</b><small>مسؤول المجال كاملًا (${ii.length} مؤشرًا)</small></div><div class="ac-asg-c">${chips(leadOf('domain', d), 'domain', String(d))}</div></header>
+          ${stds.map(st => {
+            const key = d + '|' + st, si = ii.filter(i => i.standard === st);
+            const direct = si.filter(i => (i.owner_ids || []).length).length, open = V.asgOpen === key;
+            return `<div class="ac-asg-s${open ? ' open' : ''}">
+              <div class="row"><button type="button" class="tg" data-tg="${esc(key)}">${open ? '▾' : '◂'}</button><div class="t"><b>${esc(st)}</b><small>${si.length} مؤشرات${direct ? ` · ${direct} لها مسؤول خاص` : ''}</small></div><div class="ac-asg-c">${chips(leadOf('standard', key), 'standard', key)}</div></div>
+              ${open ? `<div class="ac-asg-i">${si.map(i => `<div class="row"><span class="code">${esc(i.code)}</span><div class="t"><span>${esc(i.text)}</span></div><div class="ac-asg-c">${chips(i.owner_ids || [], 'indicator', i.id)}</div></div>`).join('')}</div>` : ''}
+            </div>`;
+          }).join('')}
+        </section>`;
+      }).join('')}</div>
+    </div>`;
+    back.querySelector('[data-x]').onclick = close;
+    back.onclick = e => { if (e.target === back) close(); };
+    back.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => { V.asgOpen = V.asgOpen === b.dataset.tg ? null : b.dataset.tg; draw(); });
+    back.querySelectorAll('.ac-pick').forEach(sel => sel.onchange = () => { if (sel.value) setOwners(sel.dataset.scope, sel.dataset.key, id => [...id, sel.value]); });
+    back.querySelectorAll('.ac-chip').forEach(b => b.onclick = () => setOwners(b.dataset.scope, b.dataset.key, id => id.filter(x => x !== b.dataset.rm)));
+  };
+  const setOwners = async (scope, key, fn) => {
+    if (scope === 'indicator') {
+      const ind = D.inds.find(i => i.id === key);
+      const next = fn(ind.owner_ids || []);
+      const { error } = await sb.from('acc_indicators').update({ owner_ids: next, updated_at: new Date().toISOString() }).eq('id', key);
+      if (error) { toast('تعذر الحفظ: ' + error.message, true); return; }
+      ind.owner_ids = next;
+    } else {
+      const cur = D.leads.find(l => l.scope === scope && l.scope_key === key);
+      const next = fn(cur ? cur.owner_ids : []);
+      const { data, error } = await writeWithSchool(extra => sb.from('acc_leads').upsert({ scope, scope_key: key, owner_ids: next, updated_at: new Date().toISOString(), ...extra }, { onConflict: 'school_id,scope,scope_key' }).select('*').single());
+      if (error) { toast('تعذر الحفظ: ' + error.message, true); return; }
+      D.leads = [...D.leads.filter(l => !(l.scope === scope && l.scope_key === key)), data];
+    }
+    toast('حُفظ التوزيع ✓'); draw();
+  };
+  draw();
 }
