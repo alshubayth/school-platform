@@ -2,7 +2,7 @@
  * الاعتماد المدرسي: جاهزية التقويم الخارجي
  * - المؤشرات (acc_indicators) مرتبة: المجال ← المعيار ← المؤشر.
  * - لكل مؤشر مسؤولون بدرجات (أول/ثانٍ/ثالث)، أفرادًا أو فرقًا (acc_groups)، ومعه قائمة الشواهد المطلوبة ودليل شرحه.
- * - سلسلة المسؤولية: جامع الشواهد يرفع ← مراجع الشاهد ← منسق التقويم ← اعتماد قائد المدرسة (acc_review).
+ * - سلسلة الاعتماد: جامع الشواهد يرفع ← قائد المجال يراجع ويعتمد ← المدير يعتمد نهائيًا (acc_review).
  * - كل شاهد يرتبط ببند من الشواهد المطلوبة، ويُصنَّف بتدرّجه: تخطيط ← تنفيذ ← متابعة ← أثر.
  * - المسؤول يحدّد حالة إنجاز مؤشره، والخطة الزمنية بمراحلها الثماني محفوظة في acc_settings.phases.
  * ========================================================================= */
@@ -19,15 +19,15 @@ const ST = {
   empty: { t: 'لا توجد شواهد', c: 'empty' }, na: { t: 'لا ينطبق', c: 'na' },
 };
 const EVST = {
-  submitted: { t: 'بانتظار المراجع', c: 'pend', n: 0 }, reviewed: { t: 'بانتظار المنسق', c: 'pend', n: 1 }, verified: { t: 'بانتظار اعتماد القائد', c: 'pend', n: 2 },
-  approved: { t: 'معتمد', c: 'done', n: 3 }, returned: { t: 'معاد للتعديل', c: 'ret', n: -1 },
+  submitted: { t: 'بانتظار قائد المجال', c: 'pend', n: 0 }, reviewed: { t: 'بانتظار اعتماد المدير', c: 'pend', n: 1 }, verified: { t: 'بانتظار اعتماد المدير', c: 'pend', n: 1 },
+  approved: { t: 'معتمد نهائيًا', c: 'done', n: 3 }, returned: { t: 'معاد للتعديل', c: 'ret', n: -1 },
 };
 const PROG = { not_started: 'لم يبدأ', in_progress: 'جارٍ', done: 'مكتمل', revise: 'يحتاج تعديل' };
 const STAGES = { plan: ['التخطيط', 'خطة أو إجراء واضح'], exec: ['التنفيذ', 'دليل على تنفيذ الخطة'], follow: ['المتابعة', 'محضر أو سجل أو تقرير متابعة'], impact: ['الأثر', 'مقارنة قبل/بعد أو إحصاءات أو استبانة'] };
 const RANK = { 1: 'المسؤول الأول', 2: 'المسؤول الثاني', 3: 'المسؤول الثالث' };
 const RSHORT = { 1: 'أول', 2: 'ثانٍ', 3: 'ثالث' };
-const HVERB = { reviewed: 'راجعه', verified: 'تحقق منه', approved: 'اعتمده', returned: 'أعاده' };
-const LV_ACT = { 1: 'تمت المراجعة', 2: 'تحقق المنسق', 3: 'اعتماد نهائي' };
+const HVERB = { reviewed: 'اعتمده قائد المجال', verified: 'اعتمده قائد المجال', approved: 'اعتمده نهائيًا', returned: 'أعاده' };
+const LV_ACT = { 1: 'اعتماد قائد المجال', 3: 'اعتماد نهائي' };
 const IC = {
   file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>',
   img: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>',
@@ -93,13 +93,11 @@ function rankOf(i, uid) {
 }
 const asgLabel = a => a.k === 'u' ? short(nameOf(a.id)) : ((groupById(a.id) || {}).name || 'فريق محذوف');
 const roleIds = k => (D.roles && Array.isArray(D.roles[k])) ? D.roles[k] : [];
-const reviewersOf = d => (((D.roles || {}).domains || {})[d] || {}).reviewers || [];
 // مستوى المراجعة (مطابق لـ acc_review_level في القاعدة)
 function myLevel(d) {
   if (currentProfile && currentProfile.role === 'owner') return 3;
   if (roleIds('principal').includes(currentUserId) || (mgr() && !roleIds('principal').length)) return 3;
-  if (roleIds('coordinator').includes(currentUserId) || mgr()) return 2;
-  if (reviewersOf(d).includes(currentUserId) || leadOf('domain', d).includes(currentUserId)) return 1;
+  if (leadOf('domain', d).includes(currentUserId)) return 1;
   return 0;
 }
 const canAct = e => { const i = D.inds.find(x => x.id === e.indicator_id); const lv = i ? myLevel(i.domain_no) : 0, n = EVST[e.status] ? EVST[e.status].n : -1; return lv > 0 && n >= 0 && n < 3 && lv > n; };
@@ -191,7 +189,7 @@ function render() {
         <div class="ac-core"><b data-count="${pct}">0</b><span>%</span><small>جاهزية الشواهد</small><em>${done} من ${app.length} مكتمل</em></div>
       </div>
     </header>
-    ${queue || (mgr() && noOwner) ? `<div class="ac-alerts">${queue ? `<button type="button" id="ac-goq">${queue} ${queue === 1 ? 'شاهد ينتظر' : 'شواهد تنتظر'} إجراءك في سلسلة المراجعة ←</button>` : ''}${mgr() && noOwner ? `<button type="button" id="ac-assign2">${noOwner} مؤشرًا بلا مسؤول، وزّعها ←</button>` : ''}</div>` : ''}
+    ${queue || (mgr() && noOwner) ? `<div class="ac-alerts">${queue ? `<button type="button" id="ac-goq">${queue} ${queue === 1 ? 'شاهد ينتظر' : 'شواهد تنتظر'} اعتمادك ←</button>` : ''}${mgr() && noOwner ? `<button type="button" id="ac-assign2">${noOwner} مؤشرًا بلا مسؤول، وزّعها ←</button>` : ''}</div>` : ''}
     <div class="ac-planets">${[1, 2, 3, 4].map(d => {
       const ii = D.inds.filter(i => i.domain_no === d && !i.not_applicable);
       const p = ii.length ? ii.reduce((s, i) => s + coverage(i), 0) / ii.length : 0, dn = ii.filter(i => statusOf(i) === 'done').length, C = 2 * Math.PI * 26;
@@ -285,9 +283,8 @@ function renderMe() {
   const ret = myEvs.filter(e => e.status === 'returned');
   const pct = mine.length ? Math.round(mine.reduce((s, i) => s + coverage(i), 0) / mine.length * 100) : 0;
   const roles = [];
-  if (roleIds('principal').includes(currentUserId)) roles.push('قائد المدرسة (الاعتماد النهائي)');
-  if (roleIds('coordinator').includes(currentUserId)) roles.push('منسق التقويم المدرسي');
-  [1, 2, 3, 4].forEach(d => { if (leadOf('domain', d).includes(currentUserId)) roles.push('قائد مجال ' + DOMAINS[d]); if (reviewersOf(d).includes(currentUserId)) roles.push('مراجع شواهد ' + DOMAINS[d]); });
+  if (roleIds('principal').includes(currentUserId)) roles.push('مدير المدرسة (الاعتماد النهائي)');
+  [1, 2, 3, 4].forEach(d => { if (leadOf('domain', d).includes(currentUserId)) roles.push('قائد مجال ' + DOMAINS[d]); });
   pane.innerHTML = `<div class="ac-me">
     <section class="ac-me-hero">
       <div class="ac-me-av">${initial(currentUserId)}</div>
@@ -295,7 +292,7 @@ function renderMe() {
         <div class="ac-me-chips"><em>${mine.length} مؤشرًا</em>${[1, 2, 3].map(r => byR[r].length ? `<em class="r${r}">${byR[r].length} بصفة ${RANK[r].replace('المسؤول ', 'المسؤول ')}</em>` : '').join('')}${roles.map(r => `<em class="role">${esc(r)}</em>`).join('')}</div></div>
       <div class="ac-me-ring" style="--p:${pct}"><b>${pct}%</b><small>شواهدي المطلوبة</small></div>
     </section>
-    ${queue.length ? `<section class="ac-queue" id="ac-queue"><header><b>بانتظار إجرائك</b><span>${queue.length} ${queue.length === 1 ? 'شاهد' : 'شواهد'} في سلسلة المراجعة</span></header>${queue.map(e => queueRow(e)).join('')}</section>` : ''}
+    ${queue.length ? `<section class="ac-queue" id="ac-queue"><header><b>بانتظار إجرائك</b><span>${queue.length} ${queue.length === 1 ? 'شاهد ينتظر' : 'شواهد تنتظر'} اعتمادك</span></header>${queue.map(e => queueRow(e)).join('')}</section>` : ''}
     ${ret.length ? `<section class="ac-queue ret"><header><b>شواهد أُعيدت إليك</b><span>عدّلها ثم أعد إرسالها</span></header>${ret.map(e => queueRow(e)).join('')}</section>` : ''}
     ${mine.length ? [1, 2, 3, 0].filter(r => byR[r].length).map(r => `<section class="ac-me-sec"><h4><i class="r${r}"></i>${r ? 'بصفتي ' + RANK[r] : 'ضمن مسؤولية المجال أو المعيار'}<small>${byR[r].length}</small></h4><div class="ac-cards">${byR[r].map(cardHtml).join('')}</div></section>`).join('')
       : `<div class="ac-empty">${queue.length ? 'لا توجد مؤشرات مسندة إليك مباشرة.' : 'لا توجد مؤشرات مسندة إليك بعد.'}</div>`}
@@ -313,7 +310,8 @@ function queueRow(e) {
 }
 function chainDots(e) {
   const n = EVST[e.status] ? EVST[e.status].n : -1;
-  return `<span class="ac-chaind${n < 0 ? ' ret' : ''}" title="رفع ← مراجعة ← المنسق ← اعتماد القائد">${['رفع', 'المراجع', 'المنسق', 'القائد'].map((t, k) => `<i class="${n >= k ? 'on' : ''}" title="${t}"></i>`).join('')}</span>`;
+  const lit = n >= 3 ? 3 : n + 1;
+  return `<span class="ac-chaind${n < 0 ? ' ret' : ''}" title="رفع ← اعتماد قائد المجال ← اعتماد المدير">${['رفع', 'قائد المجال', 'المدير'].map((t, k) => `<i class="${n >= 0 && lit > k ? 'on' : ''}" title="${t}"></i>`).join('')}</span>`;
 }
 
 /* ---------- الأدوار والفرق ---------- */
@@ -330,15 +328,14 @@ function renderTeam() {
   }).sort((a, b) => b.r1 - a.r1 || b.n - a.n);
   pane.innerHTML = `<div class="ac-teamtab">
     <section class="ac-chain">
-      <header><b>سلسلة المسؤولية</b><span>لا يمر الشاهد من المعلم إلى المؤشر مباشرة، بل عبر هذه السلسلة حتى لا تتراكم شواهد غير مرتبطة فعليًا بالمؤشر.</span></header>
-      <ol>${[['قائد المجال', 'يتابع مؤشرات مجاله كاملة'], ['مسؤول المؤشر', 'أول وثانٍ وثالث'], ['جامع الشواهد', 'يرفع الشاهد ويربطه ببنده'], ['مراجع الشاهد', 'يتحقق من الارتباط والجودة'], ['منسق التقويم', 'يتحقق من الاكتمال'], ['قائد المدرسة', 'الاعتماد النهائي']].map(([t, s], k) => `<li style="animation-delay:${(k * 0.07).toFixed(2)}s"><span>${k + 1}</span><b>${t}</b><small>${s}</small></li>`).join('')}</ol>
+      <header><b>سلسلة الاعتماد</b><span>يمر كل شاهد بقائد المجال ثم المدير، حتى لا تتراكم شواهد غير مرتبطة فعليًا بالمؤشر.</span></header>
+      <ol>${[['مسؤول المؤشر', 'أول وثانٍ وثالث'], ['جامع الشواهد', 'يرفع الشاهد ويربطه ببنده'], ['قائد المجال', 'يراجع الشاهد ويعتمده أو يعيده'], ['مدير المدرسة', 'الاعتماد النهائي']].map(([t, s], k) => `<li style="animation-delay:${(k * 0.07).toFixed(2)}s"><span>${k + 1}</span><b>${t}</b><small>${s}</small></li>`).join('')}</ol>
     </section>
     <section class="ac-roles">
-      <div class="ac-role"><span class="ic">${IC.star}</span><div><b>قائد فريق التقويم (قائد المدرسة)</b><small>الاعتماد النهائي للشواهد، وإعادة الشاهد المعتمد</small><div class="ac-asg-c">${picker(roleIds('principal'), 'principal')}</div></div></div>
-      <div class="ac-role"><span class="ic">${IC.flag}</span><div><b>منسق التقويم المدرسي</b><small>حلقة الوصل بين الفرق، ويتحقق من اكتمال الشواهد</small><div class="ac-asg-c">${picker(roleIds('coordinator'), 'coordinator')}</div></div></div>
+      <div class="ac-role wide"><span class="ic">${IC.star}</span><div><b>مدير المدرسة (قائد فريق التقويم)</b><small>الاعتماد النهائي للشواهد بعد اعتماد قائد المجال، وله وحده إعادة الشاهد المعتمد نهائيًا</small><div class="ac-asg-c">${picker(roleIds('principal'), 'principal')}</div></div></div>
       ${[1, 2, 3, 4].map(d => `<div class="ac-role dom" style="--c:${DCOL[d]}"><span class="ic n">${d}</span><div><b>${DOMAINS[d]}</b>
-        <small>قائد المجال</small><div class="ac-asg-c">${M ? `${leadOf('domain', d).map(o => `<button type="button" class="ac-chip" data-rmlead="${d}" data-id="${o}">${esc(short(nameOf(o)))}<i>✕</i></button>`).join('')}<select class="ac-pick" data-addlead="${d}"><option value="">＋ إضافة</option>${D.staff.filter(p => !leadOf('domain', d).includes(p.id)).map(p => `<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select>` : (leadOf('domain', d).map(o => `<span class="ac-chip">${esc(short(nameOf(o)))}</span>`).join('') || '<span class="ac-dim">لم يُحدَّد</span>')}</div>
-        <small>مراجعو الشواهد</small><div class="ac-asg-c">${picker(reviewersOf(d), 'rev:' + d)}</div></div></div>`).join('')}
+        <small>قائد المجال: يراجع شواهد المجال ويعتمدها قبل المدير</small><div class="ac-asg-c">${M ? `${leadOf('domain', d).map(o => `<button type="button" class="ac-chip" data-rmlead="${d}" data-id="${o}">${esc(short(nameOf(o)))}<i>✕</i></button>`).join('')}<select class="ac-pick" data-addlead="${d}"><option value="">＋ إضافة</option>${D.staff.filter(p => !leadOf('domain', d).includes(p.id)).map(p => `<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select>` : (leadOf('domain', d).map(o => `<span class="ac-chip">${esc(short(nameOf(o)))}</span>`).join('') || '<span class="ac-dim">لم يُحدَّد</span>')}</div>
+        </div></div>`).join('')}
     </section>
     <section class="ac-groups">
       <header><b>الفرق والمجموعات</b><span>يُسند المؤشر إلى فريق كامل، وكل عضو فيه يرى المؤشر ويرفع شواهده.</span>${M ? '<button type="button" class="ac-mini ok" id="ac-newg">＋ فريق جديد</button>' : ''}</header>
@@ -362,8 +359,7 @@ function renderTeam() {
   if (!M) return;
   const setRole = async (attr, fn) => {
     const roles = JSON.parse(JSON.stringify(D.roles || {}));
-    if (attr.startsWith('rev:')) { const d = attr.slice(4); roles.domains = roles.domains || {}; roles.domains[d] = roles.domains[d] || {}; roles.domains[d].reviewers = fn(roles.domains[d].reviewers || []); }
-    else roles[attr] = fn(roles[attr] || []);
+    roles[attr] = fn(roles[attr] || []);
     if (await saveSettings({ roles })) { D.roles = roles; toast('حُفظ ✓'); renderTeam(); }
   };
   pane.querySelectorAll('[data-addrole]').forEach(s => s.onchange = () => { if (s.value) setRole(s.dataset.addrole, a => [...a, s.value]); });
@@ -490,7 +486,7 @@ function refresh() { render(); }
 
 function respHtml(i) {
   const a = asgOf(i).slice().sort((x, y) => x.r - y.r), M = mgr();
-  const lead = domainOwners(i), std = stdOwners(i), rev = reviewersOf(i.domain_no);
+  const lead = domainOwners(i), std = stdOwners(i), pr = roleIds('principal');
   return `<div class="ac-resp">
     <div class="ac-resp-row">${a.map((x, k) => `<span class="ac-rp r${x.r}${x.k === 'g' ? ' g' : ''}${x.k === 'u' && x.id === currentUserId ? ' me' : ''}">
         ${M ? `<button type="button" class="rk" data-rk="${k}" title="غيّر الدرجة">${RSHORT[x.r]}</button>` : `<i class="rk">${RSHORT[x.r]}</i>`}
@@ -498,7 +494,7 @@ function respHtml(i) {
         ${M ? `<button type="button" class="x" data-rmasg="${k}" aria-label="إزالة">✕</button>` : ''}</span>`).join('') || '<span class="ac-dim warn">لم يُسند المؤشر لأحد بعد</span>'}
       ${M ? `<select class="ac-pick" data-addasg><option value="">＋ إسناد</option><optgroup label="الفرق">${D.groups.filter(g => !a.some(x => x.k === 'g' && x.id === g.id)).map(g => `<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}</optgroup><optgroup label="الأشخاص">${D.staff.filter(p => !a.some(x => x.k === 'u' && x.id === p.id)).map(p => `<option value="u:${p.id}">${esc(p.full_name)}</option>`).join('')}</optgroup></select>` : ''}
     </div>
-    ${lead.length || std.length || rev.length ? `<div class="ac-inh">${[['قائد المجال', lead], ['مسؤول المعيار', std], ['مراجع الشواهد', rev]].filter(x => x[1].length).map(([t, ids]) => `<span><i>${t}</i>${ids.map(o => `<b${o === currentUserId ? ' class="me"' : ''}>${esc(short(nameOf(o)))}</b>`).join('')}</span>`).join('')}</div>` : ''}
+    ${lead.length || std.length || pr.length ? `<div class="ac-inh">${[['قائد المجال', lead], ['مسؤول المعيار', std], ['الاعتماد النهائي', pr]].filter(x => x[1].length).map(([t, ids]) => `<span><i>${t}</i>${ids.map(o => `<b${o === currentUserId ? ' class="me"' : ''}>${esc(short(nameOf(o)))}</b>`).join('')}</span>`).join('')}</div>` : ''}
     ${M ? `<label class="ac-na"><input type="checkbox" data-na${i.not_applicable ? ' checked' : ''}> لا ينطبق على المدرسة${i.star ? ' (مؤشرات (*) خاصة بالمدارس الأهلية والعالمية)' : ''}</label>` : ''}
   </div>`;
 }
