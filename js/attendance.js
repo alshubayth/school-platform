@@ -335,7 +335,9 @@ async function renderDay() {
     const s = sById.get(id) || { id, full_name: '—' };
     const taken = PERIODS.filter(p => sessBy.has(`${p}|${s.grade_level}|${s.class_section}`));
     const abs = [...mp].filter(([, v]) => v === 'absent').map(([p]) => p), late = [...mp].filter(([, v]) => v === 'late').map(([p]) => p);
-    return { ...s, mp, taken, abs, late, full: abs.length > 0 && abs.length >= taken.length, msg: msgBy.get(id) || null };
+    const m0 = msgBy.get(id) || null;
+    // رسالة أُلغيت لأن الغياب أُلغي قبل إرسالها: لا تمنع إرسال رسالة جديدة إن عاد الطالب غائبًا
+    return { ...s, mp, taken, abs, late, full: abs.length > 0 && abs.length >= taken.length, msg: m0 && m0.status !== 'cancelled' ? m0 : null, cancelled: !!(m0 && m0.status === 'cancelled') };
   }).sort((a, b) => GRADES.indexOf(a.grade_level) - GRADES.indexOf(b.grade_level) || a.class_section - b.class_section || b.abs.length - a.abs.length || String(a.full_name).localeCompare(String(b.full_name), 'ar'));
   const expected = (sched || []).map(r => ({ ...r, key: `${r.period_number}|${r.grade_level}|${r.class_section}` }));
   const missing = expected.filter(r => !sessBy.has(r.key) && (date < todayIso() || (periodTime(r.grade_level, r.period_number) || { end: 0 }).end <= new Date().getHours() * 60 + new Date().getMinutes()));
@@ -373,7 +375,7 @@ function renderSub() { if (dv.sub === 'track') renderTrack(); else if (dv.sub ==
 function dotsHtml(r) {
   return `<span class="av-dots" aria-hidden="true">${PERIODS.map(p => { const v = r.mp.get(p); const t = r.taken.includes(p); return `<i class="${v === 'absent' ? 'a' : v === 'late' ? 'l' : t ? 'p' : ''}" title="الحصة ${p}: ${v === 'absent' ? 'غائب' : v === 'late' ? 'متأخر' : t ? 'حاضر' : 'لم تُحضَّر'}">${p}</i>`; }).join('')}</span>`;
 }
-const msgPill = r => (r.msg ? `<span class="av-ms ${r.msg.status}" title="${esc(r.msg.error || '')}">${r.msg.status === 'sent' ? 'أُرسلت ✓' : r.msg.status === 'failed' ? 'تعذر الإرسال' : r.msg.status === 'sending' ? 'جارٍ الإرسال' : 'بانتظار الإرسال'}</span>` : !r.mobile ? '<span class="av-ms failed">بلا جوال</span>' : '');
+const msgPill = r => (r.cancelled && !r.msg ? '<span class="av-ms cancelled" title="لم تُرسل لأن الغياب أُلغي قبل الإرسال">أُلغيت قبل الإرسال</span>' : r.msg ? `<span class="av-ms ${r.msg.status}" title="${esc(r.msg.error || '')}">${r.msg.status === 'sent' ? 'أُرسلت ✓' : r.msg.status === 'failed' ? 'تعذر الإرسال' : r.msg.status === 'sending' ? 'جارٍ الإرسال' : 'بانتظار الإرسال'}</span>` : !r.mobile ? '<span class="av-ms failed">بلا جوال</span>' : '');
 
 function renderAbsent() {
   const box = $('av-sub');
@@ -491,8 +493,8 @@ async function sendPending(date) {
     if (data && data.error) return { ok: false, msg: 'تعذر الإرسال: ' + data.error };
     let res = {};
     for (let i = 0; i < 5; i++) { await wait(2000); res = await syncSms(date); if (!res.waiting) break; }
-    const n = res.sent || 0, f = (res.failed || 0) + (data.invalid || 0);
-    return { ok: !f && !res.waiting, msg: `✓ أُرسلت ${plural(n, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة')}${f ? `، وتعذر إرسال ${f}` : ''}${res.waiting ? `، و${res.waiting} جارٍ إرسالها` : ''}` };
+    const n = res.sent || 0, f = (res.failed || 0) + (data.invalid || 0), c = data.cancelled || 0;
+    return { ok: !f && !res.waiting, msg: `✓ أُرسلت ${plural(n, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة')}${f ? `، وتعذر إرسال ${f}` : ''}${res.waiting ? `، و${res.waiting} جارٍ إرسالها` : ''}${c ? `، وأُلغيت ${c} لأن الغياب أُلغي قبل الإرسال` : ''}` };
   } catch (e) { return { ok: false, msg: 'تعذر الإرسال: ' + (e.message || e) }; }
 }
 async function retryFailed() {
@@ -517,32 +519,29 @@ async function smsStatusLine() {
 }
 async function approveMessages(ids, tpl) {
   if (!ids.length || !dayData) return;
-  const btn = $('av-send'); btn.disabled = true; btn.textContent = 'جارٍ التحقق من التحضير...';
-  // تحقق أخير من قاعدة البيانات قبل الإرسال: قد يكون الغياب أُلغي أو تحوّل إلى تأخر بعد فتح الصفحة
-  const scoped = (t, cols, f) => readScopedBySchool(sc => { let q = f(sb.from(t).select(cols)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
-  const [{ data: fm, error: e1 }, { data: fs, error: e2 }, { data: fmsg }] = await Promise.all([
-    scoped('attendance_marks', 'student_id, status, period', q => q.eq('att_date', dayData.date).in('student_id', ids)),
-    scoped('attendance_sessions', 'period, grade_level, class_section', q => q.eq('att_date', dayData.date)),
-    scoped('attendance_messages', 'student_id', q => q.eq('att_date', dayData.date).in('student_id', ids)),
-  ]);
-  if (e1 || e2) { toast('تعذر التحقق من التحضير، حاول مرة أخرى', 'err'); btn.disabled = false; paintAct(); return; }
-  const already = new Set((fmsg || []).map(m => m.student_id));
-  const changed = [], one = [];
-  const rows = dayData.rows.filter(r => ids.includes(r.id) && r.mobile).filter(r => {
-    const abs = (fm || []).filter(m => m.student_id === r.id && m.status === 'absent').map(m => m.period);
-    const taken = (fs || []).filter(x => x.grade_level === r.grade_level && x.class_section === r.class_section).map(x => x.period);
-    if (already.has(r.id)) return false;
-    if (!abs.length) { changed.push(r.full_name); return false; }
-    if (taken.length < MIN_TAKEN) one.push(r.full_name);
-    return true;
+  // ١) تحديث: إعادة تحميل التحضير من قاعدة البيانات وعرضه كما هو الآن
+  const btn0 = $('av-send'); if (btn0) { btn0.disabled = true; btn0.textContent = 'جارٍ تحديث التحضير...'; }
+  const picked = new Set(ids);
+  const before = new Map(dayData.rows.map(r => [r.id, r.full_name]));
+  await renderDay();
+  if (dv.sub !== 'abs') return;
+  // ٢) تحقق: يبقى من التحديد من ما زال غائبًا ولم تُرسل له رسالة
+  const rows = dayData.rows.filter(r => picked.has(r.id) && r.abs.length && !r.msg && r.mobile);
+  const changed = [...picked].filter(id => !rows.some(r => r.id === id)).map(id => {
+    const r = dayData.rows.find(x => x.id === id);
+    return { name: (r && r.full_name) || before.get(id) || '—', why: !r || !r.abs.length ? 'أُلغي غيابه' : r.msg ? 'أُرسلت له رسالة' : 'بلا جوال' };
   });
-  btn.disabled = false; paintAct();
-  if (changed.length) toast(`استُبعد ${plural(changed.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')} أُلغي غيابهم بعد فتح الصفحة`, 'err');
-  if (!rows.length) { renderDay(); return; }
-  const warn = one.length ? `\n\nتنبيه: ${plural(one.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')} حُضّرت لفصولهم حصة واحدة فقط، وقد يكونون متأخرين لا غائبين:\n${one.slice(0, 8).join('\n')}${one.length > 8 ? '\n...' : ''}` : '';
-  const ex = changed.length ? `\n\nاستُبعد ${changed.length} لأن غيابهم أُلغي: ${changed.slice(0, 5).join('، ')}${changed.length > 5 ? '...' : ''}` : '';
-  if (!confirm(`إرسال رسالة غياب لأولياء أمور ${plural(rows.length, 'طالب واحد', 'طالبين', 'طلاب', 'طالبًا')}؟${ex}${warn}\n\nمثال:\n${bodyFor(rows[0], tpl)}`)) { if (changed.length) renderDay(); return; }
-  btn.disabled = true; btn.textContent = 'جارٍ الإرسال...';
+  dv.sel = new Set(rows.map(r => r.id));
+  renderAbsent();
+  if (!rows.length) { toast(changed.length ? 'لم يبقَ طالب غائب في التحديد بعد تحديث التحضير' : 'لا توجد رسائل للإرسال', 'err'); return; }
+  const one = rows.filter(r => r.taken.length < MIN_TAKEN).map(r => r.full_name);
+  const ex = changed.length ? `\n\nاستُبعد بعد التحديث ${plural(changed.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')}:\n${changed.slice(0, 8).map(c => `• ${c.name} (${c.why})`).join('\n')}${changed.length > 8 ? '\n...' : ''}` : '';
+  const warn = one.length ? `\n\nتنبيه: ${plural(one.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')} حُضّرت لفصولهم حصة واحدة فقط، وقد يكونون متأخرين:\n${one.slice(0, 8).join('\n')}${one.length > 8 ? '\n...' : ''}` : '';
+  // ٣) إرسال بعد التأكيد (وقاعدة البيانات تتحقق مرة أخيرة لحظة الإرسال)
+  if (!confirm(`تم تحديث التحضير ✓\nإرسال رسالة غياب لأولياء أمور ${plural(rows.length, 'طالب واحد', 'طالبين', 'طلاب', 'طالبًا')}؟${ex}${warn}\n\nمثال:\n${bodyFor(rows[0], tpl)}`)) return;
+ const btn = $('av-send'); btn.disabled = true; btn.textContent = 'جارٍ الإرسال...';
+  const cIds = rows.filter(r => r.cancelled).map(r => r.id);
+  if (cIds.length) await sb.from('attendance_messages').delete().eq('att_date', dayData.date).eq('status', 'cancelled').in('student_id', cIds);
   const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile, body: bodyFor(r, tpl), status: 'pending', approved_by: currentUserId }));
   const { error } = await writeWithSchool(extra => sb.from('attendance_messages').insert(payload.map(p => ({ ...p, ...extra }))));
   if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الاعتماد: ' + error.message, 'err'); btn.disabled = false; paintAct(); return; }
