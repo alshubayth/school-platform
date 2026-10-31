@@ -86,6 +86,10 @@ const asgUsers = i => [...new Set(asgOf(i).flatMap(a => a.k === 'u' ? [a.id] : g
 const effOwners = i => [...new Set([...domainOwners(i), ...stdOwners(i), ...asgUsers(i)])];
 const isMine = ind => effOwners(ind).includes(currentUserId);
 const canUpload = ind => mgr() || isMine(ind);
+const myDomains = () => [1, 2, 3, 4].filter(d => leadOf('domain', d).includes(currentUserId));
+const isLead = i => domainOwners(i).includes(currentUserId);
+const canAssign = i => mgr() || isLead(i);
+const viewOf = () => mgr() ? 'admin' : myDomains().length ? 'lead' : 'member';
 function rankOf(i, uid) {
   let r = null;
   asgOf(i).forEach(a => { if ((a.k === 'u' && a.id === uid) || (a.k === 'g' && groupMembers(groupById(a.id)).includes(uid))) r = r == null ? a.r : Math.min(r, a.r); });
@@ -123,7 +127,7 @@ export async function loadAccreditationModule() {
   if (inds.error) { box.innerHTML = `<div class="ac-empty">تعذر تحميل المؤشرات: ${esc(inds.error.message)}</div>`; return; }
   const st = (set.data || [])[0] || {};
   D = { inds: inds.data || [], evs: evs.data || [], staff: (staff.data || []).filter(p => p.full_name), visit: st.visit_date || null, leads: leads.data || [], groups: groups.data || [], roles: st.roles || {}, phases: Array.isArray(st.phases) ? st.phases : [] };
-  if (!mgr()) { V.mine = true; if (V.tab === 'list' && D.inds.some(isMine)) V.tab = 'me'; }
+  if (!mgr()) { V.mine = true; V.tab = viewOf() === 'lead' ? (V.tab === 'me' ? 'me' : 'dom') : 'me'; }
   render();
 }
 
@@ -160,6 +164,7 @@ function readiness() {
 }
 
 function render() {
+  if (viewOf() !== 'admin') return renderLite();
   const box = $('acc-container');
   const { app, pct, done } = readiness();
   const cnt = s => app.filter(i => statusOf(i) === s).length;
@@ -217,7 +222,72 @@ function render() {
   renderPane();
   if (V.open) drawDrawer();
 }
-function renderPane() { ({ list: renderListTab, me: renderMe, team: renderTeam, plan: renderPlan }[V.tab] || renderListTab)(); }
+function renderPane() { ({ list: renderListTab, me: renderMe, team: renderTeam, plan: renderPlan, dom: renderDomain }[V.tab] || renderListTab)(); }
+
+/* ---------- واجهة المعلم وقائد المجال: ما يخصه فقط ---------- */
+function renderLite() {
+  const box = $('acc-container'), lead = viewOf() === 'lead', doms = myDomains();
+  const queue = D.evs.filter(canAct).length;
+  const ii = lead ? D.inds.filter(i => doms.includes(i.domain_no) && !i.not_applicable) : D.inds.filter(i => isMine(i) && !i.not_applicable);
+  const pct = ii.length ? Math.round(ii.reduce((s, i) => s + coverage(i), 0) / ii.length * 100) : 0;
+  const dl = daysLeft();
+  if (!lead) V.tab = 'me';
+  box.innerHTML = `<div class="ac">
+    <header class="ac-lite">
+      <div class="ac-stars" aria-hidden="true"></div>
+      <div class="t"><span class="ac-kicker">التقويم المدرسي · جاهزية التقويم الخارجي</span>
+        <h3>${lead ? 'قائد مجال ' + doms.map(d => DOMAINS[d]).join(' و') : 'مؤشراتي في التقويم المدرسي'}</h3>
+        <p>${lead ? 'أسند مؤشرات مجالك لزملائك، وراجع شواهدهم واعتمدها قبل أن تصل للمدير.' : 'ارفع شواهد مؤشراتك مرتبطة ببنودها، ويعتمدها قائد المجال ثم المدير.'}</p>
+        ${D.visit && dl != null && dl >= 0 ? `<span class="ac-lite-d">${IC.cal}${dl === 0 ? 'الزيارة اليوم' : `${dl} ${dl === 1 ? 'يوم' : dl === 2 ? 'يومان' : 'يومًا'} على الزيارة`} · ${esc(arDate(D.visit))}</span>` : ''}</div>
+      <div class="ac-me-ring" style="--p:${pct}"><b>${pct}%</b><small>${lead ? 'جاهزية المجال' : 'جاهزية مؤشراتي'}</small></div>
+    </header>
+    ${lead ? `<nav class="ac-tabs" role="tablist">${[['dom', IC.list, 'مؤشرات المجال'], ['me', IC.user, 'مؤشراتي']].map(([k, ic, t]) => `<button type="button" role="tab" data-tab="${k}" class="${V.tab === k ? 'on' : ''}">${ic}<span>${t}</span>${k === 'dom' && queue ? `<em>${queue}</em>` : ''}</button>`).join('')}</nav>` : ''}
+    <div id="ac-pane"></div>
+  </div>
+  <aside class="ac-drawer${V.open ? ' open' : ''}" id="ac-drawer" aria-hidden="${V.open ? 'false' : 'true'}"></aside>
+  <div class="ac-scrim${V.open ? ' open' : ''}" id="ac-scrim"></div>`;
+  box.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { V.tab = b.dataset.tab; box.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('on', x === b)); renderPane(); });
+  $('ac-scrim').onclick = () => openDrawer(null);
+  renderPane();
+  if (V.open) drawDrawer();
+}
+
+/* صفحة قائد المجال: كل مؤشر وأمامه المسندون إليه، والشواهد التي تنتظر اعتماده */
+function renderDomain() {
+  const pane = $('ac-pane'), doms = myDomains();
+  const queue = D.evs.filter(canAct);
+  const picker = i => { const a = asgOf(i);
+    return `<select class="ac-pick" data-dadd="${i.id}"><option value="">＋ إسناد</option><optgroup label="الأشخاص">${D.staff.filter(p => !a.some(x => x.k === 'u' && x.id === p.id)).map(p => `<option value="u:${p.id}">${esc(p.full_name)}</option>`).join('')}</optgroup>${D.groups.length ? `<optgroup label="الفرق">${D.groups.filter(g => !a.some(x => x.k === 'g' && x.id === g.id)).map(g => `<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}</optgroup>` : ''}</select>`; };
+  pane.innerHTML = `<div class="ac-dom">
+    ${queue.length ? `<section class="ac-queue" id="ac-queue"><header><b>تنتظر اعتمادك</b><span>${queue.length} ${queue.length === 1 ? 'شاهد' : 'شواهد'}، افتح المؤشر ثم اعتمد الشاهد أو أعده بملاحظة</span></header>${queue.map(queueRow).join('')}</section>` : '<div class="ac-allok">لا توجد شواهد تنتظر اعتمادك ✓</div>'}
+    ${doms.map(d => {
+      const ii = D.inds.filter(i => i.domain_no === d);
+      const stds = [...new Set(ii.map(i => i.standard))];
+      const un = ii.filter(i => !i.not_applicable && !asgOf(i).length).length;
+      return `<section class="ac-dsec" style="--c:${DCOL[d]}">
+        <header><span class="n">${d}</span><div><b>${DOMAINS[d]}</b><small>${ii.length} مؤشرًا${un ? ` · <em>${un} بلا مسؤول</em>` : ''}</small></div></header>
+        ${stds.map(st => `<div class="ac-dstd"><h5>${esc(st)}</h5>${ii.filter(i => i.standard === st).map(i => {
+          const s = statusOf(i), req = reqOf(i), cov = coveredOf(i), a = asgOf(i), pend = evsOf(i).filter(isPend).length;
+          return `<div class="ac-drow ${s}${i.not_applicable ? ' na' : ''}">
+            <button type="button" class="ac-drow-t" data-open="${i.id}"><span class="code">${esc(i.code)}</span><span class="txt">${esc(i.text)}</span>
+              <span class="ac-drow-m"><span class="ac-st ${ST[s].c}">${ST[s].t}</span>${req.length && !i.not_applicable ? `<span class="ac-reqbar">${req.map((_, k) => `<i class="${cov.has(k) ? 'on' : ''}"></i>`).join('')}<small>${cov.size}/${req.length}</small></span>` : ''}${pend ? `<em class="pend">${pend} بانتظار الاعتماد</em>` : ''}</span></button>
+            <div class="ac-drow-a"><span class="lbl">المسؤولون</span>${i.not_applicable ? '<span class="ac-dim">لا ينطبق</span>' : `${a.map((x, k) => `<span class="ac-rp sm${x.k === 'g' ? ' g' : ''}"><b>${esc(asgLabel(x))}</b><button type="button" class="x" data-drm="${i.id}" data-k="${k}" aria-label="إزالة">✕</button></span>`).join('') || '<span class="ac-dim warn">لم يُسند بعد</span>'}${picker(i)}`}</div>
+          </div>`;
+        }).join('')}</div>`).join('')}
+      </section>`;
+    }).join('')}
+  </div>`;
+  pane.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openDrawer(b.dataset.open));
+  pane.querySelectorAll('[data-qopen]').forEach(b => b.onclick = () => openDrawer(b.dataset.qopen));
+  pane.querySelectorAll('[data-dadd]').forEach(sel => sel.onchange = async () => { if (!sel.value) return; const i = D.inds.find(x => x.id === sel.dataset.dadd); const [k, id] = sel.value.split(':'); if (await setAssignees(i, [...asgOf(i), { k, id, r: 1 }])) { toast('أُسند المؤشر ✓'); renderDomain(); } });
+  pane.querySelectorAll('[data-drm]').forEach(b => b.onclick = async () => { const i = D.inds.find(x => x.id === b.dataset.drm); const a = asgOf(i).slice(); a.splice(+b.dataset.k, 1); if (await setAssignees(i, a)) renderDomain(); });
+}
+async function setAssignees(i, next) {
+  const { data, error } = await sb.rpc('acc_set_assignees', { p_ind: i.id, p_assignees: next });
+  if (error) { toast('تعذر الحفظ: ' + error.message, true); return false; }
+  i.assignees = Array.isArray(data) ? data : next; i.owner_ids = []; return true;
+}
+
 
 /* ---------- تبويب المؤشرات ---------- */
 function renderListTab() {
@@ -259,15 +329,14 @@ function renderList() {
 }
 
 function cardHtml(i) {
-  const s = statusOf(i), req = reqOf(i), cov = coveredOf(i), a = asgOf(i).slice().sort((x, y) => x.r - y.r);
-  const myR = rankOf(i, currentUserId);
+  const s = statusOf(i), req = reqOf(i), cov = coveredOf(i), a = asgOf(i);
   return `<button type="button" class="ac-card ${s}${V.open === i.id ? ' on' : ''}${isMine(i) ? ' mine' : ''}" data-id="${i.id}">
-    <span class="top"><span class="code">${esc(i.code)}</span>${i.star ? '<i class="star" title="مؤشر أساسي (*) خاص بالمدارس الأهلية والعالمية">★</i>' : ''}${myR ? `<span class="ac-myr r${myR}">${RANK[myR]}</span>` : ''}<span class="ac-st ${ST[s].c}">${ST[s].t}</span></span>
+    <span class="top"><span class="code">${esc(i.code)}</span>${i.star ? '<i class="star" title="مؤشر أساسي (*) خاص بالمدارس الأهلية والعالمية">★</i>' : ''}<span class="ac-st ${ST[s].c}">${ST[s].t}</span></span>
     <span class="txt">${esc(i.text)}</span>
     ${req.length && !i.not_applicable ? `<span class="ac-reqbar" title="الشواهد المطلوبة المعتمدة">${req.map((_, k) => `<i class="${cov.has(k) ? 'on' : ''}"></i>`).join('')}<small>${cov.size}/${req.length}</small></span>` : ''}
     <span class="bot">
-      <span class="ac-asg-mini">${a.length ? a.slice(0, 3).map(x => `<em class="r${x.r}${x.k === 'g' ? ' g' : ''}" title="${esc(RANK[x.r] + ': ' + asgLabel(x))}"><b>${RSHORT[x.r]}</b>${esc(asgLabel(x))}</em>`).join('') + (a.length > 3 ? `<em class="more">+${a.length - 3}</em>` : '') : (i.not_applicable ? '' : '<em class="none">بلا مسؤول</em>')}</span>
-      <span class="ac-prog-mini p-${i.progress || 'not_started'}">${PROG[i.progress || 'not_started']}</span>
+      <span class="ac-asg-mini">${a.length ? a.slice(0, 3).map(x => `<em class="${x.k === 'g' ? 'g' : ''}" title="${esc(asgLabel(x))}">${esc(asgLabel(x))}</em>`).join('') + (a.length > 3 ? `<em class="more">+${a.length - 3}</em>` : '') : (i.not_applicable ? '' : '<em class="none">بلا مسؤول</em>')}</span>
+      ${(() => { const p = evsOf(i).filter(isPend).length; return p ? `<span class="ac-prog-mini p-in_progress">${p} بانتظار الاعتماد</span>` : ''; })()}
     </span>
   </button>`;
 }
@@ -276,8 +345,7 @@ function cardHtml(i) {
 function renderMe() {
   const pane = $('ac-pane');
   const mine = D.inds.filter(i => isMine(i) && !i.not_applicable);
-  const byR = { 1: [], 2: [], 3: [], 0: [] };
-  mine.forEach(i => byR[rankOf(i, currentUserId) || 0].push(i));
+  const direct = mine.filter(i => asgUsers(i).includes(currentUserId)), viaLead = mine.filter(i => !asgUsers(i).includes(currentUserId));
   const queue = D.evs.filter(canAct).sort((a, b) => (EVST[b.status].n - EVST[a.status].n) || String(a.created_at).localeCompare(b.created_at));
   const myEvs = D.evs.filter(e => e.uploaded_by === currentUserId);
   const ret = myEvs.filter(e => e.status === 'returned');
@@ -289,13 +357,15 @@ function renderMe() {
     <section class="ac-me-hero">
       <div class="ac-me-av">${initial(currentUserId)}</div>
       <div class="ac-me-t"><span>صفحة المسؤول</span><b>${esc(nameOf(currentUserId))}</b>
-        <div class="ac-me-chips"><em>${mine.length} مؤشرًا</em>${[1, 2, 3].map(r => byR[r].length ? `<em class="r${r}">${byR[r].length} بصفة ${RANK[r].replace('المسؤول ', 'المسؤول ')}</em>` : '').join('')}${roles.map(r => `<em class="role">${esc(r)}</em>`).join('')}</div></div>
+        <div class="ac-me-chips"><em>${direct.length} ${direct.length === 1 ? 'مؤشر مسند إليّ' : 'مؤشرات مسندة إليّ'}</em>${roles.map(r => `<em class="role">${esc(r)}</em>`).join('')}</div></div>
       <div class="ac-me-ring" style="--p:${pct}"><b>${pct}%</b><small>شواهدي المطلوبة</small></div>
     </section>
-    ${queue.length ? `<section class="ac-queue" id="ac-queue"><header><b>بانتظار إجرائك</b><span>${queue.length} ${queue.length === 1 ? 'شاهد ينتظر' : 'شواهد تنتظر'} اعتمادك</span></header>${queue.map(e => queueRow(e)).join('')}</section>` : ''}
+    ${queue.length && viewOf() !== 'lead' ? `<section class="ac-queue" id="ac-queue"><header><b>بانتظار إجرائك</b><span>${queue.length} ${queue.length === 1 ? 'شاهد ينتظر' : 'شواهد تنتظر'} اعتمادك</span></header>${queue.map(e => queueRow(e)).join('')}</section>` : ''}
     ${ret.length ? `<section class="ac-queue ret"><header><b>شواهد أُعيدت إليك</b><span>عدّلها ثم أعد إرسالها</span></header>${ret.map(e => queueRow(e)).join('')}</section>` : ''}
-    ${mine.length ? [1, 2, 3, 0].filter(r => byR[r].length).map(r => `<section class="ac-me-sec"><h4><i class="r${r}"></i>${r ? 'بصفتي ' + RANK[r] : 'ضمن مسؤولية المجال أو المعيار'}<small>${byR[r].length}</small></h4><div class="ac-cards">${byR[r].map(cardHtml).join('')}</div></section>`).join('')
-      : `<div class="ac-empty">${queue.length ? 'لا توجد مؤشرات مسندة إليك مباشرة.' : 'لا توجد مؤشرات مسندة إليك بعد.'}</div>`}
+    ${direct.length ? `<section class="ac-me-sec"><h4><i class="r1"></i>المؤشرات المسندة إليّ<small>${direct.length}</small></h4><div class="ac-cards">${direct.map(cardHtml).join('')}</div></section>` : ''}
+    ${viaLead.length && viewOf() === 'admin' ? `<section class="ac-me-sec"><h4><i></i>ضمن مسؤولية المجال أو المعيار<small>${viaLead.length}</small></h4><div class="ac-cards">${viaLead.map(cardHtml).join('')}</div></section>` : ''}
+    ${direct.length || (viaLead.length && viewOf() === 'admin') ? ''
+      : `<div class="ac-empty">${viewOf() === 'lead' ? 'لم تُسند إليك مؤشرات بعينها؛ مؤشرات مجالك في تبويب «مؤشرات المجال».' : 'لا توجد مؤشرات مسندة إليك بعد. يسندها قائد المجال.'}</div>`}
   </div>`;
   pane.querySelectorAll('.ac-card').forEach(c => c.onclick = () => openDrawer(c.dataset.id));
   pane.querySelectorAll('[data-qopen]').forEach(b => b.onclick = () => { V.dtab = 'req'; openDrawer(b.dataset.qopen); });
@@ -323,13 +393,12 @@ function renderTeam() {
   const rows = ids.map(id => {
     const mine = D.inds.filter(i => effOwners(i).includes(id) && !i.not_applicable);
     const p = mine.length ? mine.reduce((s, i) => s + coverage(i), 0) / mine.length : 0;
-    const r1 = mine.filter(i => rankOf(i, id) === 1).length;
-    return { id, n: mine.length, r1, p };
-  }).sort((a, b) => b.r1 - a.r1 || b.n - a.n);
+    return { id, n: mine.length, p };
+  }).sort((a, b) => b.n - a.n);
   pane.innerHTML = `<div class="ac-teamtab">
     <section class="ac-chain">
       <header><b>سلسلة الاعتماد</b><span>يمر كل شاهد بقائد المجال ثم المدير، حتى لا تتراكم شواهد غير مرتبطة فعليًا بالمؤشر.</span></header>
-      <ol>${[['مسؤول المؤشر', 'أول وثانٍ وثالث'], ['جامع الشواهد', 'يرفع الشاهد ويربطه ببنده'], ['قائد المجال', 'يراجع الشاهد ويعتمده أو يعيده'], ['مدير المدرسة', 'الاعتماد النهائي']].map(([t, s], k) => `<li style="animation-delay:${(k * 0.07).toFixed(2)}s"><span>${k + 1}</span><b>${t}</b><small>${s}</small></li>`).join('')}</ol>
+      <ol>${[['قائد المجال يسند', 'يحدد المسؤولين عن كل مؤشر في مجاله'], ['المسؤول يرفع', 'يرفع الشاهد ويربطه ببنده'], ['قائد المجال', 'يراجع الشاهد ويعتمده أو يعيده'], ['مدير المدرسة', 'الاعتماد النهائي']].map(([t, s], k) => `<li style="animation-delay:${(k * 0.07).toFixed(2)}s"><span>${k + 1}</span><b>${t}</b><small>${s}</small></li>`).join('')}</ol>
     </section>
     <section class="ac-roles">
       <div class="ac-role wide"><span class="ic">${IC.star}</span><div><b>مدير المدرسة (قائد فريق التقويم)</b><small>الاعتماد النهائي للشواهد بعد اعتماد قائد المجال، وله وحده إعادة الشاهد المعتمد نهائيًا</small><div class="ac-asg-c">${picker(roleIds('principal'), 'principal')}</div></div></div>
@@ -352,7 +421,7 @@ function renderTeam() {
       const C = 2 * Math.PI * 21;
       return `<button type="button" class="ac-mem${r.id === currentUserId ? ' me' : ''}" data-mem="${r.id}" style="animation-delay:${(k * 0.04).toFixed(2)}s">
         <span class="ring"><svg viewBox="0 0 50 50"><circle cx="25" cy="25" r="21" class="bg"/><circle cx="25" cy="25" r="21" class="fg" style="stroke-dasharray:${C};stroke-dashoffset:${C * (1 - r.p)}"/></svg><i>${initial(r.id)}</i></span>
-        <b>${esc(short(nameOf(r.id)))}</b><small>${r.n} مؤشر${r.r1 ? ` · ${r.r1} أول` : ''}</small></button>`;
+        <b>${esc(short(nameOf(r.id)))}</b><small>${r.n} ${r.n === 1 ? 'مؤشر' : 'مؤشرات'}</small></button>`;
     }).join('')}</div></section>
   </div>`;
   pane.querySelectorAll('[data-mem]').forEach(b => b.onclick = () => { V.member = b.dataset.mem; V.tab = 'list'; V.mine = false; render(); });
@@ -456,7 +525,7 @@ function openDrawer(id) {
 }
 function drawDrawer() {
   const i = D.inds.find(x => x.id === V.open); if (!i) return;
-  const dr = $('ac-drawer'), s = statusOf(i), canProg = mgr() || isMine(i), prog = i.progress || 'not_started';
+  const dr = $('ac-drawer'), s = statusOf(i);
   dr.dataset.id = i.id;
   dr.style.setProperty('--c', DCOL[i.domain_no]);
   const req = reqOf(i), cov = coveredOf(i);
@@ -465,19 +534,11 @@ function drawDrawer() {
       <span class="crumb">${DOMAINS[i.domain_no]} · ${esc(i.standard)}</span>
       <div class="ac-dh-t"><span class="code">${esc(i.code)}</span><span class="ac-st ${ST[s].c}">${ST[s].t}</span>${req.length ? `<span class="ac-dcov">${cov.size}/${req.length} شواهد مطلوبة معتمدة</span>` : ''}</div>
       <h4>${esc(i.text)}${i.star ? ' <i class="star">★</i>' : ''}</h4>
-      <div class="ac-progsel${canProg ? '' : ' ro'}"><span>حالة الإنجاز</span>${Object.entries(PROG).map(([k, t]) => `<button type="button" data-prog="${k}" class="p-${k}${prog === k ? ' on' : ''}"${canProg ? '' : ' disabled'}><i></i>${t}</button>`).join('')}</div>
     </div>
     ${respHtml(i)}
-    <nav class="ac-dtabs">${[['req', 'الشواهد المطلوبة'], ['guide', 'دليل المؤشر'], ['all', `كل الشواهد (${evsOf(i).length})`]].map(([k, t]) => `<button type="button" data-dtab="${k}" class="${V.dtab === k ? 'on' : ''}">${t}</button>`).join('')}</nav>
-    <div class="ac-det">${V.dtab === 'guide' ? guideHtml(i) : V.dtab === 'all' ? allEvHtml(i) : reqHtml(i)}</div>`;
+    <div class="ac-det">${V.gedit ? guideHtml(i) : `<details class="ac-gd"${V.gopen ? ' open' : ''}><summary>${IC.book}<span><b>شرح المؤشر والنصيحة العملية</b><small>ماذا يعني المؤشر؟ وبماذا أبدأ؟ وما الشاهد الأقوى؟</small></span></summary>${guideHtml(i)}</details>${reqHtml(i)}`}</div>`;
   dr.querySelector('.ac-dx').onclick = () => openDrawer(null);
-  dr.querySelectorAll('[data-dtab]').forEach(b => b.onclick = () => { V.dtab = b.dataset.dtab; drawDrawer(); });
-  dr.querySelectorAll('[data-prog]').forEach(b => b.onclick = async () => {
-    if (!canProg || b.dataset.prog === prog) return;
-    const { error } = await sb.rpc('acc_set_progress', { p_ind: i.id, p_progress: b.dataset.prog });
-    if (error) { toast('تعذر الحفظ: ' + error.message, true); return; }
-    i.progress = b.dataset.prog; toast('حُدّثت حالة الإنجاز ✓'); refresh();
-  });
+  const gd = dr.querySelector('.ac-gd'); if (gd) gd.ontoggle = () => { V.gopen = gd.open; };
   wireResp(dr, i);
   wireDetail(dr, i);
 }
@@ -485,31 +546,24 @@ function drawDrawer() {
 function refresh() { render(); }
 
 function respHtml(i) {
-  const a = asgOf(i).slice().sort((x, y) => x.r - y.r), M = mgr();
+  const a = asgOf(i), M = canAssign(i);
   const lead = domainOwners(i), std = stdOwners(i), pr = roleIds('principal');
   return `<div class="ac-resp">
     <div class="ac-resp-row">${a.map((x, k) => `<span class="ac-rp r${x.r}${x.k === 'g' ? ' g' : ''}${x.k === 'u' && x.id === currentUserId ? ' me' : ''}">
-        ${M ? `<button type="button" class="rk" data-rk="${k}" title="غيّر الدرجة">${RSHORT[x.r]}</button>` : `<i class="rk">${RSHORT[x.r]}</i>`}
         <span><b>${esc(asgLabel(x))}</b>${x.k === 'g' ? `<small>${(() => { const g = groupById(x.id); return g ? (g.everyone ? 'جميع المعلمين' : `${(g.member_ids || []).length} أعضاء`) : ''; })()}</small>` : ''}</span>
         ${M ? `<button type="button" class="x" data-rmasg="${k}" aria-label="إزالة">✕</button>` : ''}</span>`).join('') || '<span class="ac-dim warn">لم يُسند المؤشر لأحد بعد</span>'}
-      ${M ? `<select class="ac-pick" data-addasg><option value="">＋ إسناد</option><optgroup label="الفرق">${D.groups.filter(g => !a.some(x => x.k === 'g' && x.id === g.id)).map(g => `<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}</optgroup><optgroup label="الأشخاص">${D.staff.filter(p => !a.some(x => x.k === 'u' && x.id === p.id)).map(p => `<option value="u:${p.id}">${esc(p.full_name)}</option>`).join('')}</optgroup></select>` : ''}
+      ${M ? `<select class="ac-pick" data-addasg><option value="">＋ إسناد</option><optgroup label="الأشخاص">${D.staff.filter(p => !a.some(x => x.k === 'u' && x.id === p.id)).map(p => `<option value="u:${p.id}">${esc(p.full_name)}</option>`).join('')}</optgroup><optgroup label="الفرق">${D.groups.filter(g => !a.some(x => x.k === 'g' && x.id === g.id)).map(g => `<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}</optgroup></select>` : ''}
     </div>
     ${lead.length || std.length || pr.length ? `<div class="ac-inh">${[['قائد المجال', lead], ['مسؤول المعيار', std], ['الاعتماد النهائي', pr]].filter(x => x[1].length).map(([t, ids]) => `<span><i>${t}</i>${ids.map(o => `<b${o === currentUserId ? ' class="me"' : ''}>${esc(short(nameOf(o)))}</b>`).join('')}</span>`).join('')}</div>` : ''}
-    ${M ? `<label class="ac-na"><input type="checkbox" data-na${i.not_applicable ? ' checked' : ''}> لا ينطبق على المدرسة${i.star ? ' (مؤشرات (*) خاصة بالمدارس الأهلية والعالمية)' : ''}</label>` : ''}
+    ${mgr() ? `<label class="ac-na"><input type="checkbox" data-na${i.not_applicable ? ' checked' : ''}> لا ينطبق على المدرسة${i.star ? ' (مؤشرات (*) خاصة بالمدارس الأهلية والعالمية)' : ''}</label>` : ''}
   </div>`;
 }
 function wireResp(box, i) {
-  const save = async next => {
-    const { error } = await sb.from('acc_indicators').update({ assignees: next, updated_at: new Date().toISOString() }).eq('id', i.id);
-    if (error) { toast('تعذر الحفظ: ' + error.message, true); return; }
-    i.assignees = next; if ((i.owner_ids || []).length) { await sb.from('acc_indicators').update({ owner_ids: [] }).eq('id', i.id); i.owner_ids = []; }
-    refresh();
-  };
-  const cur = () => asgOf(i).slice().sort((x, y) => x.r - y.r).map(x => ({ ...x }));
-  box.querySelectorAll('[data-rk]').forEach(b => b.onclick = () => { const a = cur(); const x = a[+b.dataset.rk]; x.r = x.r % 3 + 1; save(a); });
+  const save = async next => { if (await setAssignees(i, next)) refresh(); };
+  const cur = () => asgOf(i).map(x => ({ ...x }));
   box.querySelectorAll('[data-rmasg]').forEach(b => b.onclick = () => { const a = cur(); a.splice(+b.dataset.rmasg, 1); save(a); });
   const add = box.querySelector('[data-addasg]');
-  if (add) add.onchange = () => { if (!add.value) return; const [k, id] = add.value.split(':'); const a = cur(); const r = Math.min(3, (a.length ? Math.max(...a.map(x => x.r)) : 0) + 1); a.push({ k, id, r: a.some(x => x.r === 1) ? r : 1 }); save(a); toast('أُسند المؤشر ✓'); };
+  if (add) add.onchange = () => { if (!add.value) return; const [k, id] = add.value.split(':'); const a = cur(); a.push({ k, id, r: 1 }); save(a); toast('أُسند المؤشر ✓'); };
   const na = box.querySelector('[data-na]');
   if (na) na.onchange = async () => { const { error } = await sb.from('acc_indicators').update({ not_applicable: na.checked }).eq('id', i.id); if (error) { toast('تعذر الحفظ: ' + error.message, true); return; } i.not_applicable = na.checked; refresh(); };
 }
@@ -525,7 +579,7 @@ function ladderHtml(i) {
 function reqHtml(i) {
   const req = reqOf(i), ev = evsOf(i), up = canUpload(i) && !i.not_applicable;
   const other = ev.filter(e => e.req_idx == null || e.req_idx >= req.length);
-  return `${ladderHtml(i)}
+  return `<div class="ac-sub">الشواهد المطلوبة</div>
     <div class="ac-req">${req.map((t, k) => {
       const my = ev.filter(e => e.req_idx === k), ok = my.some(e => e.status === 'approved'), pend = my.some(isPend), ret = my.length && my.every(e => e.status === 'returned');
       return `<div class="ac-ri${ok ? ' ok' : pend ? ' pend' : ret ? ' ret' : ''}">
@@ -551,7 +605,7 @@ function guideHtml(i) {
   }
   return `<div class="ac-guide">
     ${g.meaning ? `<section><h5>${IC.book}ماذا يعني المؤشر؟</h5><p>${esc(g.meaning)}</p></section>` : '<div class="ac-none">لا يوجد شرح لهذا المؤشر.</div>'}
-    ${g.start || g.quality || g.avoid ? `<section class="tip"><h5>نصيحة عملية</h5><ul>${g.start ? `<li><b>ابدأ بـ:</b> ${esc(g.start)}</li>` : ''}${g.quality ? `<li><b>لرفع الجودة:</b> ${esc(g.quality)}</li>` : ''}${g.avoid ? `<li class="av"><b>تجنّب:</b> ${esc(g.avoid)}</li>` : ''}</ul></section>` : ''}
+    ${g.start || g.quality || g.avoid ? `<section class="tip"><h5>نصيحة عملية</h5><ul>${g.start ? `<li><b>ابدأ بـ:</b> ${esc(g.start)}</li>` : ''}${g.quality ? `<li><b>لرفع الجودة:</b> ${esc(g.quality)}</li>` : ''}${g.avoid ? `<li class="avoid"><b>تجنّب:</b> ${esc(g.avoid)}</li>` : ''}</ul></section>` : ''}
     ${g.best ? `<section class="best">${IC.star}<div><small>الشاهد الأقوى</small><b>${esc(g.best)}</b></div></section>` : ''}
     ${g.note ? `<section class="warn">⚠ ${esc(g.note)}</section>` : ''}
     <section class="rule"><b>قاعدة الشواهد:</b> ليس المطلوب أكبر عدد من الملفات، بل شاهد قوي، حديث، واضح، مرتبط بالمؤشر، ويثبت التطبيق والنتيجة.</section>
@@ -589,7 +643,6 @@ function uploadForm(i) {
   return `<form class="ac-add" data-add-ev id="ac-upform">
     <div class="ac-add-h"><b>${IC.up}رفع شاهد</b></div>
     ${req.length ? `<label class="ac-gf"><span>البند المرتبط من الشواهد المطلوبة</span><select name="req"><option value="">— غير مرتبط ببند —</option>${req.map((t, k) => `<option value="${k}">${k + 1}. ${esc(t.length > 80 ? t.slice(0, 80) + '…' : t)}</option>`).join('')}</select></label>` : ''}
-    <div class="ac-stgsel"><span>تدرّج الشاهد</span>${Object.entries(STAGES).map(([k, [t]]) => `<button type="button" data-stg="${k}">${t}</button>`).join('')}</div>
     <div class="ac-seg"><button type="button" data-k="file" class="on">${IC.up}ملف أو صورة</button><button type="button" data-k="link">${IC.link}رابط</button></div>
     <input type="text" name="title" placeholder="عنوان الشاهد (مثل: محضر اجتماع مجلس المدرسة)" maxlength="160">
     <textarea name="desc" rows="2" placeholder="وصف مختصر (اختياري)" maxlength="500"></textarea>
@@ -763,7 +816,7 @@ function printIndex() {
   const logo = printLogo();
   const rows = D.inds.map(i => {
     const ev = evsOf(i).filter(e => e.status === 'approved'), req = reqOf(i), cov = coveredOf(i);
-    const who = asgOf(i).slice().sort((a, b) => a.r - b.r).map(a => `${esc(asgLabel(a))} <small>(${RSHORT[a.r]})</small>`).join('<br>');
+    const who = asgOf(i).map(a => esc(asgLabel(a))).join('<br>');
     return `<tr class="${i.not_applicable ? 'na' : ''}"><td class="c">${esc(i.code)}</td><td>${esc(i.text)}</td><td>${i.not_applicable ? 'لا ينطبق' : ev.length ? ev.map((e, k) => `${k + 1}. ${esc(e.title)}${e.req_idx != null && req[e.req_idx] ? ` <small>← بند ${e.req_idx + 1}</small>` : ''}`).join('<br>') : '<span class="miss">لا توجد شواهد معتمدة</span>'}</td><td class="c">${i.not_applicable ? '—' : `${cov.size}/${req.length}`}</td><td>${who}</td></tr>`;
   });
   let html = '', last = null, lastStd = null;
@@ -813,12 +866,12 @@ function openAssign() {
   const close = () => { back.remove(); document.body.classList.remove('ac-lock'); render(); };
   const chips = (ids, scope, key) => `${ids.map(o => `<button type="button" class="ac-chip" data-rm="${o}" data-scope="${scope}" data-key="${esc(key)}">${esc(short(nameOf(o)))}<i>✕</i></button>`).join('')}
     <select class="ac-pick" data-scope="${scope}" data-key="${esc(key)}"><option value="">＋ إضافة</option>${D.staff.filter(p => !ids.includes(p.id)).map(p => `<option value="${p.id}">${esc(p.full_name)}</option>`).join('')}</select>`;
-  const indChips = i => { const a = asgOf(i).slice().sort((x, y) => x.r - y.r);
-    return `${a.map((x, k) => `<span class="ac-rp sm r${x.r}${x.k === 'g' ? ' g' : ''}"><button type="button" class="rk" data-irk="${i.id}" data-k="${k}">${RSHORT[x.r]}</button><b>${esc(asgLabel(x))}</b><button type="button" class="x" data-irm="${i.id}" data-k="${k}">✕</button></span>`).join('')}
+  const indChips = i => { const a = asgOf(i);
+    return `${a.map((x, k) => `<span class="ac-rp sm${x.k === 'g' ? ' g' : ''}"><b>${esc(asgLabel(x))}</b><button type="button" class="x" data-irm="${i.id}" data-k="${k}">✕</button></span>`).join('')}
     <select class="ac-pick" data-iadd="${i.id}"><option value="">＋ إسناد</option><optgroup label="الفرق">${D.groups.filter(g => !a.some(x => x.k === 'g' && x.id === g.id)).map(g => `<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}</optgroup><optgroup label="الأشخاص">${D.staff.filter(p => !a.some(x => x.k === 'u' && x.id === p.id)).map(p => `<option value="u:${p.id}">${esc(p.full_name)}</option>`).join('')}</optgroup></select>`; };
   const draw = () => {
     back.innerHTML = `<div class="ac-asg" role="dialog" aria-modal="true" aria-label="توزيع المسؤوليات">
-      <div class="ac-asg-h"><div><b>توزيع المسؤوليات</b><span>أسند كل مؤشر لمسؤول أول وثانٍ وثالث، أفرادًا أو فرقًا. اضغط على الدرجة لتغييرها. ويمكن تحديد مسؤول عن مجال كامل أو معيار.</span></div><button type="button" class="ac-dx" data-x>✕</button></div>
+      <div class="ac-asg-h"><div><b>توزيع المسؤوليات</b><span>حدّد قائد كل مجال، وأسند كل مؤشر لشخص أو أكثر أو لفريق. ويستطيع قائد المجال تعديل إسناد مؤشرات مجاله من صفحته.</span></div><button type="button" class="ac-dx" data-x>✕</button></div>
       <div class="ac-asg-b">${[1, 2, 3, 4].map(d => {
         const ii = D.inds.filter(i => i.domain_no === d);
         const stds = [...new Set(ii.map(i => i.standard))];
@@ -841,15 +894,10 @@ function openAssign() {
     back.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => { V.asgOpen = V.asgOpen === b.dataset.tg ? null : b.dataset.tg; draw(); });
     back.querySelectorAll('.ac-pick[data-scope]').forEach(sel => sel.onchange = () => { if (sel.value) setOwners(sel.dataset.scope, sel.dataset.key, id => [...id, sel.value]); });
     back.querySelectorAll('.ac-chip[data-scope]').forEach(b => b.onclick = () => setOwners(b.dataset.scope, b.dataset.key, id => id.filter(x => x !== b.dataset.rm)));
-    const cur = i => asgOf(i).slice().sort((x, y) => x.r - y.r).map(x => ({ ...x }));
-    const saveI = async (i, next) => {
-      const { error } = await sb.from('acc_indicators').update({ assignees: next, owner_ids: [], updated_at: new Date().toISOString() }).eq('id', i.id);
-      if (error) { toast('تعذر الحفظ: ' + error.message, true); return; }
-      i.assignees = next; i.owner_ids = []; draw();
-    };
-    back.querySelectorAll('[data-irk]').forEach(b => b.onclick = () => { const i = D.inds.find(x => x.id === b.dataset.irk); const a = cur(i); a[+b.dataset.k].r = a[+b.dataset.k].r % 3 + 1; saveI(i, a); });
+    const cur = i => asgOf(i).map(x => ({ ...x }));
+    const saveI = async (i, next) => { if (await setAssignees(i, next)) draw(); };
     back.querySelectorAll('[data-irm]').forEach(b => b.onclick = () => { const i = D.inds.find(x => x.id === b.dataset.irm); const a = cur(i); a.splice(+b.dataset.k, 1); saveI(i, a); });
-    back.querySelectorAll('[data-iadd]').forEach(sel => sel.onchange = () => { if (!sel.value) return; const i = D.inds.find(x => x.id === sel.dataset.iadd); const [k, id] = sel.value.split(':'); const a = cur(i); a.push({ k, id, r: a.some(x => x.r === 1) ? Math.min(3, Math.max(...a.map(x => x.r)) + 1) : 1 }); saveI(i, a); });
+    back.querySelectorAll('[data-iadd]').forEach(sel => sel.onchange = () => { if (!sel.value) return; const i = D.inds.find(x => x.id === sel.dataset.iadd); const [k, id] = sel.value.split(':'); const a = cur(i); a.push({ k, id, r: 1 }); saveI(i, a); });
   };
   const setOwners = async (scope, key, fn) => {
     const cur = D.leads.find(l => l.scope === scope && l.scope_key === key);
@@ -873,7 +921,7 @@ function openPrintMenu() {
     <div class="ac-asg-h"><div><b>الطباعة</b><span>اطبع ما يحتاجه الفريق ليعرف النظام ودوره فيه.</span></div><button type="button" class="ac-dx" data-x>✕</button></div>
     <div class="ac-pm-b">
       <button type="button" class="ac-pm-o" data-p="guide"><span class="ic">${IC.book}</span><span><b>دليل العمل والخطة</b><small>الهدف، والأدوار، وسلسلة الاعتماد، وآلية الرفع والاعتماد في مدار، وقاعدة الشواهد، والخطة الزمنية، وملخص التوزيع</small></span></button>
-      <div class="ac-pm-o col"><div class="r"><span class="ic">${IC.user}</span><span><b>بطاقات المسؤولين</b><small>صفحة لكل مسؤول وفريق: مؤشراته بدرجته، والمشاركون معه، والشواهد المطلوبة مع مربعات للتأشير</small></span></div>
+      <div class="ac-pm-o col"><div class="r"><span class="ic">${IC.user}</span><span><b>بطاقات المسؤولين</b><small>صفحة لكل مسؤول وفريق: مؤشراته، والمشاركون معه، والشواهد المطلوبة مع مربعات للتأشير</small></span></div>
         <div class="ac-pm-f"><select data-who><option value="all">الجميع (${users.length} مسؤولًا و${groups.length} فرق)</option><optgroup label="الأشخاص">${users.map(u => `<option value="u:${u}">${esc(nameOf(u))}</option>`).join('')}</optgroup><optgroup label="الفرق">${groups.map(g => `<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}</optgroup></select><button type="button" class="ac-btn" data-p="cards">${IC.print}طباعة</button></div></div>
       <button type="button" class="ac-pm-o" data-p="index"><span class="ic">${IC.list}</span><span><b>فهرس الشواهد</b><small>الشواهد المعتمدة لكل مؤشر وبنوده ومسؤوليه، للزيارة</small></span></button>
     </div></div>`;
@@ -923,8 +971,8 @@ function printGuide() {
   const today = new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
   const leads = [1, 2, 3, 4].map(d => ({ d, ids: leadOf('domain', d), n: D.inds.filter(i => i.domain_no === d && !i.not_applicable).length, a: D.inds.filter(i => i.domain_no === d && !i.not_applicable && asgOf(i).length).length }));
   const { users, groups } = cardHolders();
-  const urow = id => { const mine = app.filter(i => asgOf(i).some(a => a.k === 'u' && a.id === id)); const c = r => mine.filter(i => rankOf(i, id) === r).length; return `<tr><td>${esc(nameOf(id))}</td><td class="c">${mine.length}</td><td class="c">${c(1)}</td><td class="c">${c(2) + c(3)}</td></tr>`; };
-  const grow = g => { const n = app.filter(i => asgOf(i).some(a => a.k === 'g' && a.id === g.id)).length; return `<tr><td>${esc(g.name)} <span class="muted">(${g.everyone ? 'جميع المعلمين' : (g.member_ids || []).map(m => short(nameOf(m))).join('، ') || 'لم يُحدَّد الأعضاء'})</span></td><td class="c">${n}</td><td class="c" colspan="2">فريق</td></tr>`; };
+  const urow = id => { const mine = app.filter(i => asgOf(i).some(a => a.k === 'u' && a.id === id)); return `<tr><td>${esc(nameOf(id))}</td><td class="c">${mine.length}</td><td>${mine.map(i => esc(i.code)).join('، ')}</td></tr>`; };
+  const grow = g => { const mine = app.filter(i => asgOf(i).some(a => a.k === 'g' && a.id === g.id)); return `<tr><td>${esc(g.name)} <span class="muted">(${g.everyone ? 'جميع المعلمين' : (g.member_ids || []).map(m => short(nameOf(m))).join('، ') || 'لم يُحدَّد الأعضاء'})</span></td><td class="c">${mine.length}</td><td>${mine.map(i => esc(i.code)).join('، ')}</td></tr>`; };
   const steps = (list) => `<ol class="steps">${list.map(([t, s]) => `<li><b>${t}</b><span>${s}</span></li>`).join('')}</ol>`;
   const body = `
   <section class="pg">
@@ -943,13 +991,13 @@ function printGuide() {
   <section class="pg">
     ${prHead('الأدوار وسلسلة الاعتماد')}
     <h2>سلسلة الاعتماد</h2>
-    <div class="chain">${[['مسؤول المؤشر', 'أول وثانٍ وثالث، يتابع مؤشره ويحدّد حالة إنجازه'], ['جامع الشواهد', 'يرفع الشاهد في مدار ويربطه ببنده من الشواهد المطلوبة'], ['قائد المجال', 'يراجع الشاهد: يعتمده أو يعيده بملاحظة'], ['مدير المدرسة', 'الاعتماد النهائي للشاهد']].map(([t, s], k) => `<div><i>${k + 1}</i><b>${t}</b><span>${s}</span></div>`).join('<em>←</em>')}</div>
+    <div class="chain">${[['قائد المجال يسند', 'يحدد المسؤولين عن كل مؤشر في مجاله'], ['المسؤول يرفع', 'يرفع الشاهد في مدار ويربطه ببنده من الشواهد المطلوبة'], ['قائد المجال', 'يراجع الشاهد: يعتمده أو يعيده بملاحظة'], ['مدير المدرسة', 'الاعتماد النهائي للشاهد']].map(([t, s], k) => `<div><i>${k + 1}</i><b>${t}</b><span>${s}</span></div>`).join('<em>←</em>')}</div>
     <p class="muted">لا يُحتسب الشاهد في جاهزية المؤشر إلا بعد اعتماده نهائيًا من المدير، ولا يكتمل المؤشر إلا باعتماد جميع بنود شواهده المطلوبة.</p>
     <h2>الهيكل التنظيمي</h2>
     <table><thead><tr><th>الدور</th><th>المكلّف</th><th>المهام</th></tr></thead><tbody>
       <tr><td><b>مدير المدرسة</b><br><span class="muted">قائد فريق التقويم</span></td><td>${pr.map(id => esc(nameOf(id))).join('<br>') || '—'}</td><td>الإشراف العام على الخطة، واعتماد التوزيع، ومتابعة نسب الإنجاز، وإزالة المعوقات، والاعتماد النهائي للشواهد، وقيادة الاجتماعات الدورية.</td></tr>
-      ${leads.map(l => `<tr><td><b>قائد مجال: ${DOMAINS[l.d]}</b><br><span class="muted">${l.n} مؤشرًا</span></td><td>${l.ids.map(id => esc(nameOf(id))).join('<br>') || '<span class="muted">لم يُحدَّد</span>'}</td><td>متابعة جميع مؤشرات المجال، ومراجعة شواهده واعتمادها أو إعادتها بملاحظة قبل رفعها للمدير، وليس بالضرورة أن يجمع الشواهد بنفسه.</td></tr>`).join('')}
-      <tr><td><b>مسؤولو المؤشرات</b></td><td>حسب التوزيع</td><td><span class="rk r1">أول</span> صاحب المؤشر والمسؤول عن اكتمال شواهده · <span class="rk r2">ثانٍ</span> و<span class="rk r3">ثالث</span> يشاركان في جمع الشواهد وتنفيذ البرامج.</td></tr>
+      ${leads.map(l => `<tr><td><b>قائد مجال: ${DOMAINS[l.d]}</b><br><span class="muted">${l.n} مؤشرًا</span></td><td>${l.ids.map(id => esc(nameOf(id))).join('<br>') || '<span class="muted">لم يُحدَّد</span>'}</td><td>إسناد مؤشرات المجال للمسؤولين وتعديل الإسناد، ومتابعة جميع مؤشرات المجال، ومراجعة شواهده واعتمادها أو إعادتها بملاحظة قبل رفعها للمدير.</td></tr>`).join('')}
+      <tr><td><b>مسؤولو المؤشرات</b></td><td>حسب الإسناد</td><td>يظهر لكل مسؤول في حسابه المؤشرات المسندة إليه فقط، فيقرأ شرحها ويرفع شواهدها مرتبطة ببنودها، ويعدّل ما يُعاد إليه.</td></tr>
     </tbody></table>
     <h2>حالات الشاهد في مدار</h2>
     <table><tbody>
@@ -962,9 +1010,9 @@ function printGuide() {
   <section class="pg">
     ${prHead('آلية الرفع والاعتماد في منصة مدار')}
     <h2>رفع الشاهد (لمسؤولي المؤشرات وجامعي الشواهد)</h2>
-    ${steps([['ادخل صفحتك', 'من منصة مدار: الإدارة ← الاعتماد المدرسي ← تبويب «صفحتي»، وتجد فيه مؤشراتك مرتبة بدرجتك.'], ['افهم المؤشر', 'افتح المؤشر واقرأ «دليل المؤشر»: ماذا يعني، والنصيحة العملية، والشاهد الأقوى.'], ['ارفع لكل بند', 'في «الشواهد المطلوبة» اضغط «رفع» بجانب البند، فيرتبط الشاهد به مباشرة.'], ['صنّف الشاهد', 'اختر تدرّجه (تخطيط، تنفيذ، متابعة، أثر)، واكتب عنوانًا واضحًا، ثم أرفق الملف أو الرابط.'], ['حدّث حالة الإنجاز', 'من أعلى المؤشر: لم يبدأ، جارٍ، مكتمل، يحتاج تعديل.'], ['تابع شواهدك', 'الشاهد المعاد يظهر في «صفحتي» تحت «شواهد أُعيدت إليك»؛ عدّله ثم اضغط «إعادة الإرسال».']])}
+    ${steps([['ادخل صفحتك', 'من منصة مدار: الاعتماد المدرسي، وتظهر لك المؤشرات المسندة إليك فقط.'], ['افهم المؤشر', 'افتح المؤشر واقرأ «دليل المؤشر»: ماذا يعني، والنصيحة العملية، والشاهد الأقوى.'], ['ارفع لكل بند', 'في «الشواهد المطلوبة» اضغط «رفع» بجانب البند، فيرتبط الشاهد به مباشرة.'], ['أرفق الشاهد', 'اكتب عنوانًا واضحًا، ثم أرفق الملف أو الرابط.'], ['تابع شواهدك', 'الشاهد المعاد يظهر في «صفحتي» تحت «شواهد أُعيدت إليك»؛ عدّله ثم اضغط «إعادة الإرسال».']])}
     <h2>اعتماد الشاهد (لقادة المجالات والمدير)</h2>
-    ${steps([['افتح قائمة الانتظار', 'في «صفحتي» تظهر «بانتظار إجرائك» بالشواهد التي تنتظر اعتمادك، وفي أعلى الصفحة تنبيه بعددها.'], ['راجع الشاهد', 'افتحه وتحقق: هل هو مرتبط فعلًا بالبند؟ هل هو حديث وواضح ويثبت التطبيق والنتيجة؟'], ['اعتمد أو أعِد', 'قائد المجال يضغط «اعتماد قائد المجال»، والمدير يضغط «اعتماد نهائي». وعند النقص اضغط «إعادة» واكتب الملاحظة.']])}
+    ${steps([['افتح قائمة الانتظار', 'قائد المجال يجد «تنتظر اعتمادك» في أعلى «مؤشرات المجال»، والمدير يجدها في «صفحتي».'], ['راجع الشاهد', 'افتحه وتحقق: هل هو مرتبط فعلًا بالبند؟ هل هو حديث وواضح ويثبت التطبيق والنتيجة؟'], ['اعتمد أو أعِد', 'قائد المجال يضغط «اعتماد قائد المجال»، والمدير يضغط «اعتماد نهائي». وعند النقص اضغط «إعادة» واكتب الملاحظة.']])}
     <h2>قاعدة مهمة جدًا للشواهد</h2>
     <div class="box">ليس المطلوب أكبر عدد من الملفات، بل شاهد <b>قوي، حديث، واضح، مرتبط بالمؤشر</b>، ويثبت التطبيق والنتيجة. ويُفضَّل أن يكون الشاهد متدرجًا:</div>
     <div class="ladder">${Object.entries(STAGES).map(([k, [t, s]], n) => `<div><i>${n + 1}</i><b>${t}</b><span>${s}</span></div>`).join('')}</div>
@@ -981,7 +1029,7 @@ function printGuide() {
       ${leads.map(l => `<tr><td><b>${DOMAINS[l.d]}</b></td><td>${l.ids.map(id => esc(short(nameOf(id)))).join('، ') || '—'}</td><td class="c">${l.n}</td><td class="c">${l.a}</td><td class="c">${l.n - l.a}</td></tr>`).join('')}
     </tbody></table>
     <h2>التوزيع على المسؤولين</h2>
-    <table><thead><tr><th>المسؤول</th><th class="c">المؤشرات</th><th class="c">مسؤول أول</th><th class="c">ثانٍ / ثالث</th></tr></thead><tbody>${users.map(urow).join('')}${groups.map(grow).join('')}</tbody></table>
+    <table><thead><tr><th>المسؤول</th><th class="c">العدد</th><th>المؤشرات</th></tr></thead><tbody>${users.map(urow).join('')}${groups.map(grow).join('')}</tbody></table>
   </section>`;
   printDoc('دليل العمل لجاهزية التقويم الخارجي', body, `
     .cover{ text-align:center; padding:26mm 10mm 10mm; border-bottom:3px solid #0F2447; margin-bottom:8px; }
@@ -1008,28 +1056,26 @@ function printCards(who) {
   const pr = roleIds('principal');
   const page = h => {
     const mine = D.inds.filter(i => !i.not_applicable && asgOf(i).some(a => a.k === h.k && a.id === h.id))
-      .map(i => ({ i, r: asgOf(i).find(a => a.k === h.k && a.id === h.id).r })).sort((a, b) => a.r - b.r || a.i.sort - b.i.sort);
+      .map(i => ({ i })).sort((a, b) => a.i.sort - b.i.sort);
     const name = h.k === 'u' ? nameOf(h.id) : (groupById(h.id) || {}).name;
     const g = h.k === 'g' ? groupById(h.id) : null;
     const roles = h.k === 'u' ? [...(pr.includes(h.id) ? ['مدير المدرسة · الاعتماد النهائي'] : []), ...[1, 2, 3, 4].filter(d => leadOf('domain', d).includes(h.id)).map(d => 'قائد مجال ' + DOMAINS[d])] : [];
-    const c = r => mine.filter(x => x.r === r).length;
     return `<section class="pg">
       ${prHead('بطاقة المسؤول')}
       <div class="who"><div><small>${h.k === 'g' ? 'فريق' : 'المسؤول'}</small><h1>${esc(name || '')}</h1>
         ${g ? `<p class="muted">${g.everyone ? 'جميع معلمي المدرسة' : 'الأعضاء: ' + ((g.member_ids || []).map(m => esc(short(nameOf(m)))).join('، ') || 'لم يُحدَّدوا بعد')}</p>` : ''}
         ${roles.length ? `<p class="roles">${roles.map(r => `<span>${esc(r)}</span>`).join('')}</p>` : ''}</div>
-        <div class="cnt"><div><b>${mine.length}</b><span>مؤشرًا</span></div>${[1, 2, 3].map(r => c(r) ? `<div><b>${c(r)}</b><span class="rk r${r}">${RANK[r].replace('المسؤول ', '')}</span></div>` : '').join('')}</div></div>
-      <div class="how">اقرأ الشواهد المطلوبة لكل مؤشر، وارفعها في <b>مدار ← الاعتماد المدرسي ← صفحتي</b> مرتبطة ببنودها. يمر كل شاهد على قائد المجال ثم يعتمده المدير نهائيًا.</div>
-      ${mine.map(({ i, r }) => {
-        const others = asgOf(i).filter(a => !(a.k === h.k && a.id === h.id)).sort((x, y) => x.r - y.r);
+        <div class="cnt"><div><b>${mine.length}</b><span>${mine.length === 1 ? 'مؤشر' : 'مؤشرات'}</span></div></div></div>
+      <div class="how">اقرأ الشواهد المطلوبة لكل مؤشر، وارفعها في <b>مدار ← الاعتماد المدرسي</b> مرتبطة ببنودها. يعتمد قائد المجال كل شاهد ثم يعتمده المدير نهائيًا.</div>
+      ${mine.map(({ i }) => {
+        const others = asgOf(i).filter(a => !(a.k === h.k && a.id === h.id));
         const cov = coveredOf(i), gd = guideOf(i), lead = domainOwners(i);
         return `<div class="card" style="--c:${DCOL[i.domain_no]}">
-          <div class="top"><span class="code">${esc(i.code)}</span><span class="dom">${DOMAINS[i.domain_no]} · ${esc(i.standard)}</span><span class="rk r${r}">${RANK[r]}</span></div>
+          <div class="top"><span class="code">${esc(i.code)}</span><span class="dom">${DOMAINS[i.domain_no]} · ${esc(i.standard)}</span></div>
           <b class="txt">${esc(i.text)}</b>
-          <div class="meta"><span><i>المشاركون:</i> ${others.map(a => `${esc(asgLabel(a))} <small>(${RSHORT[a.r]})</small>`).join('، ') || 'لا يوجد'}</span>${lead.length ? `<span><i>قائد المجال:</i> ${lead.map(id => esc(short(nameOf(id)))).join('، ')}</span>` : ''}</div>
+          <div class="meta"><span><i>المشاركون:</i> ${others.map(a => esc(asgLabel(a))).join('، ') || 'لا يوجد'}</span>${lead.length ? `<span><i>قائد المجال:</i> ${lead.map(id => esc(short(nameOf(id)))).join('، ')}</span>` : ''}</div>
           <div class="req"><i>الشواهد المطلوبة</i>${reqOf(i).map((t, k) => `<div><span class="chk${cov.has(k) ? ' on' : ''}"></span>${esc(t)}</div>`).join('')}</div>
           ${gd.best ? `<div class="best">★ الشاهد الأقوى: ${esc(gd.best)}</div>` : ''}
-          <div class="st"><i>حالة الإنجاز:</i>${Object.entries(PROG).map(([k, t]) => `<span><span class="chk${(i.progress || 'not_started') === k ? ' on' : ''}"></span>${t}</span>`).join('')}</div>
         </div>`;
       }).join('') || '<p class="muted">لا توجد مؤشرات مسندة.</p>'}
     </section>`;
