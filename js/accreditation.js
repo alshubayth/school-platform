@@ -181,7 +181,7 @@ function render() {
         <div class="ac-legend">${[['done', 'مكتمل'], ['partial', 'جزئي'], ['pending', 'قيد المراجعة'], ['returned', 'معاد'], ['empty', 'بلا شواهد']].map(([k, t]) => `<button type="button" data-f="${k}" class="${V.filter === k ? 'on' : ''}"><i style="background:${SCOL[k]}"></i>${t}<b>${cnt(k)}</b></button>`).join('')}</div>
         <div class="ac-sky-a">
           <button type="button" class="ac-btn glow" id="ac-visit">${IC.eye}وضع الزيارة</button>
-          <button type="button" class="ac-btn light" id="ac-print">${IC.print}فهرس الشواهد</button>
+          <button type="button" class="ac-btn light" id="ac-print">${IC.print}الطباعة</button>
         </div>
       </div>
       <div class="ac-orbit">
@@ -207,7 +207,7 @@ function render() {
   box.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { V.tab = b.dataset.tab; box.querySelectorAll('[data-tab]').forEach(x => x.classList.toggle('on', x === b)); renderPane(); });
   box.querySelectorAll('.orb-dot').forEach(c => c.onclick = () => openDrawer(c.dataset.ind));
   $('ac-visit').onclick = openVisit;
-  $('ac-print').onclick = printIndex;
+  $('ac-print').onclick = openPrintMenu;
   $('ac-scrim').onclick = () => openDrawer(null);
   const gq = $('ac-goq'); if (gq) gq.onclick = () => { V.tab = 'me'; render(); setTimeout(() => { const q = $('ac-queue'); if (q) q.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 50); };
   const asg2 = $('ac-assign2'); if (asg2) asg2.onclick = openAssign;
@@ -860,4 +860,191 @@ function openAssign() {
     toast('حُفظ التوزيع ✓'); draw();
   };
   draw();
+}
+
+/* ---------- الطباعة: دليل العمل، بطاقات المسؤولين، فهرس الشواهد ---------- */
+function openPrintMenu() {
+  let back = $('ac-pm');
+  if (!back) { back = document.createElement('div'); back.id = 'ac-pm'; back.className = 'ac-asg-back'; document.body.appendChild(back); }
+  document.body.classList.add('ac-lock');
+  const close = () => { back.remove(); document.body.classList.remove('ac-lock'); };
+  const { users, groups } = cardHolders();
+  back.innerHTML = `<div class="ac-pm" role="dialog" aria-modal="true" aria-label="الطباعة">
+    <div class="ac-asg-h"><div><b>الطباعة</b><span>اطبع ما يحتاجه الفريق ليعرف النظام ودوره فيه.</span></div><button type="button" class="ac-dx" data-x>✕</button></div>
+    <div class="ac-pm-b">
+      <button type="button" class="ac-pm-o" data-p="guide"><span class="ic">${IC.book}</span><span><b>دليل العمل والخطة</b><small>الهدف، والأدوار، وسلسلة الاعتماد، وآلية الرفع والاعتماد في مدار، وقاعدة الشواهد، والخطة الزمنية، وملخص التوزيع</small></span></button>
+      <div class="ac-pm-o col"><div class="r"><span class="ic">${IC.user}</span><span><b>بطاقات المسؤولين</b><small>صفحة لكل مسؤول وفريق: مؤشراته بدرجته، والمشاركون معه، والشواهد المطلوبة مع مربعات للتأشير</small></span></div>
+        <div class="ac-pm-f"><select data-who><option value="all">الجميع (${users.length} مسؤولًا و${groups.length} فرق)</option><optgroup label="الأشخاص">${users.map(u => `<option value="u:${u}">${esc(nameOf(u))}</option>`).join('')}</optgroup><optgroup label="الفرق">${groups.map(g => `<option value="g:${g.id}">${esc(g.name)}</option>`).join('')}</optgroup></select><button type="button" class="ac-btn" data-p="cards">${IC.print}طباعة</button></div></div>
+      <button type="button" class="ac-pm-o" data-p="index"><span class="ic">${IC.list}</span><span><b>فهرس الشواهد</b><small>الشواهد المعتمدة لكل مؤشر وبنوده ومسؤوليه، للزيارة</small></span></button>
+    </div></div>`;
+  back.querySelector('[data-x]').onclick = close;
+  back.onclick = e => { if (e.target === back) close(); };
+  back.querySelector('[data-p=guide]').onclick = () => { close(); printGuide(); };
+  back.querySelector('[data-p=index]').onclick = () => { close(); printIndex(); };
+  back.querySelector('[data-p=cards]').onclick = () => { const v = back.querySelector('[data-who]').value; close(); printCards(v); };
+}
+
+function cardHolders() {
+  const n = {}, g = new Set();
+  D.inds.forEach(i => { if (i.not_applicable) return; asgOf(i).forEach(a => { if (a.k === 'u') n[a.id] = (n[a.id] || 0) + (a.r === 1 ? 100 : 1); else g.add(a.id); }); });
+  const users = Object.keys(n).sort((a, b) => n[b] - n[a]);
+  return { users, groups: D.groups.filter(x => g.has(x.id)) };
+}
+
+const PRINT_CSS = `@page{ size:A4; margin:11mm 11mm 13mm; }
+  *{ box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  body{ font-family:'Tajawal',Tahoma,sans-serif; color:#14233A; font-size:11.5px; margin:0; line-height:1.7; }
+  .pg{ page-break-after:always; } .pg:last-child{ page-break-after:auto; }
+  .hd{ display:flex; align-items:center; gap:12px; border-bottom:2px solid #0F2447; padding-bottom:7px; margin-bottom:12px; } .hd img{ height:44px; } .hd .t{ flex:1; }
+  .hd small{ display:block; color:#5B6B80; font-size:10.5px; } .hd b{ font-size:15px; }
+  h1{ margin:0; font-size:22px; } h2{ font-size:14.5px; margin:16px 0 8px; color:#0F2447; display:flex; align-items:center; gap:8px; }
+  h2::before{ content:''; width:5px; height:17px; border-radius:3px; background:#2FC1B2; }
+  table{ width:100%; border-collapse:collapse; } th,td{ border:1px solid #D5DCE6; padding:5px 7px; text-align:right; vertical-align:top; }
+  th{ background:#0F2447; color:#fff; font-size:11px; } td.c, th.c{ text-align:center; } tr{ break-inside:avoid; }
+  .muted{ color:#5B6B80; } .box{ border:1px solid #D5DCE6; border-radius:10px; padding:9px 12px; break-inside:avoid; }
+  .chk{ display:inline-block; width:12px; height:12px; border:1.6px solid #5B6B80; border-radius:3px; vertical-align:middle; margin-inline-end:6px; position:relative; top:-1px; }
+  .chk.on{ background:#2FC1B2; border-color:#2FC1B2; }
+  .rk{ display:inline-block; font-size:10px; font-weight:800; border-radius:999px; padding:1px 8px; } .r1{ background:#0F2447; color:#fff; } .r2{ background:#2FC1B2; color:#fff; } .r3{ background:#DCE3EC; color:#0F2447; }`;
+function printDoc(title, body, extraCss = '') {
+  const doc = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(title)}</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800;900&display=swap">
+    <style>${PRINT_CSS}${extraCss}</style></head><body>${body}
+    <script>window.onload=()=>{ (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(()=>setTimeout(()=>window.print(),350)); };<\/script></body></html>`;
+  const w = window.open('', '_blank');
+  if (!w) { alert('اسمح بالنوافذ المنبثقة للطباعة'); return; }
+  w.document.open(); w.document.write(doc); w.document.close();
+}
+const prHead = sub => { const logo = printLogo(); return `<div class="hd">${logo ? `<img src="${esc(logo)}" alt="">` : ''}<div class="t"><small>${esc(printOrgName())} · جاهزية التقويم الخارجي</small><b>${sub}</b></div></div>`; };
+
+/* دليل العمل والخطة */
+function printGuide() {
+  const pr = roleIds('principal');
+  const app = D.inds.filter(i => !i.not_applicable);
+  const today = new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' });
+  const leads = [1, 2, 3, 4].map(d => ({ d, ids: leadOf('domain', d), n: D.inds.filter(i => i.domain_no === d && !i.not_applicable).length, a: D.inds.filter(i => i.domain_no === d && !i.not_applicable && asgOf(i).length).length }));
+  const { users, groups } = cardHolders();
+  const urow = id => { const mine = app.filter(i => asgOf(i).some(a => a.k === 'u' && a.id === id)); const c = r => mine.filter(i => rankOf(i, id) === r).length; return `<tr><td>${esc(nameOf(id))}</td><td class="c">${mine.length}</td><td class="c">${c(1)}</td><td class="c">${c(2) + c(3)}</td></tr>`; };
+  const grow = g => { const n = app.filter(i => asgOf(i).some(a => a.k === 'g' && a.id === g.id)).length; return `<tr><td>${esc(g.name)} <span class="muted">(${g.everyone ? 'جميع المعلمين' : (g.member_ids || []).map(m => short(nameOf(m))).join('، ') || 'لم يُحدَّد الأعضاء'})</span></td><td class="c">${n}</td><td class="c" colspan="2">فريق</td></tr>`; };
+  const steps = (list) => `<ol class="steps">${list.map(([t, s]) => `<li><b>${t}</b><span>${s}</span></li>`).join('')}</ol>`;
+  const body = `
+  <section class="pg">
+    <div class="cover">
+      ${printLogo() ? `<img src="${esc(printLogo())}" alt="">` : ''}
+      <small>${esc(printOrgName())}</small>
+      <h1>دليل العمل لجاهزية التقويم الخارجي</h1>
+      <p>الخطة التنفيذية · الأدوار وسلسلة الاعتماد · آلية رفع الشواهد واعتمادها في منصة مدار</p>
+      <div class="kpis"><div><b>${app.length}</b><span>مؤشرًا</span></div><div><b>4</b><span>مجالات</span></div><div><b>${users.length}</b><span>مسؤولًا</span></div><div><b>${groups.length}</b><span>فرق</span></div>${D.visit ? `<div><b>${esc(shortDate(D.visit))}</b><span>موعد الزيارة</span></div>` : ''}</div>
+      <em>تاريخ الإخراج: ${esc(today)}</em>
+    </div>
+    <h2>الهدف العام</h2>
+    <p>رفع جاهزية المدرسة للتقويم الخارجي من خلال بناء منظومة عمل منظمة تضمن:</p>
+    <ol class="goals">${['توزيع مجالات ومؤشرات التقويم على فريق المدرسة.', 'تحديد مسؤول واضح عن كل مؤشر.', 'تحديد الشواهد المطلوبة لكل مؤشر.', 'رفع الشواهد إلكترونيًا في منصة مدار مرتبطة بمؤشراتها.', 'مراجعة الشواهد والتحقق من جودتها قبل اعتمادها.', 'اكتشاف الفجوات مبكرًا ومعالجتها.', 'تجهيز منسوبي المدرسة للمقابلات.', 'تجهيز البيئة الصفية والمدرسية للملاحظة.', 'بناء ملف متكامل يوضح أداء المدرسة بالأدلة والبيانات.'].map(t => `<li>${t}</li>`).join('')}</ol>
+  </section>
+  <section class="pg">
+    ${prHead('الأدوار وسلسلة الاعتماد')}
+    <h2>سلسلة الاعتماد</h2>
+    <div class="chain">${[['مسؤول المؤشر', 'أول وثانٍ وثالث، يتابع مؤشره ويحدّد حالة إنجازه'], ['جامع الشواهد', 'يرفع الشاهد في مدار ويربطه ببنده من الشواهد المطلوبة'], ['قائد المجال', 'يراجع الشاهد: يعتمده أو يعيده بملاحظة'], ['مدير المدرسة', 'الاعتماد النهائي للشاهد']].map(([t, s], k) => `<div><i>${k + 1}</i><b>${t}</b><span>${s}</span></div>`).join('<em>←</em>')}</div>
+    <p class="muted">لا يُحتسب الشاهد في جاهزية المؤشر إلا بعد اعتماده نهائيًا من المدير، ولا يكتمل المؤشر إلا باعتماد جميع بنود شواهده المطلوبة.</p>
+    <h2>الهيكل التنظيمي</h2>
+    <table><thead><tr><th>الدور</th><th>المكلّف</th><th>المهام</th></tr></thead><tbody>
+      <tr><td><b>مدير المدرسة</b><br><span class="muted">قائد فريق التقويم</span></td><td>${pr.map(id => esc(nameOf(id))).join('<br>') || '—'}</td><td>الإشراف العام على الخطة، واعتماد التوزيع، ومتابعة نسب الإنجاز، وإزالة المعوقات، والاعتماد النهائي للشواهد، وقيادة الاجتماعات الدورية.</td></tr>
+      ${leads.map(l => `<tr><td><b>قائد مجال: ${DOMAINS[l.d]}</b><br><span class="muted">${l.n} مؤشرًا</span></td><td>${l.ids.map(id => esc(nameOf(id))).join('<br>') || '<span class="muted">لم يُحدَّد</span>'}</td><td>متابعة جميع مؤشرات المجال، ومراجعة شواهده واعتمادها أو إعادتها بملاحظة قبل رفعها للمدير، وليس بالضرورة أن يجمع الشواهد بنفسه.</td></tr>`).join('')}
+      <tr><td><b>مسؤولو المؤشرات</b></td><td>حسب التوزيع</td><td><span class="rk r1">أول</span> صاحب المؤشر والمسؤول عن اكتمال شواهده · <span class="rk r2">ثانٍ</span> و<span class="rk r3">ثالث</span> يشاركان في جمع الشواهد وتنفيذ البرامج.</td></tr>
+    </tbody></table>
+    <h2>حالات الشاهد في مدار</h2>
+    <table><tbody>
+      <tr><td><b>بانتظار قائد المجال</b></td><td>رُفع الشاهد وينتظر مراجعة قائد المجال.</td></tr>
+      <tr><td><b>بانتظار اعتماد المدير</b></td><td>اعتمده قائد المجال، وينتظر الاعتماد النهائي.</td></tr>
+      <tr><td><b>معتمد نهائيًا</b></td><td>اعتمده المدير، ويُحتسب في جاهزية المؤشر ويظهر في وضع الزيارة.</td></tr>
+      <tr><td><b>معاد للتعديل</b></td><td>أُعيد لصاحبه بملاحظة، فيعدّله ثم يضغط «إعادة الإرسال».</td></tr>
+    </tbody></table>
+  </section>
+  <section class="pg">
+    ${prHead('آلية الرفع والاعتماد في منصة مدار')}
+    <h2>رفع الشاهد (لمسؤولي المؤشرات وجامعي الشواهد)</h2>
+    ${steps([['ادخل صفحتك', 'من منصة مدار: الإدارة ← الاعتماد المدرسي ← تبويب «صفحتي»، وتجد فيه مؤشراتك مرتبة بدرجتك.'], ['افهم المؤشر', 'افتح المؤشر واقرأ «دليل المؤشر»: ماذا يعني، والنصيحة العملية، والشاهد الأقوى.'], ['ارفع لكل بند', 'في «الشواهد المطلوبة» اضغط «رفع» بجانب البند، فيرتبط الشاهد به مباشرة.'], ['صنّف الشاهد', 'اختر تدرّجه (تخطيط، تنفيذ، متابعة، أثر)، واكتب عنوانًا واضحًا، ثم أرفق الملف أو الرابط.'], ['حدّث حالة الإنجاز', 'من أعلى المؤشر: لم يبدأ، جارٍ، مكتمل، يحتاج تعديل.'], ['تابع شواهدك', 'الشاهد المعاد يظهر في «صفحتي» تحت «شواهد أُعيدت إليك»؛ عدّله ثم اضغط «إعادة الإرسال».']])}
+    <h2>اعتماد الشاهد (لقادة المجالات والمدير)</h2>
+    ${steps([['افتح قائمة الانتظار', 'في «صفحتي» تظهر «بانتظار إجرائك» بالشواهد التي تنتظر اعتمادك، وفي أعلى الصفحة تنبيه بعددها.'], ['راجع الشاهد', 'افتحه وتحقق: هل هو مرتبط فعلًا بالبند؟ هل هو حديث وواضح ويثبت التطبيق والنتيجة؟'], ['اعتمد أو أعِد', 'قائد المجال يضغط «اعتماد قائد المجال»، والمدير يضغط «اعتماد نهائي». وعند النقص اضغط «إعادة» واكتب الملاحظة.']])}
+    <h2>قاعدة مهمة جدًا للشواهد</h2>
+    <div class="box">ليس المطلوب أكبر عدد من الملفات، بل شاهد <b>قوي، حديث، واضح، مرتبط بالمؤشر</b>، ويثبت التطبيق والنتيجة. ويُفضَّل أن يكون الشاهد متدرجًا:</div>
+    <div class="ladder">${Object.entries(STAGES).map(([k, [t, s]], n) => `<div><i>${n + 1}</i><b>${t}</b><span>${s}</span></div>`).join('')}</div>
+    <p class="muted">المرحلة الرابعة (الأثر والنتيجة) هي ما يميز الأحكام العليا في التقويم.</p>
+  </section>
+  <section class="pg">
+    ${prHead('الخطة الزمنية وملخص التوزيع')}
+    <h2>الجدول الزمني للتنفيذ</h2>
+    <table><thead><tr><th class="c">م</th><th>المرحلة</th><th>المسؤول</th><th>المخرج المطلوب</th><th class="c">من</th><th class="c">إلى</th><th class="c">الحالة</th></tr></thead><tbody>
+      ${D.phases.map((p, k) => `<tr><td class="c">${k + 1}</td><td><b>${esc(p.t)}</b></td><td>${esc(p.owner || '')}</td><td>${esc(p.out || '')}</td><td class="c">${p.from ? esc(shortDate(p.from)) : '…/…'}</td><td class="c">${p.to ? esc(shortDate(p.to)) : '…/…'}</td><td class="c">${PHST[p.st || 'todo']}</td></tr>`).join('')}
+    </tbody></table>
+    <h2>التوزيع على المجالات</h2>
+    <table><thead><tr><th>المجال</th><th>قائد المجال</th><th class="c">المؤشرات</th><th class="c">أُسندت</th><th class="c">المتبقي</th></tr></thead><tbody>
+      ${leads.map(l => `<tr><td><b>${DOMAINS[l.d]}</b></td><td>${l.ids.map(id => esc(short(nameOf(id)))).join('، ') || '—'}</td><td class="c">${l.n}</td><td class="c">${l.a}</td><td class="c">${l.n - l.a}</td></tr>`).join('')}
+    </tbody></table>
+    <h2>التوزيع على المسؤولين</h2>
+    <table><thead><tr><th>المسؤول</th><th class="c">المؤشرات</th><th class="c">مسؤول أول</th><th class="c">ثانٍ / ثالث</th></tr></thead><tbody>${users.map(urow).join('')}${groups.map(grow).join('')}</tbody></table>
+  </section>`;
+  printDoc('دليل العمل لجاهزية التقويم الخارجي', body, `
+    .cover{ text-align:center; padding:26mm 10mm 10mm; border-bottom:3px solid #0F2447; margin-bottom:8px; }
+    .cover img{ height:70px; margin-bottom:8px; } .cover small{ display:block; color:#5B6B80; font-size:13px; } .cover h1{ font-size:27px; margin:6px 0; color:#0F2447; }
+    .cover p{ color:#2455A4; font-size:13px; margin:0 0 16px; } .cover em{ display:block; font-style:normal; color:#5B6B80; margin-top:14px; }
+    .kpis{ display:flex; justify-content:center; gap:10px; } .kpis div{ border:1px solid #D5DCE6; border-radius:12px; padding:8px 16px; min-width:84px; } .kpis b{ display:block; font-size:22px; color:#0F2447; } .kpis span{ color:#5B6B80; }
+    .goals li{ margin-bottom:3px; font-size:12.5px; }
+    .chain{ display:flex; align-items:stretch; gap:6px; } .chain > div{ flex:1; border:1px solid #D5DCE6; border-radius:12px; padding:9px; text-align:center; background:#F6F9FD; }
+    .chain > div:last-child{ background:#E7F7F4; border-color:#9FD9CF; } .chain i{ display:inline-flex; width:24px; height:24px; border-radius:8px; background:#0F2447; color:#fff; font-style:normal; font-weight:800; align-items:center; justify-content:center; }
+    .chain b{ display:block; font-size:13px; margin:4px 0 2px; } .chain span{ font-size:10.5px; color:#5B6B80; } .chain em{ align-self:center; font-style:normal; color:#2FC1B2; font-size:18px; font-weight:900; }
+    .steps{ list-style:none; padding:0; margin:0; counter-reset:s; display:flex; flex-direction:column; gap:6px; }
+    .steps li{ counter-increment:s; display:flex; gap:10px; align-items:flex-start; border:1px solid #E3E8EF; border-radius:10px; padding:7px 10px; break-inside:avoid; }
+    .steps li::before{ content:counter(s); flex-shrink:0; width:24px; height:24px; border-radius:50%; background:#2FC1B2; color:#fff; font-weight:800; display:flex; align-items:center; justify-content:center; }
+    .steps b{ min-width:110px; font-size:12.5px; } .steps span{ color:#33445C; }
+    .ladder{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-top:8px; } .ladder div{ border:1px solid #D5DCE6; border-radius:10px; padding:8px; text-align:center; }
+    .ladder i{ display:inline-flex; width:22px; height:22px; border-radius:50%; background:#0F2447; color:#fff; font-style:normal; font-weight:800; align-items:center; justify-content:center; } .ladder div:last-child i{ background:#2FC1B2; }
+    .ladder b{ display:block; } .ladder span{ font-size:10.5px; color:#5B6B80; }`);
+}
+
+/* بطاقات المسؤولين: صفحة لكل مسؤول أو فريق */
+function printCards(who) {
+  const { users, groups } = cardHolders();
+  const holders = who === 'all' ? [...users.map(id => ({ k: 'u', id })), ...groups.map(g => ({ k: 'g', id: g.id }))] : [{ k: who.split(':')[0], id: who.split(':')[1] }];
+  const pr = roleIds('principal');
+  const page = h => {
+    const mine = D.inds.filter(i => !i.not_applicable && asgOf(i).some(a => a.k === h.k && a.id === h.id))
+      .map(i => ({ i, r: asgOf(i).find(a => a.k === h.k && a.id === h.id).r })).sort((a, b) => a.r - b.r || a.i.sort - b.i.sort);
+    const name = h.k === 'u' ? nameOf(h.id) : (groupById(h.id) || {}).name;
+    const g = h.k === 'g' ? groupById(h.id) : null;
+    const roles = h.k === 'u' ? [...(pr.includes(h.id) ? ['مدير المدرسة · الاعتماد النهائي'] : []), ...[1, 2, 3, 4].filter(d => leadOf('domain', d).includes(h.id)).map(d => 'قائد مجال ' + DOMAINS[d])] : [];
+    const c = r => mine.filter(x => x.r === r).length;
+    return `<section class="pg">
+      ${prHead('بطاقة المسؤول')}
+      <div class="who"><div><small>${h.k === 'g' ? 'فريق' : 'المسؤول'}</small><h1>${esc(name || '')}</h1>
+        ${g ? `<p class="muted">${g.everyone ? 'جميع معلمي المدرسة' : 'الأعضاء: ' + ((g.member_ids || []).map(m => esc(short(nameOf(m)))).join('، ') || 'لم يُحدَّدوا بعد')}</p>` : ''}
+        ${roles.length ? `<p class="roles">${roles.map(r => `<span>${esc(r)}</span>`).join('')}</p>` : ''}</div>
+        <div class="cnt"><div><b>${mine.length}</b><span>مؤشرًا</span></div>${[1, 2, 3].map(r => c(r) ? `<div><b>${c(r)}</b><span class="rk r${r}">${RANK[r].replace('المسؤول ', '')}</span></div>` : '').join('')}</div></div>
+      <div class="how">اقرأ الشواهد المطلوبة لكل مؤشر، وارفعها في <b>مدار ← الاعتماد المدرسي ← صفحتي</b> مرتبطة ببنودها. يمر كل شاهد على قائد المجال ثم يعتمده المدير نهائيًا.</div>
+      ${mine.map(({ i, r }) => {
+        const others = asgOf(i).filter(a => !(a.k === h.k && a.id === h.id)).sort((x, y) => x.r - y.r);
+        const cov = coveredOf(i), gd = guideOf(i), lead = domainOwners(i);
+        return `<div class="card" style="--c:${DCOL[i.domain_no]}">
+          <div class="top"><span class="code">${esc(i.code)}</span><span class="dom">${DOMAINS[i.domain_no]} · ${esc(i.standard)}</span><span class="rk r${r}">${RANK[r]}</span></div>
+          <b class="txt">${esc(i.text)}</b>
+          <div class="meta"><span><i>المشاركون:</i> ${others.map(a => `${esc(asgLabel(a))} <small>(${RSHORT[a.r]})</small>`).join('، ') || 'لا يوجد'}</span>${lead.length ? `<span><i>قائد المجال:</i> ${lead.map(id => esc(short(nameOf(id)))).join('، ')}</span>` : ''}</div>
+          <div class="req"><i>الشواهد المطلوبة</i>${reqOf(i).map((t, k) => `<div><span class="chk${cov.has(k) ? ' on' : ''}"></span>${esc(t)}</div>`).join('')}</div>
+          ${gd.best ? `<div class="best">★ الشاهد الأقوى: ${esc(gd.best)}</div>` : ''}
+          <div class="st"><i>حالة الإنجاز:</i>${Object.entries(PROG).map(([k, t]) => `<span><span class="chk${(i.progress || 'not_started') === k ? ' on' : ''}"></span>${t}</span>`).join('')}</div>
+        </div>`;
+      }).join('') || '<p class="muted">لا توجد مؤشرات مسندة.</p>'}
+    </section>`;
+  };
+  printDoc('بطاقات المسؤولين', holders.map(page).join(''), `
+    .who{ display:flex; align-items:center; gap:12px; background:linear-gradient(135deg,#13336A,#0C2147); color:#fff; border-radius:14px; padding:12px 16px; margin-bottom:8px; }
+    .who > div:first-child{ flex:1; } .who small{ color:#BFD3F0; } .who h1{ font-size:21px; } .who .muted{ color:#BFD3F0; margin:2px 0 0; }
+    .roles{ margin:4px 0 0; display:flex; gap:5px; flex-wrap:wrap; } .roles span{ background:rgba(242,196,107,.2); color:#F7D894; border-radius:999px; padding:0 9px; font-size:10.5px; font-weight:700; }
+    .cnt{ display:flex; gap:6px; } .cnt div{ background:rgba(255,255,255,.1); border-radius:10px; padding:5px 10px; text-align:center; min-width:62px; } .cnt b{ display:block; font-size:19px; } .cnt span{ font-size:10px; }
+    .how{ font-size:11px; background:#F2F7FD; border:1px dashed #BCD3EF; color:#1D4D7C; border-radius:10px; padding:6px 10px; margin-bottom:8px; }
+    .card{ border:1px solid #D5DCE6; border-inline-start:4px solid var(--c); border-radius:10px; padding:8px 11px; margin-bottom:7px; break-inside:avoid; }
+    .card .top{ display:flex; align-items:center; gap:8px; } .card .code{ font-weight:800; color:var(--c); direction:ltr; } .card .dom{ flex:1; color:#5B6B80; font-size:10.5px; }
+    .card .txt{ display:block; font-size:12.5px; margin:2px 0 4px; } .card i{ font-style:normal; font-weight:800; color:#5B6B80; margin-inline-end:4px; }
+    .card .meta{ display:flex; gap:14px; flex-wrap:wrap; font-size:10.5px; margin-bottom:4px; } .card .meta small{ color:#5B6B80; }
+    .card .req{ font-size:11px; } .card .req > i{ display:block; color:#1F7A45; } .card .req div{ padding:1px 0; }
+    .card .best{ font-size:10.5px; color:#8A5A0B; background:#FFF8E8; border-radius:6px; padding:2px 8px; margin-top:4px; }
+    .card .st{ display:flex; gap:12px; align-items:center; font-size:10.5px; border-top:1px dashed #D5DCE6; margin-top:5px; padding-top:4px; }`);
 }

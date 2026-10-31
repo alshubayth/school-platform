@@ -4268,3 +4268,10 @@ body.ac-lock{ overflow:hidden; }
 @keyframes up{ from{ opacity:0; transform:translateY(8px); } to{ opacity:1; transform:none; } }
 @media (prefers-reduced-motion: reduce){ .ac-tabs ~ #ac-pane, .ac-ph, .ac-chain li, .ac-rp, .ml-day{ animation:none !important; } }
 .ac-role.wide{ grid-column:1 / -1; }
+.ac-pm{ width:min(560px,100%); background:#fff; border-radius:20px; overflow:hidden; box-shadow:0 30px 80px rgba(8,23,51,.35); animation:up .3s both; margin:auto; }
+.ac-pm-b{ display:flex; flex-direction:column; gap:8px; padding:14px; }
+.ac-pm-o{ display:flex; align-items:flex-start; gap:12px; width:100%; margin:0; text-align:start; font:inherit; color:var(--ink); background:#F8FAFD; border:1px solid var(--border); border-radius:14px; padding:12px; cursor:pointer; transition:border-color .2s, transform .15s; }
+button.ac-pm-o:hover{ border-color:#2FC1B2; transform:translateY(-1px); } .ac-pm-o.col{ flex-direction:column; cursor:default; } .ac-pm-o .r{ display:flex; gap:12px; }
+.ac-pm-o .ic{ width:40px; height:40px; flex-shrink:0; border-radius:12px; background:linear-gradient(135deg,#13336A,#2455A4); color:#fff; display:flex; align-items:center; justify-content:center; } .ac-pm-o .ic svg{ width:19px; height:19px; }
+.ac-pm-o b{ display:block; font-size:14px; } .ac-pm-o small{ display:block; font-size:12px; color:var(--slate); line-height:1.7; }
+.ac-pm-f{ display:flex; gap:8px; width:100%; } .ac-pm-f select{ flex:1; margin:0; }
