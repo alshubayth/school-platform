@@ -280,7 +280,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-10-31f';
+export const ASSET_VERSION = '2026-10-31g';
 
 /* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
  * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
@@ -500,11 +500,9 @@ export async function loadProfileAndShowDashboard(userId) {
     const { data: membership } = await sb.from('operational_plan_members').select('id').eq('profile_id', userId).maybeSingle();
     isOpPlanMember = !!membership;
     try {
-      const [{ data: accMine }, { data: accLead }] = await Promise.all([
-        sb.from('acc_indicators').select('id').contains('owner_ids', [userId]).limit(1),
-        sb.from('acc_leads').select('id').contains('owner_ids', [userId]).limit(1),
-      ]);
-      hasAccAssignment = !!((accMine && accMine.length) || (accLead && accLead.length));
+      // مسند إليه مؤشر (شخصيًا أو ضمن فريق) أو قائد مجال/معيار
+      const { data: accHas } = await sb.rpc('acc_has_assignment');
+      hasAccAssignment = !!accHas;
     } catch (e) { hasAccAssignment = false; }
 
     const [{ data: subjectAssign }, { data: teamAssign }] = await Promise.all([
