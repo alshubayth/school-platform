@@ -26,6 +26,7 @@ const plural = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <=
 const initials = n => { const w = String(n || '').split(/\s+/).filter(x => x && x !== 'بن'); return (w[0] ? w[0][0] : '') + (w.length > 1 ? w[w.length - 1].replace(/^ال(?=.{2})/, '')[0] : ''); };
 const DEFAULT_TEMPLATE = 'ولي أمر الطالب {الاسم}، نفيدكم بغياب ابنكم عن المدرسة اليوم {اليوم} {التاريخ}. {المدرسة}';
 const IC = {
+  down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m6 10 6 6 6-6"/><path d="M4 20h16"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
   back: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
   prev: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>',
@@ -358,6 +359,7 @@ async function renderDay() {
     <div class="av-subtabs" role="tablist">
       <button type="button" data-sub="abs" class="${dv.sub === 'abs' ? 'on' : ''}">${IC.msg}الغائبون والرسائل <i>${absent.length}</i></button>
       <button type="button" data-sub="round" class="${dv.sub === 'round' ? 'on' : ''}">${IC.check}جولة الفصول</button>
+      <button type="button" data-sub="log" class="${dv.sub === 'log' ? 'on' : ''}">${IC.clock}سجل الرسائل</button>
       <button type="button" data-sub="track" class="${dv.sub === 'track' ? 'on' : ''}">${IC.grid}متابعة التحضير${missing.length ? ` <i class="warn">${missing.length}</i>` : ''}</button>
     </div>
     <div id="av-sub"></div>`;
@@ -370,7 +372,7 @@ async function renderDay() {
   renderSub();
 }
 
-function renderSub() { if (dv.sub === 'track') renderTrack(); else if (dv.sub === 'round') renderRound(); else renderAbsent(); }
+function renderSub() { if (dv.sub === 'track') renderTrack(); else if (dv.sub === 'round') renderRound(); else if (dv.sub === 'log') renderLog(); else renderAbsent(); }
 
 function dotsHtml(r) {
   return `<span class="av-dots" aria-hidden="true">${PERIODS.map(p => { const v = r.mp.get(p); const t = r.taken.includes(p); return `<i class="${v === 'absent' ? 'a' : v === 'late' ? 'l' : t ? 'p' : ''}" title="الحصة ${p}: ${v === 'absent' ? 'غائب' : v === 'late' ? 'متأخر' : t ? 'حاضر' : 'لم تُحضَّر'}">${p}</i>`; }).join('')}</span>`;
@@ -709,4 +711,88 @@ async function openFollowPerms() {
       openFollowPerms();
     };
   });
+}
+
+
+/* ---------- سجل الرسائل: أرشيف رسائل الغياب بالتاريخ والوقت ---------- */
+const LOG = { from: null, to: null, q: '', status: 'all', grade: '', data: null, open: null };
+const MS_LABEL = { sent: 'أُرسلت', failed: 'تعذر الإرسال', cancelled: 'أُلغيت قبل الإرسال', pending: 'بانتظار الإرسال', sending: 'جارٍ الإرسال' };
+const clockOf = ts => (ts ? new Date(ts).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' }) : '—');
+async function loadLog() {
+  const scoped = (t, cols, f) => readScopedBySchool(sc => { let q = f(sb.from(t).select(cols)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
+  const out = [];
+  for (let from = 0; from < 20000; from += 1000) {
+    const { data, error } = await scoped('attendance_messages', 'id, att_date, student_id, mobile, body, status, error, approved_by, approved_at, sent_at', q => q.gte('att_date', LOG.from).lte('att_date', LOG.to).order('att_date', { ascending: false }).range(from, from + 999));
+    if (error) throw error;
+    out.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  const ids = [...new Set(out.map(m => m.student_id))], pids = [...new Set(out.map(m => m.approved_by).filter(Boolean))];
+  const studs = new Map(), people = new Map();
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data } = await sb.from('students').select('id, full_name, grade_level, class_section').in('id', ids.slice(i, i + 200));
+    (data || []).forEach(x => studs.set(x.id, x));
+  }
+  if (pids.length) { const { data } = await sb.from('profiles').select('id, full_name').in('id', pids); (data || []).forEach(x => people.set(x.id, x.full_name)); }
+  LOG.data = out.map(m => ({ ...m, st: studs.get(m.student_id) || { full_name: '—' }, by: people.get(m.approved_by) || '' }));
+}
+async function renderLog() {
+  const box = $('av-sub');
+  if (!LOG.to) { LOG.to = todayIso(); LOG.from = shiftIso(LOG.to, -30); }
+  box.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
+  try { await loadLog(); } catch (e) { box.innerHTML = `<div class="av-card av-noslots">تعذر تحميل السجل: ${esc(e.message || e)}</div>`; return; }
+  drawLog();
+}
+function logFiltered() {
+  const q = String(LOG.q || '').trim();
+  return LOG.data.filter(m => (LOG.status === 'all' || m.status === LOG.status) && (!LOG.grade || m.st.grade_level === LOG.grade)
+    && (!q || String(m.st.full_name).includes(q) || String(m.mobile || '').includes(q)));
+}
+function drawLog() {
+  const box = $('av-sub');
+  const all = LOG.data, list = logFiltered();
+  const cnt = k => all.filter(m => m.status === k).length;
+  const days = new Map();
+  list.forEach(m => { if (!days.has(m.att_date)) days.set(m.att_date, []); days.get(m.att_date).push(m); });
+  const maxDay = Math.max(1, ...[...days.values()].map(v => v.length));
+  box.innerHTML = `<div class="ml">
+    <div class="ml-top">
+      <div class="ml-range"><label>من<input type="date" id="ml-from" value="${LOG.from}" max="${todayIso()}"></label><label>إلى<input type="date" id="ml-to" value="${LOG.to}" max="${todayIso()}"></label>
+        <div class="ml-quick">${[[0, 'اليوم'], [7, '٧ أيام'], [30, '٣٠ يومًا'], [90, '٩٠ يومًا']].map(([n, t]) => `<button type="button" data-days="${n}">${t}</button>`).join('')}</div></div>
+      <button type="button" class="ml-export" id="ml-csv">${IC.down || ''}تصدير Excel</button>
+    </div>
+    <div class="ml-stats">
+      <button type="button" data-st="all" class="${LOG.status === 'all' ? 'on' : ''}"><b>${all.length}</b><span>كل الرسائل</span></button>
+      <button type="button" data-st="sent" class="ok${LOG.status === 'sent' ? ' on' : ''}"><b>${cnt('sent')}</b><span>أُرسلت</span></button>
+      <button type="button" data-st="failed" class="bad${LOG.status === 'failed' ? ' on' : ''}"><b>${cnt('failed')}</b><span>تعذر إرسالها</span></button>
+      <button type="button" data-st="cancelled" class="mut${LOG.status === 'cancelled' ? ' on' : ''}"><b>${cnt('cancelled')}</b><span>أُلغيت قبل الإرسال</span></button>
+    </div>
+    <div class="ml-tools"><label class="av-search">${IC.search}<input type="search" id="ml-q" placeholder="ابحث باسم الطالب أو رقم الجوال" value="${esc(LOG.q)}"></label>
+      <select id="ml-grade"><option value="">كل الصفوف</option>${GRADES.map(g => `<option value="${g}"${LOG.grade === g ? ' selected' : ''}>${esc(gradeLabels[g] || g)}</option>`).join('')}</select></div>
+    ${days.size ? `<div class="ml-days">${[...days.entries()].map(([d, ms], di) => {
+      const sent = ms.filter(m => m.status === 'sent').length;
+      const batches = new Map(); ms.forEach(m => { const k = m.approved_at ? m.approved_at.slice(0, 16) : '—'; if (!batches.has(k)) batches.set(k, []); batches.get(k).push(m); });
+      return `<section class="ml-day" style="animation-delay:${Math.min(di * 0.05, 0.6)}s">
+        <header><span class="ml-dot"></span><div><b>${esc(dateLong(d))}</b><small>${d}</small></div><span class="ml-bar"><i style="width:${Math.round(ms.length / maxDay * 100)}%"></i></span><span class="ml-n">${plural(ms.length, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة')}${sent !== ms.length ? ` · أُرسل ${sent}` : ''}</span></header>
+        ${[...batches.entries()].map(([k, bm]) => `<div class="ml-batch"><div class="ml-bh">${IC.clock}<b>${esc(clockOf(bm[0].approved_at))}</b><span>${esc(bm[0].by ? 'اعتمدها ' + bm[0].by : '')}</span><em>${plural(bm.length, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة')}</em></div>
+          <ul>${bm.map(m => `<li class="${m.status}" data-id="${m.id}"><span class="ml-st ${m.status}">${esc(MS_LABEL[m.status] || m.status)}</span><b>${esc(m.st.full_name)}</b><small>${esc(clsName(m.st.grade_level, m.st.class_section))}</small><span class="ml-t">${m.sent_at ? 'وصلت ' + esc(clockOf(m.sent_at)) : ''}</span>
+            ${LOG.open === m.id ? `<div class="ml-body"><p>${esc(m.body)}</p><span>الجوال: <bdi>${esc(m.mobile || '—')}</bdi>${m.error ? ` · ${esc(m.error)}` : ''}</span></div>` : ''}</li>`).join('')}</ul></div>`).join('')}
+      </section>`;
+    }).join('')}</div>` : '<div class="av-card av-noslots">لا توجد رسائل في هذه الفترة</div>'}
+  </div>`;
+  const reload = () => renderLog();
+  $('ml-from').onchange = e => { LOG.from = e.target.value || LOG.from; if (LOG.from > LOG.to) LOG.to = LOG.from; reload(); };
+  $('ml-to').onchange = e => { LOG.to = e.target.value || LOG.to; if (LOG.to < LOG.from) LOG.from = LOG.to; reload(); };
+  box.querySelectorAll('[data-days]').forEach(b => b.onclick = () => { LOG.to = todayIso(); LOG.from = shiftIso(LOG.to, -(+b.dataset.days)); reload(); });
+  box.querySelectorAll('[data-st]').forEach(b => b.onclick = () => { LOG.status = b.dataset.st; drawLog(); });
+  $('ml-grade').onchange = e => { LOG.grade = e.target.value; drawLog(); };
+  const qi = $('ml-q'); qi.oninput = () => { LOG.q = qi.value; const pos = qi.selectionStart; drawLog(); const n = $('ml-q'); n.focus(); n.setSelectionRange(pos, pos); };
+  box.querySelectorAll('.ml-day li').forEach(li => li.onclick = () => { LOG.open = LOG.open === li.dataset.id ? null : li.dataset.id; drawLog(); });
+  $('ml-csv').onclick = () => {
+    const rows = [['التاريخ', 'وقت الاعتماد', 'وقت الوصول', 'الطالب', 'الصف', 'الفصل', 'الجوال', 'الحالة', 'اعتمدها', 'نص الرسالة', 'ملاحظة']]
+      .concat(logFiltered().map(m => [m.att_date, clockOf(m.approved_at), m.sent_at ? clockOf(m.sent_at) : '', m.st.full_name, gradeLabels[m.st.grade_level] || '', m.st.class_section || '', m.mobile || '', MS_LABEL[m.status] || m.status, m.by, m.body, m.error || '']));
+    const csv = '﻿' + rows.map(r => r.map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `سجل رسائل الغياب ${LOG.from} إلى ${LOG.to}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  };
 }
