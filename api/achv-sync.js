@@ -163,7 +163,7 @@ async function handle(body, token, deps) {
   const wr = await deps.fetch(`${SUPABASE_URL}/rest/v1/achv_snapshots?on_conflict=school_id`, {
     method: 'POST',
     headers: { ...h, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ school_id: school, rows: parsed.data, rules: parsed.rules, fetched_at }),
+    body: JSON.stringify({ school_id: school, rows: parsed.data, rules: parsed.rules, fetched_at, source: 'excel', viewer: null, root: null }),
   });
   if (!wr.ok) return [wr.status === 401 || wr.status === 403 ? 403 : 500, { error: 'save', status: wr.status }];
 

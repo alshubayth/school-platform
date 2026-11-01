@@ -1,5 +1,7 @@
 /* ملفات الإنجاز
- * المصدر: إكسل «قارئ ملفات الإنجاز» داخل ون درايف المدرسة (Power Query يعدّ ملفات كل بند لكل معلم)،
+ * المصدر المفضل: مجلد «العام» في ون درايف مباشرة، تقرؤه إضافة مُدار في المتصفح بجلسة المستخدم (قراءة فقط)،
+ * فتُحسب ملفات كل بند لكل معلم وتُحفظ معها قائمة الملفات للاستعراض السريع.
+ * المصدر البديل: إكسل «قارئ ملفات الإنجاز» داخل ون درايف المدرسة (Power Query يعدّ ملفات كل بند لكل معلم)،
  * والمنصة تسحبه من رابط المشاركة عن طريق /api/achv-sync وتحفظ آخر نسخة بجدول achv_snapshots.
  * المدير/الوكيل: لوحة اكتمال لكل معلم + ربط مجلد المعلم بحسابه + تذكير الناقصين + طباعة.
  * المعلم: يشوف ملفه هو بس (achv_my). */
@@ -10,6 +12,88 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const canManage = () => isAdminOrDeputy() || isOwnerAccount;
 const norm = s => String(s || '').replace(/[ًٌٍَُِّْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه').replace(/\s+/g, ' ').trim();
 const AUTO_SYNC_MIN = 30;
+
+/* ---------- إضافة مُدار (قراءة مجلد ون درايف بجلسة المتصفح) ---------- */
+const ext = { version: document.documentElement.dataset.mudaarExt || null, seq: 0, wait: new Map() };
+window.addEventListener('message', e => {
+  const d = e.data;
+  if (e.source !== window || !d || d.from !== 'mudaar-ext') return;
+  if (d.type === 'hello') ext.version = d.version;
+  const w = d.id && ext.wait.get(d.id);
+  if (!w) return;
+  if (d.progress) { if (w.onProgress) w.onProgress(d.progress); }
+  else if (d.reply) { ext.wait.delete(d.id); w.resolve(d.reply); }
+});
+async function extReady() {
+  ext.version = ext.version || document.documentElement.dataset.mudaarExt || null;
+  if (ext.version) return true;
+  window.postMessage({ to: 'mudaar-ext', type: 'ping' }, location.origin);
+  await new Promise(r => setTimeout(r, 500));
+  return !!(ext.version || document.documentElement.dataset.mudaarExt);
+}
+const extOk = () => { const v = ext.version || document.documentElement.dataset.mudaarExt || ''; const [a, b] = v.split('.').map(Number); return a > 0 || b >= 10; };
+function extCall(type, payload, onProgress) {
+  return new Promise(resolve => {
+    const id = 'q' + (++ext.seq) + '-' + Date.now();
+    ext.wait.set(id, { resolve, onProgress });
+    window.postMessage({ to: 'mudaar-ext', id, type, payload }, location.origin);
+  });
+}
+
+// ملفات المجلد ← صفوف بنفس شكل صفوف الإكسل: التخصص/المعلم/الفصل/البند (+ قائمة الملفات)
+const itemNo = name => { const m = /^\s*(\d+)\s*[-–ـ.)]/.exec(name) || /[-–ـ]\s*(\d+)\s*$/.exec(name); return m ? Number(m[1]) : null; };
+function localStamp(iso) { const d = new Date(iso); if (isNaN(d)) return null; const z = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}T${z(d.getHours())}:${z(d.getMinutes())}`; }
+function rowsFromScan(scan) {
+  const root = scan.root.replace(/\/+$/, '');
+  const rel = p => p.startsWith(root + '/') ? p.slice(root.length + 1) : null;
+  const skipTeacher = t => /^\d+$/.test(t); // مجلدات قوالب مرقّمة
+  const rows = new Map();
+  const key = (spec, teacher, term, item) => [spec, teacher, term, item].join('\u0001');
+  const row = (spec, teacher, term, item) => {
+    const k = key(spec, teacher, term, item);
+    if (!rows.has(k)) rows.set(k, { spec, teacher, term, item, no: item ? itemNo(item) : null, files: 0, modified: null, list: [] });
+    return rows.get(k);
+  };
+  // المجلدات أولًا حتى تظهر البنود الفارغة والمعلم الذي لا ملفات له
+  for (const p of scan.folders) {
+    const r = rel(p); if (!r) continue;
+    const seg = r.split('/');
+    if (seg.length < 2 || skipTeacher(seg[1])) continue;
+    if (seg.length === 2) row(seg[0], seg[1], '', '');
+    else if (seg.length === 4) row(seg[0], seg[1], seg[2], seg[3]);
+  }
+  for (const f of scan.files) {
+    const r = rel(f.p); if (!r) continue;
+    const seg = r.split('/');
+    if (seg.length < 3 || skipTeacher(seg[1])) continue; // ملفات في جذر المجلد أو التخصص
+    const term = seg.length >= 4 ? seg[2] : '';
+    const item = seg.length >= 5 ? seg[3] : 'ملفات خارج البنود';
+    const x = row(seg[0], seg[1], term, item);
+    x.files++;
+    const t = localStamp(f.t);
+    if (t && (!x.modified || t > x.modified)) x.modified = t;
+    x.list.push({ r, s: f.s, t });
+  }
+  // نحذف صف «المعلم بلا بند» إذا وُجدت له بنود
+  const withItems = new Set([...rows.values()].filter(x => x.item).map(x => x.teacher));
+  return [...rows.values()].filter(x => x.item || !withItems.has(x.teacher)).map(x => { x.list.sort((a, b) => (b.t || '').localeCompare(a.t || '')); return x; });
+}
+function defaultRules(rows) {
+  const by = new Map();
+  for (const r of rows) if (r.item && r.item !== 'ملفات خارج البنود') { const k = r.no != null ? 'n' + r.no : 's' + norm(r.item); if (!by.has(k)) by.set(k, { no: r.no, name: r.item.replace(/^\s*\d+\s*[-–ـ.)]\s*/, '').replace(/\s*[-–ـ]\s*\d+\s*$/, ''), required: true, min: 1, note: '' }); }
+  return [...by.values()].sort((a, b) => (a.no ?? 99) - (b.no ?? 99));
+}
+// رابط عرض الملف أو المجلد داخل ون درايف
+function spLink(snap, r, folder = false) {
+  if (!snap || !snap.viewer || !snap.root) return null;
+  const full = snap.root.replace(/\/+$/, '') + '/' + r;
+  const parent = full.slice(0, full.lastIndexOf('/'));
+  return snap.viewer + '?id=' + encodeURIComponent(full) + (folder ? '' : '&parent=' + encodeURIComponent(parent));
+}
+const fileName = r => r.slice(r.lastIndexOf('/') + 1);
+const fileExt = r => { const m = /\.([a-z0-9]{1,5})$/i.exec(r); return m ? m[1].toLowerCase() : ''; };
+const EXT_KIND = { pdf: 'pdf', doc: 'doc', docx: 'doc', xls: 'xls', xlsx: 'xls', csv: 'xls', ppt: 'ppt', pptx: 'ppt', jpg: 'img', jpeg: 'img', png: 'img', heic: 'img', gif: 'img', webp: 'img', mp4: 'vid', mov: 'vid' };
+const fmtSize = b => b >= 1048576 ? (b / 1048576).toFixed(1) + ' م.ب' : Math.max(1, Math.round(b / 1024)) + ' ك.ب';
 
 let state = { excluded: new Set(), source: null, snap: null, map: new Map(), staff: [], filter: { spec: '', q: '', sort: 'low', term: '' }, open: new Set(), syncing: false, missingSql: false };
 
@@ -47,7 +131,9 @@ function evaluateTeacher(rows, rules) {
     const files = matched.reduce((a, r) => a + (r.files || 0), 0);
     const status = files >= rule.min ? 'ok' : files > 0 ? 'part' : 'none';
     const modified = matched.map(r => r.modified).filter(Boolean).sort().pop() || null;
-    return { rule, files, status, modified };
+    const list = matched.flatMap(r => r.list || []);
+    const folder = matched.length === 1 && matched[0].term ? [matched[0].spec, matched[0].teacher, matched[0].term, matched[0].item].join('/') : null;
+    return { rule, files, status, modified, list, folder };
   });
   const extra = rows.filter((r, i) => !used.has(i));
   const req = items.filter(x => x.rule.required);
@@ -105,8 +191,8 @@ async function saveExcluded() {
 /* ---------- البيانات ---------- */
 async function loadManagerData() {
   const [src, snap, map, staff, exc] = await Promise.all([
-    sb.from('achv_sources').select('xlsx_url, updated_at').eq('school_id', currentSchoolId).maybeSingle(),
-    sb.from('achv_snapshots').select('rows, rules, fetched_at').eq('school_id', currentSchoolId).maybeSingle(),
+    sb.from('achv_sources').select('xlsx_url, folder_url, updated_at').eq('school_id', currentSchoolId).maybeSingle(),
+    sb.from('achv_snapshots').select('rows, rules, fetched_at, source, viewer, root').eq('school_id', currentSchoolId).maybeSingle(),
     sb.from('achv_teacher_map').select('folder_name, profile_id').eq('school_id', currentSchoolId),
     sb.from('profiles').select('id, full_name, role').eq('school_id', currentSchoolId).in('role', ['admin', 'deputy', 'teacher']).order('full_name'),
     sb.from('school_settings').select('value').eq('school_id', currentSchoolId).eq('key', 'achv_excluded').maybeSingle(),
@@ -121,6 +207,7 @@ async function loadManagerData() {
 }
 
 async function syncNow(silent = false) {
+  if (state.source && state.source.folder_url) return scanFolder(silent);
   if (state.syncing) return;
   state.syncing = true;
   const btn = $('av-sync');
@@ -156,15 +243,70 @@ async function syncNow(silent = false) {
   if (!msg && !silent) toast('تم تحديث البيانات من ملف الإكسل');
 }
 
+async function scanFolder(silent = false) {
+  if (state.syncing) return;
+  if (!(await extReady()) || !extOk()) {
+    state.lastError = 'القراءة من المجلد تحتاج إضافة مُدار (الإصدار 0.10 أو أحدث) في هذا المتصفح.';
+    if (!silent) toast(state.lastError, true);
+    renderManager(); return;
+  }
+  state.syncing = true; state.lastError = null;
+  const btn = $('av-sync');
+  if (btn) { btn.disabled = true; btn.textContent = 'جارٍ القراءة...'; }
+  const r = await extCall('achvScan', { url: state.source.folder_url }, p => { const b = $('av-sync'); if (b) { b.disabled = true; b.textContent = `جارٍ القراءة: ${p.folders} مجلد · ${p.files} ملف`; } });
+  let msg = null;
+  if (!r.ok) msg = r.error || 'تعذّرت قراءة المجلد';
+  else {
+    const rows = rowsFromScan(r.data);
+    const old = state.snap && state.snap.rules && state.snap.rules.length ? state.snap.rules : defaultRules(rows);
+    const { data: { user } } = await sb.auth.getUser();
+    const { error } = await sb.from('achv_snapshots').upsert({ school_id: currentSchoolId, rows, rules: old, fetched_at: new Date().toISOString(), fetched_by: user ? user.id : null, source: 'folder', viewer: r.data.viewer, root: r.data.root }, { onConflict: 'school_id' });
+    if (error) msg = 'تعذر حفظ النتيجة: ' + error.message;
+    else state.scanInfo = { files: rows.reduce((n, x) => n + x.files, 0), folders: r.data.folders.length };
+  }
+  state.syncing = false;
+  if (msg) { state.lastError = msg; if (!silent) toast(msg, true); }
+  await loadManagerData();
+  if (state.snap) await saveGuessedLinks(teachersFromSnap());
+  renderManager();
+  if (!msg && !silent) toast(`تمت قراءة المجلد: ${state.scanInfo.files} ملف`);
+}
+
 /* ---------- واجهة المدير/الوكيل ---------- */
 function sourceCard() {
   const s = state.source;
-  if (!s) return `
+  if (!s || state.pickSource) return `
     <div class="form-card av-setup">
-      <h3>ربط ملف «قارئ ملفات الإنجاز»</h3>
-      <p>الصق رابط مشاركة ملف الإكسل (أي شخص لديه الرابط - عرض فقط). المنصة تقرأ منه عدد ملفات كل بند لكل معلم.</p>
-      <div class="av-url-row"><input id="av-url" type="url" dir="ltr" placeholder="https://...sharepoint.com/:x:/g/personal/..."><button class="btn-primary" id="av-save-url">حفظ وقراءة</button></div>
+      <h3>مصدر ملفات الإنجاز</h3>
+      <div class="av-src-opt rec">
+        <b>القراءة من مجلد ون درايف مباشرة <span class="av-badge">موصى به</span></b>
+        <p>افتح مجلد العام الدراسي في ون درايف (الذي يحتوي مجلدات التخصصات ثم المعلمين) وانسخ الرابط من شريط العنوان. تقرأ إضافة مُدار المجلد في متصفحك بحسابك في ون درايف، دون تعديل أي ملف، وتظهر الملفات هنا للاستعراض.</p>
+        <div class="av-url-row"><input id="av-folder" type="url" dir="ltr" placeholder="https://...-my.sharepoint.com/my?id=/personal/.../العام" value="${esc((s && s.folder_url) || '')}"><button class="btn-primary" id="av-save-folder">حفظ وقراءة</button></div>
+        ${extOk() ? '' : '<div class="av-note">تحتاج إضافة مُدار للمتصفح (الإصدار 0.10 أو أحدث) لقراءة المجلد.</div>'}
+      </div>
+      <details class="av-src-opt"${s && s.xlsx_url && !s.folder_url ? ' open' : ''}><summary>أو من ملف إكسل «قارئ ملفات الإنجاز»</summary>
+        <p>الصق رابط مشاركة ملف الإكسل (أي شخص لديه الرابط - عرض فقط). المنصة تقرأ منه عدد ملفات كل بند لكل معلم.</p>
+        <div class="av-url-row"><input id="av-url" type="url" dir="ltr" placeholder="https://...sharepoint.com/:x:/g/personal/..." value="${esc((s && s.xlsx_url) || '')}"><button class="btn-secondary" id="av-save-url">حفظ وقراءة</button></div>
+      </details>
+      ${s ? '<button class="text-action-btn" id="av-cancel-src">إلغاء</button>' : ''}
     </div>`;
+  if (s.folder_url) {
+    const snap = state.snap;
+    const fileCount = snap ? (snap.rows || []).reduce((a, r) => a + (r.files || 0), 0) : 0;
+    return `
+    <div class="av-source">
+      <div class="av-source-info">
+        <span class="av-dot ${snap && snap.source === 'folder' && !state.lastError ? 'ok' : ''}"></span>
+        <div><b>${snap && snap.source === 'folder' ? 'آخر قراءة للمجلد ' + esc(ago(snap.fetched_at)) + ' · ' + fileCount + ' ملف' : 'لم يُقرأ المجلد بعد'}</b>
+        <span>${state.lastError ? esc(state.lastError) : 'المصدر: مجلد ون درايف مباشرة عبر إضافة مُدار في هذا المتصفح (قراءة فقط).'}</span></div>
+      </div>
+      <div class="av-source-actions">
+        <button class="btn-primary" id="av-sync" ${state.syncing ? 'disabled' : ''}>${state.syncing ? 'جارٍ القراءة...' : 'تحديث من ون درايف'}</button>
+        ${snap && snap.viewer ? `<a class="btn-secondary av-open-root" href="${esc(spLink(snap, '', true).replace(/%2F$/, ''))}" target="_blank" rel="noopener">فتح المجلد</a>` : ''}
+        <button class="btn-secondary" id="av-change-url">تغيير المصدر</button>
+      </div>
+    </div>`;
+  }
   const snap = state.snap;
   return `
     <div class="av-source">
@@ -290,12 +432,31 @@ function teacherRow(t) {
   </div>`;
 }
 
-function itemsTable(ev) {
+function filesCell(list, n) {
+  return list && list.length ? `<button type="button" class="av-files-btn" aria-expanded="false">${n} <span>ملف ▾</span></button>` : String(n);
+}
+function filesRow(snap, list, folder) {
+  if (!list || !list.length) return '';
+  return `<tr class="av-files-row" hidden><td colspan="5"><div class="av-files">
+    ${list.map(f => { const k = EXT_KIND[fileExt(f.r)] || 'other'; const href = spLink(snap, f.r); return `<a class="av-file" ${href ? `href="${esc(href)}" target="_blank" rel="noopener"` : ''} title="${esc(fileName(f.r))}">
+      <span class="av-ext ${k}">${esc(fileExt(f.r).toUpperCase() || 'ملف')}</span><span class="av-fn">${esc(fileName(f.r))}</span><small>${esc(fmtDT(f.t, false))}${f.s ? ' · ' + fmtSize(f.s) : ''}</small></a>`; }).join('')}
+    ${folder && spLink(snap, folder, true) ? `<a class="av-file av-file-folder" href="${esc(spLink(snap, folder, true))}" target="_blank" rel="noopener"><span class="av-ext folder">📁</span><span class="av-fn">فتح مجلد البند في ون درايف</span></a>` : ''}
+  </div></td></tr>`;
+}
+function itemsTable(ev, snap = state.snap) {
   return `<div class="av-tablewrap"><table class="av-table"><thead><tr><th>البند</th><th>الملفات</th><th>المطلوب</th><th>الحالة</th><th>آخر تعديل</th></tr></thead><tbody>
     ${ev.items.map(x => `<tr class="${x.rule.required ? '' : 'opt'}"><td>${x.rule.no != null ? x.rule.no + '- ' : ''}${esc(x.rule.name)}${x.rule.required ? '' : ' <small>(اختياري)</small>'}</td>
-      <td>${x.files}</td><td>${x.rule.min}</td><td><span class="av-st ${x.status}">${ST_LABEL[x.status]}</span></td><td>${esc(fmtDT(x.modified, false))}</td></tr>`).join('')}
-    ${ev.extra.map(r => `<tr class="extra"><td>${esc(r.item)} <small>(غير موجود بقائمة البنود)</small></td><td>${r.files}</td><td>—</td><td>—</td><td>${esc(fmtDT(r.modified, false))}</td></tr>`).join('')}
+      <td>${filesCell(x.list, x.files)}</td><td>${x.rule.min}</td><td><span class="av-st ${x.status}">${ST_LABEL[x.status]}</span></td><td>${esc(fmtDT(x.modified, false))}</td></tr>${filesRow(snap, x.list, x.folder)}`).join('')}
+    ${ev.extra.filter(r => r.files || !r.list).map(r => `<tr class="extra"><td>${esc(r.item)} <small>(غير موجود بقائمة البنود)</small></td><td>${filesCell(r.list, r.files)}</td><td>—</td><td>—</td><td>${esc(fmtDT(r.modified, false))}</td></tr>${filesRow(snap, r.list, null)}`).join('')}
   </tbody></table></div>`;
+}
+// فتح وإغلاق قائمة ملفات البند دون إعادة رسم الصفحة
+function bindFiles(el) {
+  el.querySelectorAll('.av-files-btn').forEach(b => b.onclick = () => {
+    const row = b.closest('tr').nextElementSibling;
+    if (!row || !row.classList.contains('av-files-row')) return;
+    row.hidden = !row.hidden; b.setAttribute('aria-expanded', String(!row.hidden));
+  });
 }
 function teacherDetail(t) { return `<div class="av-detail">${itemsTable(t.ev)}</div>`; }
 
@@ -305,7 +466,10 @@ function bindManager() {
   const sync = $('av-sync');
   if (sync) sync.onclick = () => syncNow(false);
   const ch = $('av-change-url');
-  if (ch) ch.onclick = () => { state.source = null; renderManager(); const u = $('av-url'); if (u) u.focus(); };
+  if (ch) ch.onclick = () => { state.pickSource = true; renderManager(); const u = $('av-folder'); if (u) u.focus(); };
+  const cs = $('av-cancel-src'); if (cs) cs.onclick = () => { state.pickSource = false; renderManager(); };
+  const sf = $('av-save-folder'); if (sf) sf.onclick = saveFolder;
+  bindFiles(root());
   const q = $('av-q');
   if (q) q.oninput = () => { state.filter.q = q.value; const pos = q.selectionStart; renderManager(); const n = $('av-q'); n.focus(); n.setSelectionRange(pos, pos); };
   root().querySelectorAll('.av-exclude').forEach(b => b.onclick = async () => { state.excluded.add(b.dataset.id); await saveExcluded(); renderManager(); toast('تم استبعاده من متابعة ملفات الإنجاز'); });
@@ -324,13 +488,26 @@ function bindManager() {
   root().querySelectorAll('.av-link').forEach(s => s.onchange = () => saveLink(s.dataset.folder, s.value, s));
 }
 
+async function saveFolder() {
+  const v = ($('av-folder').value || '').trim();
+  if (!/^https:\/\/[a-z0-9-]+\.sharepoint\.com\//i.test(v)) { toast('الصق رابط المجلد من ون درايف (يبدأ بـ https:// وفيه sharepoint.com)', true); return; }
+  const { data: { user } } = await sb.auth.getUser();
+  const { error } = await sb.from('achv_sources').upsert({ school_id: currentSchoolId, folder_url: v, updated_by: user ? user.id : null, updated_at: new Date().toISOString() }, { onConflict: 'school_id' });
+  if (error) { toast('تعذر حفظ الرابط: ' + error.message, true); return; }
+  state.source = { ...(state.source || {}), folder_url: v };
+  state.pickSource = false;
+  renderManager();
+  scanFolder(false);
+}
+
 async function saveUrl() {
   const v = ($('av-url').value || '').trim();
   if (!/^https:\/\/[^/]*(sharepoint\.com|1drv\.ms|onedrive\.live\.com)\//i.test(v)) { toast('الصق رابط مشاركة من ون درايف (يبدأ بـ https:// وفيه sharepoint.com)', true); return; }
   const { data: { user } } = await sb.auth.getUser();
-  const { error } = await sb.from('achv_sources').upsert({ school_id: currentSchoolId, xlsx_url: v, updated_by: user ? user.id : null, updated_at: new Date().toISOString() }, { onConflict: 'school_id' });
+  const { error } = await sb.from('achv_sources').upsert({ school_id: currentSchoolId, xlsx_url: v, folder_url: null, updated_by: user ? user.id : null, updated_at: new Date().toISOString() }, { onConflict: 'school_id' });
   if (error) { toast('تعذر حفظ الرابط: ' + error.message, true); return; }
   state.source = { xlsx_url: v };
+  state.pickSource = false;
   renderManager();
   syncNow(false);
 }
@@ -454,9 +631,10 @@ async function renderTeacher() {
       </div>
       ${ev.missing.length ? `<div class="av-note">نأمل إكمال: ${ev.missing.map(x => esc(x.rule.name) + (x.rule.min > 1 ? ` (${x.files}/${x.rule.min})` : '')).join('، ')}</div>`
         : ev.req.length ? '<div class="av-note good">كل البنود الإلزامية مكتملة. شكرًا لك.</div>' : ''}
-      ${itemsTable(ev)}
+      ${itemsTable(ev, data)}
       <p class="av-hint">البيانات تُقرأ من مجلدك في ون درايف. بعد إضافتك للملفات، تظهر هنا بعد التحديث القادم من الإدارة.</p>
     </div>`;
+  bindFiles(el);
 }
 
 /* ---------- عام ---------- */
@@ -478,5 +656,8 @@ export async function loadAchievementsModule() {
   if (state.snap) await saveGuessedLinks(teachersFromSnap());
   renderManager();
   // قراءة تلقائية لو آخر قراءة قديمة
-  if (state.source && (!state.snap || (Date.now() - new Date(state.snap.fetched_at)) / 60000 > AUTO_SYNC_MIN)) syncNow(true);
+  if (state.source && (!state.snap || (Date.now() - new Date(state.snap.fetched_at)) / 60000 > AUTO_SYNC_MIN)) {
+    if (!state.source.folder_url) syncNow(true);
+    else if (await extReady() && extOk()) scanFolder(true);
+  }
 }
