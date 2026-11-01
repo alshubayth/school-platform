@@ -50,7 +50,8 @@ const SHEET = {
   },
   A5: {
     w: 148, h: 210, side: 9, mark: 5, markInset: 5,
-    headTop: 9, headH: 17, logoH: 11, titleSize: 12, subSize: 8,
+    // الترويسة تبدأ بعد علامة الزاوية بمسافة (العلامة 5–10 مم) حتى لا يلامس إطار الباركود العلامة فيربك قراءة Remark
+    headTop: 11.5, headH: 14.5, logoH: 11, titleSize: 12, subSize: 8,
     barcodeW: 48, barModule: 0.33, barH: 8.5,
     infoTop: 29.5, infoRowH: 6.5, infoSize: 8, infoLabelW: 16,
     instrTop: 45, instrH: 6.5, instrSize: 7,
