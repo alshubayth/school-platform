@@ -76,6 +76,7 @@ const icons = {
   substitutes: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h13l-3-3"/><path d="M20 17H7l3 3"/></svg>',
   absence: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5 1.6 0 3 .5 4.2 1.5"/><rect x="14" y="13" width="8" height="8" rx="1.5"/><path d="M14 16h8M17 11.5v3M19 11.5v3"/></svg>',
   computerlab: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
+  lessonPrep: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/><path d="m8.5 14.5 2 2 4-4"/></svg>',
   files: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>',
   examprep: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><circle cx="9.5" cy="12.5" r="1.2"/><circle cx="9.5" cy="16.5" r="1.2"/><path d="M12.5 12.5h3M12.5 16.5h3"/></svg>',
   examgrade: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8 12 2.5 2.5L16 9"/></svg>',
@@ -89,7 +90,7 @@ const icons = {
 export const GROUPS = [
   { key: 'students', title: 'الطلاب', keys: ['attendance', 'student-data', 'student-profile', 'weekly', 'schedule', 'student-lists', 'followups'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>' },
-  { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'achievements', 'weekly-tracking', 'duty', 'substitutes', 'teacher-absence', 'portal'],
+  { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'achievements', 'lesson-prep', 'weekly-tracking', 'duty', 'substitutes', 'teacher-absence', 'portal'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
   { key: 'exams', title: 'الاختبارات', keys: ['exam-prep', 'exam-grading', 'exam-reports', 'final-exams'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>' },
@@ -119,6 +120,7 @@ export const tiles = [
   { key: 'exam-reports', icon: icons.examreports, title: 'النتائج والتقارير', desc: 'درجات الطلاب وتحليل الأسئلة والمهارات والنشر لأولياء الأمور', roles: ['admin','deputy','teacher'], color: 'diamond-purple', group: 'students', step: 3 },
   { key: 'final-exams', icon: icons.exams, title: 'الاختبارات النهائية', desc: 'اللجان وتسكين الطلاب ومتابعة سير الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students', virtual: true },
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green', group: 'admin' },
+  { key: 'lesson-prep', icon: icons.lessonPrep, title: 'متابعة التحضير', desc: 'تحضير الحصص في منصة مدرستي لكل معلم يوميًا وأسبوعيًا', roles: ['admin','deputy'], color: 'diamond-teal', group: 'teachers' },
   { key: 'achievements', icon: icons.files, title: 'ملفات الإنجاز', desc: 'اكتمال ملفات إنجاز المعلمين في ون درايف', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
   { key: 'teacher-absence', icon: icons.absence, title: 'غياب وإشغال المعلمين', desc: 'أيام الغياب وحصص الإشغال لكل معلم من ملف الجداول أو يدويًا', roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
@@ -285,7 +287,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-11-01g';
+export const ASSET_VERSION = '2026-11-01p';
 
 /* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
  * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
@@ -840,6 +842,7 @@ export function hideAllModules() {
   document.getElementById('school-contacts-module').classList.add('hidden');
   document.getElementById('settings-module').classList.add('hidden');
   const achv = document.getElementById('achv-module'); if (achv) achv.classList.add('hidden');
+  const lpm = document.getElementById('lp-module'); if (lpm) lpm.classList.add('hidden');
   const slm = document.getElementById('sl-module'); if (slm) slm.classList.add('hidden');
   const sdm = document.getElementById('sd-module'); if (sdm) sdm.classList.add('hidden');
   document.getElementById('settings-open-btn').classList.remove('active');
@@ -982,6 +985,10 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('sl-module').classList.remove('hidden');
     const { loadStudentListsModule } = await import('./student-lists.js?v=' + ASSET_VERSION);
     loadStudentListsModule();
+  } else if (key === 'lesson-prep') {
+    document.getElementById('lp-module').classList.remove('hidden');
+    const { loadLessonPrepModule } = await import('./lesson-prep.js?v=' + ASSET_VERSION);
+    loadLessonPrepModule();
   } else if (key === 'achievements') {
     document.getElementById('achv-module').classList.remove('hidden');
     const { loadAchievementsModule } = await import('./achievements.js?v=' + ASSET_VERSION);
