@@ -4304,3 +4304,15 @@ button.ac-pm-o:hover{ border-color:#2FC1B2; transform:translateY(-1px); } .ac-pm
 .ac-gd > summary::after{ content:'◂'; margin-inline-start:auto; color:var(--slate); transition:transform .2s; } .ac-gd[open] > summary::after{ transform:rotate(-90deg); }
 .ac-gd .ac-guide{ padding:10px; border-top:1px solid var(--border); }
 @media (max-width:760px){ .ac-drow{ grid-template-columns:1fr; } .ac-lite{ padding:18px; } .ac-lite h3{ font-size:19px; } }
+/* تحقق من الدرجات */
+.er-head-acts{ display:flex; gap:8px; flex-wrap:wrap; }
+.er-audit-btn{ width:auto !important; padding:10px 14px !important; }
+.exam-reports-module.er-teacher .er-audit-btn, #exam-reports-module.er-teacher .er-audit-btn{ display:none; }
+.er-audit{ width:min(680px, 100%); }
+.er-audit-sum{ display:flex; flex-direction:column; gap:2px; border-radius:14px; padding:12px 14px; margin-bottom:10px; }
+.er-audit-sum.ok{ background:#E7F5EC; color:#1F7A45; } .er-audit-sum.warn{ background:#FFF4E5; color:#A4501A; }
+.er-audit-sum b{ font-size:15px; } .er-audit-sum span{ font-size:12px; opacity:.85; }
+.er-audit-row{ display:flex; gap:10px; align-items:flex-start; border:1px solid var(--border); border-inline-start:4px solid #F2A65A; border-radius:12px; padding:10px 12px; margin-bottom:8px; flex-wrap:wrap; }
+.er-audit-row .t{ flex:1; min-width:220px; } .er-audit-row .t b{ display:block; font-size:13.5px; } .er-audit-row .t small{ color:var(--slate); font-size:11.5px; }
+.er-audit-row ul{ margin:6px 0 0; padding-inline-start:18px; font-size:12.5px; line-height:1.8; } .er-audit-row li.key{ color:#B2382F; }
+.er-audit-row .a{ display:flex; gap:6px; } .er-audit-row .a button{ width:auto; padding:7px 12px; font-size:12.5px; margin:0; }

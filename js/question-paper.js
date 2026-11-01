@@ -14,6 +14,7 @@
  * ========================================================================= */
 import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels, printOrgName, printLogo, ASSET_VERSION } from './core.js';
 import { code128Svg } from './answer-sheet.js';
+import { mapPaperAnswers } from './grading-core.js';
 
 const AR = ['أ', 'ب', 'ج'];
 const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
@@ -336,18 +337,7 @@ export async function applyPaperToParsed(parsed, { skip = false } = {}) {
     const id = idOf(st);
     const perm = paper.perms[id];
     if (!perm || !Array.isArray(perm.q) || perm.q.length !== nQ) { unknown.push(id || st.name || '—'); return; }
-    const answers = Array(nQ).fill(null);
-    perm.q.forEach((qi, pos) => {
-      const v = st.answers[pos];
-      if (v == null) return;
-      if (typeof v === 'number' && v <= 0) { answers[qi] = v === -3 ? -3 : -2; return; }
-      const q = paper.questions[qi];
-      // ترميز Remark: أرقام معكوسة (أقصى يمين = أعلى رقم) أو حروف نصية (أ = ١)
-      const width = parsed.textCoded ? null : (q.type === 'tf' && tfTwo[pos] ? 2 : SLOTS);
-      const slot = parsed.textCoded ? v - 1 : width - v;
-      const orig = perm.o[pos] && perm.o[pos][slot];
-      answers[qi] = orig == null ? -3 : orig + 1; // ترميز عادي: الخيار الأصلي أ = ١
-    });
+    const answers = mapPaperAnswers(st.answers, perm, paper.questions, { textCoded: parsed.textCoded, tfTwo, slots: SLOTS });
     students.push({ ...st, id, model: undefined, modelRaw: null, answers });
   });
   if (!students.length) return null;
