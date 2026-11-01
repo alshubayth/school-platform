@@ -215,6 +215,11 @@ export async function loadLessonPrepModule() {
   S.lastError = null;
   $('lp-root').innerHTML = '<div class="form-card lp-empty">جارٍ التحميل...</div>';
   await load();
+  // لا توجد بيانات لهذا الأسبوع بعد ← نعرض آخر يوم قُرئ
+  if (!S.rows.length) {
+    const { data } = await sb.from('lesson_prep_days').select('prep_date').eq('school_id', currentSchoolId).order('prep_date', { ascending: false }).limit(1);
+    if (data && data[0] && data[0].prep_date < S.week) { S.day = data[0].prep_date; S.week = sundayOf(S.day); await load(); }
+  }
   render();
   document.title = 'متابعة التحضير - ' + (printOrgName() || 'مُدار');
 }
