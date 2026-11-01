@@ -4434,3 +4434,32 @@ body.avv-open{ overflow:hidden; }
   .avv-it{ width:auto; min-width:170px; }
   .avv-hint{ display:none; }
 }
+
+/* ملفات الإنجاز: المراجعة والاعتماد + إعدادات البنود */
+.av-chip.review, .av-st.review{ background:#E6EEFB; color:#2456A6; }
+.avv-card.review{ border-inline-start-color:#3B6FD1; }
+.av-rv{ font-weight:800; } .av-rv.approved{ color:#1d6b3c; } .av-rv.rejected{ color:#B2382F; } .av-rv.review{ color:#2456A6; }
+.av-rej{ color:#B2382F; }
+.av-file.approved{ border-color:#9FD6B4; background:#F3FBF6; }
+.av-file.rejected{ border-color:#F1C3BF; background:#FFF6F5; } .av-file.rejected .av-fn{ text-decoration:line-through; color:#8A5A56; }
+.av-ftile{ position:relative; min-width:0; display:flex; }
+.av-ftile .av-file{ flex:1; padding-inline-end:64px; }
+.av-rvbtns{ position:absolute; inset-inline-end:6px; top:50%; transform:translateY(-50%); display:flex; gap:4px; }
+.av-rvbtns button{ width:26px; height:26px; margin:0; padding:0; border-radius:8px; border:1px solid var(--border); background:#fff; font-size:13px; font-weight:900; cursor:pointer; color:var(--slate); line-height:1; }
+.av-rvbtns .ok:hover, .av-rvbtns .ok.on{ background:#2E9E5B; border-color:#2E9E5B; color:#fff; }
+.av-rvbtns .no:hover, .av-rvbtns .no.on{ background:#D2463B; border-color:#D2463B; color:#fff; }
+.av-rvbtns button:disabled{ opacity:.5; }
+.avv-all{ width:auto; margin:0; border:1px solid #9FD6B4; background:#F3FBF6; color:#1d6b3c; border-radius:8px; padding:3px 10px; font:inherit; font-size:12px; font-weight:800; cursor:pointer; white-space:nowrap; }
+.avv-all:hover{ background:#2E9E5B; color:#fff; border-color:#2E9E5B; }
+.av-rules-card{ width:min(760px,100%); }
+.av-rules-wrap{ max-height:46vh; overflow:auto; }
+.av-rules-card input[type=text], .av-rules-card input[type=number]{ width:100%; margin:0; padding:6px 8px; border:1px solid var(--border); border-radius:8px; font:inherit; font-size:13px; }
+.av-rules-card .avr-no, .av-rules-card .avr-min{ width:64px; }
+.av-rules-card .av-table td{ white-space:normal; }
+.av-basis{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.av-basis label{ display:flex; gap:8px; align-items:flex-start; border:1px solid var(--border); border-radius:10px; padding:10px; cursor:pointer; }
+.av-basis label:has(input:checked){ border-color:var(--teal); background:var(--teal-light); }
+.av-basis input{ width:16px; height:16px; margin:3px 0 0; flex:none; }
+.av-basis b{ display:block; font-size:13px; color:var(--ink); } .av-basis small{ font-size:11.5px; color:var(--slate); line-height:1.6; }
+@media (max-width:600px){ .av-basis{ grid-template-columns:1fr; } }
+.avv .av-files{ grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); }

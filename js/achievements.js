@@ -119,7 +119,8 @@ const daysSince = s => s ? Math.floor((Date.now() - new Date(s.length === 16 ? s
 
 /* ---------- الحساب ---------- */
 // يطابق صفوف المعلم مع قواعد البنود: بالرقم أولاً، وإلا بالاسم
-function evaluateTeacher(rows, rules) {
+// ctx: { reviews: Map(path → {s:'approved'|'rejected', n}), basis: 'approved' (المعتمد بعد المراجعة) | 'files' (المرفوع) }
+function evaluateTeacher(rows, rules, ctx = reviewCtx()) {
   rows = rows.filter(r => r.item); // صفوف «مجلد بدون ملفات» للعرض فقط
   const used = new Set();
   const items = rules.map(rule => {
@@ -129,19 +130,31 @@ function evaluateTeacher(rows, rules) {
       return ok;
     });
     const files = matched.reduce((a, r) => a + (r.files || 0), 0);
-    const status = files >= rule.min ? 'ok' : files > 0 ? 'part' : 'none';
     const modified = matched.map(r => r.modified).filter(Boolean).sort().pop() || null;
     const list = matched.flatMap(r => r.list || []);
+    const rv = f => { const v = ctx.reviews.get(f.r); return v ? v.s : ''; };
+    const approved = list.filter(f => rv(f) === 'approved').length;
+    const rejected = list.filter(f => rv(f) === 'rejected').length;
+    // بدون قائمة ملفات (مصدر الإكسل) لا توجد مراجعة، فيُحتسب المرفوع
+    const byApproval = ctx.basis === 'approved' && list.length === files && files > 0;
+    const pending = byApproval ? files - approved - rejected : 0;
+    const count = byApproval ? approved : (ctx.basis === 'approved' && !files ? 0 : files);
+    // بانتظار المراجعة: الملفات المرفوعة تكفي لو اعتُمدت؛ ناقص: لا تكفي حتى لو اعتُمدت كلها
+    const status = count >= rule.min ? 'ok' : pending > 0 && approved + pending >= rule.min ? 'review' : count > 0 || pending > 0 ? 'part' : 'none';
     const folder = matched.length === 1 && matched[0].term ? [matched[0].spec, matched[0].teacher, matched[0].term, matched[0].item].join('/') : null;
-    return { rule, files, status, modified, list, folder };
+    return { rule, files, status, modified, list, folder, approved, rejected, pending, count, byApproval };
   });
   const extra = rows.filter((r, i) => !used.has(i));
   const req = items.filter(x => x.rule.required);
   const done = req.filter(x => x.status === 'ok').length;
   const pct = req.length ? Math.round(done / req.length * 100) : null;
   const lastMod = rows.map(r => r.modified).filter(Boolean).sort().pop() || null;
-  return { items, extra, req, done, pct, lastMod, missing: req.filter(x => x.status !== 'ok') };
+  const pending = items.reduce((a, x) => a + x.pending, 0);
+  return { items, extra, req, done, pct, lastMod, pending, missing: req.filter(x => x.status !== 'ok') };
 }
+function reviewCtx() { return { reviews: state.reviews || new Map(), basis: state.basis || 'approved' }; }
+// القواعد المعتمدة: من إعدادات المدرسة إن وُجدت، وإلا من آخر قراءة
+const activeRules = () => (state.cfg && state.cfg.rules && state.cfg.rules.length ? state.cfg.rules : (state.snap && state.snap.rules) || []);
 
 // الفصول الدراسية الموجودة بالمجلدات (ف1، ف2...) - الافتراضي الفصل اللي فيه أكثر ملفات
 function termsOf(rows) { return [...new Set((rows || []).map(r => r.term).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar', { numeric: true })); }
@@ -171,7 +184,7 @@ function teachersFromSnap() {
   }
   // معلم مربوط بحساب لكن ما عنده ولا ملف (ما يطلع بالإكسل أصلاً)
   for (const [folder] of state.map) if (!by.has(folder)) by.set(folder, { name: folder, spec: '', rows: [] });
-  const rules = snap.rules || [];
+  const rules = activeRules();
   const list = [...by.values()].map(t => ({ ...t, ev: evaluateTeacher(t.rows, rules), profile: state.map.get(t.name) || null }));
   // معلمو المنصة اللي ما لقينا لهم ولا ملف (مجلداتهم فاضية، فما تطلع بالإكسل أصلاً) - إلا المستبعدين (إداريين...)
   const linked = new Set(list.map(t => t.profile).filter(Boolean));
@@ -190,12 +203,14 @@ async function saveExcluded() {
 
 /* ---------- البيانات ---------- */
 async function loadManagerData() {
-  const [src, snap, map, staff, exc] = await Promise.all([
+  const [src, snap, map, staff, exc, cfg, rev] = await Promise.all([
     sb.from('achv_sources').select('xlsx_url, folder_url, updated_at').eq('school_id', currentSchoolId).maybeSingle(),
     sb.from('achv_snapshots').select('rows, rules, fetched_at, source, viewer, root').eq('school_id', currentSchoolId).maybeSingle(),
     sb.from('achv_teacher_map').select('folder_name, profile_id').eq('school_id', currentSchoolId),
     sb.from('profiles').select('id, full_name, role').eq('school_id', currentSchoolId).in('role', ['admin', 'deputy', 'teacher']).order('full_name'),
     sb.from('school_settings').select('value').eq('school_id', currentSchoolId).eq('key', 'achv_excluded').maybeSingle(),
+    sb.from('school_settings').select('value').eq('school_id', currentSchoolId).eq('key', 'achv_rules').maybeSingle(),
+    sb.from('achv_file_reviews').select('path, status, note').eq('school_id', currentSchoolId),
   ]);
   if (src.error && /achv_|does not exist|schema cache/i.test(src.error.message || '')) { state.missingSql = true; return; }
   state.missingSql = false;
@@ -204,6 +219,9 @@ async function loadManagerData() {
   state.map = new Map((map.data || []).filter(m => m.profile_id).map(m => [m.folder_name, m.profile_id]));
   state.staff = staff.data || [];
   state.excluded = new Set((exc && exc.data && exc.data.value && exc.data.value.ids) || []);
+  state.cfg = (cfg && cfg.data && cfg.data.value) || null;
+  state.basis = (state.cfg && state.cfg.basis) || 'approved';
+  state.reviews = new Map(((rev && rev.data) || []).map(v => [v.path, { s: v.status, n: v.note }]));
 }
 
 async function syncNow(silent = false) {
@@ -258,7 +276,7 @@ async function scanFolder(silent = false) {
   if (!r.ok) msg = r.error || 'تعذّرت قراءة المجلد';
   else {
     const rows = rowsFromScan(r.data);
-    const old = state.snap && state.snap.rules && state.snap.rules.length ? state.snap.rules : defaultRules(rows);
+    const old = activeRules().length ? activeRules() : defaultRules(rows);
     const { data: { user } } = await sb.auth.getUser();
     const { error } = await sb.from('achv_snapshots').upsert({ school_id: currentSchoolId, rows, rules: old, fetched_at: new Date().toISOString(), fetched_by: user ? user.id : null, source: 'folder', viewer: r.data.viewer, root: r.data.root }, { onConflict: 'school_id' });
     if (error) msg = 'تعذر حفظ النتيجة: ' + error.message;
@@ -335,7 +353,7 @@ function renderManager() {
   const el = root();
   if (state.missingSql) { el.innerHTML = '<div class="form-card av-empty">القسم يحتاج تشغيل ملف sql/achievement_files.sql بقاعدة البيانات.</div>'; return; }
   const teachers = teachersFromSnap();
-  const rules = (state.snap && state.snap.rules) || [];
+  const rules = activeRules();
   const specs = [...new Set(teachers.map(t => t.spec).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
   const f = state.filter;
   const list = visibleTeachers(teachers);
@@ -369,6 +387,7 @@ function renderManager() {
       </select>
       <span class="av-grow"></span>
       <button class="btn-primary av-view-btn" id="av-viewer" ${state.snap && state.snap.source === 'folder' ? '' : 'disabled title="يتطلب القراءة من مجلد ون درايف"'}>استعراض الملفات</button>
+      <button class="btn-secondary" id="av-rules">إعدادات البنود</button>
       <button class="btn-secondary" id="av-remind">تذكير الناقصين</button>
       <button class="btn-secondary" id="av-print">طباعة التقرير</button>
     </div>
@@ -417,12 +436,13 @@ function bar(pct) {
   const cls = pct == null ? 'idle' : pct === 100 ? 'good' : pct >= 50 ? 'warn' : 'bad';
   return `<div class="av-bar ${cls}"><i style="width:${pct || 0}%"></i></div><b class="av-pct ${cls}">${pct == null ? '—' : pct + '%'}</b>`;
 }
-const ST_LABEL = { ok: 'مكتمل', part: 'ناقص', none: 'فارغ' };
+const ST_LABEL = { ok: 'مكتمل', part: 'ناقص', none: 'فارغ', review: 'بانتظار المراجعة' };
+const countTxt = x => x.byApproval ? `معتمد ${x.approved} من ${x.rule.min}` : `${x.files} من ${x.rule.min}`;
 
 function teacherRow(t) {
   const ev = t.ev, open = state.open.has(t.name);
   const stale = daysSince(ev.lastMod);
-  const chips = ev.missing.slice(0, 4).map(x => `<span class="av-chip ${x.status}">${esc(x.rule.name)}${x.rule.min > 1 ? ` ${x.files}/${x.rule.min}` : ''}</span>`).join('')
+  const chips = (ev.pending ? `<span class="av-chip review">${ev.pending} ملف بانتظار المراجعة</span>` : '') + ev.missing.slice(0, 4).map(x => `<span class="av-chip ${x.status}">${esc(x.rule.name)}${x.rule.min > 1 ? ` ${x.count}/${x.rule.min}` : ''}</span>`).join('')
     + (ev.missing.length > 4 ? `<span class="av-chip more">+${ev.missing.length - 4}</span>` : '');
   return `
   <div class="av-row ${open ? 'open' : ''}" data-t="${esc(t.name)}">
@@ -433,7 +453,7 @@ function teacherRow(t) {
       </button>
       <div class="av-progress">${bar(ev.pct)}</div>
       ${state.snap && state.snap.source === 'folder' && !t.noFolder ? `<button type="button" class="av-peek" data-t="${esc(t.name)}" title="استعراض ملفات ${esc(t.name)}">استعراض</button>` : ''}
-      <div class="av-missing">${ev.pct === 100 ? '<span class="av-chip ok">كل البنود الإلزامية مكتملة</span>' : chips}</div>
+      <div class="av-missing">${ev.pct === 100 ? '<span class="av-chip ok">كل البنود الإلزامية مكتملة</span>' + (ev.pending ? `<span class="av-chip review">${ev.pending} بانتظار المراجعة</span>` : '') : chips}</div>
       ${t.noFolder ? `<div class="av-nofolder-box"><span class="av-nofolder">لم نجد ملفات باسمه</span><button class="text-action-btn av-exclude" data-id="${t.profile}" title="إخفاؤه من متابعة ملفات الإنجاز (إداري، مرشد طلابي...)">ليس معلمًا؟ استبعاد</button></div>` : `<select class="av-link ${t.profile ? '' : 'need'}" data-folder="${esc(t.name)}" title="ربط المجلد بحساب المعلم" aria-label="ربط ${esc(t.name)} بحساب">${staffOptions(t.profile)}</select>`}
     </div>
     ${open ? teacherDetail(t) : ''}
@@ -443,23 +463,41 @@ function teacherRow(t) {
 function filesCell(list, n) {
   return list && list.length ? `<button type="button" class="av-files-btn" aria-expanded="false">${n} <span>ملف ▾</span></button>` : String(n);
 }
-function fileTile(snap, f) {
+const REV_TXT = { approved: 'معتمد', rejected: 'مرفوض' };
+const reviewsFor = snap => (snap && snap.reviewsMap) || state.reviews || new Map();
+function fileTile(snap, f, controls = false, reviews = state.reviews || new Map()) {
   const k = EXT_KIND[fileExt(f.r)] || 'other'; const href = spLink(snap, f.r);
-  return `<a class="av-file" ${href ? `href="${esc(href)}" target="_blank" rel="noopener"` : ''} title="${esc(fileName(f.r))}">
-      <span class="av-ext ${k}">${esc(fileExt(f.r).toUpperCase() || 'ملف')}</span><span class="av-fn">${esc(fileName(f.r))}</span><small>${esc(fmtDT(f.t, false))}${f.s ? ' · ' + fmtSize(f.s) : ''}</small></a>`;
+  const v = reviews.get(f.r); const st = v ? v.s : '';
+  const a = `<a class="av-file ${st}" ${href ? `href="${esc(href)}" target="_blank" rel="noopener"` : ''} title="${esc(fileName(f.r))}${v && v.n ? ' — ' + esc(v.n) : ''}">
+      <span class="av-ext ${k}">${esc(fileExt(f.r).toUpperCase() || 'ملف')}</span><span class="av-fn">${esc(fileName(f.r))}</span><small>${st ? `<b class="av-rv ${st}">${REV_TXT[st]}</b> · ` : ''}${esc(fmtDT(f.t, false))}${f.s ? ' · ' + fmtSize(f.s) : ''}</small></a>`;
+  if (!controls) return a;
+  return `<div class="av-ftile ${st}">${a}<div class="av-rvbtns">
+      <button type="button" class="ok ${st === 'approved' ? 'on' : ''}" data-rev="${st === 'approved' ? 'clear' : 'approved'}" data-path="${esc(f.r)}" title="${st === 'approved' ? 'إلغاء الاعتماد' : 'اعتماد الملف'}">✓</button>
+      <button type="button" class="no ${st === 'rejected' ? 'on' : ''}" data-rev="${st === 'rejected' ? 'clear' : 'rejected'}" data-path="${esc(f.r)}" title="${st === 'rejected' ? 'إلغاء الرفض' : 'رفض الملف'}">✕</button></div></div>`;
+}
+// حفظ مراجعة ملف أو عدة ملفات (اعتماد/رفض/إلغاء)
+async function saveReviews(paths, status) {
+  const now = new Date().toISOString();
+  const { data: { user } } = await sb.auth.getUser();
+  const res = status === 'clear'
+    ? await sb.from('achv_file_reviews').delete().eq('school_id', currentSchoolId).in('path', paths)
+    : await sb.from('achv_file_reviews').upsert(paths.map(p => ({ school_id: currentSchoolId, path: p, status, note: '', reviewed_by: user ? user.id : null, reviewed_at: now })), { onConflict: 'school_id,path' });
+  if (res.error) { toast('تعذر حفظ المراجعة: ' + res.error.message, true); return false; }
+  paths.forEach(p => { if (status === 'clear') state.reviews.delete(p); else state.reviews.set(p, { s: status, n: '' }); });
+  return true;
 }
 function filesRow(snap, list, folder) {
   if (!list || !list.length) return '';
-  return `<tr class="av-files-row" hidden><td colspan="5"><div class="av-files">
-    ${list.map(f => fileTile(snap, f)).join('')}
+  return `<tr class="av-files-row" hidden><td colspan="6"><div class="av-files">
+    ${list.map(f => fileTile(snap, f, false, reviewsFor(snap))).join('')}
     ${folder && spLink(snap, folder, true) ? `<a class="av-file av-file-folder" href="${esc(spLink(snap, folder, true))}" target="_blank" rel="noopener"><span class="av-ext folder">📁</span><span class="av-fn">فتح مجلد البند في ون درايف</span></a>` : ''}
   </div></td></tr>`;
 }
 function itemsTable(ev, snap = state.snap) {
-  return `<div class="av-tablewrap"><table class="av-table"><thead><tr><th>البند</th><th>الملفات</th><th>المطلوب</th><th>الحالة</th><th>آخر تعديل</th></tr></thead><tbody>
+  return `<div class="av-tablewrap"><table class="av-table"><thead><tr><th>البند</th><th>الملفات</th><th>المعتمد</th><th>المطلوب</th><th>الحالة</th><th>آخر تعديل</th></tr></thead><tbody>
     ${ev.items.map(x => `<tr class="${x.rule.required ? '' : 'opt'}"><td>${x.rule.no != null ? x.rule.no + '- ' : ''}${esc(x.rule.name)}${x.rule.required ? '' : ' <small>(اختياري)</small>'}</td>
-      <td>${filesCell(x.list, x.files)}</td><td>${x.rule.min}</td><td><span class="av-st ${x.status}">${ST_LABEL[x.status]}</span></td><td>${esc(fmtDT(x.modified, false))}</td></tr>${filesRow(snap, x.list, x.folder)}`).join('')}
-    ${ev.extra.filter(r => r.files || !r.list).map(r => `<tr class="extra"><td>${esc(r.item)} <small>(غير موجود بقائمة البنود)</small></td><td>${filesCell(r.list, r.files)}</td><td>—</td><td>—</td><td>${esc(fmtDT(r.modified, false))}</td></tr>${filesRow(snap, r.list, null)}`).join('')}
+      <td>${filesCell(x.list, x.files)}</td><td>${x.byApproval ? x.approved + (x.rejected ? ` <small class="av-rej">(${x.rejected} مرفوض)</small>` : '') : '—'}</td><td>${x.rule.min}</td><td><span class="av-st ${x.status}">${ST_LABEL[x.status]}</span></td><td>${esc(fmtDT(x.modified, false))}</td></tr>${filesRow(snap, x.list, x.folder)}`).join('')}
+    ${ev.extra.filter(r => r.files || !r.list).map(r => `<tr class="extra"><td>${esc(r.item)} <small>(غير موجود بقائمة البنود)</small></td><td>${filesCell(r.list, r.files)}</td><td>—</td><td>—</td><td>—</td><td>${esc(fmtDT(r.modified, false))}</td></tr>${filesRow(snap, r.list, null)}`).join('')}
   </tbody></table></div>`;
 }
 // فتح وإغلاق قائمة ملفات البند دون إعادة رسم الصفحة
@@ -491,6 +529,7 @@ function bindManager() {
   const sp = $('av-spec'); if (sp) sp.onchange = () => { state.filter.spec = sp.value; renderManager(); };
   const so = $('av-sort'); if (so) so.onchange = () => { state.filter.sort = so.value; renderManager(); };
   const rm = $('av-remind'); if (rm) rm.onclick = openRemind;
+  const ru = $('av-rules'); if (ru) ru.onclick = openRulesEditor;
   const vw = $('av-viewer'); if (vw) vw.onclick = () => openViewer();
   root().querySelectorAll('.av-peek').forEach(b => b.onclick = () => openViewer({ teacher: b.dataset.t }));
   const pr = $('av-print'); if (pr) pr.onclick = printReport;
@@ -551,6 +590,7 @@ const ruleKey = r => r.no != null ? 'n' + r.no : 's' + norm(r.name);
 const V = { mode: 'teacher', teacher: null, rule: null, show: 'all' };
 function openViewer(opts = {}) {
   if (opts.teacher) { V.mode = 'teacher'; V.teacher = opts.teacher; }
+  V.order = visibleTeachers().map(t => t.name); // ترتيب ثابت أثناء المراجعة حتى لا يقفز المعلم بعد الاعتماد
   let wrap = document.querySelector('.avv');
   if (!wrap) {
     wrap = document.createElement('div');
@@ -565,14 +605,17 @@ function openViewer(opts = {}) {
 }
 function closeViewer() {
   const w = document.querySelector('.avv'); if (w) w.remove();
+  if (V.dirty) { V.dirty = false; renderManager(); }
   document.body.classList.remove('avv-open');
   document.removeEventListener('keydown', onViewerKey);
 }
 const stOk = x => x.status === 'ok';
+V.cards = [];
 function showOf(items) { return V.show === 'missing' ? items.filter(x => !stOk(x)) : V.show === 'ok' ? items.filter(stOk) : items; }
 function viewerData() {
-  const teachers = visibleTeachers().filter(t => !t.noFolder);
-  const rules = (state.snap && state.snap.rules) || [];
+  const pos = new Map((V.order || []).map((n, i) => [n, i]));
+  const teachers = visibleTeachers().filter(t => !t.noFolder).sort((a, b) => (pos.get(a.name) ?? 1e9) - (pos.get(b.name) ?? 1e9));
+  const rules = activeRules();
   if (!teachers.find(t => t.name === V.teacher)) V.teacher = teachers[0] ? teachers[0].name : null;
   if (!rules.find(r => ruleKey(r) === V.rule)) V.rule = rules[0] ? ruleKey(rules[0]) : null;
   return { teachers, rules };
@@ -584,15 +627,21 @@ function showChips(all) {
 function itemCard(x, title, sub) {
   const snap = state.snap;
   const folderHref = x.folder ? spLink(snap, x.folder, true) : null;
+  const unreviewed = (x.list || []).filter(f => !state.reviews.has(f.r)).map(f => f.r);
+  const cid = V.cards.push(unreviewed) - 1;
+  const counts = x.rule ? (x.byApproval ? `معتمد ${x.approved} / ${x.rule.min}${x.pending ? ` · ${x.pending} بانتظار` : ''}` : `${x.files} / ${x.rule.min}`) : `${x.files} ملف`;
   return `<section class="avv-card ${x.status}">
     <header><div><b>${title}</b>${sub ? `<small>${sub}</small>` : ''}</div>
-      <span class="av-st ${x.status}">${ST_LABEL[x.status]}</span><span class="avv-count">${x.files}${x.rule ? ' / ' + x.rule.min : ''}</span>
+      <span class="av-st ${x.status}">${ST_LABEL[x.status] || ''}</span><span class="avv-count">${counts}</span>
+      ${unreviewed.length ? `<button type="button" class="avv-all" data-revall="${cid}" title="اعتماد كل الملفات غير المراجعة في هذا البند">اعتماد الكل (${unreviewed.length})</button>` : ''}
       ${folderHref ? `<a class="avv-folder" href="${esc(folderHref)}" target="_blank" rel="noopener" title="فتح المجلد في ون درايف">📁</a>` : ''}</header>
-    ${x.list && x.list.length ? `<div class="av-files">${x.list.map(f => fileTile(snap, f)).join('')}</div>` : '<div class="avv-empty">لا توجد ملفات في هذا البند.</div>'}
+    ${x.list && x.list.length ? `<div class="av-files">${x.list.map(f => fileTile(snap, f, true)).join('')}</div>` : '<div class="avv-empty">لا توجد ملفات في هذا البند.</div>'}
   </section>`;
 }
 function drawViewer() {
   const wrap = document.querySelector('.avv'); if (!wrap) return;
+  V.cards = [];
+  const keepScroll = wrap.querySelector('.avv-main') ? wrap.querySelector('.avv-main').scrollTop : 0;
   const { teachers, rules } = viewerData();
   const term = state.filter.term;
   let side = '', main = '';
@@ -602,7 +651,7 @@ function drawViewer() {
     if (t) {
       const items = t.ev.items.map(x => ({ ...x }));
       const extra = t.ev.extra.filter(r => r.files).map(r => ({ status: 'ok', files: r.files, list: r.list, folder: null, extraName: r.item }));
-      main = `<div class="avv-head"><div><h3>${esc(t.name)}</h3><span>${esc(t.spec || '')}${term ? ' · ' + esc(term) : ''} · ${t.ev.done} من ${t.ev.req.length} بنود إلزامية</span></div>
+      main = `<div class="avv-head"><div><h3>${esc(t.name)}</h3><span>${esc(t.spec || '')}${term ? ' · ' + esc(term) : ''} · ${t.ev.done} من ${t.ev.req.length} بنود إلزامية مكتملة${t.ev.pending ? ` · <b class="av-rv review">${t.ev.pending} ملف بانتظار المراجعة</b>` : ''}</span></div>
           <div class="av-progress big">${bar(t.ev.pct)}</div>
           <div class="avv-nav"><button type="button" data-step="-1" ${i <= 0 ? 'disabled' : ''} title="السابق (↑)">‹ السابق</button><span>${i + 1} / ${teachers.length}</span><button type="button" data-step="1" ${i >= teachers.length - 1 ? 'disabled' : ''} title="التالي (↓)">التالي ›</button></div></div>
         ${showChips(items)}
@@ -629,6 +678,7 @@ function drawViewer() {
       <button type="button" class="avv-x" data-close aria-label="إغلاق">×</button></div>
     <div class="avv-body"><nav class="avv-side">${side}</nav><div class="avv-main">${main || '<div class="avv-empty">لا توجد بيانات. حدّث القراءة من ون درايف.</div>'}</div></div></div>`;
   const on = wrap.querySelector('.avv-it.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  const m = wrap.querySelector('.avv-main'); if (m && V.keep) { m.scrollTop = keepScroll; V.keep = false; }
 }
 function stepViewer(d) {
   const { teachers, rules } = viewerData();
@@ -637,10 +687,18 @@ function stepViewer(d) {
   drawViewer();
   const m = document.querySelector('.avv-main'); if (m) m.scrollTop = 0;
 }
-function onViewerClick(e) {
+async function onViewerClick(e) {
   const w = e.currentTarget;
   if (e.target === w || e.target.closest('[data-close]')) { closeViewer(); return; }
   const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.rev || b.dataset.revall) {
+    const paths = b.dataset.rev ? [b.dataset.path] : (V.cards[Number(b.dataset.revall)] || []);
+    if (!paths.length) return;
+    b.disabled = true;
+    if (await saveReviews(paths, b.dataset.rev || 'approved')) { V.keep = true; V.dirty = true; drawViewer(); }
+    else b.disabled = false;
+    return;
+  }
   if (b.dataset.mode) { V.mode = b.dataset.mode; drawViewer(); }
   else if (b.dataset.show) { V.show = b.dataset.show; drawViewer(); }
   else if (b.dataset.teacher) { V.teacher = b.dataset.teacher; drawViewer(); const m = w.querySelector('.avv-main'); if (m) m.scrollTop = 0; }
@@ -651,6 +709,62 @@ function onViewerKey(e) {
   if (!document.querySelector('.avv')) return;
   if (e.key === 'Escape') closeViewer();
   else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { if (/INPUT|SELECT|TEXTAREA/.test((e.target || {}).tagName || '')) return; e.preventDefault(); stepViewer(e.key === 'ArrowDown' ? 1 : -1); }
+}
+
+/* ---------- إعدادات البنود وطريقة الاحتساب ---------- */
+function openRulesEditor() {
+  let rules = activeRules().map(r => ({ ...r }));
+  if (!rules.length && state.snap) rules = defaultRules(state.snap.rows || []);
+  let basis = state.basis || 'approved';
+  const wrap = document.createElement('div');
+  wrap.className = 'av-modal';
+  const draw = () => {
+    wrap.innerHTML = `<div class="av-modal-card av-rules-card" role="dialog" aria-modal="true" aria-label="إعدادات البنود">
+      <h3>إعدادات بنود ملف الإنجاز</h3>
+      <p>نسبة إنجاز المعلم = عدد البنود الإلزامية المكتملة ÷ عدد البنود الإلزامية. يكتمل البند عندما يبلغ عدد ملفاته الحد الأدنى.</p>
+      <div class="av-basis">
+        <label><input type="radio" name="av-basis" value="approved" ${basis === 'approved' ? 'checked' : ''}><span><b>المعتمد بعد المراجعة</b><small>يُحتسب الملف بعد اعتماد الوكيل له فقط (موصى به)</small></span></label>
+        <label><input type="radio" name="av-basis" value="files" ${basis === 'files' ? 'checked' : ''}><span><b>كل الملفات المرفوعة</b><small>يُحتسب كل ملف موجود في مجلد البند دون مراجعة</small></span></label>
+      </div>
+      <div class="av-tablewrap av-rules-wrap"><table class="av-table"><thead><tr><th>رقم</th><th>البند</th><th>إلزامي</th><th>الحد الأدنى</th><th></th></tr></thead><tbody>
+      ${rules.map((r, i) => `<tr data-i="${i}"><td><input class="avr-no" type="number" min="1" max="99" value="${r.no ?? ''}"></td><td><input class="avr-name" type="text" value="${esc(r.name)}"></td>
+        <td><input class="avr-req" type="checkbox" ${r.required ? 'checked' : ''}></td><td><input class="avr-min" type="number" min="1" max="50" value="${r.min || 1}"></td>
+        <td><button type="button" class="text-action-btn avr-del" title="حذف البند">حذف</button></td></tr>`).join('')}
+      </tbody></table></div>
+      <button type="button" class="text-action-btn" id="avr-add">+ إضافة بند</button>
+      <p class="av-hint">رقم البند يطابق الرقم في بداية اسم مجلد البند (مثل «1- نماذج من أوراق العمل»).</p>
+      <div class="av-modal-actions"><button class="btn-primary" id="avr-save">حفظ</button><button class="btn-secondary" id="avr-cancel">إلغاء</button></div>
+    </div>`;
+  };
+  const collect = () => {
+    basis = (wrap.querySelector('input[name=av-basis]:checked') || {}).value || basis;
+    rules = [...wrap.querySelectorAll('tbody tr')].map(tr => ({
+      no: tr.querySelector('.avr-no').value ? Number(tr.querySelector('.avr-no').value) : null,
+      name: tr.querySelector('.avr-name').value.trim(),
+      required: tr.querySelector('.avr-req').checked,
+      min: Math.max(1, Math.min(50, Number(tr.querySelector('.avr-min').value) || 1)),
+      note: '',
+    }));
+  };
+  draw();
+  document.body.appendChild(wrap);
+  wrap.addEventListener('click', async e => {
+    if (e.target === wrap || e.target.id === 'avr-cancel') { wrap.remove(); return; }
+    if (e.target.classList.contains('avr-del')) { collect(); rules.splice(Number(e.target.closest('tr').dataset.i), 1); draw(); return; }
+    if (e.target.id === 'avr-add') { collect(); rules.push({ no: null, name: '', required: true, min: 1, note: '' }); draw(); const n = wrap.querySelectorAll('.avr-name'); n[n.length - 1].focus(); return; }
+    if (e.target.id === 'avr-save') {
+      collect();
+      const clean = rules.filter(r => r.name);
+      const nos = clean.map(r => r.no).filter(n => n != null);
+      if (new Set(nos).size !== nos.length) { toast('يوجد رقم بند مكرر', true); return; }
+      e.target.disabled = true;
+      const value = { rules: clean.sort((a, b) => (a.no ?? 99) - (b.no ?? 99)), basis };
+      const { error } = await sb.from('school_settings').upsert({ school_id: currentSchoolId, key: 'achv_rules', value, updated_at: new Date().toISOString() }, { onConflict: 'school_id,key' });
+      if (error) { e.target.disabled = false; toast('تعذر الحفظ: ' + error.message, true); return; }
+      state.cfg = value; state.basis = basis;
+      wrap.remove(); renderManager(); toast('تم حفظ إعدادات البنود');
+    }
+  });
 }
 
 /* ---------- تذكير الناقصين (تنبيه شخصي لكل معلم + إشعار جوال) ---------- */
@@ -688,7 +802,8 @@ async function openRemind() {
     let ok = 0, fail = 0;
     for (const t of targets) {
       send.textContent = `جارٍ الإرسال ${ok + fail + 1}/${targets.length}...`;
-      const lines = t.ev.missing.map(x => `• ${x.rule.name}${x.rule.min > 1 || x.files ? ` (لديك ${x.files} من ${x.rule.min})` : ''}`);
+      const lines = t.ev.missing.filter(x => x.status !== 'review').map(x => `• ${x.rule.name}${x.rule.min > 1 || x.count ? ` (${x.byApproval ? 'المعتمد' : 'لديك'} ${x.count} من ${x.rule.min})` : ''}`);
+      if (!lines.length) continue;
       const { error } = await sb.rpc('notice_send', {
         p_title: 'ملف الإنجاز: بنود تحتاج إكمال',
         p_body: `نأمل إكمال البنود التالية في ملف إنجازك على ون درايف:\n${lines.join('\n')}`,
@@ -705,8 +820,8 @@ async function openRemind() {
 function printReport() {
   const teachers = teachersFromSnap().filter(t => !state.filter.spec || t.spec === state.filter.spec)
     .sort((a, b) => a.spec.localeCompare(b.spec, 'ar') || a.name.localeCompare(b.name, 'ar'));
-  const req = ((state.snap && state.snap.rules) || []).filter(r => r.required);
-  const mark = x => x.status === 'ok' ? `<td class="ok">${x.files}</td>` : x.status === 'part' ? `<td class="part">${x.files}/${x.rule.min}</td>` : '<td class="none">✗</td>';
+  const req = activeRules().filter(r => r.required);
+  const mark = x => x.status === 'ok' ? `<td class="ok">${x.count}</td>` : x.status === 'part' || x.status === 'review' ? `<td class="part">${x.count}/${x.rule.min}${x.pending ? '*' : ''}</td>` : '<td class="none">✗</td>';
   const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>متابعة ملفات الإنجاز</title>
   <style>
     body{font-family:Tahoma,Arial,sans-serif;margin:18px;color:#152238}
@@ -745,14 +860,16 @@ async function renderTeacher() {
   }
   const myTerms = termsOf(data.rows);
   const myTerm = myTerms[myTerms.length - 1] || '';
-  const ev = evaluateTeacher((data.rows || []).filter(r => !myTerm || !r.term || r.term === myTerm), data.rules || []);
+  data.reviewsMap = new Map(Object.entries(data.reviews || {}));
+  const ev = evaluateTeacher((data.rows || []).filter(r => !myTerm || !r.term || r.term === myTerm), data.rules || [], { reviews: data.reviewsMap, basis: data.basis || 'approved' });
   el.innerHTML = `
     <div class="form-card av-mine">
       <div class="av-mine-head">
         <div><h3>ملف إنجازي${myTerm ? ' - ' + esc(myTerm) : ''}</h3><span>آخر قراءة ${data.fetched_at ? esc(ago(data.fetched_at)) : '—'}</span></div>
         <div class="av-progress big">${bar(ev.pct)}</div>
       </div>
-      ${ev.missing.length ? `<div class="av-note">نأمل إكمال: ${ev.missing.map(x => esc(x.rule.name) + (x.rule.min > 1 ? ` (${x.files}/${x.rule.min})` : '')).join('، ')}</div>`
+      ${ev.pending ? `<div class="av-note">${ev.pending} ملف بانتظار مراجعة الوكيل واعتماده.</div>` : ''}
+      ${ev.missing.filter(x => x.status !== 'review').length ? `<div class="av-note">نأمل إكمال: ${ev.missing.filter(x => x.status !== 'review').map(x => esc(x.rule.name) + (x.rule.min > 1 ? ` (${x.count}/${x.rule.min})` : '')).join('، ')}</div>`
         : ev.req.length ? '<div class="av-note good">كل البنود الإلزامية مكتملة. شكرًا لك.</div>' : ''}
       ${itemsTable(ev, data)}
       <p class="av-hint">البيانات تُقرأ من مجلدك في ون درايف. بعد إضافتك للملفات، تظهر هنا بعد التحديث القادم من الإدارة.</p>
