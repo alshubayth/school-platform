@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodTime, ASSET_VERSION } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, tileDesc, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodTime, ASSET_VERSION } from './core.js';
 
 // أسبوع المتابعة بالرئيسية = الأسبوع القادم (اللي يُفترض المعلمون يدخلون خطته خلال هذا الأسبوع)
 const planWeek = () => Math.min(40, academicWeekInfo().next);
@@ -334,9 +334,9 @@ export function renderWorkspacePage(groupKey, view) {
       </div>
     </div>
     <div class="wsp-grid">
-      ${list.map(t => `<a href="#/${t.key}" class="wsp-card" data-key="${t.key}">
-        <span class="wsp-card-ic" style="background:${bg}; color:${fg};">${t.icon}</span>
-        <span class="wsp-card-main"><b>${esc(tileTitle(t))}</b><span>${esc(t.key === 'budget' ? budgetTileDesc() : (t.key === 'duty' && currentProfile.role === 'teacher' ? 'المناوبة المسندة لي' : t.desc))}</span></span>
+      ${list.map(t => `<a href="#/${t.key}" class="wsp-card${t.step ? ' wsp-step' : ''}" data-key="${t.key}">
+        <span class="wsp-card-ic" style="background:${bg}; color:${fg};">${t.icon}${t.step ? `<em class="wsp-n">${'١٢٣٤'[t.step - 1]}</em>` : ''}</span>
+        <span class="wsp-card-main"><b>${esc(tileTitle(t))}</b><span>${esc(t.key === 'budget' ? budgetTileDesc() : (t.key === 'duty' && currentProfile.role === 'teacher' ? 'المناوبة المسندة لي' : tileDesc(t)))}</span></span>
         <svg class="wsp-arrow" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
       </a>`).join('')}
     </div>`;
@@ -347,7 +347,7 @@ export function renderWorkspacePage(groupKey, view) {
 
 /* ترحيب + اختصارات سريعة حسب الدور */
 const QUICK_ACTIONS = {
-  admin: [['visits', 'زيارة صفية'], ['substitutes', 'جدول اليوم'], ['weekly-tracking', 'متابعة الخطط'], ['exams', 'الاختبارات واللجان'], ['exam-reports', 'تقارير الاختبارات']],
+  admin: [['visits', 'زيارة صفية'], ['substitutes', 'جدول اليوم'], ['weekly-tracking', 'متابعة الخطط'], ['final-exams', 'الاختبارات النهائية'], ['exam-reports', 'نتائج الاختبارات']],
   // المعلم: "خطتي الأسبوعية" و"بدلاء اليوم" موجودة أصلًا كأزرار بكرت «يومك» - ما نكررها هنا
   teacher: [['duty', 'مناوبتي'], ['visits', 'زياراتي الصفية'], ['tracking', 'متابعة الاختبارات']],
 };

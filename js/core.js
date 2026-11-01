@@ -77,6 +77,8 @@ const icons = {
   absence: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5 1.6 0 3 .5 4.2 1.5"/><rect x="14" y="13" width="8" height="8" rx="1.5"/><path d="M14 16h8M17 11.5v3M19 11.5v3"/></svg>',
   computerlab: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>',
   files: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7a2 2 0 0 1 2-2h4l2 2.5h8a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></svg>',
+  examprep: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><circle cx="9.5" cy="12.5" r="1.2"/><circle cx="9.5" cy="16.5" r="1.2"/><path d="M12.5 12.5h3M12.5 16.5h3"/></svg>',
+  examgrade: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="m8 12 2.5 2.5L16 9"/></svg>',
   examreports: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h5"/><path d="M8 16.5h3l1.2 2.4 1.3-4.8 1 2.4h2"/></svg>',
   admintasks: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/><path d="m8 14.5 2 2 4-4.5"/></svg>',
   contacts: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>',
@@ -89,7 +91,7 @@ export const GROUPS = [
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>' },
   { key: 'teachers', title: 'المعلمين', keys: ['notes', 'visits', 'achievements', 'weekly-tracking', 'duty', 'substitutes', 'teacher-absence', 'portal'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c1-3.5 3.5-5.5 6.5-5.5s5.5 2 6.5 5.5"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14.5c2.3 0 3.9 1.6 4.5 4"/></svg>' },
-  { key: 'exams', title: 'الاختبارات', keys: ['exams', 'tracking', 'exam-reports'],
+  { key: 'exams', title: 'الاختبارات', keys: ['exam-prep', 'exam-grading', 'exam-reports', 'final-exams'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>' },
   { key: 'admin', title: 'الإدارة', keys: ['accreditation', 'plan', 'admin-tasks', 'budget', 'computerlab', 'schools-admin', 'more'],
     icon: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M9 20V9"/></svg>' },
@@ -110,9 +112,12 @@ export const tiles = [
   { key: 'portal', icon: icons.portal, title: 'بوابة الموظفين',      desc: 'بيانات وملفات الموظفين',       roles: ['admin','deputy'], color: 'diamond-purple', group: 'teachers' },
   { key: 'perms',  icon: icons.perms,  title: 'إدارة الصلاحيات',     desc: 'إضافة مستخدمين وأدوار',        roles: ['admin'], color: 'diamond-navy', group: 'admin' },
   { key: 'duty',   icon: icons.duty,   title: 'المناوبات',   desc: 'توزيع المناوبات الأسبوعي والحضور',      roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'teachers' },
-  { key: 'exams',  icon: icons.exams,  title: 'الاختبارات',          desc: 'تسكين الطلاب والتوزيع على اللجان', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
-  { key: 'tracking', icon: icons.tracking, title: 'متابعة الاختبارات', desc: 'سير ورقة الإجابة وغياب الطلاب أثناء الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students' },
-  { key: 'exam-reports', icon: icons.examreports, title: 'تقارير الاختبارات', desc: 'تحليل نتائج الاختبارات وبنودها', roles: ['admin','deputy','teacher'], color: 'diamond-purple', group: 'students' },
+  { key: 'exams',  icon: icons.exams,  title: 'اللجان وتسكين الطلاب', desc: 'الاختبارات النهائية: تسكين الطلاب والتوزيع على اللجان', inGroup: 'exams', roles: ['admin','deputy'], color: 'diamond-purple', group: 'students' },
+  { key: 'tracking', icon: icons.tracking, title: 'متابعة سير الاختبارات', desc: 'الاختبارات النهائية: سير ورقة الإجابة وغياب الطلاب', inGroup: 'exams', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students' },
+  { key: 'exam-prep', icon: icons.examprep, title: 'إعداد الاختبار', desc: 'الأسئلة ونموذج الإجابة والمهارات، وطباعة أوراق الإجابة والأسئلة', roles: ['admin','deputy','teacher'], color: 'diamond-purple', group: 'students', mod: 'exam-reports', step: 1 },
+  { key: 'exam-grading', icon: icons.examgrade, title: 'التصحيح', desc: 'بالجوال، أو برفع ملف Remark، أو بإدخال الإجابات يدويًا', roles: ['admin','deputy','teacher'], color: 'diamond-purple', group: 'students', mod: 'exam-reports', step: 2 },
+  { key: 'exam-reports', icon: icons.examreports, title: 'النتائج والتقارير', desc: 'درجات الطلاب وتحليل الأسئلة والمهارات والنشر لأولياء الأمور', roles: ['admin','deputy','teacher'], color: 'diamond-purple', group: 'students', step: 3 },
+  { key: 'final-exams', icon: icons.exams, title: 'الاختبارات النهائية', desc: 'اللجان وتسكين الطلاب ومتابعة سير الاختبارات', roles: ['admin','deputy','teacher'], color: 'diamond-navy', group: 'students', virtual: true },
   { key: 'budget', icon: icons.budget, title: 'ميزانية المدرسة',     desc: 'الإيرادات والمصروفات وطلبات الصرف', roles: ['admin','deputy','teacher'], color: 'diamond-green', group: 'admin' },
   { key: 'achievements', icon: icons.files, title: 'ملفات الإنجاز', desc: 'اكتمال ملفات إنجاز المعلمين في ون درايف', roles: ['admin','deputy','teacher'], color: 'diamond-gold', group: 'teachers' },
   { key: 'visits', icon: icons.visits, title: 'الزيارات الصفية',     desc: 'زيارة حصص المعلمين وتقييمها',   roles: ['admin','deputy','teacher'], color: 'diamond-teal', group: 'teachers' },
@@ -126,13 +131,13 @@ export const tiles = [
   { key: 'settings', icon: icons.settings, title: 'الإعدادات', desc: 'بيانات المدرسة والطلاب والتقويم والحسابات', roles: ['admin','deputy'], color: 'diamond-navy' },
 ];
 // مساحة العمل لكل قسم تُستمد من GROUPS (مصدر واحد للترتيب والتجميع)
-tiles.forEach(t => { const g = GROUPS.find(x => x.keys.includes(t.key)); t.group = g ? g.key : (t.key === 'settings' ? null : 'admin'); });
+tiles.forEach(t => { const g = GROUPS.find(x => x.keys.includes(t.key)); t.group = g ? g.key : t.inGroup || (t.key === 'settings' ? null : 'admin'); });
 export function groupTilesFor(groupKey) {
   const g = GROUPS.find(x => x.key === groupKey);
   return g ? g.keys.map(k => tiles.find(t => t.key === k)).filter(t => t && isTileAllowed(t)) : [];
 }
 export function tileTitle(t) { if (t.key === 'substitutes' && currentProfile && currentProfile.role === 'teacher') return 'جدول يومي'; return t.key === 'budget' ? budgetTileTitle() : t.title; }
-export function tileDesc(t) { if (t.key === 'substitutes' && currentProfile && currentProfile.role === 'teacher') return 'حصصي اليوم وحصص الإشغال'; if (t.key === 'exam-reports' && currentProfile && currentProfile.role === 'teacher') return 'تصحيح أوراق الإجابة بالجوال وتقاريرها'; return t.key === 'budget' ? budgetTileDesc() : t.desc; }
+export function tileDesc(t) { if (t.key === 'substitutes' && currentProfile && currentProfile.role === 'teacher') return 'حصصي اليوم وحصص الإشغال'; if (t.key === 'exam-reports' && currentProfile && currentProfile.role === 'teacher') return 'نتائج اختباراتي وتحليلها'; if (t.key === 'exam-grading' && currentProfile && currentProfile.role === 'teacher') return 'بالجوال، أو بإدخال إجابات الطالب يدويًا'; return t.key === 'budget' ? budgetTileDesc() : t.desc; }
 
 /* شاشة الدخول: تاريخ اليوم بالهجري والميلادي + إظهار كلمة المرور + الدخول بزر Enter */
 (function initLoginExtras() {
@@ -280,7 +285,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-11-01a';
+export const ASSET_VERSION = '2026-11-01b';
 
 /* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
  * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
@@ -659,6 +664,20 @@ export function weekLabel(k, withDate = true) {
 }
 export { isoDate as toIsoDate };
 
+// «الاختبارات النهائية»: تبويبا اللجان والتسكين ومتابعة سير الاختبارات (كل منهما بصلاحيته)
+export function finalExamTabs() {
+  return [['exams', 'اللجان وتسكين الطلاب'], ['tracking', 'متابعة سير الاختبارات']]
+    .map(([key, title]) => ({ key, title, t: tiles.find(x => x.key === key) })).filter(x => x.t && isTileAllowed(x.t));
+}
+function renderFinalExamTabs(moduleId, active) {
+  const mod = document.getElementById(moduleId); if (!mod) return;
+  let bar = mod.querySelector(':scope > .fx-tabs');
+  if (!bar) { bar = document.createElement('div'); bar.className = 'fx-tabs'; const back = mod.querySelector(':scope > .back-link'); if (back) back.after(bar); else mod.prepend(bar); }
+  const list = finalExamTabs();
+  bar.innerHTML = `<div class="fx-title"><b>الاختبارات النهائية</b></div>${list.length > 1 ? `<div class="seg-tabs" role="tablist">${list.map(x => `<button type="button" role="tab" data-fx="${x.key}" class="${x.key === active ? 'active' : ''}">${x.title}</button>`).join('')}</div>` : ''}`;
+  bar.querySelectorAll('[data-fx]').forEach(b => b.onclick = () => { if (b.dataset.fx !== active) openTile(b.dataset.fx); });
+}
+
 export function isTileAllowed(t) {
   // تبويب "إدارة المدارس والخدمات" خاص بالدور الحقيقي "owner" بس (بدون تحويله لـ"admin")
   if (t.key === 'schools-admin') return isOwnerAccount;
@@ -667,11 +686,13 @@ export function isTileAllowed(t) {
   if (t.key === 'plan' && role === 'teacher' && !isOpPlanMember) return false;
   if (t.key === 'accreditation' && role === 'teacher' && !hasAccAssignment) return false;
   if (t.key === 'tracking' && role === 'teacher' && !hasExamAssignment) return false;
+  // «الاختبارات النهائية» يجمع اللجان والتسكين ومتابعة السير: يظهر إذا سُمح بأحدهما
+  if (t.key === 'final-exams') return finalExamTabs().length > 0;
   if (t.key === 'weekly-tracking' && role === 'teacher' && !hasWeeklyTrackingAccess) return false;
   // فلترة حسب الخدمات المفعّلة لهذي المدرسة (المرحلة الأولى من دعم تعدد المدارس) - لو ما فيه
   // قائمة خدمات محمّلة (توافق خلفي، أو قبل تنفيذ SQL الترقية) نسمح بعرض كل شي زي ما هو
   // الإعدادات أساسية لكل مدرسة، ما تنطفي من قائمة الخدمات
-  if (t.key !== 'settings' && t.key !== 'student-data' && Array.isArray(currentSchoolModules) && !currentSchoolModules.includes(t.key)) return false;
+  if (t.key !== 'settings' && t.key !== 'student-data' && Array.isArray(currentSchoolModules) && !currentSchoolModules.includes(t.mod || t.key)) return false;
   return true;
 }
 
@@ -833,7 +854,8 @@ function renderModuleHeader(key) {
   let desc = t.desc;
   if (key === 'duty' && currentProfile.role === 'teacher') desc = 'المناوبة المسندة لي';
   if (key === 'achievements' && currentProfile.role === 'teacher') desc = 'بنود ملف إنجازي واكتمالها';
-  if (key === 'exam-reports' && currentProfile.role === 'teacher') desc = 'تصحيح أوراق الإجابة بالجوال وتقارير اختباراتي';
+  if (key === 'exam-reports' && currentProfile.role === 'teacher') desc = 'نتائج اختباراتي وتحليلها';
+  if (key === 'exam-grading' && currentProfile.role === 'teacher') desc = 'بالجوال، أو بإدخال إجابات الطالب يدويًا';
   if (key === 'substitutes' && currentProfile.role === 'teacher') { title = 'جدول يومي'; desc = 'حصصي اليوم وحصص الإشغال'; }
   if (key === 'budget') { title = budgetTileTitle(); desc = budgetTileDesc(); }
   const g = GROUPS.find(x => x.key === t.group);
@@ -887,18 +909,23 @@ export async function openTile(key, title, sub = null) {
     document.getElementById('duty-module').classList.remove('hidden');
     const { loadDutyBoardModule } = await import('./duty-board.js?v=' + ASSET_VERSION);
     loadDutyBoardModule();
+  } else if (key === 'final-exams') {
+    const first = finalExamTabs()[0];
+    if (first) { history.replaceState({ key: first.key }, '', '#/' + first.key); return openTile(first.key, null, sub); }
   } else if (key === 'exams') {
+    renderFinalExamTabs('exams-module', 'exams');
     document.getElementById('exams-module').classList.remove('hidden');
     const { loadExamsModule } = await import('./exams.js');
     loadExamsModule(sub);
   } else if (key === 'tracking') {
+    renderFinalExamTabs('exam-tracking-module', 'tracking');
     document.getElementById('exam-tracking-module').classList.remove('hidden');
     const { loadExamTrackingTile } = await import('./exam-tracking.js');
     loadExamTrackingTile(sub);
-  } else if (key === 'exam-reports') {
+  } else if (key === 'exam-reports' || key === 'exam-prep' || key === 'exam-grading') {
     document.getElementById('exam-reports-module').classList.remove('hidden');
     const { loadExamReportsModule } = await import('./exam-reports.js');
-    loadExamReportsModule(sub);
+    loadExamReportsModule(sub, key === 'exam-prep' ? 'prep' : key === 'exam-grading' ? 'grade' : 'results');
   } else if (key === 'schedule') {
     document.getElementById('schedule-module').classList.remove('hidden');
     const [{ loadScheduleModule }] = await Promise.all([import('./schedule.js'), import('./schedule-pdf.js')]);

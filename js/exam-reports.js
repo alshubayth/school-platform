@@ -73,7 +73,63 @@ let currentReport = null; // آخر تقرير محفوظ تم فتحه بشاش
 const isTeacherView = () => !!(currentProfile && currentProfile.role === 'teacher');
 // الموجه الطلابي يطّلع على كل التقارير والفصول، ويبقى تعديله على تقاريره هو فقط
 const isScopedTeacher = () => isTeacherView() && currentProfile.staff_role !== 'counselor';
-export async function loadExamReportsModule(sub = null) {
+/* ---------- ثلاثة أقسام على مراحل العمل: إعداد الاختبار ← التصحيح ← النتائج والتقارير ---------- */
+let SECTION = 'results', GRADE_METHOD = 'camera', PREP_TAB = 'sheet';
+const SEC_INFO = {
+  prep: { n: 1, t: 'إعداد الاختبار', d: 'جهّز نموذج الإجابة ثم اطبع أوراق الطلاب', steps: ['بيانات الاختبار', 'الأسئلة والإجابات والمهارات', 'النماذج', 'الطباعة'] },
+  grade: { n: 2, t: 'التصحيح', d: 'اختر طريقة التصحيح المناسبة، وتُحفظ النتائج في «النتائج والتقارير»', steps: ['اختر الاختبار', 'صحّح الأوراق', 'راجع الأوراق غير المقروءة', 'احفظ النتائج'] },
+  results: { n: 3, t: 'النتائج والتقارير', d: 'نتائج الاختبارات المصححة: الدرجات وتحليل الأسئلة والمهارات والنشر لأولياء الأمور', steps: [] },
+};
+const SEC_TILE = { prep: 'exam-prep', grade: 'exam-grading', results: 'exam-reports' };
+function renderSectionHead() {
+  const box = document.getElementById('er-sec-head'); if (!box) return;
+  const I = SEC_INFO[SECTION];
+  const teacher = isTeacherView();
+  const methods = [['camera', '📷', 'التصحيح بالجوال', 'صوّر أوراق الإجابة بالجوال'], ...(teacher ? [] : [['upload', '⬆', 'رفع ملف Remark', 'ملف الإكسل الناتج من الماسح']]), ['manual', '✎', 'إدخال يدوي', 'أضف ورقة طالب لاختبار مصحح']];
+  box.innerHTML = `<div class="er-sec">
+    <div class="er-sec-top"><div><span>${I.d}</span></div>
+      <nav class="er-sec-nav" aria-label="مراحل الاختبار">${['prep', 'grade', 'results'].map(k => `<button type="button" data-sec="${k}" class="${k === SECTION ? 'on' : ''}"><i>${'١٢٣'[SEC_INFO[k].n - 1]}</i>${SEC_INFO[k].t}</button>`).join('<em>←</em>')}</nav></div>
+    ${I.steps.length ? `<ol class="er-sec-steps">${I.steps.map(t => `<li>${t}</li>`).join('')}</ol>` : ''}
+    ${SECTION === 'prep' ? `<div class="seg-tabs er-sec-tabs" role="tablist"><button type="button" data-prep="sheet" class="${PREP_TAB === 'sheet' ? 'active' : ''}">ورقة إجابة ونموذج إجابة</button><button type="button" data-prep="paper" class="${PREP_TAB === 'paper' ? 'active' : ''}">ورقة أسئلة مع التظليل</button></div>` : ''}
+    ${SECTION === 'grade' ? `<div class="er-methods">${methods.map(([k, ic, t, d]) => `<button type="button" data-method="${k}" class="${GRADE_METHOD === k ? 'on' : ''}"><span class="ic">${ic}</span><b>${t}</b><small>${d}</small></button>`).join('')}</div>
+      ${GRADE_METHOD === 'manual' ? '<p class="er-sec-hint">اختر الاختبار من القائمة، ثم اضغط «إضافة ورقة» لإدخال إجابات الطالب كما ظلّلها في ورقته.</p>' : ''}` : ''}
+  </div>`;
+  box.querySelectorAll('[data-sec]').forEach(b => b.onclick = async () => { if (b.dataset.sec === SECTION) return; const { openTile } = await import('./core.js'); openTile(SEC_TILE[b.dataset.sec]); });
+  box.querySelectorAll('[data-prep]').forEach(b => b.onclick = () => { PREP_TAB = b.dataset.prep; applySection(true); });
+  box.querySelectorAll('[data-method]').forEach(b => b.onclick = () => { GRADE_METHOD = b.dataset.method; applySection(true); });
+}
+function applySection(route = false) {
+  const mod = document.getElementById('exam-reports-module');
+  ['prep', 'grade', 'results'].forEach(k => mod.classList.toggle('er-sec-' + k, k === SECTION));
+  mod.classList.toggle('er-gm-upload', SECTION === 'grade' && GRADE_METHOD === 'upload');
+  mod.classList.toggle('er-gm-manual', SECTION === 'grade' && GRADE_METHOD === 'manual');
+  renderSectionHead();
+  if (SECTION === 'prep') setMode(PREP_TAB, false);
+  else if (SECTION === 'grade') {
+    if (GRADE_METHOD === 'camera') setMode('camera', false);
+    else { setMode('reports', false); if (GRADE_METHOD === 'upload') openUpload(true); else { openUpload(false); loadSavedList(); } }
+  } else { setMode('reports', false); openUpload(false); }
+  if (route) setSubRoute(SECTION === 'prep' ? (PREP_TAB === 'paper' ? 'paper' : null) : SECTION === 'grade' ? (GRADE_METHOD === 'camera' ? null : GRADE_METHOD) : null, true);
+}
+// بعد الحفظ في قسم التصحيح: النتيجة تُفتح في «النتائج والتقارير»
+async function goToResults(id = null) {
+  if (SECTION === 'results') { if (id) openReport(id); else loadSavedList(); return; }
+  const { openTile } = await import('./core.js');
+  openTile('exam-reports', null, id);
+}
+
+export async function loadExamReportsModule(sub = null, section = 'results') {
+  // روابط قديمة: #/exam-reports/sheet|paper|camera ← القسم المناسب
+  if (section === 'results' && (sub === 'sheet' || sub === 'paper' || sub === 'camera')) {
+    const { openTile } = await import('./core.js');
+    const key = sub === 'camera' ? 'exam-grading' : 'exam-prep';
+    history.replaceState({ key: key + (sub === 'paper' ? '/paper' : '') }, '', '#/' + key + (sub === 'paper' ? '/paper' : ''));
+    return openTile(key, null, sub === 'paper' ? 'paper' : null);
+  }
+  SECTION = section;
+  if (section === 'prep') PREP_TAB = sub === 'paper' ? 'paper' : 'sheet';
+  if (section === 'grade') GRADE_METHOD = sub === 'upload' || sub === 'manual' ? sub : 'camera';
+  if (section === 'grade' && GRADE_METHOD === 'upload' && isTeacherView()) GRADE_METHOD = 'camera';
   document.getElementById('er-detail-view').classList.add('hidden');
   document.getElementById('er-list-view').classList.remove('hidden');
   document.getElementById('er-preview-card').classList.add('hidden');
@@ -83,21 +139,19 @@ export async function loadExamReportsModule(sub = null) {
   // المعلم: التصحيح بالجوال وتقاريره هو بس (بدون تصميم الأوراق ورفع ملفات Remark)
   document.getElementById('exam-reports-module').classList.toggle('er-teacher', isTeacherView());
   initAnswerSheetCard();
-  import('./nafes-teacher.js?v=' + ASSET_VERSION).then(m => m.renderNafesAssignments(document.getElementById('er-nafes-assign'))).catch(e => console.error('nafes', e));
-  if (sub === 'sheet') { setMode('sheet', false); loadSavedList(); return; }
-  if (sub === 'camera') { setMode('camera', false); loadSavedList(); return; }
-  if (sub === 'paper') { setMode('paper', false); loadSavedList(); return; }
-  setMode('reports', false);
-  const n = await loadSavedList();
+  if (section === 'prep') import('./nafes-teacher.js?v=' + ASSET_VERSION).then(m => m.renderNafesAssignments(document.getElementById('er-nafes-assign'))).catch(e => console.error('nafes', e));
+  else document.getElementById('er-nafes-assign').innerHTML = '';
+  applySection(false);
+  if (section !== 'results') return;
+  await loadSavedList();
   if (sub && sub !== 'reports') openReport(sub);
-  else if (isTeacherView() && !n) setMode('camera', false);
 }
 
 /* ---------- التصحيح بالجوال (ملف منفصل يتحمّل عند الحاجة) ---------- */
 let cameraKeyId = null;
 async function openCameraMode() {
   const { openOmrPanel } = await import('./omr-scan.js?v=' + ASSET_VERSION);
-  openOmrPanel({ keyId: cameraKeyId, openReport: id => { setMode('reports', false); openReport(id); } });
+  openOmrPanel({ keyId: cameraKeyId, openReport: id => goToResults(id) });
   cameraKeyId = null;
 }
 
@@ -415,7 +469,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
     document.getElementById('er-preview-card').classList.add('hidden');
     document.getElementById('er-file').value = '';
     openUpload(false);
-    await loadSavedList();
+    await goToResults();
     return;
   }
 
@@ -450,7 +504,7 @@ document.getElementById('er-save-btn').addEventListener('click', async () => {
   document.getElementById('er-preview-card').classList.add('hidden');
   document.getElementById('er-file').value = '';
   openUpload(false);
-  await loadSavedList();
+  await goToResults();
 });
 
 // درجة المقالي العظمى: من المفتاح المحفوظ، وإلا أعلى درجة بالملف
@@ -821,7 +875,7 @@ async function openReport(id) {
   document.getElementById('er-detail-title').textContent = data.title;
   document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`
     + (healed.removed ? ` — دُمجت ${healed.removed === 1 ? 'ورقة مكررة' : healed.removed === 2 ? 'ورقتان مكررتان' : healed.removed + (healed.removed <= 10 ? ' أوراق مكررة' : ' ورقة مكررة')} وأُعيد حساب التقرير` : healed.recalculated ? ' — أُعيد حساب التقرير' : '');
-  showErTab('dist');
+  showErTab('overview');
   const ekb = document.getElementById('er-edit-key-btn');
   ekb.textContent = data.raw_data && data.raw_data.models ? '↻ إعادة التصحيح بالمفتاح المحفوظ' : '✎ تعديل مفتاح الإجابة والدرجات';
   // تقرير الجوال ينبني من الأوراق المصححة: التعديل يكون من شاشة التصحيح نفسها
@@ -841,7 +895,7 @@ async function openReport(id) {
   }
   const cc = document.getElementById('er-camera-continue');
   cc.classList.toggle('hidden', !(cam && data.created_by === currentUserId && data.key_id));
-  cc.onclick = () => { cameraKeyId = data.key_id; document.getElementById('er-detail-view').classList.add('hidden'); document.getElementById('er-list-view').classList.remove('hidden'); setMode('camera'); };
+  cc.onclick = async () => { cameraKeyId = data.key_id; const { openTile } = await import('./core.js'); openTile('exam-grading'); };
   document.getElementById('er-editkey-card').classList.add('hidden');
   document.getElementById('er-updatefile-card').classList.add('hidden');
   // تحليل المهارات: يظهر إذا كانت أسئلة المفتاح مربوطة بمهارات
@@ -1109,7 +1163,7 @@ async function regradeModelReport() {
   if (error) { alert('تعذر الحفظ: ' + error.message); return; }
   periodicCache.delete(currentReport.id);
   currentReport = { ...currentReport, ...upd };
-  showErTab('dist');
+  showErTab('overview');
   renderReportStats(upd.stats);
 }
 
@@ -1185,7 +1239,7 @@ document.getElementById('er-editkey-save').addEventListener('click', async () =>
 
   currentReport = { ...currentReport, key_raw: keyRaw, stats, raw_data: newRawData };
   document.getElementById('er-editkey-card').classList.add('hidden');
-  showErTab('dist');
+  showErTab('overview');
   renderReportStats(stats);
 });
 
@@ -1195,14 +1249,15 @@ document.getElementById('er-back-to-list').addEventListener('click', () => {
   setSubRoute(null);
 });
 
-const ER_TABS = ['dist', 'hist', 'items', 'summary', 'itemstats', 'analysis', 'skills'];
+// أربعة تبويبات، كل تبويب يجمع أكثر من لوحة: نظرة عامة / توزيع الدرجات / تحليل الأسئلة / المهارات والعلاج
+const ER_GROUPS = { overview: ['analysis'], grades: ['dist', 'hist'], questions: ['items', 'summary', 'itemstats'], skills: ['skills'] };
+const ER_PANELS = ['dist', 'hist', 'items', 'summary', 'itemstats', 'analysis', 'skills'];
 function showErTab(tab) {
-  ER_TABS.forEach(t => {
-    document.getElementById(`er-tab-${t}`).classList.toggle('active', t === tab);
-    document.getElementById(`er-panel-${t}`).classList.toggle('hidden', t !== tab);
-  });
+  const g = ER_GROUPS[tab] ? tab : (Object.keys(ER_GROUPS).find(k => ER_GROUPS[k].includes(tab)) || 'overview');
+  Object.keys(ER_GROUPS).forEach(k => document.getElementById(`er-tab-${k}`).classList.toggle('active', k === g));
+  ER_PANELS.forEach(p => document.getElementById(`er-panel-${p}`).classList.toggle('hidden', !ER_GROUPS[g].includes(p)));
 }
-ER_TABS.forEach(t => document.getElementById(`er-tab-${t}`).addEventListener('click', () => showErTab(t)));
+Object.keys(ER_GROUPS).forEach(k => document.getElementById(`er-tab-${k}`).addEventListener('click', () => showErTab(k)));
 
 /* =========================================================================
  * عرض التقارير الستة

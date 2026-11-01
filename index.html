@@ -1344,6 +1344,7 @@
 
       <!-- ===== قائمة التقارير المحفوظة + رفع تقرير جديد ===== -->
       <div id="er-list-view">
+        <div id="er-sec-head"></div>
         <div class="er-flow" aria-label="طريقة العمل">
           <button type="button" class="er-flow-step" data-mode="sheet" style="--fc:#0E93A8;"><span class="efs-n">1</span><span class="efs-t"><b>صمّم ورقة الإجابة واحفظ المفتاح</b><span>عدد الأسئلة والخيارات، وباركود الطالب</span></span></button>
           <button type="button" class="er-flow-step" data-mode="sheet" style="--fc:#6249A6;"><span class="efs-n">2</span><span class="efs-t"><b>اطبع وصحّح في Remark</b><span>الأوراق تُقرأ بالماسح وتطلع ملف إكسل</span></span></button>
@@ -1359,7 +1360,7 @@
 
         <div id="er-mode-reports">
           <div class="er-reports-head">
-            <h4>التقارير المحفوظة</h4>
+            <h4>نتائج الاختبارات</h4>
             <div class="er-head-acts"><button type="button" class="btn-secondary er-audit-btn" id="er-audit-btn" title="يعيد حساب كل التقارير من أوراق الطلاب ويقارنها بالمحفوظ">✓ تحقق من الدرجات</button>
             <button type="button" class="btn-primary" id="er-upload-toggle" style="width:auto; padding:10px 16px;">+ رفع نتائج اختبار</button></div>
           </div>
@@ -1701,7 +1702,7 @@
 
       <!-- ===== تفاصيل تقرير محدد (٦ تقارير بتبويبات) ===== -->
       <div id="er-detail-view" class="hidden">
-        <span class="back-link" id="er-back-to-list">→ رجوع لقائمة التقارير</span>
+        <span class="back-link" id="er-back-to-list">→ رجوع لقائمة النتائج</span>
         <div class="bud-head" style="margin-top:10px;">
           <div class="bud-head-title" style="justify-content:space-between;">
             <div style="display:flex; align-items:center; gap:14px;">
@@ -1745,12 +1746,9 @@
           </div>
           <div class="seg-tabs er-model-switch hidden" id="er-model-switch" aria-label="عرض حسب النموذج"></div>
           <div class="bud-tabs" id="er-tabs" role="tablist">
-            <button class="bud-tab active" id="er-tab-dist" type="button">التوزيع التكرارى</button>
-            <button class="bud-tab" id="er-tab-hist" type="button">تقدير الطالب</button>
-            <button class="bud-tab" id="er-tab-items" type="button">تحليل البنود</button>
-            <button class="bud-tab" id="er-tab-summary" type="button">تقرير موجز</button>
-            <button class="bud-tab" id="er-tab-itemstats" type="button">إحصاءات البنود</button>
-            <button class="bud-tab" id="er-tab-analysis" type="button">تحليل شامل</button>
+            <button class="bud-tab active" id="er-tab-overview" type="button">نظرة عامة</button>
+            <button class="bud-tab" id="er-tab-grades" type="button">توزيع الدرجات</button>
+            <button class="bud-tab" id="er-tab-questions" type="button">تحليل الأسئلة</button>
             <button class="bud-tab hidden" id="er-tab-skills" type="button">المهارات والعلاج</button>
           </div>
         </div>
