@@ -246,7 +246,7 @@ async function syncNow(silent = false) {
 async function scanFolder(silent = false) {
   if (state.syncing) return;
   if (!(await extReady()) || !extOk()) {
-    state.lastError = 'القراءة من المجلد تحتاج إضافة مُدار (الإصدار 0.10 أو أحدث) في هذا المتصفح.';
+    state.lastError = 'لم تُكتشف إضافة مُدار (الإصدار 0.10 أو أحدث). إذا ثبّتها أو حدّثتها للتو فحدّث هذه الصفحة.';
     if (!silent) toast(state.lastError, true);
     renderManager(); return;
   }
