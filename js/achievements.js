@@ -144,7 +144,7 @@ function evaluateTeacher(rows, rules, ctx = reviewCtx()) {
     const status = count >= rule.min ? 'ok' : pending > 0 && approved + pending >= rule.min ? 'review' : count > 0 || pending > 0 ? 'part' : 'none';
     const folder = matched.length === 1 && matched[0].term ? [matched[0].spec, matched[0].teacher, matched[0].term, matched[0].item].join('/') : null;
     // بند إلزامي أُعفي منه المعلم: لا يدخل في نسبة الإنجاز
-    const na = rule.required && exempt.has(ruleKey(rule));
+    const na = exempt.has(ruleKey(rule));
     return { rule, files, status: na ? 'na' : status, realStatus: status, na, modified, list, folder, approved, rejected, pending: na ? 0 : pending, count, byApproval };
   });
   const extra = rows.filter((r, i) => !used.has(i));
@@ -509,7 +509,7 @@ function filesRow(snap, list, folder) {
     ${folder && spLink(snap, folder, true) ? `<a class="av-file av-file-folder" href="${esc(spLink(snap, folder, true))}" target="_blank" rel="noopener"><span class="av-ext folder">📁</span><span class="av-fn">فتح مجلد البند في ون درايف</span></a>` : ''}
   </div></td></tr>`;
 }
-const exemptBtn = (teacher, x) => teacher && x.rule.required ? `<button type="button" class="av-na-btn ${x.na ? 'on' : ''}" data-na-t="${esc(teacher)}" data-na-k="${esc(ruleKey(x.rule))}" title="${x.na ? 'إعادة البند مطلوبًا من المعلم' : 'هذا البند غير مطلوب من المعلم، فلا يدخل في نسبة إنجازه'}">${x.na ? '↺ مطلوب' : 'غير مطلوب'}</button>` : '';
+const exemptBtn = (teacher, x) => teacher ? `<button type="button" class="av-na-btn ${x.na ? 'on' : ''}" data-na-t="${esc(teacher)}" data-na-k="${esc(ruleKey(x.rule))}" title="${x.na ? 'إعادة البند مطلوبًا من المعلم' : 'هذا البند غير مطلوب من المعلم، فلا يدخل في نسبة إنجازه'}">${x.na ? '↺ مطلوب' : 'غير مطلوب'}</button>` : '';
 function itemsTable(ev, snap = state.snap, teacher = null) {
   return `<div class="av-tablewrap"><table class="av-table"><thead><tr><th>البند</th><th>الملفات</th><th>المعتمد</th><th>المطلوب</th><th>الحالة</th><th>آخر تعديل</th></tr></thead><tbody>
     ${ev.items.map(x => `<tr class="${x.rule.required ? '' : 'opt'}${x.na ? ' na' : ''}"><td>${x.rule.no != null ? x.rule.no + '- ' : ''}${esc(x.rule.name)}${x.rule.required ? '' : ' <small>(اختياري)</small>'}${x.na ? ' <small>(غير مطلوب منه)</small>' : ''}</td>
