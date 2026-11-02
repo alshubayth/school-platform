@@ -4546,3 +4546,7 @@ body.avv-open{ overflow:hidden; }
 .av-ms.pmini{ background:#EEF0FB; color:#3E4AA0; }
 .av-empty-day.small{ padding:18px; }
 .ml-p{ font-style:normal; font-size:11px; font-weight:800; background:#EEF0FB; color:#3E4AA0; border-radius:99px; padding:2px 8px; }
+.av-scope button{ font-size:12.5px; }
+.av-ref-sum{ display:flex; align-items:baseline; gap:8px; padding:10px 14px; border-radius:12px; background:#0F2447; color:#fff; }
+.av-ref-sum b{ font-size:26px; font-weight:900; line-height:1; }
+.av-ref-sum span{ font-size:13px; color:#C8D6EE; font-weight:700; }
