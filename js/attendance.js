@@ -25,6 +25,8 @@ const timeTxt = (g, p) => { const t = periodTime(g, p); return t ? `${fmtClock(t
 const plural = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n <= 10 ? `${n} ${few}` : `${n} ${many}`);
 const initials = n => { const w = String(n || '').split(/\s+/).filter(x => x && x !== 'بن'); return (w[0] ? w[0][0] : '') + (w.length > 1 ? w[w.length - 1].replace(/^ال(?=.{2})/, '')[0] : ''); };
 const DEFAULT_TEMPLATE = 'ولي أمر الطالب {الاسم}، نفيدكم بغياب ابنكم عن المدرسة اليوم {اليوم} {التاريخ}. {المدرسة}';
+const DEFAULT_PERIOD_TEMPLATE = 'ولي أمر الطالب {الاسم}، نفيدكم بغياب ابنكم عن الحصة {الحصة} اليوم {اليوم} {التاريخ}. {المدرسة}';
+const ORDINAL = ['', 'الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة', 'السادسة', 'السابعة'];
 const IC = {
   down: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m6 10 6 6 6-6"/><path d="M4 20h16"/></svg>',
   lock: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 018 0v4"/></svg>',
@@ -60,7 +62,7 @@ export async function loadAttendanceModule() {
           <label class="av-d-lbl"><span id="av-d-txt"></span><input type="date" id="av-d-in" max="${todayIso()}" aria-label="اختيار التاريخ" /></label>
           <button type="button" id="av-d-next" aria-label="اليوم التالي">${IC.next}</button>
         </div>
-        ${canFollow() ? `<div class="av-tabs" role="tablist"><button type="button" data-tab="take" class="on">التحضير</button><button type="button" data-tab="day">متابعة اليوم</button></div>` : ''}
+        ${canFollow() ? `<div class="av-tabs" role="tablist">${[['take', 'التحضير'], ['abs', 'الغياب والرسائل'], ['track', 'التزام التحضير'], ['log', 'سجل الرسائل']].map(([k, t]) => `<button type="button" data-tab="${k}" class="${k === 'take' ? 'on' : ''}">${t}</button>`).join('')}</div>` : ''}
         ${isAdminOrDeputy() ? `<button type="button" class="av-permbtn" id="av-perms" title="صلاحيات متابعة الغياب">${IC.lock}صلاحيات المتابعة</button>` : ''}
       </div>
     </header>
@@ -74,8 +76,8 @@ export async function loadAttendanceModule() {
     st.tab = b.dataset.tab;
     document.querySelectorAll('.av-tabs [data-tab]').forEach(x => x.classList.toggle('on', x === b));
     $('av-take').classList.toggle('hidden', st.tab !== 'take');
-    $('av-day').classList.toggle('hidden', st.tab !== 'day');
-    if (st.tab === 'day') renderDay(); else { await refreshMySlots(); renderTake(); }
+    $('av-day').classList.toggle('hidden', st.tab === 'take');
+    if (st.tab !== 'take') renderDay(); else { await refreshMySlots(); renderTake(); }
   });
   const pb = $('av-perms'); if (pb) pb.onclick = openFollowPerms;
   $('av-day').classList.toggle('av-nosend', !canSend());
@@ -102,7 +104,7 @@ async function setDate(iso) {
   if (st.view === 'class' && dirty() && !confirm('لم يُحفظ التحضير الحالي، هل تريد المتابعة؟')) { paintDate(); return; }
   st.date = iso; st.view = 'pick';
   paintDate();
-  if (st.tab === 'day') renderDay(); else { await refreshMySlots(); renderTake(); }
+  if (st.tab !== 'take') renderDay(); else { await refreshMySlots(); renderTake(); }
 }
 
 let toastT = null;
@@ -306,10 +308,12 @@ async function saveAttendance() {
 /* ---------- متابعة اليوم (المدير والوكيل) ---------- */
 let dayData = null;
 const MIN_TAKEN = 2;   // أقل عدد حصص محضّرة لفصل الطالب قبل تحديد رسالته تلقائيًا
-const dv = { sub: 'abs', filter: 'all', sel: new Set(), rp: 0 };
+const dv = { sub: 'abs', filter: 'all', sel: new Set(), rp: 0, mode: 'day', mp: 1 };
 
 async function renderDay() {
   const box = $('av-day');
+  // سجل الرسائل لا يحتاج بيانات اليوم
+  if (st.tab === 'log') { box.innerHTML = '<div id="av-sub"></div>'; renderLog(); return; }
   box.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
   const date = st.date;
   const day = DAY_KEYS[new Date(date + 'T00:00:00').getDay()];
@@ -318,7 +322,7 @@ async function renderDay() {
   const [{ data: sess }, { data: marks }, { data: msgs }, { data: sched }] = await Promise.all([
     scoped('attendance_sessions', '*', q => q.eq('att_date', date)),
     scoped('attendance_marks', 'student_id, status, period', q => q.eq('att_date', date)),
-    scoped('attendance_messages', 'student_id, status, error, sent_at, body', q => q.eq('att_date', date)),
+    scoped('attendance_messages', 'student_id, status, error, sent_at, body, period', q => q.eq('att_date', date)),
     scoped('class_schedules', 'period_number, grade_level, class_section, teacher_name, subject_name', q => q.eq('day_of_week', day)),
   ]);
   const ids = [...new Set((marks || []).map(m => m.student_id))];
@@ -329,7 +333,10 @@ async function renderDay() {
   }
   const sById = new Map(studs.map(s => [s.id, s]));
   const sessBy = new Map((sess || []).map(s => [`${s.period}|${s.grade_level}|${s.class_section}`, s]));
-  const msgBy = new Map((msgs || []).map(m => [m.student_id, m]));
+  const msgBy = new Map((msgs || []).filter(m => m.period == null).map(m => [m.student_id, m]));
+  // رسائل الغياب عن حصة: لكل طالب ← الحصة ← الرسالة
+  const pmBy = new Map();
+  (msgs || []).filter(m => m.period != null).forEach(m => { if (!pmBy.has(m.student_id)) pmBy.set(m.student_id, new Map()); pmBy.get(m.student_id).set(m.period, m); });
   const per = new Map();
   (marks || []).forEach(m => { if (!per.has(m.student_id)) per.set(m.student_id, new Map()); per.get(m.student_id).set(m.period, m.status); });
   const rows = [...per.entries()].map(([id, mp]) => {
@@ -338,15 +345,16 @@ async function renderDay() {
     const abs = [...mp].filter(([, v]) => v === 'absent').map(([p]) => p), late = [...mp].filter(([, v]) => v === 'late').map(([p]) => p);
     const m0 = msgBy.get(id) || null;
     // رسالة أُلغيت لأن الغياب أُلغي قبل إرسالها: لا تمنع إرسال رسالة جديدة إن عاد الطالب غائبًا
-    return { ...s, mp, taken, abs, late, full: abs.length > 0 && abs.length >= taken.length, msg: m0 && m0.status !== 'cancelled' ? m0 : null, cancelled: !!(m0 && m0.status === 'cancelled') };
+    const pAll = pmBy.get(id) || new Map(), pm = new Map(), pcan = new Set();
+    pAll.forEach((x, p) => { if (x.status === 'cancelled') pcan.add(p); else pm.set(p, x); });
+    return { ...s, mp, taken, abs, late, full: abs.length > 0 && abs.length >= taken.length, msg: m0 && m0.status !== 'cancelled' ? m0 : null, cancelled: !!(m0 && m0.status === 'cancelled'), pm, pcan };
   }).sort((a, b) => GRADES.indexOf(a.grade_level) - GRADES.indexOf(b.grade_level) || a.class_section - b.class_section || b.abs.length - a.abs.length || String(a.full_name).localeCompare(String(b.full_name), 'ar'));
   const expected = (sched || []).map(r => ({ ...r, key: `${r.period_number}|${r.grade_level}|${r.class_section}` }));
   const missing = expected.filter(r => !sessBy.has(r.key) && (date < todayIso() || (periodTime(r.grade_level, r.period_number) || { end: 0 }).end <= new Date().getHours() * 60 + new Date().getMinutes()));
-  dayData = { date, rows, sess: sess || [], sessBy, expected, missing };
-  // لا يُحدَّد تلقائيًا من حُضّرت له حصة واحدة فقط (قد يكون متأخرًا وصل بعد الحصة الأولى)
-  dv.sel = new Set(rows.filter(r => r.full && r.taken.length >= MIN_TAKEN && !r.msg && r.mobile).map(r => r.id));
+  dayData = { date, rows, sess: sess || [], sessBy, expected, missing, msgs: msgs || [] };
+  dv.sel = defaultSel();
   const absent = rows.filter(r => r.abs.length);
-  const sentN = rows.filter(r => r.msg && r.msg.status === 'sent').length;
+  const sentN = (msgs || []).filter(m => m.status === 'sent').length;
   const doneN = (sess || []).length, expN = new Set(expected.map(r => r.key)).size;
   const pct = expN ? Math.min(100, Math.round((doneN / expN) * 100)) : 0;
   box.innerHTML = `
@@ -356,12 +364,10 @@ async function renderDay() {
       <div class="av-kpi f"><div><b>${absent.filter(r => r.full).length}</b><span>غائب كل الحصص المحضّرة</span></div></div>
       <div class="av-kpi s"><div><b>${sentN}</b><span>رسالة أُرسلت</span></div></div>
     </div>
-    <div class="av-subtabs" role="tablist">
-      <button type="button" data-sub="abs" class="${dv.sub === 'abs' ? 'on' : ''}">${IC.msg}الغائبون والرسائل <i>${absent.length}</i></button>
-      <button type="button" data-sub="round" class="${dv.sub === 'round' ? 'on' : ''}">${IC.check}جولة الفصول</button>
-      <button type="button" data-sub="log" class="${dv.sub === 'log' ? 'on' : ''}">${IC.clock}سجل الرسائل</button>
-      <button type="button" data-sub="track" class="${dv.sub === 'track' ? 'on' : ''}">${IC.grid}متابعة التحضير${missing.length ? ` <i class="warn">${missing.length}</i>` : ''}</button>
-    </div>
+    ${st.tab === 'abs' ? `<div class="av-subtabs av-views" role="tablist">
+      <button type="button" data-sub="abs" class="${dv.sub !== 'round' ? 'on' : ''}">${IC.msg}الغائبون ورسائل أولياء الأمور <i>${absent.length}</i></button>
+      <button type="button" data-sub="round" class="${dv.sub === 'round' ? 'on' : ''}">${IC.check}جولة الفصول (حسب الحصة)</button>
+    </div>` : `<div class="av-sec-h">${IC.grid}<div><b>التزام المعلمين بتحضير الطلاب</b><span>الحصص التي انتهى وقتها ولم يُحضَّر طلابها، وخريطة التحضير لكل فصل وحصة${missing.length ? ` · <em>${plural(missing.length, 'حصة واحدة', 'حصتان', 'حصص', 'حصة')} لم تُحضَّر</em>` : ''}</span></div></div>`}
     <div id="av-sub"></div>`;
   box.querySelectorAll('[data-sub]').forEach(b => b.onclick = () => {
     const from = dv.sub; dv.sub = b.dataset.sub;
@@ -372,42 +378,63 @@ async function renderDay() {
   renderSub();
 }
 
-function renderSub() { if (dv.sub === 'track') renderTrack(); else if (dv.sub === 'round') renderRound(); else if (dv.sub === 'log') renderLog(); else renderAbsent(); }
+function renderSub() { if (st.tab === 'track') renderTrack(); else if (st.tab === 'log') renderLog(); else if (dv.sub === 'round') renderRound(); else renderAbsent(); }
+// التحديد التلقائي: غياب اليوم ← غائبو كل الحصص المحضّرة (حصتان فأكثر) بلا رسالة؛ غياب حصة ← غائبو تلك الحصة بلا رسالة حصة
+function defaultSel() {
+  if (!dayData) return new Set();
+  if (dv.mode === 'period') return new Set(dayData.rows.filter(r => r.mp.get(dv.mp) === 'absent' && !r.pm.get(dv.mp) && r.mobile).map(r => r.id));
+  // لا يُحدَّد تلقائيًا من حُضّرت له حصة واحدة فقط (قد يكون متأخرًا وصل بعد الحصة الأولى)
+  return new Set(dayData.rows.filter(r => r.full && r.taken.length >= MIN_TAKEN && !r.msg && r.mobile).map(r => r.id));
+}
 
 function dotsHtml(r) {
   return `<span class="av-dots" aria-hidden="true">${PERIODS.map(p => { const v = r.mp.get(p); const t = r.taken.includes(p); return `<i class="${v === 'absent' ? 'a' : v === 'late' ? 'l' : t ? 'p' : ''}" title="الحصة ${p}: ${v === 'absent' ? 'غائب' : v === 'late' ? 'متأخر' : t ? 'حاضر' : 'لم تُحضَّر'}">${p}</i>`; }).join('')}</span>`;
 }
 const msgPill = r => (r.cancelled && !r.msg ? '<span class="av-ms cancelled" title="لم تُرسل لأن الغياب أُلغي قبل الإرسال">أُلغيت قبل الإرسال</span>' : r.msg ? `<span class="av-ms ${r.msg.status}" title="${esc(r.msg.error || '')}">${r.msg.status === 'sent' ? 'أُرسلت ✓' : r.msg.status === 'failed' ? 'تعذر الإرسال' : r.msg.status === 'sending' ? 'جارٍ الإرسال' : 'بانتظار الإرسال'}</span>` : !r.mobile ? '<span class="av-ms failed">بلا جوال</span>' : '');
 
+const periodPill = (r, p) => { const m = r.pm.get(p); if (m) return `<span class="av-ms ${m.status}" title="${esc(m.error || '')}">${m.status === 'sent' ? 'أُرسلت ✓' : m.status === 'failed' ? 'تعذر الإرسال' : m.status === 'sending' ? 'جارٍ الإرسال' : 'بانتظار الإرسال'}</span>`; if (r.pcan.has(p)) return '<span class="av-ms cancelled">أُلغيت قبل الإرسال</span>'; return !r.mobile ? '<span class="av-ms failed">بلا جوال</span>' : ''; };
 function renderAbsent() {
   const box = $('av-sub');
-  const all = dayData.rows.filter(r => r.abs.length || r.late.length);
+  const PM = dv.mode === 'period', P = dv.mp;
+  const all = PM ? dayData.rows.filter(r => r.mp.get(P) === 'absent') : dayData.rows.filter(r => r.abs.length || r.late.length);
   const F = { all: () => true, full: r => r.full, part: r => r.abs.length && !r.full, late: r => r.late.length && !r.abs.length };
-  const list = all.filter(F[dv.filter] || F.all);
+  const list = PM ? all : all.filter(F[dv.filter] || F.all);
+  const anyAbs = dayData.rows.some(r => r.abs.length || r.late.length);
+  const pCount = p => dayData.rows.filter(r => r.mp.get(p) === 'absent').length;
   const cnt = k => all.filter(F[k]).length;
   const groups = new Map();
   list.forEach(r => { const k = clsName(r.grade_level, r.class_section); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
-  const pendingN = dayData.rows.filter(r => r.msg && r.msg.status === 'pending').length;
-  const failedN = dayData.rows.filter(r => r.msg && r.msg.status === 'failed' && r.mobile).length;
+  const pendingN = dayData.msgs.filter(m => m.status === 'pending').length;
+  const failedN = dayData.msgs.filter(m => m.status === 'failed').length;
+  const modeBar = `<div class="av-card av-mode">
+      <div class="av-mode-r"><span class="av-lbl">نوع الرسالة</span>
+        <div class="av-seg"><button type="button" data-mode="day" class="${PM ? '' : 'on'}">غياب اليوم</button><button type="button" data-mode="period" class="${PM ? 'on' : ''}">غياب عن حصة</button></div></div>
+      ${PM ? `<div class="av-mode-r"><span class="av-lbl">الحصة</span><div class="av-pchips av-mchips">${PERIODS.map(x => { const n = pCount(x); return `<button type="button" data-mp="${x}" class="${x === P ? 'on' : ''}${n ? '' : ' empty'}">${x}${n ? `<i>${n}</i>` : ''}</button>`; }).join('')}</div>
+        <span class="av-round-sum">${plural(all.length, 'غائب واحد', 'غائبان', 'غائبين', 'غائبًا')} في الحصة ${ORDINAL[P]}</span></div>` : '<p class="av-mode-hint">رسالة واحدة لكل طالب في اليوم عن غيابه عن المدرسة. ولغياب الطالب عن حصة بعينها اختر «غياب عن حصة».</p>'}
+    </div>`;
   box.innerHTML = `
+    ${anyAbs ? modeBar : ''}
     ${all.length ? `
-    <div class="av-filters">${[['all', 'الكل'], ['full', 'غياب كامل'], ['part', 'غياب جزئي'], ['late', 'متأخرون']].map(([k, l]) => `<button type="button" data-f="${k}" class="${dv.filter === k ? 'on' : ''}">${l} <i>${cnt(k)}</i></button>`).join('')}</div>
+    ${PM ? '' : `<div class="av-filters">${[['all', 'الكل'], ['full', 'غياب كامل'], ['part', 'غياب جزئي'], ['late', 'متأخرون']].map(([k, l]) => `<button type="button" data-f="${k}" class="${dv.filter === k ? 'on' : ''}">${l} <i>${cnt(k)}</i></button>`).join('')}</div>`}
     ${pendingN || failedN ? `<div class="av-banner">${pendingN ? `<span>${plural(pendingN, 'رسالة معتمدة', 'رسالتان معتمدتان', 'رسائل معتمدة', 'رسالة معتمدة')} لم تُرسل بعد</span><button type="button" id="av-send-pending">إرسالها الآن</button>` : ''}${failedN ? `<span>${plural(failedN, 'رسالة تعذر إرسالها', 'رسالتان تعذر إرسالهما', 'رسائل تعذر إرسالها', 'رسالة تعذر إرسالها')}</span><button type="button" id="av-retry">إعادة المحاولة</button>` : ''}</div>` : ''}
     <div class="av-abs">${[...groups.entries()].map(([k, rs]) => `
       <div class="av-grp"><div class="av-grp-h"><b>${esc(k)}</b><span>${plural(rs.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')}</span></div>
-      <ul>${rs.map(r => { const can = !r.msg && r.mobile && r.abs.length; return `<li class="${dv.sel.has(r.id) ? 'sel' : ''}${can ? '' : ' nosel'}" data-id="${r.id}">
+      <ul>${rs.map(r => { const can = PM ? !r.pm.get(P) && r.mobile : !r.msg && r.mobile && r.abs.length; return `<li class="${dv.sel.has(r.id) ? 'sel' : ''}${can ? '' : ' nosel'}" data-id="${r.id}">
         <span class="av-ck">${can ? `<input type="checkbox" data-id="${r.id}" ${dv.sel.has(r.id) ? 'checked' : ''} aria-label="تحديد ${esc(r.full_name)}" />` : ''}</span>
         <span class="av-abs-m"><b>${esc(r.full_name)}</b><small>${r.full && r.taken.length < MIN_TAKEN ? `<span class="av-one">غائب الحصة ${r.abs[0]} فقط (الوحيدة المحضّرة)، قد يكون متأخرًا</span>` : r.full ? `غائب كل الحصص المحضّرة` : r.abs.length ? `غائب ${plural(r.abs.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')} من ${r.taken.length}` : `متأخر ${plural(r.late.length, 'حصة واحدة', 'حصتين', 'حصص', 'حصة')}`}</small></span>
         ${dotsHtml(r)}
-        ${msgPill(r)}
+        ${PM ? periodPill(r, P) : msgPill(r)}${!PM && r.pm.size ? `<span class="av-ms pmini" title="رسائل غياب عن حصص">حصص: ${[...r.pm.keys()].sort().join('، ')}</span>` : ''}
       </li>`; }).join('')}</ul></div>`).join('') || '<div class="av-card av-noslots">لا يوجد طلاب في هذا التصنيف</div>'}</div>
-    <details class="av-card av-tplbox"><summary><b>نص رسالة ولي الأمر</b><span id="av-prev"></span></summary>
-      <textarea id="av-tpl" rows="3">${esc(loadTpl())}</textarea>
-      <div class="av-vars">${['{الاسم}', '{اليوم}', '{التاريخ}', '{المدرسة}'].map(v => `<button type="button" data-v="${v}">${v}</button>`).join('')}<button type="button" class="av-tpl-reset" id="av-tpl-reset">النص الافتراضي</button></div>
+    <details class="av-card av-tplbox"><summary><b>${PM ? 'نص رسالة الغياب عن الحصة' : 'نص رسالة غياب اليوم'}</b><span id="av-prev"></span></summary>
+      <textarea id="av-tpl" rows="3">${esc(loadTpl(PM))}</textarea>
+      <div class="av-vars">${['{الاسم}', ...(PM ? ['{الحصة}'] : []), '{اليوم}', '{التاريخ}', '{المدرسة}'].map(v => `<button type="button" data-v="${v}">${v}</button>`).join('')}<button type="button" class="av-tpl-reset" id="av-tpl-reset">النص الافتراضي</button></div>
     </details>
     <p class="av-sms" id="av-sms"></p>
     <div class="av-actionbar${dv.sel.size ? ' show' : ''}" id="av-actbar"><span id="av-act-t"></span><button type="button" id="av-send">إرسال لأولياء الأمور</button></div>`
+    : PM ? `<div class="av-card av-empty-day small">${IC.check}<b>لا يوجد غائب في الحصة ${ORDINAL[P]}</b></div>`
     : `<div class="av-card av-empty-day">${IC.check}<b>لا يوجد غياب مسجّل في هذا اليوم</b><span>${dayData.sess.length ? `حُضّرت ${plural(dayData.sess.length, 'حصة واحدة', 'حصتان', 'حصص', 'حصة')} بلا غياب` : 'لم تُحضَّر أي حصة بعد'}</span></div>`}`;
+  box.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { if (dv.mode === b.dataset.mode) return; dv.mode = b.dataset.mode; if (dv.mode === 'period') { const first = PERIODS.find(x => pCount(x)); dv.mp = pCount(dv.mp) ? dv.mp : (first || 1); } dv.sel = defaultSel(); renderAbsent(); });
+  box.querySelectorAll('[data-mp]').forEach(b => b.onclick = () => { dv.mp = +b.dataset.mp; dv.sel = defaultSel(); renderAbsent(); });
   if (!all.length) return;
   box.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { dv.filter = b.dataset.f; renderAbsent(); });
   if (canSend()) box.querySelectorAll('.av-abs li:not(.nosel)').forEach(li => li.onclick = e => {
@@ -417,12 +444,12 @@ function renderAbsent() {
     li.classList.toggle('sel', cb.checked); paintAct();
   });
   const tpl = $('av-tpl');
-  const prev = () => { const r = dayData.rows.find(x => dv.sel.has(x.id)) || dayData.rows[0]; $('av-prev').textContent = r ? bodyFor(r, tpl.value) : ''; };
-  tpl.oninput = () => { saveTpl(tpl.value); prev(); };
-  box.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { const p = tpl.selectionStart || tpl.value.length; tpl.value = tpl.value.slice(0, p) + b.dataset.v + tpl.value.slice(p); tpl.focus(); saveTpl(tpl.value); prev(); });
-  $('av-tpl-reset').onclick = () => { tpl.value = DEFAULT_TEMPLATE; saveTpl(tpl.value); prev(); };
+  const prev = () => { const r = dayData.rows.find(x => dv.sel.has(x.id)) || list[0]; $('av-prev').textContent = r ? bodyFor(r, tpl.value, PM ? P : null) : ''; };
+  tpl.oninput = () => { saveTpl(tpl.value, PM); prev(); };
+  box.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { const p = tpl.selectionStart || tpl.value.length; tpl.value = tpl.value.slice(0, p) + b.dataset.v + tpl.value.slice(p); tpl.focus(); saveTpl(tpl.value, PM); prev(); });
+  $('av-tpl-reset').onclick = () => { tpl.value = PM ? DEFAULT_PERIOD_TEMPLATE : DEFAULT_TEMPLATE; saveTpl(tpl.value, PM); prev(); };
   prev();
-  $('av-send').onclick = () => approveMessages([...dv.sel], tpl.value);
+  $('av-send').onclick = () => approveMessages([...dv.sel], tpl.value, PM ? P : null);
   const sp = $('av-send-pending'); if (sp) sp.onclick = async () => { sp.disabled = true; sp.textContent = 'جارٍ الإرسال...'; const r = await sendPending(dayData.date); toast(r.msg, r.ok ? 'ok' : 'err'); renderDay(); };
   const rt = $('av-retry'); if (rt) rt.onclick = async () => { rt.disabled = true; rt.textContent = 'جارٍ الإرسال...'; await retryFailed(); };
   paintAct();
@@ -432,7 +459,7 @@ function paintAct() {
   const n = dv.sel.size, bar = $('av-actbar'); if (!bar) return;
   bar.classList.toggle('show', n > 0);
   $('av-act-t').textContent = n ? `${plural(n, 'طالب واحد محدد', 'طالبان محددان', 'طلاب محددون', 'طالبًا محددًا')}` : '';
-  $('av-send').textContent = n ? `إرسال ${plural(n, 'رسالة واحدة', 'رسالتين', 'رسائل', 'رسالة')}` : 'إرسال لأولياء الأمور';
+  $('av-send').textContent = n ? `إرسال ${plural(n, 'رسالة واحدة', 'رسالتين', 'رسائل', 'رسالة')}${dv.mode === 'period' ? ` عن الحصة ${ORDINAL[dv.mp]}` : ''}` : 'إرسال لأولياء الأمور';
 }
 
 function renderTrack() {
@@ -463,13 +490,13 @@ function renderTrack() {
 
 /* ---------- الرسائل ---------- */
 const TPL_KEY = 'att-sms-template';
-const loadTpl = () => { try { return localStorage.getItem(TPL_KEY) || DEFAULT_TEMPLATE; } catch { return DEFAULT_TEMPLATE; } };
-const saveTpl = v => { try { localStorage.setItem(TPL_KEY, v); } catch { /* */ } };
-function bodyFor(r, tpl) {
+const loadTpl = (pm = false) => { const d = pm ? DEFAULT_PERIOD_TEMPLATE : DEFAULT_TEMPLATE; try { return localStorage.getItem(TPL_KEY + (pm ? '-period' : '')) || d; } catch { return d; } };
+const saveTpl = (v, pm = false) => { try { localStorage.setItem(TPL_KEY + (pm ? '-period' : ''), v); } catch { /* */ } };
+function bodyFor(r, tpl, period = null) {
   const dname = new Date(dayData.date + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long' });
   const [yy, mm, dd] = dayData.date.split('-');
   const first = String(r.full_name || '').trim().split(/\s+/)[0] || '';
-  return tpl.replace(/\{الاسم\}/g, first).replace(/\{اليوم\}/g, dname).replace(/\{التاريخ\}/g, `${Number(dd)}/${Number(mm)}/${yy}م`).replace(/\{المدرسة\}/g, printOrgName() || '');
+  return tpl.replace(/\{الحصة\}/g, period ? ORDINAL[period] : '').replace(/\{الاسم\}/g, first).replace(/\{اليوم\}/g, dname).replace(/\{التاريخ\}/g, `${Number(dd)}/${Number(mm)}/${yy}م`).replace(/\{المدرسة\}/g, printOrgName() || '');
 }
 
 const wait = ms => new Promise(r => setTimeout(r, ms));
@@ -500,7 +527,7 @@ async function sendPending(date) {
   } catch (e) { return { ok: false, msg: 'تعذر الإرسال: ' + (e.message || e) }; }
 }
 async function retryFailed() {
-  const ids = dayData.rows.filter(r => r.msg && r.msg.status === 'failed' && r.mobile).map(r => r.id);
+  const ids = [...new Set(dayData.msgs.filter(m => m.status === 'failed').map(m => m.student_id))];
   if (!ids.length) return;
   await sb.from('attendance_messages').update({ status: 'pending', error: null }).eq('att_date', dayData.date).in('student_id', ids).eq('status', 'failed');
   const r = await sendPending(dayData.date);
@@ -519,33 +546,36 @@ async function smsStatusLine() {
     el.innerHTML = `<span class="av-ms sent">خدمة الرسائل مربوطة</span> المرسل ${esc(d.sender || '—')}${bal} · لا تُرسل رسالة ثانية للطالب نفسه في اليوم نفسه`;
   } catch { el.textContent = ''; }
 }
-async function approveMessages(ids, tpl) {
+async function approveMessages(ids, tpl, period = null) {
   if (!ids.length || !dayData) return;
   // ١) تحديث: إعادة تحميل التحضير من قاعدة البيانات وعرضه كما هو الآن
   const btn0 = $('av-send'); if (btn0) { btn0.disabled = true; btn0.textContent = 'جارٍ تحديث التحضير...'; }
   const picked = new Set(ids);
   const before = new Map(dayData.rows.map(r => [r.id, r.full_name]));
   await renderDay();
-  if (dv.sub !== 'abs') return;
-  // ٢) تحقق: يبقى من التحديد من ما زال غائبًا ولم تُرسل له رسالة
-  const rows = dayData.rows.filter(r => picked.has(r.id) && r.abs.length && !r.msg && r.mobile);
+  if (st.tab !== 'abs' || dv.sub === 'round') return;
+  // ٢) تحقق: يبقى من التحديد من ما زال غائبًا (في اليوم أو في الحصة نفسها) ولم تُرسل له الرسالة نفسها
+  const stillAbs = r => (period ? r.mp.get(period) === 'absent' : r.abs.length > 0);
+  const hasMsg = r => (period ? !!r.pm.get(period) : !!r.msg);
+  const rows = dayData.rows.filter(r => picked.has(r.id) && stillAbs(r) && !hasMsg(r) && r.mobile);
   const changed = [...picked].filter(id => !rows.some(r => r.id === id)).map(id => {
     const r = dayData.rows.find(x => x.id === id);
-    return { name: (r && r.full_name) || before.get(id) || '—', why: !r || !r.abs.length ? 'أُلغي غيابه' : r.msg ? 'أُرسلت له رسالة' : 'بلا جوال' };
+    return { name: (r && r.full_name) || before.get(id) || '—', why: !r || !stillAbs(r) ? 'أُلغي غيابه' : hasMsg(r) ? 'أُرسلت له رسالة' : 'بلا جوال' };
   });
   dv.sel = new Set(rows.map(r => r.id));
   renderAbsent();
   if (!rows.length) { toast(changed.length ? 'لم يبقَ طالب غائب في التحديد بعد تحديث التحضير' : 'لا توجد رسائل للإرسال', 'err'); return; }
-  const one = rows.filter(r => r.taken.length < MIN_TAKEN).map(r => r.full_name);
+  const one = period ? [] : rows.filter(r => r.taken.length < MIN_TAKEN).map(r => r.full_name);
   const ex = changed.length ? `\n\nاستُبعد بعد التحديث ${plural(changed.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')}:\n${changed.slice(0, 8).map(c => `• ${c.name} (${c.why})`).join('\n')}${changed.length > 8 ? '\n...' : ''}` : '';
   const warn = one.length ? `\n\nتنبيه: ${plural(one.length, 'طالب واحد', 'طالبان', 'طلاب', 'طالبًا')} حُضّرت لفصولهم حصة واحدة فقط، وقد يكونون متأخرين:\n${one.slice(0, 8).join('\n')}${one.length > 8 ? '\n...' : ''}` : '';
   // ٣) إرسال بعد التأكيد (وقاعدة البيانات تتحقق مرة أخيرة لحظة الإرسال)
-  if (!confirm(`تم تحديث التحضير ✓\nإرسال رسالة غياب لأولياء أمور ${plural(rows.length, 'طالب واحد', 'طالبين', 'طلاب', 'طالبًا')}؟${ex}${warn}\n\nمثال:\n${bodyFor(rows[0], tpl)}`)) return;
+  if (!confirm(`تم تحديث التحضير ✓\nإرسال رسالة ${period ? `غياب عن الحصة ${ORDINAL[period]}` : 'غياب'} لأولياء أمور ${plural(rows.length, 'طالب واحد', 'طالبين', 'طلاب', 'طالبًا')}؟${ex}${warn}\n\nمثال:\n${bodyFor(rows[0], tpl, period)}`)) return;
  const btn = $('av-send'); btn.disabled = true; btn.textContent = 'جارٍ الإرسال...';
-  const cIds = rows.filter(r => r.cancelled).map(r => r.id);
-  if (cIds.length) await sb.from('attendance_messages').delete().eq('att_date', dayData.date).eq('status', 'cancelled').in('student_id', cIds);
-  const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile, body: bodyFor(r, tpl), status: 'pending', approved_by: currentUserId }));
+  const cIds = rows.filter(r => (period ? r.pcan.has(period) : r.cancelled)).map(r => r.id);
+  if (cIds.length) { let dq = sb.from('attendance_messages').delete().eq('att_date', dayData.date).eq('status', 'cancelled').in('student_id', cIds); dq = period ? dq.eq('period', period) : dq.is('period', null); await dq; }
+  const payload = rows.map(r => ({ att_date: dayData.date, student_id: r.id, mobile: r.mobile, body: bodyFor(r, tpl, period), status: 'pending', approved_by: currentUserId, period }));
   const { error } = await writeWithSchool(extra => sb.from('attendance_messages').insert(payload.map(p => ({ ...p, ...extra }))));
+  if (error && /duplicate|unique/i.test(error.message || '') && rows.some(r => (period ? r.msg : r.pm.size))) { toast('تعذر حفظ الرسالة: قاعدة البيانات ما زالت تسمح برسالة واحدة لكل طالب في اليوم، ويلزم تحديثها لإرسال رسائل الحصص', 'err'); btn.disabled = false; paintAct(); return; }
   if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الاعتماد: ' + error.message, 'err'); btn.disabled = false; paintAct(); return; }
   const r = await sendPending(dayData.date);
   toast(r.msg, r.ok ? 'ok' : 'err');
@@ -722,7 +752,7 @@ async function loadLog() {
   const scoped = (t, cols, f) => readScopedBySchool(sc => { let q = f(sb.from(t).select(cols)); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
   const out = [];
   for (let from = 0; from < 20000; from += 1000) {
-    const { data, error } = await scoped('attendance_messages', 'id, att_date, student_id, mobile, body, status, error, approved_by, approved_at, sent_at', q => q.gte('att_date', LOG.from).lte('att_date', LOG.to).order('att_date', { ascending: false }).range(from, from + 999));
+    const { data, error } = await scoped('attendance_messages', 'id, att_date, student_id, mobile, body, status, error, approved_by, approved_at, sent_at, period', q => q.gte('att_date', LOG.from).lte('att_date', LOG.to).order('att_date', { ascending: false }).range(from, from + 999));
     if (error) throw error;
     out.push(...(data || []));
     if (!data || data.length < 1000) break;
@@ -775,7 +805,7 @@ function drawLog() {
       return `<section class="ml-day" style="animation-delay:${Math.min(di * 0.05, 0.6)}s">
         <header><span class="ml-dot"></span><div><b>${esc(dateLong(d))}</b><small>${d}</small></div><span class="ml-bar"><i style="width:${Math.round(ms.length / maxDay * 100)}%"></i></span><span class="ml-n">${plural(ms.length, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة')}${sent !== ms.length ? ` · أُرسل ${sent}` : ''}</span></header>
         ${[...batches.entries()].map(([k, bm]) => `<div class="ml-batch"><div class="ml-bh">${IC.clock}<b>${esc(clockOf(bm[0].approved_at))}</b><span>${esc(bm[0].by ? 'اعتمدها ' + bm[0].by : '')}</span><em>${plural(bm.length, 'رسالة واحدة', 'رسالتان', 'رسائل', 'رسالة')}</em></div>
-          <ul>${bm.map(m => `<li class="${m.status}" data-id="${m.id}"><span class="ml-st ${m.status}">${esc(MS_LABEL[m.status] || m.status)}</span><b>${esc(m.st.full_name)}</b><small>${esc(clsName(m.st.grade_level, m.st.class_section))}</small><span class="ml-t">${m.sent_at ? 'وصلت ' + esc(clockOf(m.sent_at)) : ''}</span>
+          <ul>${bm.map(m => `<li class="${m.status}" data-id="${m.id}"><span class="ml-st ${m.status}">${esc(MS_LABEL[m.status] || m.status)}</span><b>${esc(m.st.full_name)}</b><small>${esc(clsName(m.st.grade_level, m.st.class_section))}</small>${m.period ? `<em class="ml-p">الحصة ${m.period}</em>` : ''}<span class="ml-t">${m.sent_at ? 'وصلت ' + esc(clockOf(m.sent_at)) : ''}</span>
             ${LOG.open === m.id ? `<div class="ml-body"><p>${esc(m.body)}</p><span>الجوال: <bdi>${esc(m.mobile || '—')}</bdi>${m.error ? ` · ${esc(m.error)}` : ''}</span></div>` : ''}</li>`).join('')}</ul></div>`).join('')}
       </section>`;
     }).join('')}</div>` : '<div class="av-card av-noslots">لا توجد رسائل في هذه الفترة</div>'}
@@ -789,8 +819,8 @@ function drawLog() {
   const qi = $('ml-q'); qi.oninput = () => { LOG.q = qi.value; const pos = qi.selectionStart; drawLog(); const n = $('ml-q'); n.focus(); n.setSelectionRange(pos, pos); };
   box.querySelectorAll('.ml-day li').forEach(li => li.onclick = () => { LOG.open = LOG.open === li.dataset.id ? null : li.dataset.id; drawLog(); });
   $('ml-csv').onclick = () => {
-    const rows = [['التاريخ', 'وقت الاعتماد', 'وقت الوصول', 'الطالب', 'الصف', 'الفصل', 'الجوال', 'الحالة', 'اعتمدها', 'نص الرسالة', 'ملاحظة']]
-      .concat(logFiltered().map(m => [m.att_date, clockOf(m.approved_at), m.sent_at ? clockOf(m.sent_at) : '', m.st.full_name, gradeLabels[m.st.grade_level] || '', m.st.class_section || '', m.mobile || '', MS_LABEL[m.status] || m.status, m.by, m.body, m.error || '']));
+    const rows = [['التاريخ', 'النوع', 'وقت الاعتماد', 'وقت الوصول', 'الطالب', 'الصف', 'الفصل', 'الجوال', 'الحالة', 'اعتمدها', 'نص الرسالة', 'ملاحظة']]
+      .concat(logFiltered().map(m => [m.att_date, m.period ? `غياب عن الحصة ${m.period}` : 'غياب اليوم', clockOf(m.approved_at), m.sent_at ? clockOf(m.sent_at) : '', m.st.full_name, gradeLabels[m.st.grade_level] || '', m.st.class_section || '', m.mobile || '', MS_LABEL[m.status] || m.status, m.by, m.body, m.error || '']));
     const csv = '﻿' + rows.map(r => r.map(v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
     a.download = `سجل رسائل الغياب ${LOG.from} إلى ${LOG.to}.csv`; document.body.appendChild(a); a.click(); a.remove();

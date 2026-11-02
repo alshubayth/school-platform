@@ -4522,3 +4522,27 @@ body.avv-open{ overflow:hidden; }
 .lp-tools select{ width:auto; margin:0; padding:8px 10px; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:13px; }
 .lp-rep td{ font-size:14px; } .lp-rep .lp-g{ color:#1D7B57; font-weight:800; } .lp-rep .lp-r{ color:#C0392B; font-weight:800; }
 .lp-rep .lp-pc{ min-width:170px; } .lp-rep .lp-pc .lp-bar{ display:inline-block; width:100px; vertical-align:middle; margin-left:8px; }
+
+/* ===== الغياب: تبويبات مسطّحة + الإرسال حسب الحصة ===== */
+.av-tabs{ flex-wrap:wrap; gap:2px; }
+@media (max-width:640px){ .av-tabs button{ padding:7px 10px; font-size:12px; } }
+.av-sec-h{ display:flex; gap:12px; align-items:center; padding:12px 14px; background:var(--card,#fff); border:1px solid var(--border); border-radius:14px; }
+.av-sec-h svg{ width:26px; height:26px; color:var(--meadow); flex-shrink:0; }
+.av-sec-h b{ display:block; font-size:15px; }
+.av-sec-h span{ font-size:12.5px; color:var(--slate); }
+.av-sec-h em{ font-style:normal; color:#A63A33; font-weight:800; }
+.av-mode{ display:flex; flex-direction:column; gap:10px; padding:14px; background:linear-gradient(135deg,#F4F8FF,#F7FBF6); }
+.av-mode-r{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+.av-lbl{ font-size:12.5px; font-weight:800; color:var(--slate); min-width:72px; }
+.av-seg{ display:inline-flex; background:#E9EEF6; border-radius:11px; padding:3px; }
+.av-seg button{ border:0; background:none; font:inherit; font-size:13px; font-weight:800; color:#47566B; padding:7px 16px; border-radius:8px; cursor:pointer; width:auto; margin:0; transition:background .2s,color .2s; }
+.av-seg button.on{ background:#0F2447; color:#fff; box-shadow:0 2px 8px rgba(15,36,71,.25); }
+.av-mchips{ display:flex; gap:6px; flex-wrap:wrap; }
+.av-mchips button{ position:relative; width:40px; height:40px; margin:0; border-radius:12px; border:1.5px solid var(--border); background:#fff; font:inherit; font-size:15px; font-weight:900; color:#0F2447; cursor:pointer; }
+.av-mchips button i{ position:absolute; top:-7px; left:-7px; font-style:normal; font-size:10.5px; min-width:18px; height:18px; line-height:18px; border-radius:99px; background:#C2412D; color:#fff; padding:0 4px; }
+.av-mchips button.empty{ color:#A9B3C1; border-style:dashed; }
+.av-mchips button.on{ background:var(--meadow); border-color:var(--meadow); color:#fff; transform:translateY(-1px); box-shadow:0 4px 12px rgba(31,106,60,.3); }
+.av-mode-hint{ margin:0; font-size:12.5px; color:var(--slate); }
+.av-ms.pmini{ background:#EEF0FB; color:#3E4AA0; }
+.av-empty-day.small{ padding:18px; }
+.ml-p{ font-style:normal; font-size:11px; font-weight:800; background:#EEF0FB; color:#3E4AA0; border-radius:99px; padding:2px 8px; }
