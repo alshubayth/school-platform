@@ -4561,3 +4561,13 @@ body.avv-open{ overflow:hidden; }
 .cv-switch input:checked + span{ background:var(--meadow,#1F6A3C); }
 .cv-switch input:checked + span::after{ transform:translateX(-18px); }
 .cv-switch em{ font-style:normal; font-size:12px; font-weight:800; color:var(--slate); min-width:90px; }
+
+/* ===== ملف الإنجاز: بند غير مطلوب ===== */
+.av-st.na{ background:#EEF0F4; color:#6B7684; }
+.av-table tr.na td{ color:#8A94A3; }
+.av-table tr.na td:first-child{ text-decoration:line-through; text-decoration-color:rgba(107,118,132,.5); }
+.av-na-btn{ margin:0 6px 0 0; width:auto; border:1px dashed #B8C0CC; background:#fff; color:#5B6676; font:inherit; font-size:11px; font-weight:800; padding:2px 9px; border-radius:99px; cursor:pointer; white-space:nowrap; transition:all .15s; }
+.av-na-btn:hover{ border-style:solid; border-color:#0F2447; color:#0F2447; }
+.av-na-btn.on{ border-style:solid; background:#0F2447; border-color:#0F2447; color:#fff; }
+.avv-card.na{ opacity:.72; }
+.avv-card.na header b{ text-decoration:line-through; text-decoration-color:rgba(107,118,132,.5); }
