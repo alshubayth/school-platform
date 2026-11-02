@@ -4550,3 +4550,14 @@ body.avv-open{ overflow:hidden; }
 .av-ref-sum{ display:flex; align-items:baseline; gap:8px; padding:10px 14px; border-radius:12px; background:#0F2447; color:#fff; }
 .av-ref-sum b{ font-size:26px; font-weight:900; line-height:1; }
 .av-ref-sum span{ font-size:13px; color:#C8D6EE; font-weight:700; }
+
+/* ===== الزيارات الصفية: صلاحية الاطلاع ===== */
+.cv-viewall-note{ margin:10px 0; padding:11px 14px; border-radius:12px; background:#EEF4FF; border:1px solid #CFDDF6; color:#23406F; font-size:13px; font-weight:700; }
+.cv-perm-list li{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.cv-switch{ display:inline-flex; align-items:center; gap:8px; cursor:pointer; margin:0; }
+.cv-switch input{ position:absolute; opacity:0; width:0; height:0; }
+.cv-switch span{ position:relative; width:42px; height:24px; border-radius:99px; background:#CBD3DE; transition:background .2s; flex-shrink:0; }
+.cv-switch span::after{ content:''; position:absolute; top:3px; right:3px; width:18px; height:18px; border-radius:50%; background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.25); transition:transform .2s; }
+.cv-switch input:checked + span{ background:var(--meadow,#1F6A3C); }
+.cv-switch input:checked + span::after{ transform:translateX(-18px); }
+.cv-switch em{ font-style:normal; font-size:12px; font-weight:800; color:var(--slate); min-width:90px; }

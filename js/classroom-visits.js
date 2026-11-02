@@ -519,6 +519,9 @@ async function renderList(container) {
     }),
     staff && !cvTeachers.length ? loadTeachersList() : Promise.resolve(),
   ]);
+  // الوكيل الممنوح صلاحية الاطلاع يرى جميع زيارات المدرسة (للعرض فقط)
+  let viewAll = false;
+  if (currentProfile.role === 'deputy') { const { data: va } = await sb.rpc('can_view_all_visits'); viewAll = !!va; }
   const visits = data || [];
   // تخصص كل معلم: من «تخصصات المعلمين» (teacher_subjects)، ولو ما له تخصص مسجل ناخذه من زياراته
   const specMap = new Map(); // teacherId -> Set(أسماء المواد)
@@ -577,10 +580,12 @@ async function renderList(container) {
       <div class="cv-toolbar">
         <button class="btn-primary" id="cv-new-btn" style="width:auto; padding:11px 20px;">+ زيارة صفية جديدة</button>
         <div class="cv-tools">
+          ${currentProfile.role === 'admin' ? `<button class="btn-secondary" id="cv-perm-btn" style="width:auto; padding:10px 14px;">🔒 صلاحيات الاطلاع</button>` : ''}
           ${visits.length ? `<button class="btn-secondary" id="cv-dl-all-btn" style="width:auto; padding:10px 14px;">تحميل الكل (PDF)</button>` : ''}
         </div>
       </div>
       <div id="cv-dl-status" class="cv-dl-status"></div>
+      ${viewAll ? `<div class="cv-viewall-note">👁️ لديك صلاحية الاطلاع على جميع الزيارات الصفية في المدرسة، ومنها زيارات المدير. يمكنك العرض والطباعة فقط، ولا يمكنك تعديل زيارات غيرك.</div>` : ''}
       <div class="kpi-grid">
         <div class="kpi"><span class="k-label">زيارات هذا الشهر</span><span class="k-value">${thisMonth}</span><span class="k-note">${visits.length} زيارة من بداية العام</span></div>
         <div class="kpi"><span class="k-label">المعلمون الذين تمت زيارتهم</span><span class="k-value">${visitedT}${totalT ? ` / ${totalT}` : ''}</span>${totalT ? `<div class="k-bar"><div style="width:${Math.round(visitedT / totalT * 100)}%;"></div></div>` : ''}<span class="k-note">من بداية العام الدراسي</span></div>
@@ -606,6 +611,7 @@ async function renderList(container) {
   html += '<div id="cv-board" class="cv-board"></div>';
   container.innerHTML = html;
 
+  const permBtn = document.getElementById('cv-perm-btn'); if (permBtn) permBtn.onclick = openVisitViewers;
   const board = document.getElementById('cv-board');
   const visitRow = (v) => {
     const st = visitStatus(v);
@@ -627,7 +633,7 @@ async function renderList(container) {
           <div class="row-menu-pop hidden">
             <button type="button" class="cv-print-btn" data-id="${v.id}">طباعة</button>
             <button type="button" class="cv-dl-one-btn" data-id="${v.id}">تحميل PDF</button>
-            ${staff ? `<button type="button" class="cv-publish-btn" data-id="${v.id}" data-current="${v.published}">${v.published ? 'إلغاء النشر' : 'نشر للمعلم'}</button>` : ''}
+            ${canEditVisit(v) ? `<button type="button" class="cv-publish-btn" data-id="${v.id}" data-current="${v.published}">${v.published ? 'إلغاء النشر' : 'نشر للمعلم'}</button>` : ''}
             ${canEditVisit(v) ? `<button type="button" class="cv-delete-btn danger" data-id="${v.id}">حذف</button>` : ''}
           </div>
         </div>
@@ -1499,4 +1505,39 @@ function fmtDate(iso) {
 }
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+
+/* ================= صلاحية اطلاع الوكلاء على جميع الزيارات ================= */
+async function openVisitViewers() {
+  let ov = document.getElementById('cv-perm-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'cv-perm-ov'; ov.className = 'av-perm-ov'; document.body.appendChild(ov); }
+  const shell = inner => `<div class="av-perm" role="dialog" aria-label="صلاحيات الاطلاع على الزيارات"><div class="av-perm-h"><b>صلاحيات الاطلاع على الزيارات</b><button type="button" class="av-perm-x" aria-label="إغلاق">✕</button></div>${inner}</div>`;
+  ov.innerHTML = shell('<div class="tr-loading">جارٍ التحميل...</div>');
+  ov.classList.remove('hidden');
+  const close = () => ov.classList.add('hidden');
+  ov.onclick = e => { if (e.target === ov) close(); };
+  ov.querySelector('.av-perm-x').onclick = close;
+  let dq = sb.from('profiles').select('id, full_name').eq('role', 'deputy').order('full_name');
+  if (currentSchoolId) dq = dq.eq('school_id', currentSchoolId);
+  let vq = sb.from('visit_viewers').select('id, profile_id');
+  if (currentSchoolId) vq = vq.eq('school_id', currentSchoolId);
+  const [{ data: deps }, { data: vw, error }] = await Promise.all([dq, vq]);
+  if (error) { ov.innerHTML = shell(`<p class="av-perm-err">تعذر تحميل الصلاحيات: ${esc(error.message)}</p>`); ov.querySelector('.av-perm-x').onclick = close; return; }
+  const byPid = new Map((vw || []).map(x => [x.profile_id, x.id]));
+  ov.innerHTML = shell(`
+    <p class="av-perm-d">الوكيل الممنوح هذه الصلاحية يطّلع على جميع الزيارات الصفية في المدرسة، ومنها زياراتك، للعرض والطباعة فقط دون تعديل أو حذف أو نشر. أما الوكيل غير الممنوح فلا يرى إلا زياراته.</p>
+    <ul class="av-perm-list cv-perm-list">${(deps || []).length ? deps.map(d => `<li>
+      <b>${esc(d.full_name)}</b>
+      <label class="cv-switch"><input type="checkbox" data-pid="${d.id}" ${byPid.has(d.id) ? 'checked' : ''} /><span></span><em>${byPid.has(d.id) ? 'يطّلع على الجميع' : 'زياراته فقط'}</em></label></li>`).join('') : '<li class="empty">لا يوجد وكلاء مسجّلون في المدرسة</li>'}</ul>`);
+  ov.querySelector('.av-perm-x').onclick = close;
+  ov.querySelectorAll('input[data-pid]').forEach(cb => cb.onchange = async () => {
+    cb.disabled = true;
+    const pid = cb.dataset.pid;
+    const res = cb.checked
+      ? await writeWithSchool(extra => sb.from('visit_viewers').insert({ profile_id: pid, granted_by: currentUserId, ...extra }))
+      : await sb.from('visit_viewers').delete().eq('id', byPid.get(pid));
+    if (res.error && !/duplicate|unique/i.test(res.error.message || '')) { alert('تعذر حفظ الصلاحية: ' + res.error.message); cb.checked = !cb.checked; }
+    openVisitViewers();
+  });
 }
