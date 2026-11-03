@@ -136,7 +136,9 @@ export function scoreReport(rep, platMap) {
   const seen = new Set();
   const recs = [];
   rd.students.forEach(st => {
-    const id = idOf(st.id);
+    // ملف بلا رقم هوية (مثل بعض تصديرات Remark): يُميَّز الطالب باسمه حتى لا تُهمل ورقته
+    const nm = String(st.name || '').trim().replace(/\s+/g, ' ');
+    const id = idOf(st.id) || (nm ? 'name:' + nm : null);
     if (!id || seen.has(id)) return;
     const answered = (st.answers || []).some(v => v != null && v !== '');
     if (!answered && typeof st.essay !== 'number') return;   // ورقة فارغة = غائب
