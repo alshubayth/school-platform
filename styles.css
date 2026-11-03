@@ -4571,3 +4571,11 @@ body.avv-open{ overflow:hidden; }
 .av-na-btn.on{ border-style:solid; background:#0F2447; border-color:#0F2447; color:#fff; }
 .avv-card.na{ opacity:.72; }
 .avv-card.na header b{ text-decoration:line-through; text-decoration-color:rgba(107,118,132,.5); }
+
+/* ===== نافس: مدخل التقرير الشامل ===== */
+.sk-nafes-cta{ display:flex; align-items:center; gap:14px; width:100%; margin:0 0 12px; text-align:right; font:inherit; cursor:pointer; border:0; border-radius:18px; padding:14px 18px; color:#fff; background:radial-gradient(120% 160% at 100% 0%,#24508F 0%,#0F2447 60%,#0A1830 100%); box-shadow:0 10px 24px rgba(15,36,71,.22); transition:transform .15s, box-shadow .15s; }
+.sk-nafes-cta:hover{ transform:translateY(-2px); box-shadow:0 14px 30px rgba(15,36,71,.3); }
+.sk-nafes-i{ font-size:26px; background:linear-gradient(135deg,#0CA678,#3B5BDB); border-radius:14px; width:50px; height:50px; display:grid; place-items:center; flex-shrink:0; }
+.sk-nafes-cta > span:nth-child(2){ flex:1; display:flex; flex-direction:column; gap:3px; }
+.sk-nafes-cta b{ font-size:16px; } .sk-nafes-cta small{ color:#B9C8E2; font-size:12px; }
+.sk-nafes-cta em{ font-style:normal; font-weight:900; background:rgba(255,255,255,.14); border-radius:10px; padding:7px 12px; white-space:nowrap; }

@@ -28,7 +28,7 @@ export async function renderSkillsPanel(rep, panel, tabBtn) {
   const keyId = rep.key_id || rd.keyId || (rd.models && rd.models.keyId) || null;
   panel.innerHTML = '';
   if (!keyId || !Array.isArray(rd.students)) return;
-  const { data: key } = await sb.from('answer_keys').select('id, subject, skills, exam_kind, models, pass_pct, parts, created_by').eq('id', keyId).maybeSingle();
+  const { data: key } = await sb.from('answer_keys').select('id, subject, skills, exam_kind, models, pass_pct, parts, created_by, grade_level, choices').eq('id', keyId).maybeSingle();
   if (!key || !Array.isArray(key.skills) || !key.skills.some(x => x && x.k)) return;
   tabBtn.classList.remove('hidden');
   panel.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
@@ -124,6 +124,7 @@ function draw(panel) {
     </div>
     ${A.unlinked ? `<div class="sk-note">${A.unlinked} من أسئلة الاختبار غير مربوطة بمهارة، فلا تدخل في التحليل. يمكن ربطها من «إعداد نموذج الإجابة».</div>` : ''}
     ${A.differentB ? '<div class="sk-note">أسئلة النموذج ب مختلفة عن النموذج أ، فالتحليل لطلاب النموذج أ فقط.</div>' : ''}
+    ${A.nafes ? `<button type="button" class="sk-nafes-cta" id="sk-nafes-full"><span class="sk-nafes-i">📊</span><span><b>التقرير الشامل لنافس</b><small>لوحة نتائج برسوم بيانية، وشهادة تحليلية لكل طالب، وتحليل المعلمين حسب فصولهم</small></span><em>فتح ←</em></button>` : ''}
     ${A.nafes ? `<div class="sk-pass">
       <div class="sk-pass-n"><span>المجتازون</span><b>${nPass} <small>من ${studs.length}</small></b><em>${studs.length ? r1(nPass / studs.length * 100) : 0}%</em></div>
       <div class="sk-pass-t">يجتاز الطالب المادة إذا حقق <label><input type="number" id="sk-pass-pct" min="1" max="${A.refMax}" step="1" value="${passScoreOf()}" ${canEditKey() ? '' : 'disabled'}></label> من ${A.refMax} فأعلى، ويجتاز الاختبار إذا اجتاز: ${A.subjects.map(esc).join('، ')}<span id="sk-pass-msg"></span></div>
@@ -170,6 +171,8 @@ function draw(panel) {
     setTimeout(() => { draw(panel); const m = panel.querySelector('#sk-pass-msg'); if (m) m.textContent = error ? ' · تعذر حفظ النسبة' : ' · حُفظت للاختبار ✓'; }, 0);
   };
   panel.querySelector('#sk-plan').onclick = () => printPlan(needs, stats, studs);
+  const nf = panel.querySelector('#sk-nafes-full');
+  if (nf) nf.onclick = () => import('./nafes-report.js?v=' + ASSET_VERSION).then(m => m.openNafesReport(A.rep, A.key));
 }
 
 /* ---------- الخطة العلاجية (طباعة) ---------- */
