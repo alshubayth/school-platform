@@ -46,7 +46,6 @@ export function certFromData(c, m = {}) {
       </section>`).join('')}
       <div class="nc-leg"><span><i class="z1"></i>دون 50%</span><span><i class="z2"></i>من 50% إلى أقل من ${pass}%</span><span><i class="z3"></i>${pass}% فأكثر (منطقة الاجتياز)</span><span><em></em>حد الاجتياز</span></div>
       <section class="nc-an"><h3>التحليل</h3><ol>${certAnalysisLines(c).map(x => `<li>${x}</li>`).join('')}</ol></section>
-      ${m.signatures === false ? '' : '<div class="nc-sig"><div>معلم المادة<i></i></div><div>وكيل الشؤون التعليمية<i></i></div><div>مدير المدرسة<i></i></div></div>'}
     </div>
   </article>`;
 }
