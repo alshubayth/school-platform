@@ -23,23 +23,7 @@
   h1,h2,h3,b,.num{ font-family:'Tajawal','IBM Plex Sans Arabic',sans-serif; }
 
 
-  /* ===== شهادة نافس ===== */
-  .nf-st{ display:inline-block; font-weight:900; font-size:14px; padding:6px 14px; border-radius:12px; }
-  .nf-st.yes{ background:#EBFBEE; color:#2B8A3E; border:1.5px solid #8CE99A; } .nf-st.no{ background:#FFF5F5; color:#C92A2A; border:1.5px solid #FFA8A8; }
-  .nf-tot{ display:flex; align-items:center; gap:16px; background:linear-gradient(135deg,#F1F5FD,#F2FBF7); border-radius:16px; padding:10px 16px; margin:4px 0 12px; }
-  .nf-tot > div{ display:flex; flex-direction:column; gap:6px; align-items:flex-start; } .nf-tot b{ font-size:28px; font-weight:900; } .nf-tot b small{ font-size:14px; color:var(--slate); } .nf-tot span{ font-size:12px; color:var(--slate); }
-  .nf-ring text{ font-family:'Tajawal',sans-serif; }
-  .nf-subjs{ display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
-  .nf-s{ border:1px solid var(--line); border-radius:16px; padding:10px 12px; border-top:4px solid var(--sc); }
-  .nf-s header{ display:flex; align-items:center; gap:8px; } .nf-s header > b{ flex:1; color:var(--sc); font-size:16px; }
-  .nf-sc{ font-weight:900; font-size:17px; } .nf-sc small{ font-size:11px; color:var(--slate); }
-  .nf-ps{ font-size:12px; font-weight:900; border-radius:9px; padding:2px 9px; } .nf-ps.yes{ background:#EBFBEE; color:#2B8A3E; } .nf-ps.no{ background:#FFF5F5; color:#C92A2A; }
-  .nf-bar{ position:relative; height:10px; background:#EEF2F7; border-radius:99px; margin:8px 0; } .nf-bar i{ position:absolute; inset-block:0; inset-inline-start:0; background:var(--sc); border-radius:99px; } .nf-bar em{ position:absolute; top:-4px; width:2px; height:18px; background:#C92A2A; }
-  .nf-s table{ width:100%; border-collapse:collapse; font-size:12px; margin:0; } .nf-s td{ padding:5px 2px; border-top:1px solid #F2F4F7; background:none; } .nf-s td:first-child{ font-weight:700; }
-  .nf-mini{ height:7px; background:#EEF2F7; border-radius:99px; overflow:hidden; min-width:44px; } .nf-mini i{ display:block; height:100%; border-radius:99px; }
-  .nf-lv{ display:inline-block; font-size:11px; font-weight:900; color:var(--c); background:var(--b); border-radius:99px; padding:2px 8px; white-space:nowrap; }
-  .nf-an{ margin-top:12px; background:#F7F9FC; border-radius:16px; padding:10px 14px; } .nf-an h4{ margin:0 0 6px; font-size:15px; } .nf-an ul{ margin:0; padding-inline-start:18px; font-size:13.5px; line-height:1.9; }
-  .nf-leg{ display:flex; flex-wrap:wrap; gap:4px 12px; font-size:11.5px; color:var(--slate); margin-top:8px; } .nf-leg i{ display:inline-block; width:9px; height:9px; border-radius:3px; margin-inline-end:4px; }
+  .nc tbody tr{ animation:none !important; opacity:1 !important; }
   /* ===== الهوية: لوحة مُدار ===== */
   .top{ position:relative; overflow:hidden; isolation:isolate; color:#fff; padding:22px 16px 96px;
     background: radial-gradient(120% 120% at 85% 0%, #1E4A8E 0%, #13336A 48%, #0C2147 100%); }
@@ -270,11 +254,13 @@ $('form').addEventListener('submit', async e => {
     return;
   }
   cred = { nid, l4 };
+  await ncReady;
   render(data);
 });
 
 function render(d) {
   const st = d.student || {}, list = d.results || [];
+  lastStudent = st;
   const out = $('out');
   const initial = String(st.name || '؟').trim().charAt(0);
   out.innerHTML = `<div class="card rise">
@@ -337,37 +323,20 @@ async function loadDoc(el) {
   view.innerHTML = `<iframe class="doc-frame" src="${esc(url)}#toolbar=0&navpanes=0&view=FitH" title="تقرير الطالب"></iframe>`;
 }
 
-// شهادة نافس التحليلية (تُحفظ مع النتيجة عند النشر)
-const NF_LV = { 4: ['متقدم', '#2B8A3E', '#EBFBEE'], 3: ['متمكن', '#1971C2', '#E7F5FF'], 2: ['أساسي', '#E67700', '#FFF4E6'], 1: ['دون الأساسي', '#C92A2A', '#FFF5F5'] };
-const nfTag = k => { const l = NF_LV[k]; return l ? `<span class="nf-lv" style="--c:${l[1]};--b:${l[2]}">${l[0]}</span>` : ''; };
-const nfNeed = n => (n === 1 ? 'درجة واحدة' : n === 2 ? 'درجتان' : `${n} درجات`);
-function nfRing(p, color) {
-  const size = 104, r = 43, c = 2 * Math.PI * r, v = Math.max(0, Math.min(100, p || 0));
-  return `<svg class="nf-ring" viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true"><circle cx="52" cy="52" r="${r}" fill="none" stroke="#EDF1F7" stroke-width="10"/><circle cx="52" cy="52" r="${r}" fill="none" stroke="${color}" stroke-width="10" stroke-linecap="round" stroke-dasharray="${c * v / 100} ${c}" transform="rotate(-90 52 52)"/><text x="52" y="56" text-anchor="middle" font-size="21" font-weight="900" fill="#0F2447">${fmt(p)}%</text></svg>`;
-}
+// شهادة نافس (النموذج المشترك مع المنصة)
+let NC = null;
+const ncReady = import('./js/nafes-cert.js').then(m => { NC = m; const st = document.createElement('style'); st.textContent = m.CERT_CSS; document.head.appendChild(st); }).catch(() => {});
 function nafesCard(r, i, x) {
-  const c = x.nafes, pubDate = pubDateOf(r);
-  const fails = c.subjects.filter(s => !s.pass);
-  const lines = [
-    fails.length ? `<b>لم يجتز الطالب في:</b> ${fails.map(s => `${esc(s.s)} (ينقصه ${nfNeed(s.need)} للاجتياز)`).join('، ')}.` : `<b>اجتاز الطالب جميع المواد</b> بتحقيقه ${c.passPct}% فأكثر في كل مادة.`,
-    `<b>نقاط القوة:</b> ${c.strong.length ? c.strong.map(s => `${esc(s.k)} (${esc(s.s)})`).join('، ') : 'لا توجد مهارة بلغ فيها الطالب 80% بعد'}.`,
-    `<b>يحتاج إلى الدعم في:</b> ${c.weak.length ? c.weak.map(s => `${esc(s.k)} (${esc(s.s)})`).join('، ') : 'لا توجد مهارة دون 50%'}.`,
-  ];
-  return `<article class="card res" data-i="${i}">
-    <div class="res-h"><h3>${esc(r.title)}</h3><span class="meta">${esc(r.semester || '')}${r.semester && pubDate ? ' · ' : ''}${pubDate ? 'نُشرت ' + esc(pubDate) : ''}</span></div>
-    <div class="nf-tot">${nfRing(c.pct, (NF_LV[c.lv] || NF_LV[1])[1])}<div><span class="nf-st ${c.passed ? 'yes' : 'no'}">${c.passed ? '✓ مجتاز' : 'غير مجتاز'}</span><b><span class="num" data-count="${c.total}">${fmt(c.total)}</span><small> من ${fmt(c.max)}</small></b>${nfTag(c.lv)}<span>الاجتياز: ${c.passPct}% فأكثر في كل مادة</span></div></div>
-    <div class="nf-subjs">${c.subjects.map(s => `<section class="nf-s" style="--sc:${s.color}">
-      <header><b>${esc(s.s)}</b><span class="nf-sc">${fmt(s.got)} <small>من ${fmt(s.w)}</small></span><span class="nf-ps ${s.pass ? 'yes' : 'no'}">${s.pass ? '✓ اجتاز' : '✕ لم يجتز'}</span></header>
-      <div class="nf-bar"><i style="width:${s.pct}%"></i><em style="inset-inline-start:${c.passPct}%"></em></div>
-      <table><tbody>${s.skills.map(k => `<tr><td>${esc(k.k)}</td><td><div class="nf-mini"><i style="width:${k.pct}%;background:${(NF_LV[k.lv] || NF_LV[1])[1]}"></i></div></td><td>${Math.round(k.pct)}%</td><td>${nfTag(k.lv)}</td></tr>`).join('')}</tbody></table></section>`).join('')}</div>
-    <div class="nf-leg">${[4, 3, 2, 1].map(k => `<span><i style="background:${NF_LV[k][1]}"></i>${NF_LV[k][0]}</span>`).join('')}</div>
-    <section class="nf-an"><h4>التحليل العام</h4><ul>${lines.map(l => `<li>${l}</li>`).join('')}</ul></section>
+  const st = lastStudent || {};
+  return `<article class="card res nafes" data-i="${i}">
+    ${NC.certFromData(x.nafes, { name: st.name, grade: GRADES[st.grade] || st.grade || '', section: st.section, title: r.title, org: document.title.replace(/^نتائج الطلاب\s*-\s*/, ''), date: pubDateOf(r) ? 'نُشرت ' + pubDateOf(r) : '', signatures: false })}
     <div class="res-f no-print"><button class="btn ghost" type="button" data-print="${i}">طباعة الشهادة</button></div>
   </article>`;
 }
+let lastStudent = null;
 function card(r, i) {
   const rows0 = (r.payload && r.payload.rows) || [];
-  if (rows0.length === 1 && rows0[0].nafes && rows0[0].nafes.subjects) return nafesCard(r, i, rows0[0]);
+  if (NC && rows0.length === 1 && rows0[0].nafes && rows0[0].nafes.subjects) return nafesCard(r, i, rows0[0]);
   return plainCard(r, i);
 }
 function plainCard(r, i) {

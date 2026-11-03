@@ -8,6 +8,7 @@
  * ========================================================================= */
 import { sb, printOrgName, printLogo, ASSET_VERSION, currentSchoolId, readScopedBySchool, gradeLabels } from './core.js';
 import { letterFor } from './grading-core.js';
+import { certFromData, CERT_CSS } from './nafes-cert.js';
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const r1 = v => (v == null || !Number.isFinite(v) ? '—' : String(Math.round(v * 10) / 10));
@@ -340,28 +341,8 @@ function certData(s) {
 }
 const r2n = v => (v == null || !Number.isFinite(v) ? null : Math.round(v * 100) / 100);
 const needTxt = n => (n === 1 ? 'درجة واحدة' : n === 2 ? 'درجتان' : `${n} درجات`);
-// أسطر التحليل العام: ١) المواد التي لم يجتزها ٢) نقاط القوة ٣) ما يحتاج إلى دعم
-export function certAnalysis(c) {
-  const lines = [];
-  const fails = c.subjects.filter(x => !x.pass);
-  lines.push(fails.length ? `<b>لم يجتز الطالب في:</b> ${fails.map(x => `${esc(x.s)} (ينقصه ${needTxt(x.need)} للاجتياز)`).join('، ')}.` : `<b>اجتاز الطالب جميع المواد</b> بتحقيقه ${c.passPct}% فأكثر في كل مادة.`);
-  lines.push(`<b>نقاط القوة:</b> ${c.strong.length ? c.strong.map(x => `${esc(x.k)} (${esc(x.s)})`).join('، ') : 'لا توجد مهارة بلغ فيها الطالب 80% بعد'}.`);
-  lines.push(`<b>يحتاج إلى الدعم في:</b> ${c.weak.length ? c.weak.map(x => `${esc(x.k)} (${esc(x.s)})`).join('، ') : 'لا توجد مهارة دون 50%'}.`);
-  return lines;
-}
 function certHtml(s) {
-  const logo = printLogo();
-  return `<article class="nr-cert">
-    <header class="nr-cert-h">${logo ? `<img src="${esc(logo)}" alt="">` : ''}<div class="nr-cert-org"><b>${esc(printOrgName())}</b><span>شهادة نتيجة اختبار نافس التجريبي</span></div><div class="nr-cert-st ${s.passed ? 'yes' : 'no'}">${s.passed ? '✓ مجتاز' : 'غير مجتاز'}</div></header>
-    <div class="nr-cert-who"><div><small>اسم الطالب</small><b>${esc(s.name)}</b></div><div><small>الصف والفصل</small><b>${esc(D.gradeTxt)} · ${esc(s.section)}</b></div>${s.nid ? `<div><small>رقم الهوية</small><b>${esc(s.nid)}</b></div>` : ''}</div>
-    <div class="nr-cert-tot">${ring(s.pct, levelOf(s.pct).c, 108, 'الدرجة الكلية')}<div><b>${r2(s.total)}<small> / ${s.max}</small></b>${lvTag(s.pct)}<span>الاجتياز: ${D.passPct}% فأكثر في كل مادة</span></div></div>
-    <div class="nr-cert-subjs">${D.parts.map(p => { const x = s.subj[p.s]; return `<section class="nr-cert-s" style="--sc:${p.color}">
-      <header><b>${esc(p.s)}</b><span class="nr-cert-sc">${r2(x.got)} <small>من ${p.w}</small></span><span class="nr-ps ${x.pass ? 'yes' : 'no'}">${x.pass ? '✓ اجتاز' : '✕ لم يجتز'}</span></header>
-      <div class="nr-cert-bar"><i style="width:${x.pct}%"></i><em style="right:${D.passPct}%"></em></div>
-      <table><tbody>${p.skills.map(g => { const v = s.sk[g.id]; return `<tr><td>${esc(g.k)}</td><td><div class="nr-mini"><i style="width:${v}%;background:${levelOf(v).c}"></i></div></td><td>${Math.round(v)}%</td><td>${lvTag(v)}</td></tr>`; }).join('')}</tbody></table></section>`; }).join('')}</div>
-    <section class="nr-cert-an"><h5>التحليل العام</h5><ul>${certAnalysis(certData(s)).map(x => `<li>${x}</li>`).join('')}</ul></section>
-    <footer class="nr-cert-f"><div>معلم المادة<i></i></div><div>رائد النشاط / الموجه الطلابي<i></i></div><div>مدير المدرسة<i></i></div></footer>
-  </article>`;
+  return `<div class="nr-certp">${certFromData(certData(s), { name: s.name, grade: D.gradeTxt, section: s.section, nid: s.nid, org: printOrgName(), logo: printLogo(), date: new Date().toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }) })}</div>`;
 }
 function openCert(id) {
   const s = D.students.find(x => x.id === id); if (!s) return;
@@ -438,11 +419,10 @@ function printDoc(title, body, paged = false) {
   w.document.open();
   w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(title)}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
-    <style>${NR_CSS}
+    <style>${NR_CSS}${CERT_CSS}
     @page{ size:A4; margin:10mm; } body{ margin:0; background:#fff; font-family:'IBM Plex Sans Arabic',Tahoma,sans-serif; }
     .nr-print{ padding:0; } .nr-btn,.nr-x,#nr-print-teacher{ display:none !important; }
-    .nr-cert{ break-after:page; box-shadow:none; border:1.5px solid #D5DCE6; margin:0 0 0; }
-    .nr-cert:last-child{ break-after:auto; } .nr-page{ break-after:page; } .nr-page:last-child{ break-after:auto; }
+    .nr-certp{ break-after:page; } .nr-certp:last-child{ break-after:auto; } .nr-certp .nc{ border:0; } .nr-page{ break-after:page; } .nr-page:last-child{ break-after:auto; }
     .nr-card,.nr-subj,.nr-tcard,.nr-cert-s,tr{ break-inside:avoid; } .nr-twrap{ overflow:visible; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }</style></head>
     <body><div class="nr nr-print">${paged ? '' : `<header class="nr-phead">${printLogo() ? `<img src="${esc(printLogo())}" alt="">` : ''}<div><b>${esc(printOrgName())}</b><span>تقرير نافس التجريبي · ${esc(title)} · ${esc(D.gradeTxt)}${V.sec !== 'all' && V.tab !== 'teachers' ? ' · فصل ' + esc(V.sec) : ''}</span></div></header>`}${body}</div>
@@ -451,7 +431,7 @@ function printDoc(title, body, paged = false) {
 }
 
 /* ---------- التنسيق ---------- */
-function injectCss() { if (document.getElementById('nr-css')) return; const s = document.createElement('style'); s.id = 'nr-css'; s.textContent = NR_CSS; document.head.appendChild(s); }
+function injectCss() { if (document.getElementById('nr-css')) return; const s = document.createElement('style'); s.id = 'nr-css'; s.textContent = NR_CSS + CERT_CSS; document.head.appendChild(s); }
 const NR_CSS = `
 .nr-ov{ position:fixed; inset:0; z-index:9000; background:#F4F6FB; overflow:hidden; }
 .nr-ov.hidden{ display:none; } body.nr-lock{ overflow:hidden; }
@@ -531,7 +511,7 @@ const NR_CSS = `
 .nr-ps.yes{ background:#EBFBEE; color:#2B8A3E; } .nr-ps.no{ background:#FFF5F5; color:#C92A2A; } .nr-ps small{ font-weight:600; font-size:10.5px; }
 .nr-empty{ padding:30px; text-align:center; color:#667085; }
 .nr-modal{ position:absolute; inset:0; background:rgba(10,24,48,.55); backdrop-filter:blur(3px); display:flex; justify-content:center; overflow:auto; padding:18px 10px; z-index:2; }
-.nr-modal-b{ width:min(860px,100%); }
+.nr-modal-b{ width:min(860px,100%); } .nr-modal-b .nc{ box-shadow:0 20px 50px rgba(10,24,48,.3); }
 .nr-modal-t{ display:flex; gap:8px; align-items:center; margin-bottom:10px; color:#fff; font-weight:800; }
 .nr-modal-t span{ flex:1; text-align:center; } .nr-modal-t .nr-x{ background:rgba(255,255,255,.2); }
 .nr-cert{ position:relative; background:#fff; border-radius:22px; padding:20px 22px; box-shadow:0 20px 50px rgba(10,24,48,.25); overflow:hidden; }
