@@ -17,7 +17,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&a
 const GRADE_ORDER = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 const GRADE_CODE = Object.fromEntries(Object.entries(gradeLabels).map(([k, v]) => [v, k]));
 const glOf = g => (GRADE_ORDER.includes(g) ? g : GRADE_CODE[g] || null);
-const TYPE_LABEL = { periodic: 'الفترية', diagnostic: 'التشخيصية', final: 'النهائية', nafes: 'التجريبية لنافس' };
+const TYPE_LABEL = { periodic: 'الفترية', diagnostic: 'التشخيصية', final: 'النهائية', nafes: 'نافس' };
 const SEMS = ['الفصل الدراسي الأول', 'الفصل الدراسي الثاني'];
 const r2 = v => Math.round(v * 100) / 100;
 const mean = a => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : null);
@@ -122,7 +122,7 @@ function renderForm(edit) {
     .sort((a, b) => GRADE_ORDER.indexOf(a.gl) - GRADE_ORDER.indexOf(b.gl) || String(a.subject_name).localeCompare(String(b.subject_name), 'ar'));
   const autoTitle = () => {
     if (f.mode === 'single') { const r = reportsMeta.find(x => x.id === f.single); return r ? `نتيجة ${r.title}` : ''; }
-    return `نتائج الاختبارات ${TYPE_LABEL[f.type] || ''}${f.sem ? ' - ' + f.sem : ''}`;
+    return `${f.type === 'nafes' ? 'نتائج اختبار نافس' : `نتائج الاختبارات ${TYPE_LABEL[f.type] || ''}`}${f.sem ? ' - ' + f.sem : ''}`;
   };
   if (!edit) f.picked = new Set(matching().map(r => r.id));
 

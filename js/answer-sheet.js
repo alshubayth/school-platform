@@ -1180,7 +1180,7 @@ function setSubject(v) {
 function updateKeyTitle() {
   const sj = $('as-subject').value;
   const g = keyGrade();
-  const name = sj === NAFES ? 'نافس التجريبي' : sj;
+  const name = sj === NAFES ? 'نافس' : sj;
   $('as-title').value = sj ? `اختبار ${name}${g ? ' - ' + (gradeLabels[g] || g) : ''}` : '';
   // نافس: ربط المهارات أساسي، ولكل سؤال مادته
   if (sj === NAFES && $('as-skills-on') && !$('as-skills-on').checked) $('as-skills-on').checked = true;

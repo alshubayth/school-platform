@@ -1,5 +1,5 @@
 /* =========================================================================
- * التقرير الشامل لاختبار نافس التجريبي
+ * التقرير الشامل لاختبار نافس
  * - لوحة النتائج: مؤشرات عامة، المواد، مستويات الأداء، توزيع الدرجات، مقارنة الفصول.
  * - المهارات والأسئلة: إتقان كل مهارة، صعوبة كل سؤال، والإجابة الخاطئة الأكثر اختيارًا.
  * - الطلاب: قائمة كاملة بالفرز والتصفية، وشهادة تحليلية لكل طالب (تُطبع منفردة أو مجتمعة).
@@ -207,7 +207,7 @@ function draw() {
   const body = V.tab === 'skills' ? viewSkills() : V.tab === 'students' ? viewStudents() : V.tab === 'teachers' ? viewTeachers() : viewOverview();
   ov.innerHTML = `<div class="nr">
     <header class="nr-top">
-      <div class="nr-ttl"><span class="nr-badge">نافس</span><div><h2>التقرير الشامل لاختبار نافس التجريبي</h2><p>${esc(printOrgName())} · ${esc(D.gradeTxt)} · ${D.students.length} طالبًا · الاجتياز ${D.passPct}% في كل مادة</p></div></div>
+      <div class="nr-ttl"><span class="nr-badge">نافس</span><div><h2>التقرير الشامل لاختبار نافس</h2><p>${esc(printOrgName())} · ${esc(D.gradeTxt)} · ${D.students.length} طالبًا · الاجتياز ${D.passPct}% في كل مادة</p></div></div>
       <div class="nr-acts"><button type="button" class="nr-btn ghost" id="nr-print">🖨 طباعة هذا القسم</button><button type="button" class="nr-x" data-close aria-label="إغلاق">✕</button></div>
       <nav class="nr-tabs">${TABS.map(([k, t]) => `<button type="button" data-tab="${k}" class="${V.tab === k ? 'on' : ''}">${t}</button>`).join('')}</nav>
     </header>
@@ -425,7 +425,7 @@ function printDoc(title, body, paged = false) {
     .nr-certp{ break-after:page; } .nr-certp:last-child{ break-after:auto; } .nr-certp .nc{ border:0; } .nr-page{ break-after:page; } .nr-page:last-child{ break-after:auto; }
     .nr-card,.nr-subj,.nr-tcard,.nr-cert-s,tr{ break-inside:avoid; } .nr-twrap{ overflow:visible; }
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }</style></head>
-    <body><div class="nr nr-print">${paged ? '' : `<header class="nr-phead">${printLogo() ? `<img src="${esc(printLogo())}" alt="">` : ''}<div><b>${esc(printOrgName())}</b><span>تقرير نافس التجريبي · ${esc(title)} · ${esc(D.gradeTxt)}${V.sec !== 'all' && V.tab !== 'teachers' ? ' · فصل ' + esc(V.sec) : ''}</span></div></header>`}${body}</div>
+    <body><div class="nr nr-print">${paged ? '' : `<header class="nr-phead">${printLogo() ? `<img src="${esc(printLogo())}" alt="">` : ''}<div><b>${esc(printOrgName())}</b><span>تقرير نافس · ${esc(title)} · ${esc(D.gradeTxt)}${V.sec !== 'all' && V.tab !== 'teachers' ? ' · فصل ' + esc(V.sec) : ''}</span></div></header>`}${body}</div>
     <script>window.onload=()=>setTimeout(()=>window.print(),600)<\/script></body></html>`);
   w.document.close();
 }

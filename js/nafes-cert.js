@@ -30,7 +30,7 @@ export function certFromData(c, m = {}) {
   const pass = c.passPct || 75;
   const passed = c.subjects.filter(x => x.pass).length;
   return `<article class="nc">
-    <header class="nc-band">${m.logo ? `<img src="${esc(m.logo)}" alt="">` : ''}<div class="nc-ttl"><h2>${esc(m.title || 'تقرير أداء الطالب · اختبار نافس التجريبي')}</h2><span>${esc(m.org || '')}${m.date ? ' · ' + esc(m.date) : ''}</span></div><div class="nc-st ${c.passed ? 'yes' : 'no'}">${c.passed ? '✓ مجتاز' : 'غير مجتاز'}</div></header>
+    <header class="nc-band">${m.logo ? `<img src="${esc(m.logo)}" alt="">` : ''}<div class="nc-ttl"><h2>${esc(m.title || 'تقرير أداء الطالب · اختبار نافس')}</h2><span>${esc(m.org || '')}${m.date ? ' · ' + esc(m.date) : ''}</span></div><div class="nc-st ${c.passed ? 'yes' : 'no'}">${c.passed ? '✓ مجتاز' : 'غير مجتاز'}</div></header>
     <div class="nc-body">
       <div class="nc-info"><div><small>اسم الطالب</small><b>${esc(m.name || '')}</b></div><div><small>الصف</small><b>${esc(m.grade || '')}</b></div><div><small>الفصل</small><b>${esc(m.section || '')}</b></div>${m.nid ? `<div><small>رقم الهوية</small><b>${esc(m.nid)}</b></div>` : ''}</div>
       <div class="nc-kp">

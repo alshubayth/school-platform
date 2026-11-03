@@ -557,7 +557,7 @@ export function canonSubject(t) {
 export function examTitle(subject, grade, type) {
   const sj = canonSubject(subject), g = canonGrade(grade);
   if (!sj) return '';
-  if (sj === 'نافس' || type === 'nafes') return `اختبار نافس التجريبي${sj && sj !== 'نافس' ? ' - ' + sj : ''}${g ? ' - ' + g : ''}`;
+  if (sj === 'نافس' || type === 'nafes') return `اختبار نافس${sj && sj !== 'نافس' ? ' - ' + sj : ''}${g ? ' - ' + g : ''}`;
   const t = type === 'periodic' ? ' الفتري' : type === 'diagnostic' ? ' التشخيصي' : '';
   return `اختبار ${sj}${t}${g ? ' - ' + g : ''}`;
 }
