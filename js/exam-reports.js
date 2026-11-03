@@ -901,7 +901,10 @@ async function openReport(id) {
   // تحليل المهارات: يظهر إذا كانت أسئلة المفتاح مربوطة بمهارات
   const skTab = document.getElementById('er-tab-skills');
   skTab.classList.add('hidden');
-  import('./skills-analysis.js?v=' + ASSET_VERSION).then(m => m.renderSkillsPanel(data, document.getElementById('er-panel-skills'), skTab)).catch(e => console.error('skills', e));
+  import('./skills-analysis.js?v=' + ASSET_VERSION).then(m => m.renderSkillsPanel(data, document.getElementById('er-panel-skills'), skTab))
+    // اختبار نافس: يُفتح مباشرة على تحليل المواد والمهارات والاجتياز
+    .then(ok => { if (ok && data.exam_type === 'nafes' && currentReport && currentReport.id === data.id) showErTab('skills'); })
+    .catch(e => console.error('skills', e));
   renderReportStats(data.stats);
 }
 

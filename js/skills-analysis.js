@@ -25,7 +25,7 @@ let view = { sec: 'all', subj: 'all', open: null };
 
 export async function renderSkillsPanel(rep, panel, tabBtn) {
   const rd = rep.raw_data || {};
-  const keyId = rep.key_id || (rd.models && rd.models.keyId) || null;
+  const keyId = rep.key_id || rd.keyId || (rd.models && rd.models.keyId) || null;
   panel.innerHTML = '';
   if (!keyId || !Array.isArray(rd.students)) return;
   const { data: key } = await sb.from('answer_keys').select('id, subject, skills, exam_kind, models, pass_pct, parts, created_by').eq('id', keyId).maybeSingle();
@@ -77,9 +77,11 @@ export async function renderSkillsPanel(rep, panel, tabBtn) {
   // الدرجة الكاملة لكل مادة (مثل ٢٠)، لعرض شرط الاجتياز بالدرجة (١٥ من ٢٠)
   const subjMax = [...subjQs.values()].map(qs => qs.reduce((a, j) => a + PW(j), 0));
   const refMax = subjMax.length ? Math.max(...subjMax) : 0;
-  A = { rep, key, nafes, list, students, unlinked, differentB, grade: sr.gl || '', passPct, refMax, subjects: [...subjQs.keys()] };
+  const subjW = Object.fromEntries([...subjQs].map(([sj, qs]) => [sj, qs.reduce((a, j) => a + PW(j), 0)]));
+  A = { rep, key, nafes, list, students, unlinked, differentB, grade: sr.gl || '', passPct, refMax, subjects: [...subjQs.keys()], subjW };
   view = { sec: 'all', subj: 'all', open: null, pass: 'all' };
   draw(panel);
+  return true;
 }
 
 function filtered() {
@@ -125,7 +127,7 @@ function draw(panel) {
     ${A.nafes ? `<div class="sk-pass">
       <div class="sk-pass-n"><span>المجتازون</span><b>${nPass} <small>من ${studs.length}</small></b><em>${studs.length ? r1(nPass / studs.length * 100) : 0}%</em></div>
       <div class="sk-pass-t">يجتاز الطالب المادة إذا حقق <label><input type="number" id="sk-pass-pct" min="1" max="${A.refMax}" step="1" value="${passScoreOf()}" ${canEditKey() ? '' : 'disabled'}></label> من ${A.refMax} فأعلى، ويجتاز الاختبار إذا اجتاز: ${A.subjects.map(esc).join('، ')}<span id="sk-pass-msg"></span></div>
-      <div class="sk-pass-s">${A.subjects.map(sj => `<span>${esc(sj)}: <b>${passBySubj[sj]}</b> اجتازوا المادة</span>`).join('')}</div>
+      <div class="sk-pass-s">${A.subjects.map(sj => { const w = A.subjW[sj] || 0, need = Math.round((A.passPct / 100) * w * 100) / 100; return `<span>${esc(sj)}: <b>${passBySubj[sj]}</b> اجتازوا المادة <small>(${need} من ${w})</small></span>`; }).join('')}</div>
     </div>` : ''}
     <div class="sk-cards">
       ${bySubj.map(x => { const l = lvl(x.m); return `<button type="button" class="sk-card ${l.c}${view.subj === x.s ? ' on' : ''}" data-subj="${esc(x.s)}"><span>${esc(x.s || 'الاختبار')}</span><b>${r1(x.m)}%</b><small>${l.t} · ${x.n} ${x.n === 1 ? 'مهارة' : x.n === 2 ? 'مهارتان' : 'مهارات'}</small></button>`; }).join('')}
