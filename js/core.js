@@ -287,7 +287,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-11-03c';
+export const ASSET_VERSION = '2026-11-03d';
 
 /* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
  * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
@@ -401,6 +401,14 @@ export function pageTitle(page) {
   return lastPageTitle ? `${lastPageTitle} - ${tail}` : tail;
 }
 // اسم المدرسة بالمطبوعات، وشعار ترويستها (شعار الجهة التابعة لها، وإلا شعار المدرسة، وإلا بدون)
+// الرابط الرسمي للمنصة في الروابط التي تُرسل (أولياء الأمور، المعلمون): الدومين الجديد دائمًا،
+// حتى لو فُتحت المنصة من الرابط القديم على Vercel. محليًا يبقى رابط الجهاز.
+export const CANONICAL_ORIGIN = 'https://www.mudaar.online';
+export function siteBase() {
+  const h = location.hostname;
+  if (/(^|\.)mudaar\.online$/.test(h) || /\.vercel\.app$/.test(h)) return CANONICAL_ORIGIN + '/';
+  return location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/[^/]*$/, '/');
+}
 export function printOrgName() { return schoolBrand.name || schoolBrand.short || ''; }
 export function printLogo() { return schoolBrand.authorityLogo || schoolBrand.logo || null; }
 

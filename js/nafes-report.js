@@ -327,30 +327,39 @@ function viewStudents() {
 }
 
 /* ---------- شهادة الطالب ---------- */
-function studentAnalysis(s) {
-  const gm = mean(D.students.map(x => x.pct));
+// بيانات الشهادة (تُستخدم في المنصة وتُحفظ لصفحة أولياء الأمور)
+function certData(s) {
+  const lv = p => { const l = levelOf(p); return l ? l.k : null; };
   const sk = D.skills.map(g => ({ g, v: s.sk[g.id] })).filter(x => x.v != null);
-  const strong = sk.filter(x => x.v >= 80).sort((a, b) => b.v - a.v), weak = sk.filter(x => x.v < 50).sort((a, b) => a.v - b.v);
+  return {
+    v: 1, passPct: D.passPct, passed: s.passed, total: r2n(s.total), max: s.max, pct: r2n(s.pct), lv: lv(s.pct),
+    subjects: D.parts.map(p => { const x = s.subj[p.s]; return { s: p.s, color: p.color, got: r2n(x.got), w: p.w, pct: r2n(x.pct), pass: x.pass, need: x.pass ? 0 : Math.max(0, Math.ceil((D.passPct / 100) * p.w - x.got - 1e-9)), skills: p.skills.map(g => ({ k: g.k, pct: r2n(s.sk[g.id]), lv: lv(s.sk[g.id]) })) }; }),
+    strong: sk.filter(x => x.v >= 80).sort((a, b) => b.v - a.v).slice(0, 4).map(x => ({ k: x.g.k, s: x.g.s })),
+    weak: sk.filter(x => x.v < 50).sort((a, b) => a.v - b.v).slice(0, 4).map(x => ({ k: x.g.k, s: x.g.s })),
+  };
+}
+const r2n = v => (v == null || !Number.isFinite(v) ? null : Math.round(v * 100) / 100);
+const needTxt = n => (n === 1 ? 'درجة واحدة' : n === 2 ? 'درجتان' : `${n} درجات`);
+// أسطر التحليل العام: ١) المواد التي لم يجتزها ٢) نقاط القوة ٣) ما يحتاج إلى دعم
+export function certAnalysis(c) {
   const lines = [];
-  lines.push(`حصل الطالب على <b>${r2(s.total)} من ${s.max}</b> (${r1(s.pct)}%)، وترتيبه <b>${s.rank}</b> من ${D.students.length} طالبًا في ${esc(D.gradeTxt)}، وأداؤه ${s.pct >= gm ? 'أعلى' : 'أدنى'} من متوسط الصف (${r1(gm)}%) بفارق ${r1(Math.abs(s.pct - gm))} نقطة، وهو أعلى من ${s.pctile}% من زملائه.`);
-  lines.push(s.passed ? `<b>اجتاز الطالب الاختبار</b> بتحقيقه ${D.passPct}% فأكثر في جميع المواد.` : `<b>لم يجتز الطالب</b> في: ${s.fails.map(f => { const p = D.parts.find(x => x.s === f), x = s.subj[f], need = Math.max(0, Math.ceil((D.passPct / 100) * p.w - x.got - 1e-9)); return `${esc(f)} (ينقصه ${need} ${need === 1 ? 'درجة' : need === 2 ? 'درجتان' : 'درجات'})`; }).join('، ')}.`);
-  if (strong.length) lines.push(`<b>نقاط القوة:</b> ${strong.slice(0, 4).map(x => `${esc(x.g.k)} (${esc(x.g.s)})`).join('، ')}.`);
-  if (weak.length) lines.push(`<b>يحتاج إلى دعم في:</b> ${weak.slice(0, 4).map(x => `${esc(x.g.k)} (${esc(x.g.s)})`).join('، ')}.`);
-  const rec = s.passed ? 'يُوصى بإثراء الطالب بأسئلة مستوى «متقدم» والمحافظة على مستواه حتى موعد الاختبار.' : weak.length ? `يُوصى بخطة علاجية مركّزة على ${esc(weak[0].g.k)}${weak[1] ? ' و' + esc(weak[1].g.k) : ''}، بتدريبات مشابهة لأسئلة نافس، ثم إعادة القياس بعد أسبوعين.` : 'يُوصى بتدريبات على نماذج نافس في المواد التي لم يجتزها، مع متابعة زمن الإجابة.';
-  lines.push(`<b>التوصية:</b> ${rec}`);
+  const fails = c.subjects.filter(x => !x.pass);
+  lines.push(fails.length ? `<b>لم يجتز الطالب في:</b> ${fails.map(x => `${esc(x.s)} (ينقصه ${needTxt(x.need)} للاجتياز)`).join('، ')}.` : `<b>اجتاز الطالب جميع المواد</b> بتحقيقه ${c.passPct}% فأكثر في كل مادة.`);
+  lines.push(`<b>نقاط القوة:</b> ${c.strong.length ? c.strong.map(x => `${esc(x.k)} (${esc(x.s)})`).join('، ') : 'لا توجد مهارة بلغ فيها الطالب 80% بعد'}.`);
+  lines.push(`<b>يحتاج إلى الدعم في:</b> ${c.weak.length ? c.weak.map(x => `${esc(x.k)} (${esc(x.s)})`).join('، ') : 'لا توجد مهارة دون 50%'}.`);
   return lines;
 }
 function certHtml(s) {
   const logo = printLogo();
   return `<article class="nr-cert">
     <header class="nr-cert-h">${logo ? `<img src="${esc(logo)}" alt="">` : ''}<div class="nr-cert-org"><b>${esc(printOrgName())}</b><span>شهادة نتيجة اختبار نافس التجريبي</span></div><div class="nr-cert-st ${s.passed ? 'yes' : 'no'}">${s.passed ? '✓ مجتاز' : 'غير مجتاز'}</div></header>
-    <div class="nr-cert-who"><div><small>اسم الطالب</small><b>${esc(s.name)}</b></div><div><small>الصف والفصل</small><b>${esc(D.gradeTxt)} · ${esc(s.section)}</b></div>${s.nid ? `<div><small>رقم الهوية</small><b>${esc(s.nid)}</b></div>` : ''}<div><small>الترتيب</small><b>${s.rank} / ${D.students.length}</b></div></div>
+    <div class="nr-cert-who"><div><small>اسم الطالب</small><b>${esc(s.name)}</b></div><div><small>الصف والفصل</small><b>${esc(D.gradeTxt)} · ${esc(s.section)}</b></div>${s.nid ? `<div><small>رقم الهوية</small><b>${esc(s.nid)}</b></div>` : ''}</div>
     <div class="nr-cert-tot">${ring(s.pct, levelOf(s.pct).c, 108, 'الدرجة الكلية')}<div><b>${r2(s.total)}<small> / ${s.max}</small></b>${lvTag(s.pct)}<span>الاجتياز: ${D.passPct}% فأكثر في كل مادة</span></div></div>
     <div class="nr-cert-subjs">${D.parts.map(p => { const x = s.subj[p.s]; return `<section class="nr-cert-s" style="--sc:${p.color}">
       <header><b>${esc(p.s)}</b><span class="nr-cert-sc">${r2(x.got)} <small>من ${p.w}</small></span><span class="nr-ps ${x.pass ? 'yes' : 'no'}">${x.pass ? '✓ اجتاز' : '✕ لم يجتز'}</span></header>
       <div class="nr-cert-bar"><i style="width:${x.pct}%"></i><em style="right:${D.passPct}%"></em></div>
       <table><tbody>${p.skills.map(g => { const v = s.sk[g.id]; return `<tr><td>${esc(g.k)}</td><td><div class="nr-mini"><i style="width:${v}%;background:${levelOf(v).c}"></i></div></td><td>${Math.round(v)}%</td><td>${lvTag(v)}</td></tr>`; }).join('')}</tbody></table></section>`; }).join('')}</div>
-    <section class="nr-cert-an"><h5>التحليل العام</h5><ul>${studentAnalysis(s).map(x => `<li>${x}</li>`).join('')}</ul></section>
+    <section class="nr-cert-an"><h5>التحليل العام</h5><ul>${certAnalysis(certData(s)).map(x => `<li>${x}</li>`).join('')}</ul></section>
     <footer class="nr-cert-f"><div>معلم المادة<i></i></div><div>رائد النشاط / الموجه الطلابي<i></i></div><div>مدير المدرسة<i></i></div></footer>
   </article>`;
 }
@@ -531,7 +540,7 @@ const NR_CSS = `
 .nr-cert-h img{ height:52px; } .nr-cert-org{ flex:1; display:flex; flex-direction:column; }
 .nr-cert-h b{ font-size:15px; } .nr-cert-h span{ font-size:18px; font-weight:900; color:#0F2447; }
 .nr-cert-st{ font-weight:900; font-size:15px; padding:9px 16px; border-radius:14px; } .nr-cert-st.yes{ background:#EBFBEE; color:#2B8A3E; border:1.5px solid #8CE99A; } .nr-cert-st.no{ background:#FFF5F5; color:#C92A2A; border:1.5px solid #FFA8A8; }
-.nr-cert-who{ display:grid; grid-template-columns:2fr 1.2fr 1.2fr .8fr; gap:10px; margin:12px 0; }
+.nr-cert-who{ display:grid; grid-template-columns:2fr 1.2fr 1.2fr; gap:10px; margin:12px 0; }
 .nr-cert-who div{ background:#F7F9FC; border-radius:12px; padding:8px 12px; } .nr-cert-who small{ display:block; color:#667085; font-size:11px; font-weight:700; } .nr-cert-who b{ font-size:14px; }
 .nr-cert-tot{ display:flex; align-items:center; gap:16px; background:linear-gradient(135deg,#F1F5FD,#F2FBF7); border-radius:16px; padding:8px 16px; margin-bottom:12px; }
 .nr-cert-tot > div{ display:flex; flex-direction:column; gap:6px; align-items:flex-start; } .nr-cert-tot b{ font-size:30px; font-weight:900; } .nr-cert-tot b small{ font-size:15px; color:#667085; } .nr-cert-tot span{ font-size:12px; color:#667085; }
@@ -562,3 +571,18 @@ const NR_CSS = `
   .nr-cert{ padding:16px 14px; } .nr-cert-who{ grid-template-columns:1fr 1fr; } .nr-tk{ grid-template-columns:1fr 1fr; }
   .nr-hb-l{ max-width:120px; }
 }`;
+
+/* ---------- لنشر النتائج: شهادة كل طالب (رقم الهوية ← بيانات الشهادة) ---------- */
+export async function nafesCertificates(rep) {
+  const rd = rep.raw_data || {};
+  const keyId = rep.key_id || rd.keyId || (rd.models && rd.models.keyId) || null;
+  if (!keyId) return null;
+  const { data: key } = await sb.from('answer_keys').select('id, subject, skills, exam_kind, pass_pct, parts, grade_level, choices').eq('id', keyId).maybeSingle();
+  if (!key || !(key.exam_kind === 'nafes' || key.subject === 'نافس')) return null;
+  const prev = D;
+  try {
+    D = await build(rep, key);
+    if (!D) return null;
+    return new Map(D.students.filter(x => x.nid).map(x => [String(x.nid), certData(x)]));
+  } finally { D = prev; }
+}

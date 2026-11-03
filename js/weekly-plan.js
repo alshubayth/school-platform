@@ -1,4 +1,4 @@
-import { academicWeekInfo, weekLabel, sb, currentUserId, currentProfile, isAdminOrDeputy, isStaff, gradeLabels, currentSchoolId, upsertSchoolKey, conflictOpt } from './core.js';
+import { academicWeekInfo, weekLabel, sb, currentUserId, currentProfile, isAdminOrDeputy, isStaff, gradeLabels, currentSchoolId, upsertSchoolKey, conflictOpt, siteBase } from './core.js';
 
 /* ===== كتابة آمنة لعمود school_id قبل/بعد تنفيذ ترقية SQL للمرحلة الثانية =====
  * لو عمود school_id لسا ما انضاف لهذا الجدول بقاعدة البيانات (رفع الكود صار قبل تنفيذ SQL
@@ -36,7 +36,6 @@ async function schoolSlugForLinks() {
   }
   return slug;
 }
-const siteBase = () => location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/[^/]*$/, '/');
 async function buildParentPageUrl() {
   return siteBase() + 'parent.html?school=' + encodeURIComponent(await schoolSlugForLinks());
 }

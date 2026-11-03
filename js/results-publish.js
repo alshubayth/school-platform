@@ -6,7 +6,7 @@
  * ويطّلع عليها ولي الأمر من صفحة results.html برقم الهوية وآخر أربعة أرقام من الجوال.
  * لا يظهر لولي الأمر اسم أي طالب آخر ولا ترتيب، فقط درجة ابنه ومتوسط فصله.
  * ========================================================================= */
-import { sb, currentSchoolId, currentUserId, readScopedBySchool, writeWithSchool, gradeLabels, ASSET_VERSION } from './core.js';
+import { sb, currentSchoolId, currentUserId, readScopedBySchool, writeWithSchool, gradeLabels, ASSET_VERSION, siteBase } from './core.js';
 import { loadPdfJs, loadPdfLib } from './lib-loader.js';
 
 const PDF_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
@@ -27,7 +27,7 @@ let pubs = [];
 let slug = 'al-murooj';
 
 const R = build => readScopedBySchool(sc => { let q = build(); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
-const pageUrl = () => location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/[^/]*$/, '/') + 'results.html?school=' + encodeURIComponent(slug);
+const pageUrl = () => siteBase() + 'results.html?school=' + encodeURIComponent(slug);
 
 export async function openResultsPublisher() {
   let back = $('rp-back');
@@ -194,7 +194,7 @@ function renderForm(edit) {
 async function generate(pub) {
   try {
     const [{ data: reps, error }, { scoreReport }, { allStudents }] = await Promise.all([
-      sb.from('exam_reports').select('id, title, subject_name, grade_level, semester, exam_type, created_at, key_raw, raw_data, source').in('id', pub.report_ids),
+      sb.from('exam_reports').select('id, title, subject_name, grade_level, semester, exam_type, created_at, key_raw, raw_data, source, key_id').in('id', pub.report_ids),
       import('./student-profile.js?v=' + ASSET_VERSION),
       import('./students-cache.js?v=' + ASSET_VERSION),
     ]);
@@ -203,6 +203,9 @@ async function generate(pub) {
     const platMap = new Map(plat.filter(p => p.national_id).map(p => [String(p.national_id).trim(), p]));
     const entries = new Map();
     const order = pub.report_ids;
+    // اختبار نافس: تُحفظ مع الدرجة شهادة الطالب التحليلية (المواد والمهارات والاجتياز)
+    const nafesCerts = new Map();
+    for (const rep of reps || []) if (rep.exam_type === 'nafes') { try { const m = await (await import('./nafes-report.js?v=' + ASSET_VERSION)).nafesCertificates(rep); if (m) nafesCerts.set(rep.id, m); } catch (e) { console.error('nafes cert', e); } }
     (reps || []).sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).forEach(rep => {
       const sr = scoreReport(rep, platMap);
       if (!sr) return;
@@ -213,7 +216,8 @@ async function generate(pub) {
       sr.recs.forEach(rec => {
         const p = platMap.get(rec.id); if (!p) return;
         done.add(rec.id);
-        entryOf(entries, p).rows.push({ subject, title: rep.title || '', score: r2(rec.total), max: r2(rec.max), pct: r2(rec.pct), classAvg: sr.secMean.get(rec.section) != null ? r2(sr.secMean.get(rec.section)) : null });
+        const cert = nafesCerts.has(rep.id) ? nafesCerts.get(rep.id).get(String(rec.id)) : null;
+        entryOf(entries, p).rows.push({ subject, title: rep.title || '', score: r2(rec.total), max: r2(rec.max), pct: r2(rec.pct), classAvg: sr.secMean.get(rec.section) != null ? r2(sr.secMean.get(rec.section)) : null, ...(cert ? { nafes: cert } : {}) });
       });
       // غائب: طالب من الصف نفسه وفي فصل شارك في الاختبار ولم تُرصد له ورقة
       plat.forEach(p => {

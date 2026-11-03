@@ -1,6 +1,6 @@
 import { sb, SUPABASE_URL, currentUserId, roleLabels, staffRoleLabels, roleLabelOf, gradeLabels,
          isAdminOrDeputy, toLoginEmail, STAFF_ID_DOMAIN, setupCollapsible,
-         currentSchoolId, readScopedBySchool, writeWithSchool } from './core.js';
+         currentSchoolId, readScopedBySchool, writeWithSchool, siteBase } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 /* ================= بوابة الموظفين ================= */
@@ -492,8 +492,8 @@ function lgWaLink(r) {
   else if (ph.startsWith('5') && ph.length === 9) ph = '966' + ph;
   const first = String(r.full_name || '').split(/\s+/)[0] || '';
   const msg = r.last_sign_in_at
-    ? `السلام عليكم أستاذ ${first}،\nنذكّركم بمتابعة منصة مُدار للاطلاع على مهامكم وجدولكم وتقارير اختباراتكم:\n${location.origin}`
-    : `السلام عليكم أستاذ ${first}،\nحسابكم في منصة مُدار جاهز، نأمل الدخول للاطلاع على جدولكم ومهامكم وتقارير اختباراتكم:\n${location.origin}\nاسم المستخدم: رقمكم الوظيفي.`;
+    ? `السلام عليكم أستاذ ${first}،\nنذكّركم بمتابعة منصة مُدار للاطلاع على مهامكم وجدولكم وتقارير اختباراتكم:\n${siteBase()}`
+    : `السلام عليكم أستاذ ${first}،\nحسابكم في منصة مُدار جاهز، نأمل الدخول للاطلاع على جدولكم ومهامكم وتقارير اختباراتكم:\n${siteBase()}\nاسم المستخدم: رقمكم الوظيفي.`;
   // بلا رقم جوال: واتساب يفتح لاختيار جهة الاتصال
   return `https://wa.me/${ph || ''}?text=${encodeURIComponent(msg)}`;
 }
@@ -547,7 +547,7 @@ function renderLoginTracker(back) {
   const grp = body.querySelector('#lg-group');
   if (grp) {
     const names = list.filter(r => lgGroup(r) !== 'week').map((r, i) => `${i + 1}. ${r.full_name}`).join('\n');
-    grp.href = `https://wa.me/?text=${encodeURIComponent(`السلام عليكم ورحمة الله،\nنأمل من الزملاء التالية أسماؤهم الدخول إلى منصة مُدار للاطلاع على جداولهم ومهامهم وتقارير اختباراتهم:\n${names}\n\nرابط المنصة: ${location.origin}\nاسم المستخدم: الرقم الوظيفي.`)}`;
+    grp.href = `https://wa.me/?text=${encodeURIComponent(`السلام عليكم ورحمة الله،\nنأمل من الزملاء التالية أسماؤهم الدخول إلى منصة مُدار للاطلاع على جداولهم ومهامهم وتقارير اختباراتهم:\n${names}\n\nرابط المنصة: ${siteBase()}\nاسم المستخدم: الرقم الوظيفي.`)}`;
   }
   const cp = body.querySelector('#lg-copy');
   if (cp) cp.onclick = async () => {
