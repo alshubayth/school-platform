@@ -208,7 +208,7 @@ function draw() {
   ov.innerHTML = `<div class="nr">
     <header class="nr-top">
       <div class="nr-ttl"><span class="nr-badge">نافس</span><div><h2>التقرير الشامل لاختبار نافس</h2><p>${esc(printOrgName())} · ${esc(D.gradeTxt)} · ${D.students.length} طالبًا · الاجتياز ${D.passPct}% في كل مادة</p></div></div>
-      <div class="nr-acts"><button type="button" class="nr-btn ghost" id="nr-print">🖨 طباعة هذا القسم</button><button type="button" class="nr-x" data-close aria-label="إغلاق">✕</button></div>
+      <div class="nr-acts"><button type="button" class="nr-btn ghost" id="nr-print">🖨 طباعة هذا القسم</button><button type="button" class="nr-btn pdf" id="nr-pdf">⬇ PDF</button><button type="button" class="nr-x" data-close aria-label="إغلاق">✕</button></div>
       <nav class="nr-tabs">${TABS.map(([k, t]) => `<button type="button" data-tab="${k}" class="${V.tab === k ? 'on' : ''}">${t}</button>`).join('')}</nav>
     </header>
     ${V.tab !== 'teachers' ? `<div class="nr-secs"><span>الفصل</span>${['all', ...D.sections].map(x => `<button type="button" data-sec="${esc(x)}" class="${V.sec === x ? 'on' : ''}">${x === 'all' ? 'كل الفصول' : 'فصل ' + esc(x)}</button>`).join('')}</div>` : ''}
@@ -223,10 +223,11 @@ function draw() {
   const q = ov.querySelector('#nr-q'); if (q) q.oninput = () => { V.q = q.value; const pos = q.selectionStart; draw(); const n = ov.querySelector('#nr-q'); n.focus(); n.setSelectionRange(pos, pos); };
   ov.querySelectorAll('[data-st]').forEach(b => b.onclick = () => openCert(b.dataset.st));
   ov.querySelectorAll('[data-tch]').forEach(b => b.onclick = () => { V.teacher = V.teacher === b.dataset.tch ? null : b.dataset.tch; draw(); const el = ov.querySelector('.nr-tdetail'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
-  const pc = ov.querySelector('#nr-print-certs'); if (pc) pc.onclick = () => printDoc('شهادات نافس', filteredStudents().map(certHtml).join(''), true);
-  const pt = ov.querySelector('#nr-print-teacher'); if (pt) pt.onclick = () => { const t = D.teachers.find(x => x.id + '|' + x.subj === V.teacher); if (t) printDoc('تقرير المعلم - ' + t.name, teacherDetail(t, true)); };
-  const pta = ov.querySelector('#nr-print-teachers'); if (pta) pta.onclick = () => printDoc('تقارير المعلمين', D.teachers.map(t => `<div class="nr-page">${teacherDetail(t, true)}</div>`).join(''), true);
-  ov.querySelector('#nr-print').onclick = () => printDoc(TABS.find(t => t[0] === V.tab)[1], ov.querySelector('#nr-main').innerHTML);
+  const both = (id, fn) => { const a = ov.querySelector('#nr-print' + id), b = ov.querySelector('#nr-pdf' + id); if (a) a.onclick = () => fn('print'); if (b) b.onclick = () => fn('pdf'); };
+  both('-certs', m => printDoc(m === 'pdf' ? 'شهادات نافس' + (V.sec !== 'all' ? ' - فصل ' + V.sec : '') : 'شهادات نافس', filteredStudents().map(certHtml).join(''), true, m));
+  both('-teacher', m => { const t = D.teachers.find(x => x.id + '|' + x.subj === V.teacher); if (t) printDoc('تقرير المعلم - ' + t.name, teacherDetail(t, true), false, m); });
+  both('-teachers', m => printDoc('تقارير المعلمين', D.teachers.map(t => `<div class="nr-page">${teacherDetail(t, true)}</div>`).join(''), true, m));
+  both('', m => printDoc((m === 'pdf' ? 'تقرير نافس - ' : '') + TABS.find(t => t[0] === V.tab)[1], ov.querySelector('#nr-main').innerHTML, false, m));
 }
 
 /* ---------- لوحة النتائج ---------- */
@@ -321,7 +322,7 @@ function viewStudents() {
   return `<div class="nr-sbar">
       <input type="search" id="nr-q" placeholder="ابحث بالاسم أو رقم الهوية" value="${esc(V.q)}">
       <select id="nr-sort" aria-label="الترتيب">${[['rank', 'الأعلى درجة'], ['low', 'الأدنى درجة'], ['name', 'الاسم'], ['sec', 'الفصل']].map(([k, t]) => `<option value="${k}" ${V.sort === k ? 'selected' : ''}>${t}</option>`).join('')}</select>
-      <button type="button" class="nr-btn" id="nr-print-certs">🎓 طباعة شهادات القائمة (${l.length})</button></div>
+      <button type="button" class="nr-btn" id="nr-print-certs">🎓 طباعة شهادات القائمة (${l.length})</button><button type="button" class="nr-btn pdf" id="nr-pdf-certs">⬇ الشهادات PDF</button></div>
     <div class="nr-chips">${F.map(([k, t, c]) => `<button type="button" data-pass="${esc(k)}" class="${V.pass === k ? 'on' : ''}">${esc(t)} <i>${c}</i></button>`).join('')}</div>
     <div class="nr-twrap"><table class="nr-t nr-st"><thead><tr><th>الترتيب</th><th>الطالب</th><th>الفصل</th>${D.parts.map(p => `<th style="color:${p.color}">${esc(p.s)}<small>من ${p.w}</small></th>`).join('')}<th>الكلية</th><th>المستوى</th><th>الاجتياز</th><th></th></tr></thead><tbody>
     ${l.map(s => `<tr><td class="nr-rk">${s.rank}</td><td><b>${esc(s.name)}</b></td><td>${esc(s.section)}</td>${D.parts.map(p => { const x = s.subj[p.s]; return `<td class="nr-sc ${x.pass ? 'ok' : 'no'}">${r2(x.got)}</td>`; }).join('')}<td><b>${r1(s.pct)}%</b></td><td>${lvTag(s.pct)}</td><td>${s.passed ? '<span class="nr-ps yes">✓ اجتاز</span>' : `<span class="nr-ps no">لم يجتز<small>${esc(s.fails.join('، '))}</small></span>`}</td><td><button type="button" class="nr-btn sm" data-st="${esc(s.id)}">الشهادة</button></td></tr>`).join('') || '<tr><td colspan="99" class="nr-empty">لا يوجد طلاب</td></tr>'}</tbody></table></div>`;
@@ -350,10 +351,11 @@ function openCert(id) {
   const m = document.createElement('div'); m.className = 'nr-modal';
   const paint = () => {
     const st = list[i] || s;
-    m.innerHTML = `<div class="nr-modal-b"><div class="nr-modal-t"><button type="button" class="nr-btn ghost" data-nav="-1" ${i <= 0 ? 'disabled' : ''}>‹ السابق</button><span>${i + 1} / ${list.length}</span><button type="button" class="nr-btn ghost" data-nav="1" ${i >= list.length - 1 ? 'disabled' : ''}>التالي ›</button><button type="button" class="nr-btn" data-printc>🖨 طباعة الشهادة</button><button type="button" class="nr-x" data-closem aria-label="إغلاق">✕</button></div>${certHtml(st)}</div>`;
+    m.innerHTML = `<div class="nr-modal-b"><div class="nr-modal-t"><button type="button" class="nr-btn ghost" data-nav="-1" ${i <= 0 ? 'disabled' : ''}>‹ السابق</button><span>${i + 1} / ${list.length}</span><button type="button" class="nr-btn ghost" data-nav="1" ${i >= list.length - 1 ? 'disabled' : ''}>التالي ›</button><button type="button" class="nr-btn" data-printc>🖨 طباعة</button><button type="button" class="nr-btn pdf" data-pdfc>⬇ PDF</button><button type="button" class="nr-x" data-closem aria-label="إغلاق">✕</button></div>${certHtml(st)}</div>`;
     m.querySelector('[data-closem]').onclick = () => m.remove();
     m.querySelectorAll('[data-nav]').forEach(b => b.onclick = () => { i = Math.max(0, Math.min(list.length - 1, i + +b.dataset.nav)); paint(); });
     m.querySelector('[data-printc]').onclick = () => printDoc('شهادة ' + st.name, certHtml(st), true);
+    m.querySelector('[data-pdfc]').onclick = () => printDoc('شهادة نافس - ' + st.name, certHtml(st), true, 'pdf');
   };
   if (i < 0) { list.unshift(s); i = 0; }
   paint();
@@ -378,7 +380,7 @@ function teacherDetail(t, print = false) {
   if (sk.length) ins.push(`أكبر مواطن الإخفاق: <b>${esc(sk[0].x.k)}</b> بإتقان ${r1(sk[0].m)}%${sk[1] ? `، ثم <b>${esc(sk[1].x.k)}</b> ${r1(sk[1].m)}%` : ''}.`);
   if (near.length) ins.push(`<b>${near.length}</b> ${near.length === 1 ? 'طالب' : 'طالبًا'} على بُعد درجة أو درجتين من اجتياز المادة؛ دعمهم يرفع نسبة الاجتياز إلى ${r1((g.pass + near.length) / g.n * 100)}%.`);
   return `<div class="nr-tdetail">
-    <header class="nr-th" style="--sc:${p.color}"><div><h3>${esc(t.name)}</h3><span>${esc(p.s)} · فصول ${t.secs.map(esc).join('، ')} · ${g.n} طالبًا</span></div>${print ? '' : '<button type="button" class="nr-btn" id="nr-print-teacher">🖨 طباعة تقرير المعلم</button>'}</header>
+    <header class="nr-th" style="--sc:${p.color}"><div><h3>${esc(t.name)}</h3><span>${esc(p.s)} · فصول ${t.secs.map(esc).join('، ')} · ${g.n} طالبًا</span></div>${print ? '' : '<button type="button" class="nr-btn" id="nr-print-teacher">🖨 طباعة تقرير المعلم</button><button type="button" class="nr-btn pdf" id="nr-pdf-teacher">⬇ PDF</button>'}</header>
     <div class="nr-tk">
       <div class="nr-kpi">${ring(g.mean, p.color, 100, 'المتوسط')}</div>
       <div class="nr-kpi"><span>الاجتياز</span><b>${g.pass} / ${g.n}</b><small>${r1(g.passP)}% · المدرسة ${r1(sch.passP)}%</small></div>
@@ -409,25 +411,86 @@ function viewTeachers() {
     }).join('')}</div></section>`;
   }).join('');
   const t = V.teacher && D.teachers.find(x => x.id + '|' + x.subj === V.teacher);
-  return `<div class="nr-sbar"><p class="nr-hint">اختر معلمًا لعرض تحليل طلاب فصوله التي يدرّسها (من الجدول المدرسي).</p><button type="button" class="nr-btn" id="nr-print-teachers">🖨 طباعة تقارير جميع المعلمين</button></div>${cards}${t ? teacherDetail(t) : ''}`;
+  return `<div class="nr-sbar"><p class="nr-hint">اختر معلمًا لعرض تحليل طلاب فصوله التي يدرّسها (من الجدول المدرسي).</p><button type="button" class="nr-btn" id="nr-print-teachers">🖨 طباعة تقارير جميع المعلمين</button><button type="button" class="nr-btn pdf" id="nr-pdf-teachers">⬇ PDF</button></div>${cards}${t ? teacherDetail(t) : ''}`;
 }
 
 /* ---------- الطباعة ---------- */
-function printDoc(title, body, paged = false) {
-  const w = window.open('', '_blank');
-  if (!w) { alert('اسمح بالنوافذ المنبثقة للطباعة'); return; }
-  w.document.open();
-  w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(title)}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap" rel="stylesheet">
+function docHtml(title, body, paged, pdf) {
+  return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(title)}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Tajawal:wght@500;700;800;900&display=swap" rel="stylesheet">
     <style>${NR_CSS}${CERT_CSS}
     @page{ size:A4; margin:10mm; } body{ margin:0; background:#fff; font-family:'IBM Plex Sans Arabic',Tahoma,sans-serif; }
-    .nr-print{ padding:0; } .nr-btn,.nr-x,#nr-print-teacher{ display:none !important; }
+    .nr-print{ padding:0; height:auto; display:block; } .nr-btn,.nr-x,#nr-print-teacher,#nr-pdf-teacher{ display:none !important; } .nr-more summary{ display:none; }
     .nr-certp{ break-after:page; } .nr-certp:last-child{ break-after:auto; } .nr-certp .nc{ border:0; } .nr-page{ break-after:page; } .nr-page:last-child{ break-after:auto; }
     .nr-card,.nr-subj,.nr-tcard,.nr-cert-s,tr{ break-inside:avoid; } .nr-twrap{ overflow:visible; }
+    ${pdf ? `html,body{ width:${pdf}px; } .nr-print{ width:${pdf}px; box-sizing:border-box; } .nr-pblock{ padding:${paged ? '28px 30px' : '34px 38px'}; box-sizing:border-box; width:${pdf}px; background:#fff; }` : ''}
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }</style></head>
-    <body><div class="nr nr-print">${paged ? '' : `<header class="nr-phead">${printLogo() ? `<img src="${esc(printLogo())}" alt="">` : ''}<div><b>${esc(printOrgName())}</b><span>تقرير نافس · ${esc(title)} · ${esc(D.gradeTxt)}${V.sec !== 'all' && V.tab !== 'teachers' ? ' · فصل ' + esc(V.sec) : ''}</span></div></header>`}${body}</div>
-    <script>window.onload=()=>setTimeout(()=>window.print(),600)<\/script></body></html>`);
-  w.document.close();
+    <body><div class="nr nr-print">${paged ? '' : `<header class="nr-phead">${printLogo() ? `<img src="${esc(printLogo())}" alt="">` : ''}<div><b>${esc(printOrgName())}</b><span>تقرير نافس · ${esc(title.replace(/^تقرير نافس - /, ''))} · ${esc(D.gradeTxt)}${V.sec !== 'all' && V.tab !== 'teachers' ? ' · فصل ' + esc(V.sec) : ''}</span></div></header>`}${body}</div>
+    ${pdf ? '' : '<script>window.onload=()=>setTimeout(()=>window.print(),600)<\/script>'}</body></html>`;
+}
+function printDoc(title, body, paged = false, mode = 'print') {
+  if (mode === 'pdf') return savePdf(title, body, paged);
+  const w = window.open('', '_blank');
+  if (!w) { alert('اسمح بالنوافذ المنبثقة للطباعة'); return; }
+  w.document.open(); w.document.write(docHtml(title, body, paged, false)); w.document.close();
+}
+
+/* ---------- تنزيل PDF: تصوير المحتوى وتقسيمه إلى صفحات A4 عند حدود العناصر ---------- */
+const LIBS = { html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js' };
+const loadLib = k => new Promise((res, rej) => { const s = document.createElement('script'); s.src = LIBS[k]; s.onload = res; s.onerror = () => rej(new Error('تعذر تحميل مكتبة ' + k)); document.head.appendChild(s); });
+function busy(text) {
+  let el = document.getElementById('nr-busy');
+  if (text == null) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'nr-busy'; el.className = 'nr-busy'; (document.getElementById('nr-ov') || document.body).appendChild(el); }
+  el.innerHTML = `<div><span class="nr-spin"></span><b>${esc(text)}</b></div>`;
+}
+async function savePdf(title, body, paged) {
+  busy('جارٍ تجهيز ملف PDF...');
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('aria-hidden', 'true');
+  iframe.style.cssText = 'position:fixed;top:0;left:0;width:794px;height:1123px;border:0;opacity:0;pointer-events:none;z-index:-1;';
+  document.body.appendChild(iframe);
+  try {
+    if (!window.html2canvas) await loadLib('html2canvas');
+    if (!window.jspdf) await loadLib('jspdf');
+    const idoc = iframe.contentDocument;
+    const W = paged ? 794 : 1040; iframe.style.width = W + 'px';
+    idoc.open(); idoc.write(docHtml(title, body, paged, W)); idoc.close();
+    await new Promise(r => { if (idoc.readyState === 'complete') r(); else iframe.onload = r; });
+    if (idoc.fonts && idoc.fonts.ready) await idoc.fonts.ready;
+    await Promise.all([...idoc.images].map(img => (img.complete ? null : new Promise(r => { img.onload = img.onerror = r; }))));
+    // كل شهادة أو تقرير معلم صفحة مستقلة، وإلا فالمحتوى كله كتلة واحدة تُقسَّم
+    const root = idoc.querySelector('.nr-print');
+    let blocks = paged ? [...root.querySelectorAll(':scope > .nr-certp, :scope > .nr-page')] : [];
+    if (!blocks.length) { const w = idoc.createElement('div'); w.className = 'nr-pblock'; while (root.firstChild) w.appendChild(root.firstChild); root.appendChild(w); blocks = [w]; }
+    else blocks.forEach(b => b.classList.add('nr-pblock'));
+    await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+    const PW = 210, PH = 297, scale = paged ? (blocks.length > 40 ? 1.3 : 1.6) : 2, q = paged ? 0.82 : 0.9;
+    let first = true;
+    for (let bi = 0; bi < blocks.length; bi++) {
+      if (blocks.length > 1) busy(`جارٍ تجهيز ملف PDF... ${bi + 1} من ${blocks.length}`);
+      const el = blocks[bi], rect = el.getBoundingClientRect();
+      const canvas = await window.html2canvas(el, { scale, useCORS: true, backgroundColor: '#ffffff', logging: false, windowWidth: W, windowHeight: Math.max(1123, el.scrollHeight) });
+      const pxPerMm = canvas.width / PW, pageH = Math.floor(PH * pxPerMm);
+      // نقاط القطع المفضلة: بدايات البطاقات والصفوف حتى لا يُقص عنصر في منتصفه
+      const tops = [...el.querySelectorAll('.nr-card, .nr-subj, .nr-kpi, .nr-th, .nr-tk, .nr-ins li, tr, .nc-sj, .nc-an, .nc-leg, h4, .nr-grid2 > *')]
+        .map(x => Math.round((x.getBoundingClientRect().top - rect.top) * scale)).filter(t => t > 0).sort((a, b) => a - b);
+      let start = 0;
+      while (start < canvas.height - 2) {
+        let end = Math.min(canvas.height, start + pageH);
+        if (end < canvas.height) { const c = tops.filter(t => t > start + pageH * 0.45 && t <= end).pop(); if (c) end = c; }
+        const slice = document.createElement('canvas'); slice.width = canvas.width; slice.height = end - start;
+        const ctx = slice.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, slice.width, slice.height); ctx.drawImage(canvas, 0, start, canvas.width, end - start, 0, 0, canvas.width, end - start);
+        if (!first) pdf.addPage(); first = false;
+        pdf.addImage(slice.toDataURL('image/jpeg', q), 'JPEG', 0, 0, PW, (end - start) / pxPerMm, undefined, 'FAST');
+        start = end;
+      }
+    }
+    pdf.save(title.replace(/[\\/:*?"<>|]/g, '-') + '.pdf');
+  } catch (e) { console.error(e); alert('تعذر إنشاء ملف PDF: ' + (e.message || e)); }
+  finally { iframe.remove(); busy(null); }
 }
 
 /* ---------- التنسيق ---------- */
@@ -448,7 +511,8 @@ const NR_CSS = `
 .nr-x{ width:38px; height:38px; margin:0; border-radius:11px; border:0; background:rgba(255,255,255,.14); color:#fff; font-size:16px; cursor:pointer; }
 .nr-btn{ width:auto; margin:0; border:0; background:#0F2447; color:#fff; font:inherit; font-weight:800; font-size:13px; padding:9px 14px; border-radius:11px; cursor:pointer; white-space:nowrap; }
 .nr-top .nr-btn.ghost{ background:rgba(255,255,255,.14); }
-.nr-btn.ghost{ background:#EEF2F8; color:#0F2447; } .nr-btn.sm{ padding:5px 10px; font-size:12px; border-radius:9px; } .nr-btn:disabled{ opacity:.4; cursor:default; }
+.nr-btn.ghost{ background:#EEF2F8; color:#0F2447; } .nr-btn.pdf{ background:#C92A2A; color:#fff; } .nr-top .nr-btn.pdf{ background:#E03131; }
+.nr-busy{ position:fixed; inset:0; z-index:9800; background:rgba(10,24,48,.45); display:grid; place-items:center; } .nr-busy > div{ display:flex; align-items:center; gap:12px; background:#fff; border-radius:16px; padding:16px 22px; box-shadow:0 20px 50px rgba(0,0,0,.25); } .nr-spin{ width:20px; height:20px; border-radius:50%; border:3px solid #DCE3EE; border-top-color:#C92A2A; animation:nrSpin .8s linear infinite; } @keyframes nrSpin{ to{ transform:rotate(360deg); } } .nr-btn.sm{ padding:5px 10px; font-size:12px; border-radius:9px; } .nr-btn:disabled{ opacity:.4; cursor:default; }
 .nr-secs{ display:flex; gap:6px; align-items:center; flex-wrap:wrap; padding:12px 22px 0; }
 .nr-secs span{ font-size:12px; font-weight:800; color:#667085; }
 .nr-secs button,.nr-chips button{ width:auto; margin:0; border:1px solid #DCE3EE; background:#fff; color:#344054; font:inherit; font-size:12.5px; font-weight:800; padding:6px 12px; border-radius:99px; cursor:pointer; }
@@ -498,7 +562,7 @@ const NR_CSS = `
 .nr-hb-t i{ position:absolute; inset-block:0; right:0; border-radius:99px; }
 .nr-hb-t em{ position:absolute; top:-4px; width:3px; height:20px; background:#0F2447; border-radius:2px; transform:translateX(50%); }
 .nr-hb-r b{ font-weight:900; text-align:left; }
-.nr-lv{ display:inline-block; font-size:11px; font-weight:900; color:var(--c); background:var(--b); border:1px solid color-mix(in srgb,var(--c) 25%,transparent); border-radius:99px; padding:2px 9px; white-space:nowrap; }
+.nr-lv{ display:inline-block; font-size:11px; font-weight:900; color:var(--c); background:var(--b); border:1px solid rgba(15,36,71,.08); border-radius:99px; padding:2px 9px; white-space:nowrap; }
 .nr-key{ display:inline-block; min-width:24px; text-align:center; background:#E7F5FF; color:#1971C2; font-weight:900; border-radius:7px; padding:1px 6px; }
 .nr-dist{ display:flex; gap:4px; flex-wrap:wrap; } .nr-dist span{ font-size:11px; background:#F2F4F7; border-radius:7px; padding:2px 6px; color:#475467; } .nr-dist span b{ margin-inline-end:3px; }
 .nr-dist span.k{ background:#EBFBEE; color:#2B8A3E; } .nr-dist span.bl{ background:#fff; border:1px dashed #D0D5DD; }
@@ -535,11 +599,11 @@ const NR_CSS = `
 .nr-cert-f{ display:flex; justify-content:space-between; gap:12px; margin-top:16px; font-size:12px; color:#475467; text-align:center; } .nr-cert-f div{ flex:1; } .nr-cert-f i{ display:block; border-bottom:1px solid #98A2B3; height:26px; }
 .nr-tcards{ display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:10px; }
 .nr-tcard{ width:auto; margin:0; text-align:right; border:1.5px solid #E4E9F2; background:#fff; border-radius:16px; padding:12px 14px; cursor:pointer; font:inherit; display:flex; flex-direction:column; gap:6px; transition:transform .15s,box-shadow .15s; }
-.nr-tcard:hover{ transform:translateY(-2px); box-shadow:0 8px 20px rgba(16,24,40,.08); } .nr-tcard.on{ border-color:var(--sc); box-shadow:0 0 0 3px color-mix(in srgb,var(--sc) 18%,transparent); }
+.nr-tcard:hover{ transform:translateY(-2px); box-shadow:0 8px 20px rgba(16,24,40,.08); } .nr-tcard.on{ border-color:var(--sc); box-shadow:0 0 0 3px rgba(15,36,71,.12); }
 .nr-tcard > b{ font-size:15px; color:#0F2447; } .nr-tcard > small{ color:#667085; font-size:11.5px; }
 .nr-tcard-n{ display:flex; gap:10px; } .nr-tcard-n span{ display:flex; flex-direction:column; font-size:11px; color:#667085; } .nr-tcard-n b{ font-size:16px; color:#0F2447; } .nr-tcard-n .up b{ color:#2B8A3E; } .nr-tcard-n .down b{ color:#C92A2A; }
 .nr-tdetail{ margin-top:6px; }
-.nr-th{ display:flex; align-items:center; gap:12px; background:linear-gradient(135deg,color-mix(in srgb,var(--sc) 12%,#fff),#fff); border:1px solid #E4E9F2; border-inline-start:6px solid var(--sc); border-radius:18px; padding:12px 16px; margin-bottom:12px; }
+.nr-th{ display:flex; align-items:center; gap:12px; background:linear-gradient(135deg,#F2F6FD,#fff); border:1px solid #E4E9F2; border-inline-start:6px solid var(--sc); border-radius:18px; padding:12px 16px; margin-bottom:12px; }
 .nr-th > div{ flex:1; } .nr-th h3{ margin:0; font-size:19px; } .nr-th span{ color:#475467; font-size:12.5px; }
 .nr-tk{ display:grid; grid-template-columns:auto repeat(3,1fr); gap:10px; margin-bottom:12px; }
 .nr-tdetail > .nr-ins{ margin-bottom:12px; }

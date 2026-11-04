@@ -45,7 +45,7 @@ export function certFromData(c, m = {}) {
         <table><tbody>${s.skills.map(k => `<tr><td class="nc-k">${esc(k.k)}</td><td class="nc-b">${bar(k.pct, pass)}</td><td class="nc-p t-${zone(k.pct, pass)}">${Math.round(+k.pct || 0)}%</td><td class="nc-l">${lvTag(k.lv)}</td></tr>`).join('')}</tbody></table>
       </section>`).join('')}
       <div class="nc-leg"><span><i class="z1"></i>دون 50%</span><span><i class="z2"></i>من 50% إلى أقل من ${pass}%</span><span><i class="z3"></i>${pass}% فأكثر (منطقة الاجتياز)</span><span><em></em>حد الاجتياز</span></div>
-      <section class="nc-an"><h3>التحليل</h3><ol>${certAnalysisLines(c).map(x => `<li>${x}</li>`).join('')}</ol></section>
+      <section class="nc-an"><h3>التحليل</h3><ul class="nc-anl">${certAnalysisLines(c).map((x, i) => `<li><span>${i + 1}</span><div>${x}</div></li>`).join('')}</ul></section>
     </div>
   </article>`;
 }
@@ -85,7 +85,7 @@ export const CERT_CSS = `
 .nc-leg{ display:flex; flex-wrap:wrap; gap:6px 16px; font-size:11.5px; color:var(--mut); margin:4px 0 12px; }
 .nc-leg i{ display:inline-block; width:14px; height:8px; border-radius:3px; margin-inline-end:5px; vertical-align:0; } .nc-leg i.z1{ background:var(--r); } .nc-leg i.z2{ background:var(--o); } .nc-leg i.z3{ background:var(--g); }
 .nc-leg em{ display:inline-block; width:2px; height:12px; background:#0F2447; margin-inline-end:5px; vertical-align:-2px; }
-.nc-an{ border:1px solid var(--ln); border-radius:9px; padding:10px 16px; } .nc-an h3{ margin:0 0 4px; font-size:15px; } .nc-an ol{ margin:0; padding-inline-start:20px; font-size:13px; line-height:2; }
+.nc-an{ border:1px solid var(--ln); border-radius:9px; padding:10px 16px; } .nc-an h3{ margin:0 0 4px; font-size:15px; } .nc-anl{ list-style:none; margin:0; padding:0; font-size:13px; line-height:2; } .nc-anl li{ display:flex; gap:8px; align-items:flex-start; } .nc-anl li > span{ flex-shrink:0; width:20px; height:20px; margin-top:5px; border-radius:50%; background:#0F2447; color:#fff; font-size:11px; font-weight:800; display:grid; place-items:center; line-height:1; }
 .nc-sig{ display:grid; grid-template-columns:repeat(3,1fr); gap:18px; margin-top:22px; text-align:center; font-size:12.5px; color:#344054; } .nc-sig i{ display:block; border-bottom:1px dotted #475467; height:28px; }
 @media (max-width:600px){
   .nc-band{ padding:14px 14px; flex-wrap:wrap; } .nc-ttl h2{ font-size:16px; } .nc-body{ padding:14px 12px; }
