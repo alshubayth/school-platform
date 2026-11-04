@@ -22,7 +22,37 @@ let labGrade = 'first_intermediate';
 let computerCount = null;
 let classesCache = [];   // الفصول المضافة بترتيب الإضافة
 
+/* ---------- الدروس التفاعلية (صفحات ثابتة في مجلد lessons/) ---------- */
+const LAB_LESSONS = [
+  { path: '/lessons/python-logic.html', title: 'مختبر المعاملات المنطقية', subject: 'بايثون', desc: 'شرح and وor وnot بمفاتيح ومصباح، مع جدول الحقيقة وترتيب الأولوية واختبار سريع.' },
+];
+
+function renderLessons() {
+  const wrap = document.getElementById('lab-lessons-list');
+  if (!wrap) return;
+  wrap.innerHTML = LAB_LESSONS.map((l, i) => `
+    <div class="lab-lesson">
+      <div class="lab-lesson-info">
+        <span class="lab-lesson-tag">${esc(l.subject)}</span>
+        <strong>${esc(l.title)}</strong>
+        <p>${esc(l.desc)}</p>
+        <code class="lab-lesson-url" dir="ltr">${esc(location.origin + l.path)}</code>
+      </div>
+      <div class="lab-lesson-actions">
+        <a class="btn-primary" href="${esc(l.path)}" target="_blank" rel="noopener" style="width:auto; padding:9px 18px; text-decoration:none; text-align:center;">فتح الدرس</a>
+        <button type="button" class="lab-lesson-copy" data-i="${i}">نسخ الرابط</button>
+      </div>
+    </div>`).join('');
+  wrap.querySelectorAll('.lab-lesson-copy').forEach(btn => btn.addEventListener('click', async () => {
+    const url = location.origin + LAB_LESSONS[Number(btn.dataset.i)].path;
+    try { await navigator.clipboard.writeText(url); btn.textContent = 'تم النسخ'; }
+    catch { btn.textContent = 'تعذّر النسخ'; }
+    setTimeout(() => { btn.textContent = 'نسخ الرابط'; }, 1800);
+  }));
+}
+
 export async function loadComputerLabModule() {
+  renderLessons();
   renderGradeTabs();
   await refreshSectionOptions();
   await loadSettings();

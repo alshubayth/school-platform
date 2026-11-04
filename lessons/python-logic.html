@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="/favicon.svg">
+<title>مختبر المعاملات المنطقية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: لوحة دوائر كهربائية — مفتاحان يغذّيان مصباحًا، ثم جدول الحقيقة ثم اختبار سريع */
+:root{
+  --bg:#eef2f7; --panel:#ffffff; --ink:#14213a; --muted:#5b6880; --line:#d3dbe6;
+  --on:#f5a524; --on-soft:#fff1d6; --off:#8a96ab; --off-soft:#e6ebf2;
+  --code-bg:#14213a; --code-fg:#e8eef8; --kw:#ff9e64; --good:#1f9d63; --bad:#d3443a;
+  --display:"Lalezar","IBM Plex Sans Arabic",system-ui,sans-serif;
+  --body:"IBM Plex Sans Arabic",system-ui,"Segoe UI",Tahoma,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0c1322; --panel:#141e33; --ink:#e6ecf6; --muted:#97a3ba; --line:#26344f;
+  --on:#ffb83d; --on-soft:#3a2c10; --off:#6b7891; --off-soft:#1c2840;
+  --code-bg:#080d18; --code-fg:#e6ecf6; --kw:#ffab70; --good:#3cc584; --bad:#ff6b5f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0c1322; --panel:#141e33; --ink:#e6ecf6; --muted:#97a3ba; --line:#26344f;
+  --on:#ffb83d; --on-soft:#3a2c10; --off:#6b7891; --off-soft:#1c2840;
+  --code-bg:#080d18; --code-fg:#e6ecf6; --kw:#ffab70; --good:#3cc584; --bad:#ff6b5f; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.7;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:24px 48px}
+.wrap{max-width:860px;margin-inline:auto;display:grid;gap:28px}
+h1,h2{font-family:var(--display);font-weight:400;margin:0;text-wrap:balance;line-height:1.3}
+h1{font-size:clamp(2rem,6vw,3rem)}
+h2{font-size:1.6rem}
+p{margin:0}
+.lede{color:var(--muted);max-width:60ch}
+code,.mono{font-family:var(--mono);direction:ltr;unicode-bidi:isolate}
+.tag{display:inline-block;font-size:.78rem;letter-spacing:.04em;color:var(--muted);font-weight:500}
+
+section{display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+
+/* operator tabs */
+.ops{display:flex;gap:8px;flex-wrap:wrap}
+.op{font-family:var(--mono);font-size:1.05rem;font-weight:700;padding:10px 22px;border-radius:999px;border:2px solid var(--line);background:transparent;color:var(--ink);cursor:pointer;direction:ltr}
+.op[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.op:focus-visible,.sw:focus-visible,.btn:focus-visible,.ans:focus-visible{outline:3px solid var(--on);outline-offset:2px}
+
+/* circuit */
+.circuit{display:grid;grid-template-columns:1fr auto 1fr;gap:16px;align-items:center}
+.inputs{display:grid;gap:14px}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:var(--off-soft);cursor:pointer;color:var(--ink);font:inherit}
+.sw .nm{font-family:var(--mono);font-weight:700;font-size:1.3rem}
+.sw .val{font-family:var(--mono);font-weight:700;color:var(--off)}
+.knob{width:52px;height:28px;border-radius:999px;background:var(--off);position:relative;flex:none;transition:background .2s}
+.knob::after{content:"";position:absolute;top:3px;right:3px;width:22px;height:22px;border-radius:50%;background:var(--panel);transition:right .2s}
+.sw[aria-checked="true"]{background:var(--on-soft);border-color:var(--on)}
+.sw[aria-checked="true"] .val{color:var(--on)}
+.sw[aria-checked="true"] .knob{background:var(--on)}
+.sw[aria-checked="true"] .knob::after{right:27px}
+.sw.dim{opacity:.35}
+.gate{font-family:var(--mono);font-weight:700;font-size:1.1rem;padding:14px 10px;border-radius:10px;background:var(--code-bg);color:var(--kw);text-align:center;min-width:72px;direction:ltr}
+.lamp-box{display:grid;justify-items:center;gap:6px}
+.lamp{width:96px;height:96px;border-radius:50%;background:var(--off-soft);border:3px solid var(--off);display:grid;place-items:center;transition:all .25s}
+.lamp svg{width:46px;height:46px;fill:none;stroke:var(--off);stroke-width:2}
+.lamp.lit{background:var(--on);border-color:var(--on);box-shadow:0 0 0 10px var(--on-soft),0 0 40px var(--on)}
+.lamp.lit svg{stroke:var(--code-bg)}
+.lamp-val{font-family:var(--mono);font-weight:700;font-size:1.2rem}
+
+.codeline{background:var(--code-bg);color:var(--code-fg);border-radius:10px;padding:14px 16px;font-family:var(--mono);font-size:1rem;direction:ltr;text-align:left;overflow-x:auto;white-space:pre}
+.codeline .k{color:var(--kw)} .codeline .c{color:#7f8ca6} .codeline .t{color:var(--on)} .codeline .f{color:#9fb0cc}
+.explain{background:var(--off-soft);border-radius:10px;padding:12px 16px}
+
+/* truth table */
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums;min-width:320px}
+th,td{padding:10px 12px;text-align:center;border-bottom:1px solid var(--line);font-family:var(--mono)}
+th{font-weight:700;color:var(--muted);font-size:.9rem}
+td.T{color:var(--on);font-weight:700} td.F{color:var(--off)}
+tr.cur td{background:var(--on-soft)}
+tr.cur td:first-child{box-shadow:inset -4px 0 0 var(--on)}
+
+/* real world */
+.cases{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.case{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:grid;gap:8px;min-width:0}
+.case .codeline{font-size:.85rem;padding:10px 12px}
+
+/* quiz */
+.quiz-q{font-family:var(--mono);font-size:1.25rem;direction:ltr;text-align:center;background:var(--code-bg);color:var(--code-fg);border-radius:10px;padding:18px 12px;overflow-x:auto}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ans{font-family:var(--mono);font-weight:700;font-size:1.1rem;padding:14px;border-radius:10px;border:2px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.ans.right{border-color:var(--good);color:var(--good)}
+.ans.wrong{border-color:var(--bad);color:var(--bad)}
+.quiz-foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.feedback{min-height:1.7em;color:var(--muted)}
+.btn{font:inherit;font-weight:700;padding:10px 20px;border-radius:999px;border:none;background:var(--ink);color:var(--panel);cursor:pointer}
+.score{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+.prec{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.prec .step{font-family:var(--mono);font-weight:700;padding:6px 14px;border-radius:8px;background:var(--code-bg);color:var(--kw);direction:ltr}
+.prec .arr{color:var(--muted)}
+
+@media (max-width:620px){
+  .circuit{grid-template-columns:1fr;justify-items:stretch}
+  .gate{justify-self:center}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap" dir="rtl" lang="ar">
+  <header style="display:grid;gap:10px">
+    <span class="tag">بايثون · الوحدة: التعابير المنطقية</span>
+    <h1>مختبر المعاملات المنطقية</h1>
+    <p class="lede">بدّل قيمة المفتاحين <code>A</code> و<code>B</code>، واختر المعامل، وراقب المصباح: يضيء عندما تكون نتيجة التعبير <code>True</code>.</p>
+  </header>
+
+  <section aria-labelledby="lab-h">
+    <h2 id="lab-h">جرّب بنفسك</h2>
+    <div class="ops" role="group" aria-label="اختر المعامل">
+      <button class="op" id="op-and" data-op="and" aria-pressed="true">and</button>
+      <button class="op" id="op-or" data-op="or" aria-pressed="false">or</button>
+      <button class="op" id="op-not" data-op="not" aria-pressed="false">not</button>
+    </div>
+    <div class="panel" style="display:grid;gap:18px">
+      <div class="circuit">
+        <div class="inputs">
+          <button class="sw" id="swA" role="switch" aria-checked="true"><span class="nm">A</span><span class="val">True</span><span class="knob"></span></button>
+          <button class="sw" id="swB" role="switch" aria-checked="false"><span class="nm">B</span><span class="val">False</span><span class="knob"></span></button>
+        </div>
+        <div class="gate" id="gate">and</div>
+        <div class="lamp-box">
+          <div class="lamp" id="lamp"><svg viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/></svg></div>
+          <span class="lamp-val mono" id="lampVal">False</span>
+        </div>
+      </div>
+      <div class="codeline" id="code"></div>
+      <p class="explain" id="explain"></p>
+    </div>
+  </section>
+
+  <section aria-labelledby="tt-h">
+    <h2 id="tt-h">جدول الحقيقة</h2>
+    <p class="lede">الصف المظلَّل هو الحالة الحالية في المختبر.</p>
+    <div class="panel tbl-wrap">
+      <table>
+        <thead><tr><th>A</th><th>B</th><th>A and B</th><th>A or B</th><th>not A</th></tr></thead>
+        <tbody id="tt"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section aria-labelledby="pr-h">
+    <h2 id="pr-h">ترتيب الأولوية</h2>
+    <div class="prec"><span class="step">not</span><span class="arr">ثم</span><span class="step">and</span><span class="arr">ثم</span><span class="step">or</span></div>
+    <p class="lede">لذلك يُحسب <code>True or False and False</code> هكذا: <code>False and False</code> أولًا فتنتج <code>False</code>، ثم <code>True or False</code> فتكون النتيجة <code>True</code>. استخدم الأقواس عند الحاجة لتغيير الترتيب.</p>
+  </section>
+
+  <section aria-labelledby="rw-h">
+    <h2 id="rw-h">من الحياة المدرسية</h2>
+    <div class="cases">
+      <div class="case">
+        <strong>النجاح في المادة</strong>
+        <div class="codeline"><span class="f">grade</span> >= 50 <span class="k">and</span> <span class="f">attendance</span> >= 75</div>
+        <p class="lede">ينجح الطالب إذا تحقق الشرطان معًا.</p>
+      </div>
+      <div class="case">
+        <strong>الإعفاء من الاختبار</strong>
+        <div class="codeline"><span class="f">grade</span> >= 95 <span class="k">or</span> <span class="f">has_medal</span></div>
+        <p class="lede">يكفي تحقق شرط واحد على الأقل.</p>
+      </div>
+      <div class="case">
+        <strong>تنبيه الغياب</strong>
+        <div class="codeline"><span class="k">not</span> <span class="f">is_present</span></div>
+        <p class="lede">يظهر التنبيه عندما يكون الطالب غير حاضر.</p>
+      </div>
+    </div>
+  </section>
+
+  <section aria-labelledby="qz-h">
+    <h2 id="qz-h">اختبر نفسك</h2>
+    <div class="panel" style="display:grid;gap:14px">
+      <span class="tag">ما ناتج التعبير التالي؟</span>
+      <div class="quiz-q" id="q"></div>
+      <div class="answers">
+        <button class="ans" id="ansT" data-v="1">True</button>
+        <button class="ans" id="ansF" data-v="0">False</button>
+      </div>
+      <p class="feedback" id="fb" aria-live="polite"></p>
+      <div class="quiz-foot">
+        <span class="score" id="score">النقاط: 0 / 0</span>
+        <button class="btn" id="next">سؤال جديد</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  let A=true,B=false,op="and";
+  const $=id=>document.getElementById(id);
+  const S=v=>v?"True":"False";
+  const tv=v=>`<span class="${v?'t':'f'}">${S(v)}</span>`;
+
+  function evalOp(a,b,o){return o==="and"?a&&b:o==="or"?a||b:!a}
+
+  function render(){
+    [["swA",A],["swB",B]].forEach(([id,v])=>{const el=$(id);el.setAttribute("aria-checked",v);el.querySelector(".val").textContent=S(v)});
+    $("swB").classList.toggle("dim",op==="not");
+    document.querySelectorAll(".op").forEach(b=>b.setAttribute("aria-pressed",b.dataset.op===op));
+    $("gate").textContent=op;
+    const r=evalOp(A,B,op);
+    $("lamp").classList.toggle("lit",r);
+    $("lampVal").textContent=S(r);
+    let expr=op==="not"?`<span class="k">not</span> A`:`A <span class="k">${op}</span> B`;
+    $("code").innerHTML=`A = ${tv(A)}\nB = ${tv(B)}\n<span class="f">print</span>(${expr})   <span class="c"># ${S(r)}</span>`;
+    let ex;
+    if(op==="and") ex=r?"كلا الطرفين True، فالنتيجة True.":"يكفي أن يكون أحد الطرفين False لتصبح النتيجة False.";
+    else if(op==="or") ex=r?"يكفي أن يكون أحد الطرفين True لتصبح النتيجة True.":"كلا الطرفين False، فالنتيجة False.";
+    else ex=`المعامل not يعكس القيمة: ${S(A)} تصبح ${S(r)}. لا يستخدم not إلا طرفًا واحدًا، لذلك تعطّل المفتاح B.`;
+    $("explain").innerHTML=ex.replace(/True|False|not/g,m=>`<code>${m}</code>`);
+    const rows=[[true,true],[true,false],[false,true],[false,false]];
+    $("tt").innerHTML=rows.map(([a,b])=>{
+      const cur=op==="not"?a===A:(a===A&&b===B);
+      const c=v=>`<td class="${v?'T':'F'}">${S(v)}</td>`;
+      return `<tr class="${cur?'cur':''}">${c(a)}${c(b)}${c(a&&b)}${c(a||b)}${c(!a)}</tr>`;
+    }).join("");
+  }
+  $("swA").onclick=()=>{A=!A;render()};
+  $("swB").onclick=()=>{if(op!=="not"){B=!B;render()}};
+  document.querySelectorAll(".op").forEach(b=>b.onclick=()=>{op=b.dataset.op;render()});
+  render();
+
+  // quiz
+  let ans=null,done=false,right=0,total=0;
+  const rnd=()=>Math.random()<.5;
+  function gen(){
+    const kind=Math.floor(Math.random()*5);
+    const a=rnd(),b=rnd(),c=rnd();
+    if(kind===0){const o=rnd()?"and":"or";return [`${S(a)} ${o} ${S(b)}`,evalOp(a,b,o)]}
+    if(kind===1){return [`not ${S(a)}`,!a]}
+    if(kind===2){return [`not (${S(a)} and ${S(b)})`,!(a&&b)]}
+    if(kind===3){return [`${S(a)} or ${S(b)} and ${S(c)}`,a||(b&&c)]}
+    const x=Math.floor(Math.random()*10),y=Math.floor(Math.random()*10);
+    return [`${x} > 5 and ${y} < 5`,x>5&&y<5];
+  }
+  function next(){
+    const [q,v]=gen();ans=v;done=false;
+    $("q").textContent=q;$("fb").textContent="";
+    ["ansT","ansF"].forEach(id=>$(id).classList.remove("right","wrong"));
+  }
+  document.querySelectorAll(".ans").forEach(b=>b.onclick=()=>{
+    if(done)return;done=true;total++;
+    const pick=b.dataset.v==="1";
+    if(pick===ans){right++;b.classList.add("right");$("fb").textContent="إجابة صحيحة!";}
+    else{b.classList.add("wrong");$(ans?"ansT":"ansF").classList.add("right");$("fb").textContent="الإجابة الصحيحة: "+S(ans);}
+    $("score").textContent=`النقاط: ${right} / ${total}`;
+  });
+  $("next").onclick=next;
+  next();
+})();
+</script>
+</body>
+</html>
