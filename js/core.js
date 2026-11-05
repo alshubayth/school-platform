@@ -289,7 +289,7 @@ export let isOwnerAccount = false;
  * قبل الدخول ما نعرف المدرسة، فنعرض اسم المنصة نفسها. */
 export const PLATFORM_NAME = 'مُدار';
 // رقم إصدار للملفات اللي تنحمّل لاحقًا - غيّره مع كل تحديث عشان المتصفح ما يستخدم نسخة قديمة
-export const ASSET_VERSION = '2026-11-04b';
+export const ASSET_VERSION = '2026-11-05a';
 
 /* ===== شريط «إغلاق / طباعة» لنوافذ الطباعة =====
  * التطبيق المثبّت على الجوال يفتح نافذة الطباعة بلا أزرار للمتصفح، فلا يستطيع المستخدم إغلاقها.
@@ -410,6 +410,15 @@ export function siteBase() {
   const h = location.hostname;
   if (/(^|\.)mudaar\.online$/.test(h) || /\.vercel\.app$/.test(h)) return CANONICAL_ORIGIN + '/';
   return location.origin + location.pathname.replace(/index\.html$/, '').replace(/\/[^/]*$/, '/');
+}
+// الاسم الأول للمخاطبة: يحفظ الأسماء المركبة كاملة إذا كُتبت بمسافة (عبد الرحمن، أبو بكر، نور الدين، عطا الله)
+const NAME_PREFIX = /^(عبد|ابو|أبو|اَبو)$/;
+const NAME_SUFFIX = /^(الله|الدين|الرحمن|الرحيم|الإسلام|الاسلام|العزيز)$/;
+export function firstName(full) {
+  const t = String(full || '').trim().split(/\s+/).filter(Boolean);
+  if (!t.length) return '';
+  if (t.length > 1 && (NAME_PREFIX.test(t[0]) || NAME_SUFFIX.test(t[1]))) return t[0] + ' ' + t[1];
+  return t[0];
 }
 export function printOrgName() { return schoolBrand.name || schoolBrand.short || ''; }
 export function printLogo() { return schoolBrand.authorityLogo || schoolBrand.logo || null; }

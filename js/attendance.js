@@ -1,4 +1,4 @@
-import { sb, currentSchoolId, currentUserId, currentProfile, isAdminOrDeputy, attFollowLevel, readScopedBySchool, writeWithSchool, gradeLabels, loadPeriodTimes, periodTime, fmtClock, printOrgName } from './core.js';
+import { sb, currentSchoolId, currentUserId, currentProfile, isAdminOrDeputy, attFollowLevel, readScopedBySchool, writeWithSchool, gradeLabels, loadPeriodTimes, periodTime, fmtClock, printOrgName, firstName } from './core.js';
 
 /* =========================================================================
  * تحضير الطلاب
@@ -211,7 +211,7 @@ function renderClass() {
         <button type="button" class="av-back" id="av-back">${IC.back}<span>الحصص</span></button>
         <div class="av-class-t"><b>${esc(gradeLabels[st.grade])} · فصل ${esc(st.section)}</b>
           <span>الحصة ${st.period}${slot && slot.subject ? ' · ' + esc(slot.subject) : ''}${timeTxt(st.grade, st.period) ? ' · ' + timeTxt(st.grade, st.period) : ''}</span></div>
-        <span class="av-saved-badge${st.session ? ' on' : ''}" id="av-saved">${st.session ? `${IC.check} حُضّرت${st.session.teacher_name && st.session.teacher_id !== currentUserId ? ' بواسطة ' + esc(st.session.teacher_name.split(' ')[0]) : ''}` : 'لم تُحضَّر'}</span>
+        <span class="av-saved-badge${st.session ? ' on' : ''}" id="av-saved">${st.session ? `${IC.check} حُضّرت${st.session.teacher_name && st.session.teacher_id !== currentUserId ? ' بواسطة ' + esc(firstName(st.session.teacher_name)) : ''}` : 'لم تُحضَّر'}</span>
       </div>
       <div class="av-stats">
         <span class="p"><b id="av-c-p">${c.p}</b>حاضر</span>
@@ -502,7 +502,7 @@ const saveTpl = (v, pm = false) => { try { localStorage.setItem(TPL_KEY + (pm ? 
 function bodyFor(r, tpl, period = null) {
   const dname = new Date(dayData.date + 'T00:00:00').toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long' });
   const [yy, mm, dd] = dayData.date.split('-');
-  const first = String(r.full_name || '').trim().split(/\s+/)[0] || '';
+  const first = firstName(r.full_name);
   return tpl.replace(/\{الحصة\}/g, period ? ORDINAL[period] : '').replace(/\{الاسم\}/g, first).replace(/\{اليوم\}/g, dname).replace(/\{التاريخ\}/g, `${Number(dd)}/${Number(mm)}/${yy}م`).replace(/\{المدرسة\}/g, printOrgName() || '');
 }
 
@@ -689,7 +689,7 @@ async function openAddAbsence(card, key, sess, sched, already) {
     const { error } = await writeWithSchool(extra => sb.from('attendance_marks').insert({ session_id: sid, student_id: b.dataset.sid, status: b.dataset.st, att_date: st.date, period: dv.rp, ...extra }));
     if (error && !/duplicate|unique/i.test(error.message || '')) { toast('تعذر الحفظ: ' + error.message, 'err'); renderRound(); return; }
     await recountSession(sid);
-    toast(`✓ أُضيف ${b.closest('li').dataset.n.split(' ')[0]} ${b.dataset.st === 'absent' ? 'غائبًا' : 'متأخرًا'}`);
+    toast(`✓ أُضيف ${firstName(b.closest('li').dataset.n)} ${b.dataset.st === 'absent' ? 'غائبًا' : 'متأخرًا'}`);
     renderRound();
   });
 }

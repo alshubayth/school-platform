@@ -1,4 +1,4 @@
-import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, printOrgName, printLogo } from './core.js';
+import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, printOrgName, printLogo, firstName as firstNameOf } from './core.js';
 import { initOverlayCard, setOverlayPeriod } from './overlay-print.js';
 import { loadXLSX } from './lib-loader.js';
 
@@ -1221,11 +1221,11 @@ document.getElementById('exam-messages-export-btn').addEventListener('click', as
   assignments.forEach(a => {
     const s = studentMap[a.student_id];
     if (!s || !s.mobile) return;
-    const firstName = (s.full_name || '').trim().split(/\s+/)[0] || '';
+    const first = firstNameOf(s.full_name);
     const committeeLabel = a.is_special ? 'اللجنة الخاصة' : ('لجنة ' + a.committee_number);
     const location = a.is_special ? '' : (locationMap[a.committee_number] || '');
     const msg = template
-      .replaceAll('#الاسم_الاول', firstName)
+      .replaceAll('#الاسم_الاول', first)
       .replaceAll('#اللجنة', committeeLabel)
       .replaceAll('#الصف', gradeLabels[s.grade_level] || '')
       .replaceAll('#رقم_الجلوس', String(a.seat_number))

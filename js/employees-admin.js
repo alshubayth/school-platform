@@ -1,6 +1,6 @@
 import { sb, SUPABASE_URL, currentUserId, roleLabels, staffRoleLabels, roleLabelOf, gradeLabels,
          isAdminOrDeputy, toLoginEmail, STAFF_ID_DOMAIN, setupCollapsible,
-         currentSchoolId, readScopedBySchool, writeWithSchool, siteBase } from './core.js';
+         currentSchoolId, readScopedBySchool, writeWithSchool, siteBase, firstName } from './core.js';
 import { loadXLSX } from './lib-loader.js';
 
 /* ================= بوابة الموظفين ================= */
@@ -490,7 +490,7 @@ function lgWaLink(r) {
   if (ph.startsWith('00')) ph = ph.slice(2);
   if (ph.startsWith('05')) ph = '966' + ph.slice(1);
   else if (ph.startsWith('5') && ph.length === 9) ph = '966' + ph;
-  const first = String(r.full_name || '').split(/\s+/)[0] || '';
+  const first = firstName(r.full_name);
   const msg = r.last_sign_in_at
     ? `السلام عليكم أستاذ ${first}،\nنذكّركم بمتابعة منصة مُدار للاطلاع على مهامكم وجدولكم وتقارير اختباراتكم:\n${siteBase()}`
     : `السلام عليكم أستاذ ${first}،\nحسابكم في منصة مُدار جاهز، نأمل الدخول للاطلاع على جدولكم ومهامكم وتقارير اختباراتكم:\n${siteBase()}\nاسم المستخدم: رقمكم الوظيفي.`;

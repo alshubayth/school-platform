@@ -1,4 +1,4 @@
-import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, tileDesc, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodTime, ASSET_VERSION } from './core.js';
+import { sb, currentUserId, currentProfile, isOpPlanMember, openTile, tiles, isTileAllowed, budgetTileTitle, budgetTileDesc, gradeLabels, GROUPS, currentSchoolId, readScopedBySchool, groupTilesFor, tileTitle, tileDesc, academicWeekInfo, weekLabel, academicCalendar, saveAcademicCalendar, sundayOf, toIsoDate, DEFAULT_ACADEMIC_START, isNoPlanWeek, loadPeriodTimes, periodTime, ASSET_VERSION, firstName } from './core.js';
 
 // أسبوع المتابعة بالرئيسية = الأسبوع القادم (اللي يُفترض المعلمون يدخلون خطته خلال هذا الأسبوع)
 const planWeek = () => Math.min(40, academicWeekInfo().next);
@@ -353,7 +353,7 @@ const QUICK_ACTIONS = {
 };
 function renderHomeHeader() {
   const now = new Date();
-  const first = String(currentProfile.full_name || '').trim().split(/\s+/)[0] || '';
+  const first = firstName(currentProfile.full_name);
   const role = currentProfile.role;
   const hero = document.querySelector('#tiles-view .home-hero');
   if (hero) hero.classList.toggle('hero-centered', role === 'deputy');
