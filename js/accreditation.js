@@ -12,6 +12,7 @@
 import { sb, currentSchoolId, currentUserId, currentProfile, readScopedBySchool, writeWithSchool } from './core.js';
 import { BOOKLET_CARDS, LEVELS, EVIDENCE_TEST, FORMS } from './acc-booklet.js';
 import { ACC_GUIDE } from './acc-guide.js';
+import { initForms, libraryHtml, bindLibrary, openFormEditor, printForm, downloadPdf, uploadSigned, FORM_DEFS } from './acc-forms.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -99,16 +100,18 @@ const daysTo = d => (d ? Math.ceil((new Date(d + 'T07:00:00') - Date.now()) / 86
 export async function loadAccreditationModule() {
   const box = $('acc-container');
   box.innerHTML = '<div class="tx-loading"><span></span><span></span><span></span></div>';
-  const [inds, evs, staff, set, leads] = await Promise.all([
+  const [inds, evs, staff, set, leads, fdocs] = await Promise.all([
     R(() => sb.from('acc_indicators').select('*').order('sort')),
     R(() => sb.from('acc_evidence').select('*').order('created_at')),
     R(() => sb.from('profiles').select('id, full_name, role').in('role', ['admin', 'deputy', 'teacher']).order('full_name')),
     R(() => sb.from('acc_settings').select('visit_date, roles')),
     R(() => sb.from('acc_leads').select('*')),
+    R(() => sb.from('acc_form_docs').select('*').order('updated_at', { ascending: false })),
   ]);
   if (inds.error) { box.innerHTML = `<div class="acx-empty">تعذر تحميل المؤشرات: ${esc(inds.error.message)}</div>`; return; }
   const st = (set.data || [])[0] || {};
-  D = { inds: inds.data || [], evs: evs.data || [], people: new Map((staff.data || []).filter(p => p.full_name).map(p => [p.id, p])), visit: st.visit_date || null, roles: st.roles || {}, leads: leads.data || [] };
+  D = { inds: inds.data || [], evs: evs.data || [], people: new Map((staff.data || []).filter(p => p.full_name).map(p => [p.id, p])), visit: st.visit_date || null, roles: st.roles || {}, leads: leads.data || [], formDocs: (fdocs && fdocs.data) || [] };
+  initForms(FX);
   const tabs = tabsFor();
   if (!V.tab || !tabs.some(t => t[0] === V.tab)) V.tab = tabs[0] ? tabs[0][0] : 'mine';
   if (V.tab === 'domain' && !V.dom) V.dom = myLeadDomains()[0] || 1;
@@ -119,6 +122,7 @@ function tabsFor() {
   if (isPrincipal()) t.push(['overview', 'المتابعة']);
   if (myLeadDomains().length) t.push(['domain', myLeadDomains().length > 1 ? 'مجالاتي' : 'مجالي']);
   if (myInds().length || !t.length) t.push(['mine', 'مؤشراتي']);
+  t.push(['forms', '📄 النماذج']);
   return t;
 }
 
@@ -126,11 +130,24 @@ function render() {
   const box = $('acc-container');
   if (V.ind) { const i = D.inds.find(x => x.id === V.ind); if (i) { box.innerHTML = indicatorPage(i); bindIndicator(i); window.scrollTo({ top: 0 }); return; } V.ind = null; }
   const tabs = tabsFor();
-  const body = V.tab === 'overview' ? overview() : V.tab === 'domain' ? domainPage(V.dom || myLeadDomains()[0] || 1) : minePage();
+  const body = V.tab === 'forms' ? libraryHtml(V.fq || '') : V.tab === 'overview' ? overview() : V.tab === 'domain' ? domainPage(V.dom || myLeadDomains()[0] || 1) : minePage();
   box.innerHTML = `<div class="acx">${hero()}
     ${tabs.length > 1 ? `<nav class="acx-tabs">${tabs.map(([k, l]) => `<button type="button" data-tab="${k}" class="${V.tab === k ? 'on' : ''}">${l}${k === 'overview' && pendingFor('principal').length ? `<i>${pendingFor('principal').length}</i>` : k === 'domain' && pendingFor('lead').length ? `<i>${pendingFor('lead').length}</i>` : ''}</button>`).join('')}</nav>` : ''}
     <div class="acx-body">${body}</div></div>`;
   bindList(box);
+  if (V.tab === 'forms') bindLibrary(box, q => { if (q != null) V.fq = q; render(); });
+}
+// سياق محرك النماذج
+const FX = {
+  sb, get D() { return D; }, get currentUserId() { return currentUserId; }, get currentSchoolId() { return currentSchoolId; },
+  toast, modal, nameOf: id => nameOf(id), canUpload: i => canUpload(i), cardOf: i => cardOf(i), writeWithSchool, BUCKET,
+  openIndicator: id => { V.ind = id; render(); },
+};
+const formDoc = e => (e && e.form_doc ? D.formDocs.find(x => x.id === e.form_doc) : null);
+async function ensureDoc(e) {
+  let d = formDoc(e); if (d || !e.form_doc) return d;
+  const { data } = await sb.from('acc_form_docs').select('*').eq('id', e.form_doc).maybeSingle();
+  if (data) D.formDocs.push(data); return data;
 }
 
 /* ---------- الترويسة ---------- */
@@ -228,6 +245,7 @@ function renderDomainFromOverview() {
 function indicatorPage(i) {
   const c = cardOf(i), st = statusOf(i), evs = evOf(i);
   const up = canUpload(i), drafts = evs.filter(e => e.status === 'draft' && e.indicator_id === i.id);
+  const pendSign = drafts.filter(e => e.sign_state === 'pending');
   const returned = evs.filter(e => e.status === 'returned');
   const reviewable = evs.filter(e => canReview(e, i));
   const opts = evOptions(i);
@@ -251,8 +269,9 @@ function indicatorPage(i) {
           <button type="button" class="acx-ghost sm" id="acx-link-t">أو رابط</button><input name="url" class="hidden" placeholder="https://" dir="ltr"></div>
         <div class="acx-up-f"><span class="acx-err"></span><button type="submit" class="acx-btn">رفع الشاهد</button></div>
       </form>
-      <div class="acx-send"><div><b>${drafts.length ? `${drafts.length} ${drafts.length === 1 ? 'شاهد جاهز' : 'شواهد جاهزة'} للإرسال` : 'ارفع شواهدك ثم أرسلها للمراجعة'}</b><small>بعد الإرسال يتقفل المؤشر حتى يراجعه ${isLeadOf(i.domain_no) && i.owner_id === currentUserId ? 'المدير' : 'قائد المجال'}.</small></div>
-        <button type="button" class="acx-btn send" id="acx-send" ${drafts.length ? '' : 'disabled'}>✓ اعتماد وإرسال للمراجعة</button></div>` : ''}
+      ${(c.forms || []).length ? `<div class="acf-quick"><span>📄 أو عبّئ نموذجًا من الحقيبة:</span>${c.forms.map(n => `<button type="button" data-qform="${n}"><i dir="ltr">ن${n}</i>${esc(FORM_DEFS[n] ? FORM_DEFS[n].t : FORMS[n - 1] || '')}</button>`).join('')}</div>` : ''}
+      <div class="acx-send ${pendSign.length ? 'blocked' : ''}"><div><b>${pendSign.length ? `✍ ${pendSign.length === 1 ? 'نموذج بانتظار' : pendSign.length + ' نماذج بانتظار'} رفع النسخة الموقعة` : drafts.length ? `${drafts.length} ${drafts.length === 1 ? 'شاهد جاهز' : 'شواهد جاهزة'} للإرسال` : 'ارفع شواهدك ثم أرسلها للمراجعة'}</b><small>${pendSign.length ? 'اطبع النموذج ووقّعه توقيعًا حيًا ثم ارفع صورته؛ بعدها يمكن الإرسال.' : `بعد الإرسال يتقفل المؤشر حتى يراجعه ${isLeadOf(i.domain_no) && i.owner_id === currentUserId ? 'المدير' : 'قائد المجال'}.`}</small></div>
+        <button type="button" class="acx-btn send" id="acx-send" ${drafts.length && !pendSign.length ? '' : 'disabled'}>✓ اعتماد وإرسال للمراجعة</button></div>` : ''}
     </section>
   </div>`;
 }
@@ -267,13 +286,15 @@ function evItem(e, i) {
   const linked = e.indicator_id !== i.id;
   const src = linked ? D.inds.find(x => x.id === e.indicator_id) : null;
   const mine = canUpload(i) && !linked && ['draft', 'returned'].includes(e.status);
-  const ext = e.kind === 'link' ? '🔗' : ((e.file_name || '').match(/\.([a-z0-9]+)$/i) || [, '📄'])[1].toUpperCase().slice(0, 4);
+  const ext = e.form_no ? 'ن' + e.form_no : e.kind === 'link' ? '🔗' : ((e.file_name || '').match(/\.([a-z0-9]+)$/i) || [, '📄'])[1].toUpperCase().slice(0, 4);
+  const pend = e.sign_state === 'pending';
+  const formBtns = e.form_no && e.form_doc ? `${pend || mine ? `<button type="button" class="fm" data-f-print="${e.id}" title="طباعة النموذج">🖨</button>` : ''}<button type="button" class="fm" data-f-edit="${e.id}" title="${mine ? 'تعديل النسخة الإلكترونية' : 'عرض النسخة الإلكترونية'}">${mine ? '✎' : '👁'}</button>${mine ? `<button type="button" class="fm sign ${pend ? 'need' : ''}" data-f-sign="${e.id}" title="رفع النسخة الموقعة">📷${pend ? ' رفع الموقّع' : ''}</button>` : ''}` : '';
   return `<div class="acx-ev ${EV[e.status] ? EV[e.status].c : ''}">
     <button type="button" class="acx-ev-i" data-open-ev="${e.id}" title="فتح">${esc(ext)}</button>
-    <div class="acx-ev-t"><b>${esc(e.ev_label || e.title)}</b><small>${esc(e.kind === 'link' ? 'رابط' : e.file_name || '')} · ${esc(sname(e.uploaded_by))} · ${new Date(e.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short' })}${linked ? ` · <em>مشترك من المؤشر ${esc(src ? src.code : '')}</em>` : (e.linked_ids || []).length ? ` · <em>مشترك مع ${(e.linked_ids || []).map(id => esc((D.inds.find(x => x.id === id) || {}).code || '')).join('، ')}</em>` : ''}</small>
+    <div class="acx-ev-t"><b>${esc(e.ev_label || e.title)}</b><small>${esc(e.kind === 'link' ? 'رابط' : e.kind === 'form' ? 'نموذج إلكتروني' : e.file_name || '')}${e.form_no && e.sign_state === 'signed' ? ' · ✍ موقّع' : ''} · ${esc(sname(e.uploaded_by))} · ${new Date(e.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short' })}${linked ? ` · <em>مشترك من المؤشر ${esc(src ? src.code : '')}</em>` : (e.linked_ids || []).length ? ` · <em>مشترك مع ${(e.linked_ids || []).map(id => esc((D.inds.find(x => x.id === id) || {}).code || '')).join('، ')}</em>` : ''}</small>
       ${e.status === 'returned' && e.review_note ? `<div class="acx-ev-note">↩ ${esc(e.review_note)}</div>` : ''}</div>
-    ${evChip(e)}
-    <div class="acx-ev-a">${canReview(e, i) && !linked ? `<button type="button" class="ok" data-rev="${e.id}" data-act="advance">✓ ${['reviewed', 'verified'].includes(e.status) ? 'اعتماد نهائي' : 'اعتماد'}</button><button type="button" class="ret" data-rev="${e.id}" data-act="return">↩ إرجاع</button>` : ''}
+    ${pend && e.status === 'draft' ? '<span class="acx-st sign">بانتظار التوقيع</span>' : evChip(e)}
+    <div class="acx-ev-a">${formBtns}${canReview(e, i) && !linked ? `<button type="button" class="ok" data-rev="${e.id}" data-act="advance">✓ ${['reviewed', 'verified'].includes(e.status) ? 'اعتماد نهائي' : 'اعتماد'}</button><button type="button" class="ret" data-rev="${e.id}" data-act="return">↩ إرجاع</button>` : ''}
       ${mine ? `<button type="button" class="del" data-del-ev="${e.id}" title="حذف">🗑</button>` : ''}</div>
   </div>`;
 }
@@ -300,6 +321,11 @@ function bindIndicator(i) {
     await refreshInd(i); toast('أُرسل المؤشر للمراجعة ✓');
   };
   const form = $('acx-up'); if (form) bindUpload(form, i);
+  document.querySelectorAll('[data-qform]').forEach(b => b.onclick = () => openFormEditor({ no: +b.dataset.qform, ind: i, onClose: () => rerender() }));
+  const evBy = id => D.evs.find(e => e.id === id);
+  document.querySelectorAll('[data-f-print]').forEach(b => b.onclick = async () => { const d = await ensureDoc(evBy(b.dataset.fPrint)); if (d) printForm(d.form_no, d.data); else toast('تعذر العثور على النسخة الإلكترونية', true); });
+  document.querySelectorAll('[data-f-edit]').forEach(b => b.onclick = async () => { const d = await ensureDoc(evBy(b.dataset.fEdit)); if (d) openFormEditor({ no: d.form_no, doc: d, onClose: () => rerender() }); else toast('تعذر العثور على النسخة الإلكترونية', true); });
+  document.querySelectorAll('[data-f-sign]').forEach(b => b.onclick = () => uploadSigned(evBy(b.dataset.fSign), () => refreshInd(i)));
 }
 async function refreshInd(i) {
   const [{ data: ind }, { data: evs }] = await Promise.all([
@@ -375,6 +401,7 @@ async function delEvidence(e) {
 async function openEvidence(e) {
   if (!e) return;
   if (e.kind === 'link') { window.open(e.url, '_blank', 'noopener'); return; }
+  if (!e.storage_path && e.form_doc) { const d = await ensureDoc(e); if (d) openFormEditor({ no: d.form_no, doc: d, onClose: () => rerender() }); return; }
   const w = window.open('', '_blank');
   const { data, error } = await sb.storage.from(BUCKET).createSignedUrl(e.storage_path, 900);
   if (error || !data) { if (w) w.close(); toast('تعذر فتح الملف', true); return; }
@@ -404,7 +431,7 @@ async function doReview(e, act, note = null) {
 /* ---------- شرح المؤشر (!) ---------- */
 function openInfo(i) {
   const c = cardOf(i), g = ACC_GUIDE[i.code] || {};
-  modal(`<header><span class="acx-code" style="--dc:${DCOL[i.domain_no]}">${esc(i.code)}</span><b>${esc(i.text)}</b><button type="button" class="acx-x" data-x>✕</button></header>
+  const m = modal(`<header><span class="acx-code" style="--dc:${DCOL[i.domain_no]}">${esc(i.code)}</span><b>${esc(i.text)}</b><button type="button" class="acx-x" data-x>✕</button></header>
     <div class="acx-info-b">
       ${g.meaning ? `<section><h4>معنى المؤشر</h4><p>${esc(g.meaning)}</p></section>` : ''}
       <section><h4>الشواهد المقترحة</h4><ul class="acx-ul">${(c.ev || []).map(t => `<li>${esc(t)}</li>`).join('')}</ul></section>
@@ -412,9 +439,10 @@ function openInfo(i) {
       ${c.drop ? `<section class="drop"><h4>يُسقط الدرجة</h4><p>${esc(c.drop)}</p></section>` : ''}
       ${c.q ? `<section class="q"><h4>السؤال المتوقع ${c.who ? `<span>يُسأل: ${esc(c.who)}</span>` : ''}</h4><p>${esc(c.q)}</p></section>` : ''}
       ${(c.shared || []).length ? `<section class="sh"><h4>شواهد مشتركة <span>تُرفع مرة واحدة وتظهر في المؤشرين</span></h4><ul class="acx-ul">${c.shared.map(s => { const p = indByCode(s.with); return `<li><b>${esc(s.t)}</b> — مع ${esc(p ? nameOf(p.owner_id) : '')} (<bdi dir="ltr">${esc(s.with)}</bdi>)</li>`; }).join('')}</ul></section>` : ''}
-      ${(c.forms || []).length ? `<section><h4>النماذج المساعدة</h4><div class="acx-forms">${c.forms.map(n => `<span>ن${n} ${esc(FORMS[n - 1] || '')}</span>`).join('')}</div></section>` : ''}
+      ${(c.forms || []).length ? `<section><h4>النماذج المساعدة</h4><div class="acx-forms">${c.forms.map(n => `<button type="button" data-info-form="${n}">ن${n} ${esc(FORMS[n - 1] || '')}</button>`).join('')}</div></section>` : ''}
       <section class="test"><h4>اختبار الشاهد قبل رفعه</h4><ul class="acx-ul check">${EVIDENCE_TEST.map(t => `<li>${esc(t)}</li>`).join('')}</ul><p class="acx-muted">معادلة الشاهد المتميز: تخطيط ← تنفيذ ← متابعة ← أثر. شاهدان أو ثلاثة قوية أفضل من عشرة ضعيفة.</p></section>
     </div>`, 'wide');
+  m.querySelectorAll('[data-info-form]').forEach(b => b.onclick = () => { m.remove(); openFormEditor({ no: +b.dataset.infoForm, ind: i, onClose: () => rerender() }); });
 }
 
 /* ---------- الإسناد ---------- */
