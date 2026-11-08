@@ -24,7 +24,8 @@ let classesCache = [];   // الفصول المضافة بترتيب الإضا�
 
 /* ---------- الدروس التفاعلية (صفحات ثابتة في مجلد lessons/) ---------- */
 const LAB_LESSONS = [
-  { path: '/lessons/python-logic.html', title: 'مختبر المعاملات المنطقية', subject: 'بايثون', desc: 'شرح and وor وnot بمفاتيح ومصباح، مع جدول الحقيقة وترتيب الأولوية واختبار سريع.' },
+  { path: '/lessons/python-libraries.html', sheet: '/lessons/python-libraries-sheet.html', title: 'رفّ المكتبات البرمجية', subject: 'بايثون', grade: 'الثالث المتوسط', desc: 'المكتبات math وrandom وdatetime، وطرق الاستيراد الثلاث مع صندوق الأسماء، ومستكشف للدوال، ومختبر نرد، واختبار سريع.' },
+  { path: '/lessons/python-logic.html', title: 'مختبر المعاملات المنطقية', subject: 'بايثون', grade: 'الثاني المتوسط', desc: 'شرح and وor وnot بمفاتيح ومصباح، مع جدول الحقيقة وترتيب الأولوية واختبار سريع.' },
 ];
 
 function renderLessons() {
@@ -33,13 +34,14 @@ function renderLessons() {
   wrap.innerHTML = LAB_LESSONS.map((l, i) => `
     <div class="lab-lesson">
       <div class="lab-lesson-info">
-        <span class="lab-lesson-tag">${esc(l.subject)}</span>
+        <span class="lab-lesson-tag">${esc(l.subject)}${l.grade ? ' · ' + esc(l.grade) : ''}</span>
         <strong>${esc(l.title)}</strong>
         <p>${esc(l.desc)}</p>
         <code class="lab-lesson-url" dir="ltr">${esc(location.origin + l.path)}</code>
       </div>
       <div class="lab-lesson-actions">
         <a class="btn-primary" href="${esc(l.path)}" target="_blank" rel="noopener" style="width:auto; padding:9px 18px; text-decoration:none; text-align:center;">فتح الدرس</a>
+        ${l.sheet ? `<a class="lab-lesson-copy" href="${esc(l.sheet)}" target="_blank" rel="noopener" style="text-decoration:none;">📄 ورقة العمل</a>` : ''}
         <button type="button" class="lab-lesson-copy" data-i="${i}">نسخ الرابط</button>
       </div>
     </div>`).join('');
