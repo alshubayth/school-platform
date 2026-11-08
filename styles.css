@@ -5010,3 +5010,7 @@ button.acf-box:hover{ border-color:var(--acf-blue); }
   #acf-print-root thead{ display:table-header-group; }
   @page{ size:A4; margin:11mm 10mm; }
 }
+.acx-recall{ display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+.acx-recall > div{ flex:1; min-width:220px; }
+.acx-recall .acx-ghost{ width:auto; margin:0; background:#fff; border:1.5px solid #E9A54B; color:#8A4B06; font-weight:800; }
+.acx-recall .acx-ghost:hover{ background:#FFEFD6; }

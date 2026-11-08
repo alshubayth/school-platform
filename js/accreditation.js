@@ -248,6 +248,8 @@ function indicatorPage(i) {
   const pendSign = drafts.filter(e => e.sign_state === 'pending');
   const returned = evs.filter(e => e.status === 'returned');
   const reviewable = evs.filter(e => canReview(e, i));
+  // ما أرسله المستخدم ولم يتخذ عليه المراجع إجراءً بعد ← يمكن استرجاعه للتعديل
+  const recallable = up ? evs.filter(e => e.indicator_id === i.id && ['submitted', 'reviewed'].includes(e.status) && (() => { const hs = e.history || [], h = hs[hs.length - 1]; return (!h && e.status === 'submitted') || (h && h.by === currentUserId && h.to === e.status); })()) : [];
   const opts = evOptions(i);
   return `<div class="acx acx-ip">
     <button type="button" class="acx-back" id="acx-back">→ رجوع</button>
@@ -257,7 +259,7 @@ function indicatorPage(i) {
       <div class="acx-ih-meta"><span>المسؤول: <b>${esc(nameOf(i.owner_id))}</b>${c.group ? ` <em>(مؤشر ${esc(c.group)})</em>` : ''}</span>${(i.uploader_ids || []).length ? `<span>مكلّفون بالرفع: ${i.uploader_ids.map(u => esc(sname(u))).join('، ')}</span>` : ''}
         <span class="acx-ih-btns">${canAssign(i) ? '<button type="button" class="acx-ghost" id="acx-assign">تغيير المسؤول</button>' : ''}<button type="button" class="acx-info" id="acx-info" title="شرح المؤشر والشواهد المقترحة">!</button></span></div>
     </header>
-    ${i.locked ? '<div class="acx-alert wait">🔒 المؤشر مرسل لقائد المجال للمراجعة، ولا يمكن إضافة شواهد أو تعديلها حتى تنتهي المراجعة.</div>' : ''}
+    ${i.locked || recallable.length ? `<div class="acx-alert wait acx-recall"><div>${i.locked ? `🔒 المؤشر مرسل لقائد المجال للمراجعة، ولا يمكن إضافة شواهد أو تعديلها حتى تنتهي المراجعة.` : `📤 أُرسلت شواهدك إلى المدير للاعتماد.`}${recallable.length ? `<small>اكتشفت خطأً؟ يمكنك التراجع عن الإرسال ما دامت المراجعة لم تبدأ، ثم التعديل وإعادة الإرسال.</small>` : ''}</div>${recallable.length ? `<button type="button" class="acx-ghost" id="acx-recall">↶ تراجع عن الإرسال (${recallable.length})</button>` : ''}</div>` : ''}
     ${returned.length ? `<div class="acx-alert ret"><b>↩ ${returned.length === 1 ? 'شاهد معاد للتعديل' : returned.length + ' شواهد معادة للتعديل'}</b>${returned.map(e => `<div class="acx-note"><b>${esc(e.ev_label || e.title)}:</b> ${esc(e.review_note || '')} <small>— ${esc(sname(e.reviewed_by))}</small></div>`).join('')}<small>احذف الشاهد المعاد وارفع بديله، ثم أرسل المؤشر للمراجعة.</small></div>` : ''}
     <section class="acx-card"><h3>الشواهد <i>${evs.length}</i>${reviewable.length > 1 ? `<button type="button" class="acx-ok-all" id="acx-ok-all">✓ اعتماد الكل (${reviewable.length})</button>` : ''}</h3>
       <div class="acx-evs">${evs.map(e => evItem(e, i)).join('') || '<div class="acx-empty sm">لا توجد شواهد بعد</div>'}</div>
@@ -319,6 +321,13 @@ function bindIndicator(i) {
     const { error } = await sb.rpc('acc_submit', { p_ind: i.id });
     if (error) { send.disabled = false; toast(error.message, true); return; }
     await refreshInd(i); toast('أُرسل المؤشر للمراجعة ✓');
+  };
+  const rc = $('acx-recall'); if (rc) rc.onclick = async () => {
+    if (!confirm('التراجع عن إرسال الشواهد؟ ستعود مسودات يمكنك تعديلها أو حذفها، ثم إعادة إرسالها للمراجعة.')) return;
+    rc.disabled = true;
+    const { data, error } = await sb.rpc('acc_recall', { p_ind: i.id });
+    if (error) { rc.disabled = false; toast(error.message, true); await refreshInd(i); return; }
+    await refreshInd(i); toast(`أُعيد ${data === 1 ? 'شاهد واحد' : data + ' شواهد'} إلى المسودات — عدّل ثم أرسل من جديد ✓`);
   };
   const form = $('acx-up'); if (form) bindUpload(form, i);
   document.querySelectorAll('[data-qform]').forEach(b => b.onclick = () => openFormEditor({ no: +b.dataset.qform, ind: i, onClose: () => rerender() }));
