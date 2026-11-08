@@ -193,9 +193,12 @@ async function loadThumb(img) {
 }
 async function download(id) {
   const it = S.items.find(x => x.id === id); if (!it) return;
-  const { data, error } = await sb.storage.from('drops').createSignedUrl(it.path, 300, { download: it.name });
+  // التنزيل عبر Blob محلي ليحتفظ الملف باسمه العربي الصحيح (رابط التنزيل المباشر يشوّه الأسماء العربية في ويندوز)
+  const { data, error } = await sb.storage.from('drops').download(it.path);
   if (error || !data) { toast('تعذر التنزيل، ربما انتهت المشاركة'); return; }
-  const a = document.createElement('a'); a.href = data.signedUrl; a.download = it.name; a.rel = 'noopener'; document.body.appendChild(a); a.click(); a.remove();
+  const url = URL.createObjectURL(data);
+  const a = document.createElement('a'); a.href = url; a.download = it.name || 'ملف'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 async function removeItem(id) {
   const it = S.items.find(x => x.id === id); if (!it || !confirm('حذف هذا العنصر من المشاركة؟')) return;
@@ -240,7 +243,10 @@ async function upload(files) {
     up.appendChild(row);
     const e = extOf(f.name);
     const path = `${S.room.id}/${crypto.randomUUID()}${e ? '.' + e : ''}`;
-    const { error } = await sb.storage.from('drops').upload(path, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+    let body;
+    try { const buf = await f.arrayBuffer(); if (!buf.byteLength) throw 0; body = new Blob([buf], { type: f.type || 'application/octet-stream' }); }
+    catch { row.remove(); toast(`تعذّرت قراءة «${f.name}» أو أنه فارغ؛ افتحه مرة على الجهاز ثم أعد اختياره`); continue; }
+    const { error } = await sb.storage.from('drops').upload(path, body, { contentType: body.type, upsert: false });
     if (!error) {
       const { error: e2 } = await sb.from('drop_items').insert({ room_id: S.room.id, kind: 'file', path, name: f.name || 'ملف', size: f.size, mime: f.type || null });
       if (e2) { await sb.storage.from('drops').remove([path]); toast('تعذر حفظ الملف: ' + e2.message); }

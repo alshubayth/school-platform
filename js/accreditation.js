@@ -378,8 +378,11 @@ function bindUpload(form, i) {
       if (f.size > 25 * 1024 * 1024) { err.textContent = `«${f.name}» أكبر من 25 م.ب`; continue; }
       const ext = (f.name.match(/\.([A-Za-z0-9]{1,8})$/) || [])[1] || 'bin';
       const path = `${currentSchoolId}/${i.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext.toLowerCase()}`;
-      const upr = await sb.storage.from(BUCKET).upload(path, f, { contentType: f.type || undefined, upsert: false });
-      if (upr.error) { err.textContent = `تعذر رفع «${f.name}»: ${upr.error.message}`; continue; }
+      let body;
+      try { body = await toUploadBlob(f); } catch (e) { err.textContent = e.message; continue; }
+      let upr = await sb.storage.from(BUCKET).upload(path, body, { contentType: body.type, upsert: false });
+      if (upr.error && /520|fetch|network|Failed/i.test(upr.error.message)) upr = await sb.storage.from(BUCKET).upload(path, body, { contentType: body.type, upsert: false });
+      if (upr.error) { err.textContent = `تعذر رفع «${f.name}»: ${upr.error.message}. أعد المحاولة، وإن تكرر الخطأ فأعد تسمية الملف باسم قصير ثم ارفعه.`; continue; }
       const { error } = await writeWithSchool(extra => sb.from('acc_evidence').insert({ ...base, kind: 'file', storage_path: path, file_name: f.name, file_size: f.size, ...extra }));
       if (error) { err.textContent = 'تعذر الحفظ: ' + error.message; await sb.storage.from(BUCKET).remove([path]); continue; }
       ok++;
@@ -387,6 +390,15 @@ function bindUpload(form, i) {
     btn.disabled = false; btn.textContent = 'رفع الشاهد';
     if (ok) { await refreshInd(i); toast(ok === 1 ? 'رُفع الشاهد مسودةً ✓' : `رُفع ${ok} شواهد ✓`); }
   };
+}
+// يقرأ الملف كاملًا ويرفعه كبيانات خام دون اسمه الأصلي؛ يتجنب أخطاء الأسماء الطويلة/المشوّهة وملفات iCloud غير المكتملة
+async function toUploadBlob(f) {
+  let buf;
+  try { buf = await f.arrayBuffer(); } catch { throw new Error(`تعذّرت قراءة «${f.name}». إن كان من iCloud أو واتساب فافتحه مرة على الجهاز ثم أعد اختياره.`); }
+  if (!buf.byteLength) throw new Error(`الملف «${f.name}» فارغ (0 بايت) أو لم يكتمل تنزيله على الجهاز. افتحه مرة ثم أعد اختياره.`);
+  const ext = ((f.name || '').match(/\.([A-Za-z0-9]{1,8})$/) || [])[1] || '';
+  const type = f.type || ({ pdf: 'application/pdf', jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' }[ext.toLowerCase()]) || 'application/octet-stream';
+  return new Blob([buf], { type });
 }
 async function shrinkImage(f) {
   if (!/^image\/(jpeg|png|webp)$/.test(f.type) || f.size < 700 * 1024) return f;
