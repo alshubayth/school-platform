@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="/favicon.svg">
+<title>سوق التجارة الإلكترونية</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">
+<style>
+/* التخطيط: سوق مسقوف — بطاقات الأنظمة، فرز النماذج، ميزان المزايا والعيوب، الأسواق، السلع الافتراضية، المتجر التدريبي، الاختبار */
+:root{
+  --bg:#f5f1e8; --panel:#fffdf8; --ink:#1d2a2a; --muted:#647070; --line:#e3dccb;
+  --g:#0d6e5c; --g-soft:#dcefe8; --s:#d98c12; --s-soft:#fbecd2; --r:#c2412d; --r-soft:#f9e1dc;
+  --b2b:#3157a8; --b2c:#0d6e5c; --c2c:#a8457a;
+  --good:#1b8a55; --bad:#c2412d;
+  --display:"Lalezar","IBM Plex Sans Arabic",system-ui,sans-serif;
+  --body:"IBM Plex Sans Arabic",system-ui,"Segoe UI",Tahoma,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101716; --panel:#172120; --ink:#e6eeec; --muted:#9aa9a6; --line:#29393a;
+  --g:#35c3a3; --g-soft:#143a33; --s:#f0a93b; --s-soft:#3a2b12; --r:#ff7a63; --r-soft:#3a1c17;
+  --b2b:#7fa3ee; --b2c:#35c3a3; --c2c:#e58bbd; --good:#45c486; --bad:#ff7a63; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101716; --panel:#172120; --ink:#e6eeec; --muted:#9aa9a6; --line:#29393a;
+  --g:#35c3a3; --g-soft:#143a33; --s:#f0a93b; --s-soft:#3a2b12; --r:#ff7a63; --r-soft:#3a1c17;
+  --b2b:#7fa3ee; --b2c:#35c3a3; --c2c:#e58bbd; --good:#45c486; --bad:#ff7a63; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.75;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 56px}
+.wrap{max-width:920px;margin-inline:auto;display:grid;gap:38px}
+h1,h2{font-family:var(--display);font-weight:400;margin:0;line-height:1.3;text-wrap:balance}
+h1{font-size:clamp(2.2rem,7vw,3.4rem)} h2{font-size:1.7rem}
+p{margin:0} .lede{color:var(--muted);max-width:64ch}
+.tag{font-size:.82rem;color:var(--muted);font-weight:500}
+section{display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--s);outline-offset:2px}
+.en{direction:ltr;unicode-bidi:isolate;font-weight:700}
+
+/* مظلة السوق */
+.awning{height:46px;margin-inline:calc(-1*max(16px,env(safe-area-inset-left,0px)));background:repeating-linear-gradient(90deg,var(--g) 0 46px,var(--panel) 46px 92px);
+  -webkit-mask:radial-gradient(23px at 23px 46px,#0000 98%,#000) 0 0/46px 100%;mask:radial-gradient(23px at 23px 46px,#0000 98%,#000) 0 0/46px 100%;margin-bottom:22px}
+.hero{display:grid;gap:12px}
+.def{background:var(--g-soft);border-inline-start:5px solid var(--g);border-radius:12px;padding:14px 18px}
+
+/* الأنظمة */
+.sys{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.sy{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:14px;display:grid;gap:4px;cursor:pointer;text-align:start;transition:transform .15s,border-color .15s}
+.sy:hover{transform:translateY(-2px);border-color:var(--g)}
+.sy .ic{font-size:1.6rem} .sy b{font-size:1rem}
+.sy small{color:var(--muted);font-size:.86rem;display:none}
+.sy[aria-expanded="true"]{border-color:var(--g);background:var(--g-soft)} .sy[aria-expanded="true"] small{display:block}
+
+/* فرز النماذج */
+.scene{display:grid;gap:14px;justify-items:center;text-align:center}
+.card{max-width:520px;width:100%;background:var(--panel);border:2px dashed var(--line);border-radius:16px;padding:18px 20px;font-weight:700;font-size:1.08rem;min-height:96px;display:grid;place-items:center;animation:in .3s ease}
+@keyframes in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.bins{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}
+.bin{border:0;border-radius:14px;padding:12px 8px;color:#fff;cursor:pointer;display:grid;gap:2px;font-weight:700}
+.bin .en{font-size:1.25rem} .bin small{font-weight:500;opacity:.92;font-size:.82rem}
+.bin.b2b{background:var(--b2b)} .bin.b2c{background:var(--b2c)} .bin.c2c{background:var(--c2c)}
+.bin:disabled{opacity:.45;cursor:default}
+.fb{min-height:1.7em;color:var(--muted);text-align:center}
+.fb.ok{color:var(--good)} .fb.no{color:var(--bad)}
+.prog{font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* الميزان */
+.scale{position:relative;height:240px;display:grid;place-items:center}
+.beam{position:absolute;top:64px;width:min(560px,92%);height:8px;border-radius:8px;background:var(--ink);transition:transform .5s cubic-bezier(.3,1.4,.5,1);transform-origin:50% 50%}
+.pan{position:absolute;top:8px;width:42%;min-height:110px;border-radius:0 0 50% 50%/0 0 34% 34%;border:3px solid var(--ink);border-top:0;display:flex;flex-wrap:wrap;gap:4px;align-content:flex-end;justify-content:center;padding:6px;background:var(--panel)}
+.pan.pro{right:0;transform:translateY(8px)} .pan.con{left:0;transform:translateY(8px)}
+.pan h4{position:absolute;bottom:-30px;left:0;right:0;text-align:center;margin:0;font-size:.95rem}
+.pan.pro h4{color:var(--good)} .pan.con h4{color:var(--bad)}
+.pan i{width:22px;height:22px;border-radius:6px;display:block;animation:in .3s ease}
+.pan.pro i{background:var(--good)} .pan.con i{background:var(--bad)}
+.post{position:absolute;bottom:0;width:10px;height:150px;background:var(--ink);border-radius:6px}
+.post::after{content:"";position:absolute;bottom:-6px;left:-40px;width:90px;height:14px;border-radius:8px;background:var(--ink)}
+.two{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.btn{border:0;font-weight:700;padding:10px 20px;border-radius:999px;cursor:pointer;background:var(--ink);color:var(--panel)}
+.btn.pro{background:var(--good);color:#fff} .btn.con{background:var(--bad);color:#fff}
+.btn.alt{background:transparent;color:var(--ink);border:2px solid var(--line)}
+.btn:disabled{opacity:.45;cursor:default}
+
+/* الأسواق */
+.mk{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+.mkc{border-radius:16px;padding:16px;display:grid;gap:8px;align-content:start;border:2px solid transparent;background:var(--panel);transition:border-color .2s}
+.mkc h3{margin:0;font-size:1.05rem} .mkc p{font-size:.9rem;color:var(--muted)}
+.mkc .ex{display:flex;gap:6px;flex-wrap:wrap;min-height:34px}
+.mkc .ex span{background:var(--s-soft);color:var(--ink);border-radius:999px;padding:2px 12px;font-weight:700;font-size:.85rem;direction:ltr}
+.mkc.hit{border-color:var(--good)} .mkc.miss{border-color:var(--bad)}
+.mkc button{border:2px solid var(--line);background:transparent;border-radius:10px;padding:6px;cursor:pointer;font-weight:700}
+.chips{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.chip{border:2px solid var(--line);background:var(--panel);border-radius:999px;padding:6px 16px;font-weight:700;cursor:pointer;direction:ltr}
+.chip[aria-pressed="true"]{border-color:var(--s);background:var(--s-soft)}
+.chip.done{opacity:.35;pointer-events:none}
+
+/* السلع الافتراضية */
+.goods{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.gd{border:2px solid var(--line);background:var(--panel);border-radius:14px;padding:12px 8px;display:grid;gap:6px;justify-items:center;text-align:center;font-weight:700;font-size:.9rem}
+.gd .e{font-size:2rem;line-height:1}
+.gd .vb{display:flex;gap:4px}
+.gd .vb button{border:1.5px solid var(--line);background:transparent;border-radius:8px;font-size:.75rem;padding:2px 8px;cursor:pointer}
+.gd.v{border-color:var(--g);background:var(--g-soft)} .gd.p{border-color:var(--s);background:var(--s-soft)} .gd.x{border-color:var(--bad)}
+
+/* المتجر */
+.shop{border:1px solid var(--line);border-radius:18px;overflow:hidden;background:var(--panel)}
+.nav{display:flex;align-items:center;gap:14px;padding:10px 16px;border-bottom:1px solid var(--line);font-size:.9rem;flex-wrap:wrap}
+.nav b{font-family:var(--display);font-weight:400;font-size:1.25rem;margin-inline-end:auto}
+.nav button{border:0;background:none;cursor:pointer;color:var(--muted);font-weight:700;padding:4px 2px;border-bottom:2px solid transparent}
+.nav button[aria-current="page"]{color:var(--g);border-color:var(--g)}
+.nav .cc{background:var(--s);color:#fff;border-radius:999px;font-size:.72rem;padding:0 7px;margin-inline-start:4px}
+.view{padding:18px;min-height:300px}
+.home{display:grid;place-items:center;gap:14px;text-align:center;min-height:260px;border-radius:14px;color:#fff;
+  background:radial-gradient(ellipse at 30% 110%,#f0a93b55,transparent 60%),linear-gradient(160deg,#0e2a3a,#0d6e5c)}
+.home h3{font-family:var(--display);font-weight:400;font-size:1.8rem;margin:0}
+.home .go{background:#9bd23c;color:#14310a;border:0;border-radius:8px;padding:10px 22px;font-weight:700;cursor:pointer}
+.tools{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;font-size:.9rem;color:var(--muted)}
+.tools select{font:inherit;border:1px solid var(--line);border-radius:8px;padding:4px 8px;background:var(--panel);color:var(--ink)}
+.prods{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.pr{border:1px solid var(--line);border-radius:14px;padding:14px;display:grid;gap:8px;justify-items:center;text-align:center;position:relative}
+.pr .art{width:100%;aspect-ratio:4/3;border-radius:10px;background:var(--bg);display:grid;place-items:center;font-size:3rem}
+.pr .sale{position:absolute;top:10px;inset-inline-start:10px;background:var(--r);color:#fff;font-size:.72rem;font-weight:700;border-radius:999px;padding:1px 9px}
+.pr .price{font-weight:700} .pr del{color:var(--muted);font-weight:500;margin-inline-start:6px}
+.add{background:#9bd23c;color:#14310a;border:0;border-radius:8px;padding:7px 14px;font-weight:700;cursor:pointer;width:100%}
+.added{font-size:.82rem;color:var(--g);min-height:1.3em}
+.cart{width:100%;border-collapse:collapse}
+.cart th,.cart td{padding:10px 8px;border-bottom:1px solid var(--line);text-align:center}
+.cart th{color:var(--muted);font-size:.85rem}
+.cart input{width:60px;font:inherit;text-align:center;border:1px solid var(--line);border-radius:8px;padding:3px;background:var(--panel);color:var(--ink)}
+.cart .del{border:0;background:none;color:var(--bad);font-size:1.1rem;cursor:pointer}
+.tot{display:flex;justify-content:space-between;margin-top:14px;font-weight:700;font-size:1.1rem;padding:12px 14px;border-radius:12px;background:var(--g-soft)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;counter-reset:s}
+.st{counter-increment:s;border:2px solid var(--line);border-radius:12px;padding:10px 10px 10px 10px;font-size:.88rem;display:flex;gap:8px;align-items:center;background:var(--panel)}
+.st::before{content:counter(s);flex:0 0 26px;height:26px;border-radius:50%;display:grid;place-items:center;background:var(--line);font-weight:700}
+.st.done{border-color:var(--good)} .st.done::before{content:"✓";background:var(--good);color:#fff}
+.tip{border-radius:12px;background:var(--s-soft);padding:10px 14px;font-size:.92rem}
+
+/* الاختبار */
+.qq{font-weight:700;font-size:1.1rem}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ans{padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:var(--panel);cursor:pointer;text-align:start;font-weight:600}
+.ans.right{border-color:var(--good);color:var(--good)} .ans.wrong{border-color:var(--bad);color:var(--bad)}
+.qfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.score{font-weight:700;font-variant-numeric:tabular-nums}
+
+@media (max-width:700px){
+  .sys,.mk{grid-template-columns:1fr 1fr} .goods{grid-template-columns:1fr 1fr}
+  .prods{grid-template-columns:1fr} .steps{grid-template-columns:1fr 1fr} .answers{grid-template-columns:1fr}
+  .bins{grid-template-columns:1fr}
+}
+@media (max-width:460px){ .sys,.mk{grid-template-columns:1fr} .cart th:nth-child(2),.cart td:nth-child(2){display:none} }
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="awning" aria-hidden="true"></div>
+<div class="wrap">
+
+  <header class="hero">
+    <span class="tag">المهارات الرقمية · الصف الثالث المتوسط · الوحدة الثالثة: التجارة الإلكترونية · الدرس الأول</span>
+    <h1>مقدمة في التجارة الإلكترونية</h1>
+    <p class="def"><b>التجارة الإلكترونية (<span class="en">E-commerce</span>)</b> تشير إلى كافة أشكال التعاملات التجارية التي تتم عبر الإنترنت، كليًا أو جزئيًا، ومن أشهر أمثلتها التسوق عبر الإنترنت: شراء المنتجات وبيعها وتحويل الأموال والبيانات من خلال الأجهزة المختلفة.</p>
+  </header>
+
+  <section aria-labelledby="h-sys">
+    <h2 id="h-sys">الأنظمة التي تعتمد عليها التجارة الإلكترونية</h2>
+    <p class="lede">ستة أنظمة وأدوات تقنية تعمل معًا عندما تشتري منتجًا عبر الإنترنت. اضغط على كل نظام لترى دوره في رحلة طلبك.</p>
+    <div class="sys" id="sys"></div>
+  </section>
+
+  <section aria-labelledby="h-mod">
+    <h2 id="h-mod">نماذج التجارة الإلكترونية: مَن يبيع لمن؟</h2>
+    <p class="lede">تُصنَّف النماذج إلى ثلاثة أنواع بناءً على نوع المشاركين في التبادل التجاري. اقرأ الموقف ثم اختر النموذج المناسب.</p>
+    <div class="panel scene">
+      <span class="prog" id="mProg"></span>
+      <div class="card" id="mCard"></div>
+      <div class="bins">
+        <button class="bin b2b" data-m="B2B"><span class="en">B2B</span><small>شركة إلى شركة</small></button>
+        <button class="bin b2c" data-m="B2C"><span class="en">B2C</span><small>شركة إلى مستهلك</small></button>
+        <button class="bin c2c" data-m="C2C"><span class="en">C2C</span><small>مستهلك إلى مستهلك</small></button>
+      </div>
+      <p class="fb" id="mFb" aria-live="polite"></p>
+      <button class="btn alt" id="mNext" hidden>الموقف التالي ←</button>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-pc">
+    <h2 id="h-pc">ميزان المزايا والعيوب</h2>
+    <p class="lede">ضع كل عبارة في الكفة الصحيحة: هل هي من مزايا التجارة الإلكترونية أم من عيوبها؟</p>
+    <div class="panel" style="display:grid;gap:16px">
+      <div class="scale" aria-hidden="true">
+        <div class="post"></div>
+        <div class="beam" id="beam">
+          <div class="pan pro" id="panPro"><h4>المزايا</h4></div>
+          <div class="pan con" id="panCon"><h4>العيوب</h4></div>
+        </div>
+      </div>
+      <div class="card" id="pcCard" style="margin-inline:auto"></div>
+      <div class="two"><button class="btn pro" id="toPro">✓ ميزة</button><button class="btn con" id="toCon">✗ عيب</button></div>
+      <p class="fb" id="pcFb" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-mk">
+    <h2 id="h-mk">الأسواق الإلكترونية</h2>
+    <p class="lede"><b>الأسواق الإلكترونية (<span class="en">E-marketplace</span>)</b> مواقع تجارة إلكترونية يوفر فيها طرف ثالث المنتجات أو الخدمات، ويتولى مشغّل السوق معالجة التعاملات. اختر مثالًا من الأسفل، ثم اضغط على نوع السوق الذي ينتمي إليه.</p>
+    <div class="chips" id="mkChips"></div>
+    <div class="mk" id="mk"></div>
+    <p class="fb" id="mkFb" aria-live="polite"></p>
+  </section>
+
+  <section aria-labelledby="h-vg">
+    <h2 id="h-vg">السلع الافتراضية</h2>
+    <p class="lede"><b>السلع الافتراضية (<span class="en">Virtual goods</span>)</b> أصول غير ملموسة يتم تداولها في اقتصاد افتراضي، مثل الألعاب الإلكترونية وورش التطوير المهني وبرمجيات الإنترنت. صنّف كل سلعة: افتراضية أم مادية؟</p>
+    <div class="goods" id="goods"></div>
+    <p class="fb" id="vgFb" aria-live="polite"></p>
+  </section>
+
+  <section aria-labelledby="h-shop">
+    <h2 id="h-shop">المتجر التدريبي: اختر منتجًا وأضفه إلى السلة</h2>
+    <p class="lede">طبّق خطوات الكتاب على هذا المتجر التدريبي المشابه لمتجر <span class="en">My giftshop</span> الذي تفتحه من خلال <span class="en">LocalWP</span>.</p>
+    <div class="steps" id="steps">
+      <div class="st" data-s="0">الذهاب للتسوق</div><div class="st" data-s="1">إضافة إلى السلة</div><div class="st" data-s="2">عرض السلة</div><div class="st" data-s="3">تعديل الكمية في السلة</div>
+    </div>
+    <div class="shop">
+      <div class="nav"><b>متجر الهدايا</b>
+        <button data-v="home" aria-current="page">الصفحة الرئيسة</button><button data-v="store">المتجر</button><button data-v="cart">سلة المشتريات<span class="cc" id="cc">0</span></button></div>
+      <div class="view" id="view"></div>
+    </div>
+    <p class="tip">💡 تأكّد دائمًا من إضافة المنتجات الصحيحة وعددها إلى سلة المشتريات قبل إتمام عملية الدفع. ستتعلم إنشاء الحساب والدفع في الدرس الثاني.</p>
+  </section>
+
+  <section aria-labelledby="h-qz">
+    <h2 id="h-qz">اختبر نفسك</h2>
+    <div class="panel" style="display:grid;gap:14px">
+      <p class="qq" id="qq"></p>
+      <div class="answers" id="answers"></div>
+      <p class="fb" id="qFb" aria-live="polite" style="text-align:start"></p>
+      <div class="qfoot"><span class="score" id="score">النقاط: 0 / 0</span><button class="btn" id="qNext">سؤال جديد</button></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+
+  /* ---------- الأنظمة ---------- */
+  const SYS=[
+    ['📧','البريد الإلكتروني','تصلك عليه رسالة تأكيد الطلب والفاتورة.'],
+    ['🏢','أنظمة إدارة موارد الشركة','تنظّم المخزون والمشتريات والحسابات داخل الشركة البائعة.'],
+    ['💬','أنظمة تبادل الرسائل الفورية','للتواصل السريع مع خدمة العملاء والاستفسار عن الطلب.'],
+    ['🛒','أنظمة التسوق عبر الإنترنت','المتجر نفسه: عرض المنتجات وسلة المشتريات وإتمام الطلب.'],
+    ['🚚','خدمات تتبع توصيل المنتجات','تعرف من خلالها أين وصلت شحنتك حتى باب منزلك.'],
+    ['🏦','الخدمات المصرفية عبر الإنترنت','تنقل قيمة مشترياتك من حسابك إلى البائع.']
+  ];
+  $('sys').innerHTML=SYS.map(s=>`<button class="sy" aria-expanded="false"><span class="ic" aria-hidden="true">${s[0]}</span><b>${s[1]}</b><small>${s[2]}</small></button>`).join('');
+  document.querySelectorAll('.sy').forEach(b=>b.onclick=()=>b.setAttribute('aria-expanded',b.getAttribute('aria-expanded')!=='true'));
+
+  /* ---------- النماذج ---------- */
+  const MOD=[
+    ['شركة أمازون تقدّم لشركات ومتاجر أخرى خدمة «الوفاء» بتخزين منتجاتها وتغليفها وشحنها (FBA).','B2B','تبادل خدمات بين شركة وشركات أخرى.'],
+    ['مصنع يبيع قطع غيار بكميات كبيرة لشركة صيانة سيارات عبر منصة إلكترونية.','B2B','البائع شركة والمشتري شركة.'],
+    ['متجر إلكتروني لعلامة تجارية يبيع حذاءً رياضيًا لطالب ويوصله إلى منزله.','B2C','الشركة تبيع مباشرة للمستهلك.'],
+    ['شركة مصنّعة تبيع منتجاتها مباشرة للمستهلكين عبر موقعها الإلكتروني.','B2C','من أمثلة الكتاب: المصنعون والشركات المنتجة بشكل مباشر.'],
+    ['شخص يعرض دراجته المستعملة في موقع مزادات مثل إيباي (eBay) ويشتريها شخص آخر.','C2C','المستهلكون يتداولون فيما بينهم عبر منصة طرف ثالث.'],
+    ['طالب يبيع كتبه القديمة لطالب آخر عبر تطبيق إعلانات مبوبة.','C2C','البائع والمشتري كلاهما مستهلك.'],
+    ['شركتان تتبادلان أدلة المنتجات والمنتجات نفسها عبر منصة إلكترونية.','B2B','من عمليات B2B: تبادل أدلة المنتجات والمنتجات معًا.'],
+    ['متجر إلكتروني يبيع منتجات لمجموعة واسعة من العلامات التجارية للمتسوقين.','B2C','من أمثلة الكتاب على نموذج B2C.']
+  ];
+  let mOrder=shuffle(MOD),mi=0,mRight=0;
+  function mShow(){
+    if(mi>=mOrder.length){$('mCard').innerHTML=`🎉 أنهيت المواقف: ${mRight} من ${mOrder.length} صحيحة`;$('mProg').textContent='';$('mFb').textContent='';$('mNext').hidden=false;$('mNext').textContent='إعادة النشاط ↻';document.querySelectorAll('.bin').forEach(b=>b.disabled=true);return}
+    $('mCard').textContent=mOrder[mi][0];$('mProg').textContent=`الموقف ${mi+1} من ${mOrder.length}`;$('mFb').textContent='';$('mFb').className='fb';$('mNext').hidden=true;
+    document.querySelectorAll('.bin').forEach(b=>b.disabled=false);
+  }
+  document.querySelectorAll('.bin').forEach(b=>b.onclick=()=>{
+    const [,ans,why]=mOrder[mi],ok=b.dataset.m===ans;if(ok)mRight++;
+    $('mFb').className='fb '+(ok?'ok':'no');$('mFb').textContent=(ok?'✓ صحيح. ':'✗ النموذج الصحيح: '+ans+'. ')+why;
+    document.querySelectorAll('.bin').forEach(x=>x.disabled=true);$('mNext').hidden=false;$('mNext').textContent='الموقف التالي ←';
+  });
+  $('mNext').onclick=()=>{if(mi>=mOrder.length){mOrder=shuffle(MOD);mi=0;mRight=0}else mi++;mShow()};
+
+  /* ---------- الميزان ---------- */
+  const PC=[
+    ['تقدم وصفًا مفصلًا للمنتج وتتيح الاطلاع على آراء العملاء الآخرين حوله.',1],
+    ['يمكن القيام بعدد غير محدود من المشتريات ودفع الثمن في وقت واحد.',1],
+    ['احتمال حدوث الأخطاء ضئيل بسبب أتمتة عمليات المتجر.',1],
+    ['يتيح المتجر عبر الإنترنت توسيع الأسواق وعدد العملاء بشكل كبير.',1],
+    ['لا يمكن للعميل معاينة المنتج أو رؤيته على الواقع قبل الشراء.',0],
+    ['على العميل الانتظار لاستلام المنتج بعد شحنه.',0],
+    ['قد تترتب تكاليف إضافية مثل الضرائب ورسوم الشحن.',0],
+    ['لا يرغب بعض العملاء في تزويد المتاجر ببياناتهم الشخصية خوفًا من القرصنة.',0]
+  ];
+  let pcOrder=shuffle(PC),pi=0,pro=0,con=0,pcRight=0;
+  function pcShow(){
+    const t=pro-con;$('beam').style.transform=`rotate(${Math.max(-12,Math.min(12,-t*3))}deg)`;
+    if(pi>=pcOrder.length){$('pcCard').textContent=`⚖️ اكتمل الميزان: ${pcRight} من ${pcOrder.length} صحيحة. للتجارة الإلكترونية مزايا كثيرة، لكن عيوبها تحتاج إلى وعي عند الشراء.`;$('toPro').disabled=$('toCon').disabled=true;return}
+    $('pcCard').textContent=pcOrder[pi][0];
+  }
+  function pcPut(side){
+    const ok=pcOrder[pi][1]===side,real=pcOrder[pi][1];
+    if(ok)pcRight++;
+    const i=document.createElement('i');(real?$('panPro'):$('panCon')).appendChild(i);real?pro++:con++;
+    $('pcFb').className='fb '+(ok?'ok':'no');$('pcFb').textContent=ok?'✓ صحيح.':'✗ هذه العبارة من '+(real?'المزايا':'العيوب')+'.';
+    pi++;pcShow();
+  }
+  $('toPro').onclick=()=>pcPut(1);$('toCon').onclick=()=>pcPut(0);
+
+  /* ---------- الأسواق ---------- */
+  const MK=[
+    {k:'ind',t:'الأسواق المستقلة',en:'Independent E-marketplace',d:'منصات عامة تملكها مؤسسات ربحية مستقلة، تتيح المساحة للبائعين والمشترين لممارسة التبادل التجاري.'},
+    {k:'buy',t:'الأسواق الموجّهة للمشتري',en:'Buyer-Oriented E-marketplace',d:'يستخدمها الموردون لعرض البضائع والخدمات الموجهة لفئة محددة من المشترين.'},
+    {k:'sup',t:'الأسواق الموجّهة للمورد',en:'Supplier-Oriented E-marketplace',d:'يديرها مجموعة من الموردين، وتستخدمها شركات التصنيع لترويج منتجاتها لغيرها من الموردين.'}
+  ];
+  const EX=[['eBay.com','ind'],['Alibaba.com','ind'],['General Electric','buy'],['Cisco','sup'],['Intel','sup']];
+  let pickEx=null;
+  $('mkChips').innerHTML=EX.map((e,i)=>`<button class="chip" data-x="${i}" aria-pressed="false">${e[0]}</button>`).join('');
+  $('mk').innerHTML=MK.map(m=>`<div class="mkc" data-k="${m.k}"><h3>${m.t}</h3><span class="en" style="font-size:.78rem;color:var(--muted)">${m.en}</span><p>${m.d}</p><div class="ex"></div><button data-put="${m.k}">ضع المثال هنا</button></div>`).join('');
+  document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{pickEx=+c.dataset.x;document.querySelectorAll('.chip').forEach(x=>x.setAttribute('aria-pressed',x===c))});
+  document.querySelectorAll('[data-put]').forEach(b=>b.onclick=()=>{
+    if(pickEx==null){$('mkFb').className='fb';$('mkFb').textContent='اختر مثالًا أولًا من الأعلى.';return}
+    const [n,k]=EX[pickEx],card=b.closest('.mkc'),ok=k===b.dataset.put;
+    card.classList.remove('hit','miss');void card.offsetWidth;card.classList.add(ok?'hit':'miss');
+    if(ok){const s=document.createElement('span');s.textContent=n;card.querySelector('.ex').appendChild(s);document.querySelector(`.chip[data-x="${pickEx}"]`).classList.add('done');pickEx=null;
+      $('mkFb').className='fb ok';$('mkFb').textContent='✓ صحيح.'+(document.querySelectorAll('.chip.done').length===EX.length?' أحسنت، صنّفت جميع الأمثلة.':'')}
+    else{$('mkFb').className='fb no';$('mkFb').textContent='✗ حاول مرة أخرى: اقرأ وصف كل نوع جيدًا.'}
+  });
+
+  /* ---------- السلع الافتراضية ---------- */
+  const GD=[['🎮','لعبة إلكترونية',1],['🧢','قبعة',0],['🎓','ورشة تطوير مهني عبر الإنترنت',1],['☕','كوب',0],['💻','برنامج حاسوبي يُنزَّل من الإنترنت',1],['📕','كتاب مطبوع',0],['🤝','تبرّع عبر متجر «إحسان» الافتراضي',1],['📌','دبابيس',0]];
+  $('goods').innerHTML=GD.map((g,i)=>`<div class="gd" data-i="${i}"><span class="e" aria-hidden="true">${g[0]}</span><span>${g[1]}</span><span class="vb"><button data-g="1">افتراضية</button><button data-g="0">مادية</button></span></div>`).join('');
+  document.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{
+    const d=b.closest('.gd'),g=GD[+d.dataset.i],ok=+b.dataset.g===g[2];
+    d.className='gd '+(ok?(g[2]?'v':'p'):'x');
+    if(ok)d.querySelector('.vb').innerHTML=`<b style="font-size:.8rem">${g[2]?'سلعة افتراضية ✓':'سلعة مادية ✓'}</b>`;
+    const done=document.querySelectorAll('.gd.v,.gd.p').length;
+    $('vgFb').className='fb '+(ok?'ok':'no');$('vgFb').textContent=ok?(done===GD.length?'🎉 صنّفت جميع السلع. السلع الافتراضية غير مادية، ويحدد قيمتها ما يرغب المستخدمون في دفعه مقابلها.':'✓ صحيح.'):'✗ فكّر: هل يمكنك لمسها؟';
+  });
+
+  /* ---------- المتجر ---------- */
+  const P=[{id:'pin',n:'دبابيس',e:'📌',p:3.99,old:4.99,pop:3,rate:4.6,date:3},{id:'cap',n:'قبعة',e:'🧢',p:44.99,pop:2,rate:4.2,date:2},{id:'mug',n:'كوب',e:'☕',p:49.99,pop:1,rate:4.8,date:1}];
+  const cart={};let view='home',sort='def',addedMsg={};
+  const done=new Set();
+  const fmt=v=>v.toFixed(2)+' ر.س';
+  function mark(i){done.add(i);document.querySelectorAll('.st').forEach(s=>s.classList.toggle('done',done.has(+s.dataset.s)))}
+  function count(){return Object.values(cart).reduce((a,b)=>a+b,0)}
+  function render(){
+    document.querySelectorAll('.nav [data-v]').forEach(b=>b.setAttribute('aria-current',b.dataset.v===view?'page':'false'));
+    $('cc').textContent=count();
+    const v=$('view');
+    if(view==='home'){v.innerHTML=`<div class="home"><h3>مرحبًا بكم في متجرنا الإلكتروني</h3><button class="go" id="go">الذهاب للتسوق</button></div>`;$('go').onclick=()=>{mark(0);view='store';render()};return}
+    if(view==='store'){
+      const list=P.slice();
+      if(sort==='low')list.sort((a,b)=>a.p-b.p);else if(sort==='high')list.sort((a,b)=>b.p-a.p);else if(sort==='pop')list.sort((a,b)=>b.pop-a.pop);else if(sort==='rate')list.sort((a,b)=>b.rate-a.rate);else if(sort==='new')list.sort((a,b)=>a.date-b.date);
+      v.innerHTML=`<div class="tools"><span>عرض جميع النتائج (${P.length})</span><label>الترتيب: <select id="sort">
+        <option value="def">الترتيب الافتراضي</option><option value="pop">حسب الشهرة</option><option value="rate">حسب معدل التقييم</option><option value="new">حسب الأحدث</option><option value="low">حسب السعر: الأدنى إلى الأعلى</option><option value="high">حسب السعر: الأعلى إلى الأدنى</option></select></label></div>
+        <div class="prods">${list.map(p=>`<div class="pr">${p.old?'<span class="sale">تخفيض!</span>':''}<div class="art" aria-hidden="true">${p.e}</div><b>${p.n}</b><span class="price">${fmt(p.p)}${p.old?`<del>${fmt(p.old)}</del>`:''}</span><button class="add" data-add="${p.id}">إضافة إلى السلة</button><span class="added">${addedMsg[p.id]||''}</span></div>`).join('')}</div>`;
+      $('sort').value=sort;$('sort').onchange=e=>{sort=e.target.value;render()};
+      v.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{cart[b.dataset.add]=(cart[b.dataset.add]||0)+1;addedMsg[b.dataset.add]='✓ أُضيف — <a href="#" data-goc>عرض السلة</a>';mark(1);render()});
+      v.querySelectorAll('[data-goc]').forEach(a=>a.onclick=e=>{e.preventDefault();mark(2);view='cart';render()});
+      return}
+    const items=P.filter(p=>cart[p.id]);
+    if(!items.length){v.innerHTML=`<div style="text-align:center;padding:40px 0;color:var(--muted)">🛒 سلة المشتريات فارغة.<br><button class="btn alt" id="back" style="margin-top:12px">العودة إلى المتجر</button></div>`;$('back').onclick=()=>{view='store';render()};return}
+    const total=items.reduce((s,p)=>s+p.p*cart[p.id],0);
+    v.innerHTML=`<h3 style="margin:0 0 10px;font-family:var(--display);font-weight:400;font-size:1.6rem">سلة المشتريات</h3><table class="cart"><thead><tr><th></th><th>المنتج</th><th>السعر</th><th>الكمية</th><th>المجموع</th></tr></thead><tbody>
+      ${items.map(p=>`<tr><td><button class="del" data-del="${p.id}" aria-label="حذف ${p.n}">✕</button></td><td>${p.e} ${p.n}</td><td>${fmt(p.p)}</td><td><input type="number" min="1" max="20" value="${cart[p.id]}" data-q="${p.id}" aria-label="كمية ${p.n}"></td><td>${fmt(p.p*cart[p.id])}</td></tr>`).join('')}</tbody></table>
+      <div class="tot"><span>الإجمالي</span><span>${fmt(total)}</span></div>`;
+    v.querySelectorAll('[data-del]').forEach(b=>b.onclick=()=>{delete cart[b.dataset.del];delete addedMsg[b.dataset.del];render()});
+    v.querySelectorAll('[data-q]').forEach(inp=>inp.onchange=()=>{const q=Math.max(1,Math.min(20,parseInt(inp.value)||1));cart[inp.dataset.q]=q;mark(3);render()});
+  }
+  document.querySelectorAll('.nav [data-v]').forEach(b=>b.onclick=()=>{view=b.dataset.v;if(view==='cart')mark(2);if(view==='store')mark(0);render()});
+
+  /* ---------- الاختبار ---------- */
+  const QZ=[
+    ['ما النموذج الذي يتداول فيه المستهلكون المنتجات مع بعضهم البعض؟',['C2C','B2B','B2C','EDI']],
+    ['يتم في نموذج (B2B) تبادل السلع والخدمات بين:',['الشركات','المستهلكين','الشركات والمستهلكين','الحكومات فقط']],
+    ['من الأمثلة على الأسواق الإلكترونية المستقلة:',['eBay وAlibaba','جنرال إلكتريك','سيسكو وإنتل','متجر الهدايا']],
+    ['تقدّم البضائع والخدمات لفئة محددة من المشترين، ومن أمثلتها شركة جنرال إلكتريك:',['الأسواق الموجّهة للمشتري','الأسواق المستقلة','الأسواق الموجّهة للمورد','السلع الافتراضية']],
+    ['أيٌّ مما يأتي سلعة افتراضية؟',['لعبة إلكترونية','قبعة','كوب','دبابيس']],
+    ['من الأمثلة على سوق السلع الافتراضية في المملكة:',['متجر إحسان للتبرعات الفردية','سوق الخضار المركزي','معرض السيارات','مكتبة ورقية']],
+    ['أيٌّ مما يأتي من عيوب التجارة الإلكترونية؟',['لا يمكن معاينة المنتج قبل الشراء','وصف مفصل للمنتج','توسيع الأسواق','قلة الأخطاء']],
+    ['أيٌّ مما يأتي من مزايا التجارة الإلكترونية؟',['الاطلاع على آراء العملاء والمقارنة بين المنتجات','انتظار الشحن','رسوم الشحن','الخوف من القرصنة']],
+    ['الأداة المستخدمة في الكتاب لفتح المتجر الإلكتروني الافتراضي هي:',['LocalWP','Excel','Scratch','PowerPoint']],
+    ['تقدم شركة أمازون للشركات خدمة «الوفاء» (FBA)، وهذا مثال على نموذج:',['B2B','C2C','B2C','لا شيء مما سبق']],
+    ['أيٌّ مما يأتي ليس من الأنظمة التي تعتمد عليها التجارة الإلكترونية؟',['معالجة النصوص','البريد الإلكتروني','الخدمات المصرفية عبر الإنترنت','خدمات تتبع التوصيل']],
+    ['بعد إضافة المنتج إلى السلة، نضغط على ... لمشاهدة محتوياتها:',['عرض السلة','الذهاب للتسوق','الصفحة الرئيسة','الترتيب الافتراضي']]
+  ];
+  let qOrder=shuffle(QZ),qi=-1,qr=0,qt=0,qDone=false;
+  function qNext(){qi=(qi+1)%qOrder.length;if(qi===0&&qt)qOrder=shuffle(QZ);qDone=false;const [q,a]=qOrder[qi];$('qq').textContent=q;$('qFb').textContent='';$('qFb').className='fb';
+    $('answers').innerHTML=shuffle(a).map(x=>`<button class="ans" data-r="${x===a[0]?1:0}">${x}</button>`).join('');
+    document.querySelectorAll('.ans').forEach(b=>b.onclick=()=>{if(qDone)return;qDone=true;qt++;const ok=b.dataset.r==='1';if(ok)qr++;
+      b.classList.add(ok?'right':'wrong');if(!ok)document.querySelector('.ans[data-r="1"]').classList.add('right');
+      $('qFb').className='fb '+(ok?'ok':'no');$('qFb').textContent=ok?'✓ إجابة صحيحة!':'✗ الإجابة الصحيحة: '+a[0];$('score').textContent=`النقاط: ${qr} / ${qt}`});}
+  $('qNext').onclick=qNext;
+
+  mShow();pcShow();render();qNext();
+})();
+</script>
+</body>
+</html>

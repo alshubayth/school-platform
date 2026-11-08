@@ -1,0 +1,405 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="icon" href="/favicon.svg">
+<title>محقق المتاجر الآمنة</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=IBM+Plex+Sans+Arabic:wght@400;500;700&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* التخطيط: لوحة تحقيق — شبكة التقنيات، محفظة طرق الدفع، شريط العنوان الآمن، محقق المتاجر، رحلة الدفع، الاختبار */
+:root{
+  --bg:#eef1f6; --panel:#ffffff; --ink:#172033; --muted:#5d6880; --line:#d6dce8;
+  --a:#3a4fd1; --a-soft:#e4e8fd; --safe:#13865a; --safe-soft:#dcf2e7; --warn:#d6336c; --warn-soft:#fde3ec; --gold:#e3a008; --gold-soft:#fdf2d3;
+  --good:#13865a; --bad:#d6336c;
+  --display:"Lalezar","IBM Plex Sans Arabic",system-ui,sans-serif;
+  --body:"IBM Plex Sans Arabic",system-ui,"Segoe UI",Tahoma,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1220; --panel:#151c2e; --ink:#e5eaf5; --muted:#98a3bb; --line:#27314a;
+  --a:#8b9bff; --a-soft:#1f2850; --safe:#3fcf8e; --safe-soft:#123827; --warn:#ff6b9a; --warn-soft:#3d1626; --gold:#f5c04a; --gold-soft:#3a2e10;
+  --good:#3fcf8e; --bad:#ff6b9a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1220; --panel:#151c2e; --ink:#e5eaf5; --muted:#98a3bb; --line:#27314a;
+  --a:#8b9bff; --a-soft:#1f2850; --safe:#3fcf8e; --safe-soft:#123827; --warn:#ff6b9a; --warn-soft:#3d1626; --gold:#f5c04a; --gold-soft:#3a2e10;
+  --good:#3fcf8e; --bad:#ff6b9a; color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.75;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 56px}
+.wrap{max-width:940px;margin-inline:auto;display:grid;gap:38px}
+h1,h2{font-family:var(--display);font-weight:400;margin:0;line-height:1.3;text-wrap:balance}
+h1{font-size:clamp(2.2rem,7vw,3.4rem)} h2{font-size:1.7rem}
+p{margin:0} .lede{color:var(--muted);max-width:64ch}
+.tag{font-size:.82rem;color:var(--muted);font-weight:500}
+section{display:grid;gap:16px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:20px}
+button{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.en{direction:ltr;unicode-bidi:isolate}
+.mono{font-family:var(--mono);direction:ltr;unicode-bidi:isolate}
+.fb{min-height:1.7em;color:var(--muted)} .fb.ok{color:var(--good)} .fb.no{color:var(--bad)}
+.btn{border:0;font-weight:700;padding:10px 20px;border-radius:999px;cursor:pointer;background:var(--ink);color:var(--panel)}
+.btn.alt{background:transparent;color:var(--ink);border:2px solid var(--line)}
+.btn.go{background:#9bd23c;color:#14310a;border-radius:8px}
+
+/* الغلاف */
+.hero{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center}
+.badge{width:130px;height:150px;position:relative}
+.badge svg{width:100%;height:100%}
+
+/* التقنيات */
+.tech{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.tc{border:2px solid var(--line);background:var(--panel);border-radius:14px;padding:12px 14px;cursor:pointer;text-align:start;display:grid;gap:2px}
+.tc b{font-size:1rem} .tc .en{font-size:.78rem;color:var(--muted);font-family:var(--mono)}
+.tc[aria-pressed="true"]{border-color:var(--a);background:var(--a-soft)}
+.tdef{border-radius:14px;padding:14px 18px;background:var(--a-soft);border-inline-start:5px solid var(--a);min-height:70px}
+
+/* طرق الدفع */
+.pay{display:grid;grid-template-columns:240px 1fr;gap:16px}
+.pm{display:grid;gap:6px;align-content:start}
+.pm button{border:2px solid var(--line);background:var(--panel);border-radius:12px;padding:10px 12px;text-align:start;cursor:pointer;font-weight:700;display:flex;gap:8px;align-items:center}
+.pm button[aria-selected="true"]{border-color:var(--a);background:var(--a-soft)}
+.pv{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:start}
+.dev{width:150px;height:230px;border-radius:24px;border:3px solid var(--ink);background:var(--bg);display:grid;place-items:center;position:relative;overflow:hidden}
+.dev .scr{font-size:3.2rem;text-align:center;line-height:1.3}
+.dev .scr small{display:block;font-size:.75rem;font-weight:700;color:var(--muted)}
+.dev.card{height:100px;border-radius:12px;margin-top:60px;background:linear-gradient(135deg,var(--a),#1d2a73);color:#fff;border:0}
+.dev.card::after{content:"";position:absolute;top:22px;inset-inline-start:16px;width:34px;height:24px;border-radius:5px;background:var(--gold)}
+.dev.card .scr{font-size:.85rem;font-family:var(--mono);margin-top:30px}
+.wave{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:44px;height:44px;border-radius:50%;border:3px solid var(--safe);animation:wave 1.6s infinite;opacity:0}
+@keyframes wave{0%{transform:translateX(-50%) scale(.3);opacity:1}100%{transform:translateX(-50%) scale(1.6);opacity:0}}
+.pinfo{display:grid;gap:8px} .pinfo h3{margin:0;font-size:1.2rem}
+.pinfo ul{margin:0;padding-inline-start:20px;display:grid;gap:4px}
+.cmp{width:100%;border-collapse:collapse;font-size:.92rem}
+.cmp th,.cmp td{border:1px solid var(--line);padding:8px 10px;vertical-align:top}
+.cmp th{background:var(--a-soft)}
+
+/* شريط العنوان */
+.browser{border:2px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel)}
+.bbar{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border-bottom:1px solid var(--line)}
+.dots{display:flex;gap:5px}.dots i{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.addr{flex:1;display:flex;align-items:center;gap:8px;background:var(--panel);border-radius:999px;padding:6px 14px;font-family:var(--mono);font-size:.9rem;direction:ltr;border:2px solid transparent;transition:border-color .3s}
+.addr.sec{border-color:var(--safe)} .addr.ins{border-color:var(--warn)}
+.addr .lk{font-size:1rem}
+.addr .sch{font-weight:700}
+.addr.sec .sch{color:var(--safe)} .addr.ins .sch{color:var(--warn)}
+.bbody{padding:16px;display:grid;gap:10px}
+.flow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 0}
+.node{width:82px;text-align:center;font-size:.8rem;font-weight:700;display:grid;gap:4px;justify-items:center}
+.node span{font-size:2rem}
+.pipe{flex:1;height:34px;border-radius:999px;background:var(--bg);position:relative;overflow:hidden;font-family:var(--mono);font-size:.8rem;display:flex;align-items:center;padding:0 10px;direction:ltr;white-space:nowrap}
+.pipe .pk{position:absolute;animation:mv 3s linear infinite;font-weight:700}
+@keyframes mv{from{left:-40%}to{left:100%}}
+.spy{font-size:1rem;text-align:center;font-weight:700;overflow-wrap:anywhere}
+.aspects{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.asp{background:var(--safe-soft);border-radius:12px;padding:10px 12px;font-size:.92rem;display:flex;gap:8px}
+.asp b{flex:0 0 24px;height:24px;border-radius:50%;background:var(--safe);color:#fff;display:grid;place-items:center;font-size:.8rem}
+.tips{display:grid;gap:8px}
+.tips details{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:10px 14px}
+.tips summary{cursor:pointer;font-weight:700;list-style:none;display:flex;gap:10px;align-items:center}
+.tips summary::-webkit-details-marker{display:none}
+.tips summary::before{content:"+";flex:0 0 24px;height:24px;border-radius:7px;background:var(--a-soft);color:var(--a);display:grid;place-items:center;font-weight:700}
+.tips details[open] summary::before{content:"−"}
+.tips details p{margin-top:8px;color:var(--muted);font-size:.93rem}
+
+/* محقق المتاجر */
+.cases{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.store{border:2px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);display:flex;flex-direction:column}
+.store .hd{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;font-weight:700}
+.hs{cursor:pointer;border-radius:8px;outline:2px dashed transparent;outline-offset:2px;transition:outline-color .2s,background .2s;position:relative}
+.hs:hover{outline-color:var(--muted)}
+.hs.flag{outline:2px solid var(--warn);background:var(--warn-soft)}
+.hs.trust{outline:2px solid var(--safe);background:var(--safe-soft)}
+.hs.nope{animation:nope .4s}
+@keyframes nope{25%{transform:translateX(4px)}75%{transform:translateX(-4px)}}
+.store .sb{padding:12px;display:grid;gap:10px;flex:1}
+.banner{border-radius:10px;padding:12px;text-align:center;font-weight:700}
+.items{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.it{border:1px solid var(--line);border-radius:10px;padding:8px;text-align:center;font-size:.85rem}
+.it .e{font-size:1.8rem;display:block}
+.it del{color:var(--muted);font-size:.78rem}
+.foot{font-size:.8rem;color:var(--muted);border-top:1px solid var(--line);padding:8px 12px;display:grid;gap:4px}
+.seals{display:flex;gap:6px;flex-wrap:wrap}
+.seal{border:1.5px solid var(--line);border-radius:8px;padding:2px 8px;font-size:.75rem;font-weight:700;direction:ltr}
+.verdict{display:flex;gap:8px;justify-content:center;padding:10px;border-top:1px solid var(--line);flex-wrap:wrap}
+.verdict button{border:2px solid var(--line);background:transparent;border-radius:999px;padding:6px 14px;font-weight:700;cursor:pointer;font-size:.88rem}
+.verdict button.ok{border-color:var(--good);color:var(--good)} .verdict button.no{border-color:var(--bad);color:var(--bad)}
+.clues{display:grid;gap:6px;font-size:.92rem}
+.clue{border-radius:10px;padding:8px 12px;animation:in .3s ease}
+.clue.f{background:var(--warn-soft)} .clue.t{background:var(--safe-soft)}
+@keyframes in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.meter{display:flex;gap:16px;flex-wrap:wrap;font-weight:700}
+.meter span{display:flex;gap:6px;align-items:center}
+
+/* رحلة الدفع */
+.stepper{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;counter-reset:s}
+.sp{counter-increment:s;text-align:center;font-size:.8rem;font-weight:700;color:var(--muted);display:grid;gap:4px;justify-items:center}
+.sp::before{content:counter(s);width:30px;height:30px;border-radius:50%;display:grid;place-items:center;background:var(--line);color:var(--ink)}
+.sp.on{color:var(--a)} .sp.on::before{background:var(--a);color:#fff}
+.sp.done::before{content:"✓";background:var(--good);color:#fff}
+.co{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden}
+.co .nav{display:flex;justify-content:space-between;padding:10px 16px;border-bottom:1px solid var(--line);font-size:.88rem;color:var(--muted)}
+.co .nav b{color:var(--ink);font-family:var(--display);font-weight:400;font-size:1.2rem}
+.cv{padding:18px;display:grid;gap:12px;min-height:260px}
+.cv h3{margin:0;font-family:var(--display);font-weight:400;font-size:1.6rem}
+.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fgrid label{display:grid;gap:3px;font-size:.85rem;color:var(--muted)}
+.fgrid input,.fgrid select{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+.radio{display:grid;gap:6px}
+.radio label{display:flex;gap:8px;align-items:center;border:2px solid var(--line);border-radius:10px;padding:8px 12px;cursor:pointer}
+.radio label:has(input:checked){border-color:var(--a);background:var(--a-soft)}
+.warnbox{border-radius:12px;background:var(--warn-soft);padding:10px 14px;font-size:.92rem;border-inline-start:4px solid var(--warn)}
+.done-big{text-align:center;display:grid;gap:10px;justify-items:center;padding:20px 0}
+.done-big span{font-size:3rem}
+
+/* الاختبار */
+.qq{font-weight:700;font-size:1.1rem}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ans{padding:12px 14px;border-radius:12px;border:2px solid var(--line);background:var(--panel);cursor:pointer;text-align:start;font-weight:600}
+.ans.right{border-color:var(--good);color:var(--good)} .ans.wrong{border-color:var(--bad);color:var(--bad)}
+.qfoot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.score{font-weight:700;font-variant-numeric:tabular-nums}
+
+@media (max-width:760px){
+  .hero{grid-template-columns:1fr}.badge{display:none}
+  .tech{grid-template-columns:1fr 1fr}.pay{grid-template-columns:1fr}.pm{grid-template-columns:1fr 1fr}
+  .pv{grid-template-columns:1fr;justify-items:center}.pinfo{justify-self:stretch}
+  .cases,.aspects,.answers,.fgrid{grid-template-columns:1fr}
+  .stepper{grid-template-columns:repeat(5,1fr)}.sp{font-size:.68rem}
+  .node{width:60px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <div style="display:grid;gap:12px">
+      <span class="tag">المهارات الرقمية · الصف الثالث المتوسط · الوحدة الثالثة: التجارة الإلكترونية · الدرس الثاني</span>
+      <h1>التعاملات عبر الإنترنت</h1>
+      <p class="lede">التقنية هي العمود الفقري للتجارة الإلكترونية: تربط البائعين بالمستهلكين، وتدير الطلبات والمدفوعات والشحن. في هذا الدرس تتعرف على طرق الدفع، وكيف تميّز المتجر الآمن من المتجر الاحتيالي، ثم تُتم طلبك بنفسك.</p>
+    </div>
+    <div class="badge" aria-hidden="true"><svg viewBox="0 0 120 140"><path d="M60 6 L108 24 V66 C108 98 86 122 60 134 C34 122 12 98 12 66 V24 Z" fill="var(--safe-soft)" stroke="var(--safe)" stroke-width="5"/><rect x="40" y="62" width="40" height="34" rx="6" fill="var(--safe)"/><path d="M47 62 V52 a13 13 0 0 1 26 0 V62" fill="none" stroke="var(--safe)" stroke-width="6"/><circle cx="60" cy="78" r="5" fill="var(--panel)"/></svg></div>
+  </header>
+
+  <section aria-labelledby="h-tech">
+    <h2 id="h-tech">تقنيات التجارة الإلكترونية</h2>
+    <p class="lede">ست تقنيات تُستخدم على نطاق واسع في تعاملات التجارة الإلكترونية. اضغط على كل تقنية لقراءة تعريفها.</p>
+    <div class="tech" id="tech"></div>
+    <p class="tdef" id="tdef"></p>
+  </section>
+
+  <section aria-labelledby="h-pay">
+    <h2 id="h-pay">طرق الدفع الإلكتروني</h2>
+    <p class="lede"><b>الدفع الإلكتروني (<span class="en">E-Payment</span>)</b> هو عملية الدفع مقابل السلع أو الخدمات عبر الإنترنت، ويشمل جميع العمليات المالية التي تتم بواسطة الأجهزة الإلكترونية. اختر طريقة لتتعرف عليها.</p>
+    <div class="panel pay">
+      <div class="pm" role="tablist" id="pm"></div>
+      <div class="pv" id="pv"></div>
+    </div>
+    <details class="panel"><summary style="cursor:pointer;font-weight:700">مقارنة: خصائص الدفع عبر باي بال وأبل باي</summary>
+      <table class="cmp" style="margin-top:12px"><thead><tr><th>باي بال (<span class="en">PayPal</span>)</th><th>أبل باي (<span class="en">Apple Pay</span>)</th></tr></thead><tbody>
+        <tr><td>يتم إدخال بيانات بطاقات الائتمان مرة واحدة أثناء التسجيل، وتحافظ على سرية معلومات المشتري من الاختراق.</td><td>عند تسجيل بيانات البطاقة يتم تشفيرها وإرسالها إلى خوادم أبل، وعند الدفع يُفك تشفيرها وتُحدَّد شبكة الدفع.</td></tr>
+        <tr><td>تحويل الأموال إلى طرف ثالث مباشرة بضغطة واحدة، وهي أسرع من طرق التحويل المكلفة الأخرى.</td><td>تحويل الأموال من خلال تطبيق الرسائل باستخدام بطاقات أبل كاش (<span class="en">Apple Cash</span>).</td></tr>
+        <tr><td>لا توجد رسوم على المشتري عند الشراء، ولكن تُخصم نسبة من أموال البائع.</td><td>تطلق أبل مجموعة من الخصومات في فترات محددة للاستفادة منها عند اختيارها طريقة للدفع.</td></tr>
+        <tr><td>تتوفر خصومات لعملائها في بعض المتاجر.</td><td>لا تتطلب أجهزة خاصة، بل تعمل مع أجهزة الجهات المالية بشرط وجود خاصية الدفع بالبطاقة الذكية غير التلامسي.</td></tr>
+      </tbody></table>
+    </details>
+  </section>
+
+  <section aria-labelledby="h-sec">
+    <h2 id="h-sec">التعاملات الآمنة والاتصال الآمن</h2>
+    <p class="lede"><b>الاتصال الآمن (<span class="en">Secure connection</span>)</b> اتصال مُشفَّر بواسطة بروتوكول أو أكثر لضمان أمن تدفق البيانات بين طرفين. بدّل بين العنوانين وراقب ما يراه المتجسس على الشبكة.</p>
+    <div class="browser">
+      <div class="bbar"><span class="dots"><i></i><i></i><i></i></span><div class="addr" id="addr"></div></div>
+      <div class="bbody">
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn alt" id="toHttp">http://</button><button class="btn" id="toHttps">https://</button></div>
+        <div class="flow"><div class="node"><span>💻</span>جهازك</div><div class="pipe" id="pipe"></div><div class="node"><span>🏬</span>خادم المتجر</div></div>
+        <div class="spy" id="spy"></div>
+        <p id="secWhy" class="tdef" style="min-height:0"></p>
+      </div>
+    </div>
+    <p class="lede">يجب أن تكون الاتصالات الآمنة قادرة على:</p>
+    <div class="aspects"><div class="asp"><b>1</b>منع أية جهات خارجية من الحصول على بيانات سرية.</div><div class="asp"><b>2</b>التحقق من هوية الشخص الذي يرغب بالوصول وتبادل البيانات.</div><div class="asp"><b>3</b>منع أي أطراف مجهولة من استعراض أو تغيير معلومات غير مصرح لهم بالوصول إليها.</div></div>
+    <h3 style="margin:8px 0 0">نصائح لإتمام التعاملات المالية عبر الإنترنت بأمان</h3>
+    <div class="tips" id="tips"></div>
+  </section>
+
+  <section aria-labelledby="h-det">
+    <h2 id="h-det">محقق المتاجر 🔍</h2>
+    <p class="lede">أمامك متجران تدريبيان (أسماؤهما وعناوينهما من الخيال). اضغط على كل عنصر تراه <b>علامة تحذير من الاحتيال</b> أو <b>إشارة ثقة</b>، ثم احكم على المتجر.</p>
+    <div class="meter"><span>🚩 علامات التحذير: <b id="fCount">0</b> / 4</span><span>🛡️ إشارات الثقة: <b id="tCount">0</b> / 4</span></div>
+    <div class="cases" id="cases"></div>
+    <div class="clues" id="clues" aria-live="polite"></div>
+  </section>
+
+  <section aria-labelledby="h-co">
+    <h2 id="h-co">رحلة الدفع: من السلة إلى تأكيد الطلب</h2>
+    <p class="lede">تابع خطوات الكتاب في المتجر التدريبي: أضف عنوانك، ثم أتمم الطلب بالدفع نقدًا عند الاستلام.</p>
+    <div class="stepper" id="stepper"><div class="sp">سلة المشتريات</div><div class="sp">عنوان الشحن</div><div class="sp">إتمام الطلب</div><div class="sp">تأكيد الطلب</div><div class="sp">تسجيل الخروج</div></div>
+    <div class="co"><div class="nav"><b>متجر الهدايا</b><span>إتمام الطلب · سلة المشتريات</span></div><div class="cv" id="cv"></div></div>
+  </section>
+
+  <section aria-labelledby="h-qz">
+    <h2 id="h-qz">اختبر نفسك</h2>
+    <div class="panel" style="display:grid;gap:14px">
+      <p class="qq" id="qq"></p>
+      <div class="answers" id="answers"></div>
+      <p class="fb" id="qFb" aria-live="polite"></p>
+      <div class="qfoot"><span class="score" id="score">النقاط: 0 / 0</span><button class="btn" id="qNext">سؤال جديد</button></div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const shuffle=a=>{a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
+
+  /* ---------- التقنيات ---------- */
+  const TECH=[
+    ['الدفع الإلكتروني','E-Payment','عملية الدفع مقابل السلع أو الخدمات عبر الإنترنت، ويشمل جميع العمليات المالية التي تتم بواسطة الأجهزة الإلكترونية مثل أجهزة الحاسب والهواتف الذكية والأجهزة اللوحية.'],
+    ['التحويل الإلكتروني للأموال','EFT','معاملة تتم عبر شبكة محوسبة، إما بين حسابات مختلفة في نفس المصرف، أو بين حسابات في مؤسسات مالية منفصلة.'],
+    ['التسويق الإلكتروني','E-Marketing','عملية الترويج لنشاط تجاري أو علامة تجارية بمنتجاتها ونشاطاتها عبر الإنترنت، باستخدام أدوات تساعد على زيادة الاهتمام بالمنتج والعملاء المحتملين والمبيعات.'],
+    ['التبادل الإلكتروني للبيانات','EDI','عملية تبادل المعلومات التجارية بشكل إلكتروني، تسمح لشركة ما بإرسال معلومات إلى شركة أخرى إلكترونيًا بدلًا من التبادل الورقي التقليدي؛ مثل أوامر الشراء والفواتير ومعلومات الشحن.'],
+    ['إدارة المخزون','Inventory Management','عملية الإشراف على البضائع والمنتجات وتدفقها من الموردين والشركات المصنعة إلى المستودعات ثم إلى نقاط البيع.'],
+    ['التوزيع الرقمي','Digital Distribution','عملية إيصال محتوى وسائط رقمية مثل الصوت والفيديو والكتب الإلكترونية وألعاب الفيديو والبرامج التي تم شراؤها عبر التجارة الإلكترونية، دون المرور بطرق التوزيع المادية.']
+  ];
+  $('tech').innerHTML=TECH.map((t,i)=>`<button class="tc" data-t="${i}" aria-pressed="false"><b>${t[0]}</b><span class="en">${t[1]}</span></button>`).join('');
+  function pickTech(i){document.querySelectorAll('.tc').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.t===i));$('tdef').innerHTML=`<b>${TECH[i][0]} (<span class="en">${TECH[i][1]}</span>):</b> ${TECH[i][2]}`}
+  document.querySelectorAll('.tc').forEach(b=>b.onclick=()=>pickTech(+b.dataset.t));pickTech(0);
+
+  /* ---------- طرق الدفع ---------- */
+  const PM=[
+    {i:'💳',t:'بطاقات الائتمان وبطاقات الخصم الفوري',d:'card',s:'mada •••• 4821',pts:['من أهم طرق الدفع؛ تقبل المدفوعات بالبطاقات مثل فيزا وماستركارد.','تسمح لعدد كبير من المشترين بالتسوق والحصول على سلعهم بشكل شبه فوري دون الذهاب إلى متجر فعلي.','من أمثلة بطاقات الخصم المحلية: بطاقات مدى (mada)، وهي منظومة دفع وطنية.']},
+    {i:'📱',t:'الدفع بواسطة الهاتف المحمول',d:'nfc',s:'NFC',pts:['عملية دفع مبلغ مالي مقابل منتج أو خدمة من خلال جهاز إلكتروني محمول.','يمكن الدفع بمسح الرمز الشريطي (barcode) في أحد تطبيقات الهاتف.','تقنية الاتصال قريب المدى (NFC): لمس الهاتف لقارئ NFC، ويعمل مثل بطاقات الائتمان الخاصة بالدفع بنظام البطاقة الذكية غير التلامسي.']},
+    {i:'👛',t:'المحفظة الإلكترونية',d:'wal',s:'E-Wallet',pts:['من وسائل الدفع الإلكترونية في التعاملات عبر الإنترنت، وهي محمية بكلمة مرور، ولها نفس وظيفة بطاقة الائتمان.','تحتوي على مكونين: البرنامج (يخزن المعلومات ويوفر الأمان) والمعلومات (قاعدة بيانات تفاصيل المستخدم: الاسم وعنوان الشحن وطريقة الدفع).','من أمثلتها: أبل باي، مايكروسوفت باي، سامسونج باي.']},
+    {i:'🌐',t:'الدفع الإلكتروني عبر الشبكة',d:'web',s:'checkout',pts:['تقدم المواقع طرقًا متعددة للدفع الفوري من خلال نموذج خاص للدفع.','تناسب العملاء الذين يتسوقون بشكل دوري؛ إذ يمكنهم إنشاء حساباتهم وتخزين معلومات الدفع.','توفر عملية معالجة دفع آمنة وأكثر أمانًا للحفاظ على البيانات المالية للعملاء.']},
+    {i:'📧',t:'خدمة الفواتير من خلال البريد الإلكتروني',d:'mail',s:'Invoice',pts:['إصدار فاتورة لأحد العملاء وإرسالها عبر البريد الإلكتروني والدفع فورًا.','نظام متكامل يتضمن خيارات الإشعار بالبريد الإلكتروني ونموذج دفع.','يسهّل إعداد التقارير المختلفة كالفواتير والدفعات وتسجيلها في قاعدة البيانات.']},
+    {i:'⚡',t:'أنظمة باي بال وأبل باي',d:'pp',s:'PayPal · Apple Pay',pts:['باي بال: يعالج دفع الأموال عبر الإنترنت لكثير من المستخدمين التجاريين مقابل رسوم، ويتيح الدفع بضغطة واحدة وتذكر كلمة المرور.','أبل باي: محفظة رقمية تابعة لشركة أبل، تتيح الدفع بشكل شخصي في تطبيقات iOS وعلى الشبكة الإلكترونية.','تُدار كنظام عالمي لدفع الأموال عبر الإنترنت كبديل إلكتروني عن الطرق الورقية التقليدية مثل الشيكات والحوالات المالية.']}
+  ];
+  $('pm').innerHTML=PM.map((p,i)=>`<button role="tab" data-p="${i}" aria-selected="false"><span aria-hidden="true">${p.i}</span>${p.t}</button>`).join('');
+  function pickPay(i){
+    const p=PM[i];document.querySelectorAll('#pm button').forEach(b=>b.setAttribute('aria-selected',+b.dataset.p===i));
+    const dev=p.d==='card'?`<div class="dev card"><div class="scr">${p.s}</div></div>`:`<div class="dev">${p.d==='nfc'?'<span class="wave"></span>':''}<div class="scr">${p.i}<small class="en">${p.s}</small></div></div>`;
+    $('pv').innerHTML=`${dev}<div class="pinfo"><h3>${p.t}</h3><ul>${p.pts.map(x=>`<li>${x}</li>`).join('')}</ul></div>`;
+  }
+  document.querySelectorAll('#pm button').forEach(b=>b.onclick=()=>pickPay(+b.dataset.p));pickPay(0);
+
+  /* ---------- العنوان الآمن ---------- */
+  function sec(on){
+    $('addr').className='addr '+(on?'sec':'ins');
+    $('addr').innerHTML=`<span class="lk">${on?'🔒':'⚠️'}</span><span><span class="sch">${on?'https':'http'}</span>://www.matjar-alhadaya.sa/checkout</span>`;
+    $('pipe').innerHTML=on?'<span class="pk">x7#Qp!9zL@2v…</span>':'<span class="pk">card=4821 0000 · pass=Saad123</span>';
+    $('spy').innerHTML=on?'🕵️ المتجسس يرى: <span class="mono">x7#Qp!9zL@2v…</span> — بيانات مشفّرة لا يفهمها.':'🕵️ المتجسس يرى: <span class="mono">card=4821… pass=Saad123</span> — بياناتك مكشوفة!';
+    $('secWhy').innerHTML=on?'بروتوكول <b>أمان طبقة النقل (<span class="en">TLS</span>)</b> يحمي البيانات المُدخلة في الصفحة. لاحظ رمز القفل، وأن العنوان يبدأ بـ <b class="mono">https</b>؛ لأن حرف «<span class="mono">s</span>» يعني آمن (<span class="en">Secure</span>).':'العنوان يبدأ بـ <b class="mono">http</b> دون حرف «<span class="mono">s</span>»، فالبيانات تنتقل دون تشفير. لا تُدخل معلومات حساسة في مثل هذه الصفحة.';
+    $('toHttps').className=on?'btn':'btn alt';$('toHttp').className=on?'btn alt':'btn';
+  }
+  $('toHttp').onclick=()=>sec(false);$('toHttps').onclick=()=>sec(true);sec(true);
+  const TIPS=[
+    ['حدّث البرامج في أجهزة الحاسب والأجهزة الذكية.','ثبّت آخر التحديثات للبرامج والتطبيقات، وبرنامج مكافحة الفيروسات، واستخدم متصفحات تشفّر المعلومات مثل بروتوكول طبقة المقابس الآمنة (SSL).'],
+    ['كن حذرًا عند تسوقك عبر الإنترنت.','ابحث عن رمز القفل في رابط الموقع، وتحقق أن العنوان يبدأ بـ https بدلًا من http.'],
+    ['ابحث عن إشارات الثقة والشهادات الرقمية.','الضغط على الشعار يتيح التأكد من أن الموقع حقيقي وليس نسخة مزيفة.'],
+    ['اقرأ اتفاقية الخصوصية.','تأكد من سياسة خصوصية الشركة لضمان عدم بيع معلوماتك الشخصية للآخرين.'],
+    ['لا تكشف أو تشارك كلمات مرورك أو معلومات معرّف المستخدم.','استخدم كلمة مرور قوية وفعّل المصادقة المزدوجة، ولا تزوّد أي جهة بهذه البيانات عبر البريد أو وسائل التواصل، وسجّل الخروج في الأجهزة العامة.'],
+    ['احتفظ بسجلات معاملاتك عبر الإنترنت.','استخدم طرق الدفع الآمنة مثل باي بال، وراقب كشوفات بطاقتك الائتمانية.'],
+    ['بعد شرائك عبر الإنترنت، تحقق من بريدك الإلكتروني.','غالبًا ما يرسل التجار رسائل بريد إلكتروني أو غيرها للتأكيد على طلبك.']
+  ];
+  $('tips').innerHTML=TIPS.map(t=>`<details><summary>${t[0]}</summary><p>${t[1]}</p></details>`).join('');
+
+  /* ---------- محقق المتاجر ---------- */
+  const CL={
+    a1:['f','عنوان URL غريب: نطاق غير عادي (.bargain) وكلمات تجارية مثل app — والعنوان يبدأ بـ http دون قفل.'],
+    a2:['f','تخفيضات كبيرة جدًا (90%): تدعو شركات الأمن الرقمي للحذر من الصفقات ذات الخصومات العالية.'],
+    a3:['f','تصميم رديء ولغة غير سليمة: «اشتري الان عرض حصرى!!!» — التجار الحقيقيون يحرصون على تصميم احترافي ولغة سليمة.'],
+    a4:['f','خيارات اتصال محدودة ومشبوهة: بريد على حساب مجاني بدلًا من حساب شركة، دون هاتف أو عنوان.'],
+    b1:['t','اتصال آمن: العنوان يبدأ بـ https ومعه رمز القفل، والنطاق مألوف.'],
+    b2:['t','إشارة ثقة: شعار «التحقق بواسطة فيزا» (Verified by Visa) يدل على أن المعاملة محمية.'],
+    b3:['t','إشارة ثقة: ختم نورتون (Norton Seal) يضمن أن المعاملات لن يتم اختراقها، بعد تحقق ديجي سيرت من الموقع.'],
+    b4:['t','وسائل تواصل واضحة وسياسة خصوصية منشورة؛ تجعل العميل يشعر بالأمان عند اتخاذ قرار الشراء.']
+  };
+  $('cases').innerHTML=`
+  <div class="store" data-store="a"><div class="bbar"><div class="addr ins hs" data-h="a1" style="font-size:.78rem"><span class="lk">⚠️</span>http://super-cheap-gifts-app.bargain</div></div>
+    <div class="hd" style="font-family:'Comic Sans MS',cursive;color:#e00">MEGA GIFTS ★★★</div>
+    <div class="sb"><div class="banner hs" data-h="a2" style="background:#ffea00;color:#d00">خصم 90% على كل شي!! لفترة محدوده</div>
+      <div class="hs" data-h="a3" style="font-weight:700;color:#00a;text-align:center">اشتري الان عرض حصرى!!! لا تفوتك الفرصه</div>
+      <div class="items"><div class="it"><span class="e">🎧</span>سماعة<br><b>9 ر.س</b> <del>450 ر.س</del></div><div class="it"><span class="e">⌚</span>ساعة ذكية<br><b>15 ر.س</b> <del>900 ر.س</del></div></div></div>
+    <div class="foot"><span class="hs" data-h="a4">للتواصل فقط: megagifts.deals2025@gmail.com</span></div>
+    <div class="verdict"><button data-v="no">🚩 متجر مشبوه</button><button data-v="ok">🛡️ متجر موثوق</button></div></div>
+  <div class="store" data-store="b"><div class="bbar"><div class="addr sec hs" data-h="b1" style="font-size:.78rem"><span class="lk">🔒</span>https://www.matjar-alhadaya.sa</div></div>
+    <div class="hd">متجر الهدايا <span style="font-size:.8rem;color:var(--muted)">الصفحة الرئيسة · المتجر · السلة</span></div>
+    <div class="sb"><div class="banner" style="background:var(--a-soft)">عرض نهاية الأسبوع: خصم 20% على الأكواب</div>
+      <div class="items"><div class="it"><span class="e">☕</span>كوب<br><b>39.99 ر.س</b> <del>49.99 ر.س</del></div><div class="it"><span class="e">🧢</span>قبعة<br><b>44.99 ر.س</b></div></div>
+      <div class="seals"><span class="seal hs" data-h="b2">Verified by VISA</span><span class="seal hs" data-h="b3">✔ Norton Secured</span></div></div>
+    <div class="foot hs" data-h="b4"><span>📞 920000000 · ✉️ support@matjar-alhadaya.sa · 📍 الرياض، حي العليا</span><span>سياسة الخصوصية · الشروط والأحكام</span></div>
+    <div class="verdict"><button data-v="no">🚩 متجر مشبوه</button><button data-v="ok">🛡️ متجر موثوق</button></div></div>`;
+  const found=new Set();
+  document.querySelectorAll('.hs').forEach(el=>el.onclick=()=>{
+    const k=el.dataset.h;if(found.has(k))return;found.add(k);const [t,txt]=CL[k];
+    el.classList.add(t==='f'?'flag':'trust');
+    const c=document.createElement('div');c.className='clue '+t;c.textContent=(t==='f'?'🚩 ':'🛡️ ')+txt;$('clues').prepend(c);
+    $('fCount').textContent=[...found].filter(x=>x[0]==='a').length;$('tCount').textContent=[...found].filter(x=>x[0]==='b').length;
+  });
+  document.querySelectorAll('.verdict button').forEach(b=>b.onclick=()=>{
+    const s=b.closest('.store').dataset.store,right=(s==='a'&&b.dataset.v==='no')||(s==='b'&&b.dataset.v==='ok');
+    b.parentElement.querySelectorAll('button').forEach(x=>x.classList.remove('ok','no'));b.classList.add(right?'ok':'no');
+    const c=document.createElement('div');c.className='clue '+(right?'t':'f');
+    c.textContent=right?(s==='a'?'✓ حكم صحيح: هذا المتجر تظهر عليه علامات التحذير من الاحتيال؛ لا تُدخل فيه أي بيانات.':'✓ حكم صحيح: اتصال آمن وإشارات ثقة ووسائل تواصل واضحة.'):'✗ راجع العلامات مرة أخرى قبل الحكم.';$('clues').prepend(c);
+  });
+
+  /* ---------- رحلة الدفع ---------- */
+  let step=0;const ord={first:'',last:'',pay:''};
+  const addr={country:'المملكة العربية السعودية',city:'Riyadh',region:'Riyadh',zip:'12611',street:''};
+  function stepper(){document.querySelectorAll('.sp').forEach((s,i)=>{s.className='sp'+(i<step?' done':i===step?' on':'')})}
+  function co(){
+    stepper();const v=$('cv');
+    const sum=`<div class="row"><span>📌 دبابيس × 1</span><b>3.99 ر.س</b></div><div class="row"><span>الشحن</span><span>شحن مجاني</span></div>`;
+    if(step===0){v.innerHTML=`<h3>سلة المشتريات</h3>${sum}<div class="row"><b>الإجمالي</b><b>3.99 ر.س</b></div><p class="tdef" style="min-height:0">من علامة التبويب سلة المشتريات انتقل إلى تفاصيل <b>الشحن</b> لإضافة عنوانك.</p><button class="btn go" id="n">إضافة عنوان الشحن</button>`;$('n').onclick=()=>{step=1;co()};return}
+    if(step===1){v.innerHTML=`<h3>تفاصيل الشحن</h3><div class="fgrid"><label>الدولة<select disabled><option>${addr.country}</option></select></label><label>المدينة<input id="city" value="${addr.city}"></label><label>المنطقة<input id="reg" value="${addr.region}"></label><label>الرمز البريدي<input id="zip" value="${addr.zip}" inputmode="numeric"></label><label style="grid-column:1/-1">عنوان الشارع / الحي<input id="st" placeholder="مثال: Al Olaya, 990" value="${addr.street}"></label></div><span class="fb" id="e1"></span><button class="btn go" id="n">تحديث</button>`;
+      $('n').onclick=()=>{addr.city=$('city').value.trim();addr.region=$('reg').value.trim();addr.zip=$('zip').value.trim();addr.street=$('st').value.trim();if(!addr.street||!addr.city||!addr.zip){$('e1').className='fb no';$('e1').textContent='أكمل العنوان ثم اضغط تحديث.';return}step=2;co()};return}
+    if(step===2){v.innerHTML=`<h3>إتمام الطلب</h3>${sum}<div class="row"><span>شحن إلى</span><span>${addr.street}، ${addr.city}، ${addr.zip}</span></div>
+      <div class="fgrid"><label>الاسم الأول *<input id="fn" value="${ord.first}"></label><label>الاسم الأخير *<input id="ln" value="${ord.last}"></label></div>
+      <div class="radio"><label><input type="radio" name="pay" value="cod">الدفع نقدًا عند الاستلام (<span class="en">Cash on the delivery</span>)</label><label><input type="radio" name="pay" value="card">بطاقة ائتمان أو مدى</label></div>
+      <p class="warnbox">تأكّد دائمًا أنك حددت طريقة الدفع الصحيحة؛ فالعديد من المتاجر توفر طرقًا أخرى غير الدفع النقدي عند الاستلام.</p><span class="fb" id="e2"></span><button class="btn go" id="n">تأكيد الطلب</button>`;
+      $('n').onclick=()=>{ord.first=$('fn').value.trim();ord.last=$('ln').value.trim();const p=document.querySelector('input[name=pay]:checked');
+        if(!ord.first||!ord.last){$('e2').className='fb no';$('e2').textContent='أضف الاسم الأول والأخير.';return}
+        if(!p){$('e2').className='fb no';$('e2').textContent='اختر طريقة الدفع.';return}
+        if(p.value==='card'){$('e2').className='fb no';$('e2').textContent='في نشاط الكتاب نختار «الدفع نقدًا عند الاستلام»؛ لأن المتجر التدريبي لا يعالج بطاقات حقيقية. لا تُدخل بيانات بطاقة حقيقية في أي متجر تدريبي.';return}
+        ord.pay=p.value;step=3;co()};return}
+    if(step===3){v.innerHTML=`<div class="done-big"><span>📦</span><h3>شكرًا ${ord.first}، تم استلام طلبك</h3><p class="lede">رقم الطلب: <b class="mono">#1048</b> · الدفع نقدًا عند الاستلام · الإجمالي 3.99 ر.س</p><p class="lede">📧 تحقق من بريدك الإلكتروني؛ غالبًا ما يرسل التاجر رسالة لتأكيد الطلب.</p></div><p class="warnbox"><b>كن حذرًا:</b> بعد تقديم طلبك، تأكد من الخروج من المتجر الإلكتروني كإجراء أمني للبيانات التي حفظتها في حسابك.</p><button class="btn" id="n">تسجيل الخروج</button>`;$('n').onclick=()=>{step=4;co()};return}
+    v.innerHTML=`<div class="done-big"><span>🔐</span><h3>تم تسجيل الخروج بأمان</h3><p class="lede">أتممت رحلة الشراء كاملة: السلة ← الشحن ← إتمام الطلب ← التأكيد ← الخروج.</p><button class="btn alt" id="n">ابدأ من جديد</button></div>`;
+    document.querySelectorAll('.sp').forEach(s=>s.className='sp done');$('n').onclick=()=>{step=0;Object.assign(ord,{first:'',last:'',pay:''});addr.street='';co()};
+  }
+
+  /* ---------- الاختبار ---------- */
+  const QZ=[
+    ['نوع من وسائل الدفع المستخدمة في التعاملات عبر الإنترنت من خلال الهاتف الذكي، ومحمية بكلمة مرور:',['المحفظة الإلكترونية','التبادل الإلكتروني للبيانات','إدارة المخزون','التوزيع الرقمي']],
+    ['خدمة تحافظ على خصوصية معلومات البطاقة؛ إذ تُكتب بياناتها مرة واحدة عند التسجيل:',['باي بال','البريد الإلكتروني','التسويق الإلكتروني','الرمز الشريطي']],
+    ['عناصر تساعد عملاء المتاجر على الشعور بالأمان والتحقق من مصداقية الموقع:',['إشارات الثقة','التخفيضات الكبيرة','العناوين الغريبة','الإعلانات المنبثقة']],
+    ['عملية الإشراف على البضائع وتدفقها من الموردين إلى المستودعات ثم إلى نقاط البيع:',['إدارة المخزون','التحويل الإلكتروني للأموال','التوزيع الرقمي','الدفع الإلكتروني']],
+    ['يتم تشفير الاتصال الآمن بواسطة ... لضمان أمن تدفق البيانات بين طرفين:',['بروتوكول أو أكثر من بروتوكولات الأمان','كلمة مرور قصيرة','رسالة بريد إلكتروني','شعار المتجر']],
+    ['حرف «s» في https يعني:',['آمن (Secure)','سريع (Speed)','متجر (Store)','بحث (Search)']],
+    ['أيٌّ مما يأتي من علامات التحذير من الاحتيال؟',['تخفيضات كبيرة جدًا وعنوان URL غريب','شعار Verified by Visa','رمز القفل في الرابط','سياسة خصوصية منشورة']],
+    ['تقنية تتيح الدفع بلمس الهاتف لقارئ خاص:',['الاتصال قريب المدى NFC','التبادل الإلكتروني للبيانات EDI','التسويق الإلكتروني','الفواتير عبر البريد']],
+    ['إرسال أوامر الشراء والفواتير ومعلومات الشحن إلكترونيًا بين الشركات بدلًا من الورق:',['التبادل الإلكتروني للبيانات EDI','التوزيع الرقمي','الدفع النقدي','المحفظة الإلكترونية']],
+    ['إيصال الكتب الإلكترونية وألعاب الفيديو والبرامج دون طرق التوزيع المادية:',['التوزيع الرقمي','إدارة المخزون','التحويل الإلكتروني للأموال','التسويق الإلكتروني']],
+    ['من أمثلة بطاقات الخصم المحلية في المملكة العربية السعودية:',['مدى (mada)','باي بال','نورتون','ديجي سيرت']],
+    ['ما الإجراء الأمني المطلوب بعد تقديم طلبك في المتجر الإلكتروني؟',['تسجيل الخروج من المتجر','مشاركة كلمة المرور مع البائع','حذف البريد الإلكتروني','إيقاف تحديث المتصفح']],
+    ['أيٌّ مما يأتي لا يتطلب أجهزة خاصة، ويعمل مع أجهزة الدفع غير التلامسي؟',['أبل باي','الشيكات الورقية','الحوالات المالية الورقية','التبادل الورقي']]
+  ];
+  let qOrder=shuffle(QZ),qi=-1,qr=0,qt=0,qDone=false;
+  function qNext(){qi=(qi+1)%qOrder.length;if(qi===0&&qt)qOrder=shuffle(QZ);qDone=false;const [q,a]=qOrder[qi];$('qq').textContent=q;$('qFb').textContent='';$('qFb').className='fb';
+    $('answers').innerHTML=shuffle(a).map(x=>`<button class="ans" data-r="${x===a[0]?1:0}">${x}</button>`).join('');
+    document.querySelectorAll('.ans').forEach(b=>b.onclick=()=>{if(qDone)return;qDone=true;qt++;const ok=b.dataset.r==='1';if(ok)qr++;
+      b.classList.add(ok?'right':'wrong');if(!ok)document.querySelector('.ans[data-r="1"]').classList.add('right');
+      $('qFb').className='fb '+(ok?'ok':'no');$('qFb').textContent=ok?'✓ إجابة صحيحة!':'✗ الإجابة الصحيحة: '+a[0];$('score').textContent=`النقاط: ${qr} / ${qt}`});}
+  $('qNext').onclick=qNext;
+
+  co();qNext();
+})();
+</script>
+</body>
+</html>
