@@ -24,7 +24,6 @@ let classesCache = [];   // الفصول المضافة بترتيب الإضا�
 
 /* ---------- الدروس التفاعلية (صفحات ثابتة في مجلد lessons/) ---------- */
 const LAB_LESSONS = [
-  { path: '/lessons/python-libraries.html', sheet: '/lessons/python-libraries-sheet.html', title: 'رفّ المكتبات البرمجية', subject: 'بايثون', grade: 'الثالث المتوسط', desc: 'المكتبات math وrandom وdatetime، وطرق الاستيراد الثلاث مع صندوق الأسماء، ومستكشف للدوال، ومختبر نرد، واختبار سريع.' },
   { path: '/lessons/python-logic.html', title: 'مختبر المعاملات المنطقية', subject: 'بايثون', grade: 'الثاني المتوسط', desc: 'شرح and وor وnot بمفاتيح ومصباح، مع جدول الحقيقة وترتيب الأولوية واختبار سريع.' },
 ];
 
