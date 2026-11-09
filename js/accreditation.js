@@ -50,12 +50,15 @@ const indByCode = c => D.inds.find(i => i.code === c);
 const leadOf = d => { const l = D.leads.find(x => x.scope === 'domain' && String(x.scope_key) === String(d)); return l && l.owner_ids && l.owner_ids[0] || null; };
 const principals = () => (D.roles && Array.isArray(D.roles.principal) ? D.roles.principal : []);
 const isPrincipal = () => currentProfile.role === 'owner' || principals().includes(currentUserId) || (currentProfile.role === 'admin' && !principals().length);
-const myLeadDomains = () => [1, 2, 3, 4].filter(d => leadOf(d) === currentUserId);
-const isLeadOf = d => leadOf(d) === currentUserId;
-const canUpload = i => i.owner_id === currentUserId || (i.uploader_ids || []).includes(currentUserId);
+// منسق الاعتماد (acc_settings.roles.coordinator): يطّلع على جميع المجالات ويراجع ويُسند مثل قائد المجال، ويرفع الشواهد في أي مؤشر
+const isCoord = () => !!(D.roles && Array.isArray(D.roles.coordinator) && D.roles.coordinator.includes(currentUserId));
+const myLeadDomains = () => [1, 2, 3, 4].filter(d => leadOf(d) === currentUserId || isCoord());
+const isLeadOf = d => leadOf(d) === currentUserId || isCoord();
+const isAssigned = i => i.owner_id === currentUserId || (i.uploader_ids || []).includes(currentUserId);
+const canUpload = i => isAssigned(i) || isCoord();
 const canAssign = i => isPrincipal() || isLeadOf(i.domain_no);
 const applicable = () => D.inds.filter(i => !i.not_applicable);
-const myInds = () => applicable().filter(canUpload);
+const myInds = () => applicable().filter(isAssigned);
 const evOf = i => D.evs.filter(e => e.indicator_id === i.id || (e.linked_ids || []).includes(i.id));
 const canReview = (e, i = D.inds.find(x => x.id === e.indicator_id)) => !!i && ((e.status === 'submitted' && isLeadOf(i.domain_no)) || (['reviewed', 'verified'].includes(e.status) && isPrincipal()));
 
@@ -120,7 +123,7 @@ export async function loadAccreditationModule() {
 function tabsFor() {
   const t = [];
   if (isPrincipal()) t.push(['overview', 'المتابعة']);
-  if (myLeadDomains().length) t.push(['domain', myLeadDomains().length > 1 ? 'مجالاتي' : 'مجالي']);
+  if (myLeadDomains().length) t.push(['domain', isCoord() ? 'المجالات' : myLeadDomains().length > 1 ? 'مجالاتي' : 'مجالي']);
   if (myInds().length || !t.length) t.push(['mine', 'مؤشراتي']);
   t.push(['forms', '📄 النماذج']);
   return t;
