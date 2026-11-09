@@ -3,7 +3,7 @@
  * - «نتائج مجمّعة»: عدة تقارير (مثل كل الاختبارات الفترية لصف في فصل دراسي) في كشف واحد لكل طالب.
  * - «تقرير واحد»: نتيجة اختبار واحد.
  * عند الحفظ تُحسب درجات كل طالب من التقارير وتُحفظ نسخة جاهزة (result_entries)،
- * ويطّلع عليها ولي الأمر من صفحة results.html برقم الهوية وآخر أربعة أرقام من الجوال.
+ * ويطّلع عليها ولي الأمر من صفحة results.html بالاسم الأول للطالب وآخر أربعة أرقام من الجوال.
  * لا يظهر لولي الأمر اسم أي طالب آخر ولا ترتيب، فقط درجة ابنه ومتوسط فصله.
  * ========================================================================= */
 import { sb, currentSchoolId, currentUserId, readScopedBySchool, writeWithSchool, gradeLabels, ASSET_VERSION, siteBase } from './core.js';
@@ -62,7 +62,7 @@ function renderList() {
   const box = $('rp-back').querySelector('.rp');
   box.innerHTML = `${head('نتائج أولياء الأمور')}
     <div class="rp-link">
-      <div><b>رابط صفحة النتائج</b><span>يدخل ولي الأمر رقم هوية الطالب وآخر أربعة أرقام من جواله المسجل في المدرسة.</span></div>
+      <div><b>رابط صفحة النتائج</b><span>يدخل ولي الأمر الاسم الأول للطالب وآخر أربعة أرقام من جواله المسجل في المدرسة.</span></div>
       <div class="rp-link-r"><code dir="ltr">${esc(pageUrl())}</code><button type="button" class="rp-btn ghost" id="rp-copy">نسخ الرابط</button><a class="rp-btn ghost" href="${esc(pageUrl())}" target="_blank" rel="noopener">فتح الصفحة</a></div>
     </div>
     <div class="rp-bar"><b>النتائج المحفوظة</b><button type="button" class="rp-btn" id="rp-new">＋ نشر نتائج جديدة</button></div>

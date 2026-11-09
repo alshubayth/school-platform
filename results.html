@@ -164,6 +164,8 @@
     *{ animation:none !important; }
     .bar i, .lvl, .sbox, .stu .av{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   }
+  .pick{ margin:4px 0 10px; padding:12px; border-radius:14px; background:rgba(59,130,246,.08); display:grid; gap:10px; font-size:14px; }
+  .pick > div{ display:flex; flex-wrap:wrap; gap:8px; } .pick .btn{ width:auto; padding:8px 14px; }
 </style>
 </head>
 <body>
@@ -187,10 +189,10 @@
 <main>
   <section class="card lookup rise" id="lookup">
     <h2>الاستعلام عن النتيجة</h2>
-    <p class="sub">أدخل رقم هوية الطالب وآخر أربعة أرقام من جوال ولي الأمر المسجل لدى المدرسة.</p>
+    <p class="sub">أدخل الاسم الأول للطالب، وآخر أربعة أرقام من جوال ولي الأمر المسجل لدى المدرسة.</p>
     <form id="form" autocomplete="off" novalidate>
-      <label class="field"><span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="12" r="2.5"/><path d="M14 10h4M14 14h3"/></svg></i>رقم هوية الطالب</span>
-        <div class="inp"><input id="nid" inputmode="numeric" maxlength="10" placeholder="1xxxxxxxxx" required><span class="cnt" id="nid-c">0/10</span></div></label>
+      <label class="field"><span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></i>الاسم الأول للطالب</span><small>كما هو مسجل في المدرسة، مثل: محمد، عبدالله</small>
+        <div class="inp"><input id="nm" maxlength="30" placeholder="الاسم الأول" autocomplete="off" required></div></label>
       <label class="field"><span><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/></svg></i>آخر أربعة أرقام من جوال ولي الأمر</span><small>الرقم المسجل لدى المدرسة، الذي تصلكم عليه رسائلها</small>
         <div class="inp"><input id="l4" inputmode="numeric" maxlength="4" placeholder="••••" required><span class="cnt" id="l4-c">0/4</span></div></label>
       <button class="btn" id="go" type="submit"><span class="spin" aria-hidden="true"></span><span id="go-t">عرض النتيجة</span></button>
@@ -226,37 +228,47 @@ let cred = null;   // للاستعلام عن ملفات التقارير بعد
   if (logo) { $('logo').src = logo; $('logo').alt = 'شعار ' + data.name; }
 })();
 
-['nid', 'l4'].forEach(id => $(id).addEventListener('input', e => {
-  const max = id === 'nid' ? 10 : 4;
-  const v = digits(e.target.value).slice(0, max); if (e.target.value !== v) e.target.value = v;
-  $(id + '-c').textContent = `${v.length}/${max}`;
-  e.target.closest('.inp').classList.toggle('done', v.length === max);
-  if (id === 'nid' && v.length === 10) $('l4').focus();
-}));
+$('l4').addEventListener('input', e => {
+  const v = digits(e.target.value).slice(0, 4); if (e.target.value !== v) e.target.value = v;
+  $('l4-c').textContent = `${v.length}/4`;
+  e.target.closest('.inp').classList.toggle('done', v.length === 4);
+});
+$('nm').addEventListener('input', e => e.target.closest('.inp').classList.toggle('done', e.target.value.trim().length >= 2));
+const clearPick = () => { const o = document.getElementById('pick'); if (o) o.remove(); };
+$('nm').addEventListener('input', clearPick); $('l4').addEventListener('input', clearPick);
 const shake = el => { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); };
 const setBusy = on => { const b = $('go'); b.disabled = on; b.classList.toggle('loading', on); $('go-t').textContent = on ? 'جارٍ البحث...' : 'عرض النتيجة'; };
 
-$('form').addEventListener('submit', async e => {
-  e.preventDefault();
-  const nid = digits($('nid').value), l4 = digits($('l4').value), msg = $('msg');
+async function lookup(pick) {
+  const nm = $('nm').value.trim(), l4 = digits($('l4').value), msg = $('msg');
   msg.textContent = '';
-  if (nid.length !== 10) { msg.textContent = 'رقم الهوية يتكون من عشرة أرقام'; shake($('nid').closest('.inp')); $('nid').focus(); return; }
+  if (nm.replace(/\s/g, '').length < 2) { msg.textContent = 'اكتب الاسم الأول للطالب'; shake($('nm').closest('.inp')); $('nm').focus(); return; }
   if (l4.length !== 4) { msg.textContent = 'أدخل آخر أربعة أرقام من الجوال'; shake($('l4').closest('.inp')); $('l4').focus(); return; }
   setBusy(true);
-  const { data, error } = await sb.rpc('parent_results', { p_school_slug: slug, p_nid: nid, p_last4: l4 });
+  const { data, error } = await sb.rpc('parent_results_v2', { p_school_slug: slug, p_first: nm, p_last4: l4, p_pick: pick || null });
   setBusy(false);
   if (error) { msg.textContent = 'تعذر الاتصال، حاول مرة أخرى'; return; }
+  if (data.error === 'multiple') {
+    clearPick();
+    const box = document.createElement('div'); box.id = 'pick'; box.className = 'pick';
+    box.innerHTML = `<b>يوجد أكثر من طالب بهذا الاسم مرتبط بهذا الجوال، اختر صف الطالب:</b><div>${(data.options || []).map(o => `<button type="button" class="btn ghost" data-pick="${o.pick}">${esc(GRADES[o.grade] || o.grade || '')}${o.section ? ' · فصل ' + esc(o.section) : ''}</button>`).join('')}</div>`;
+    $('msg').before(box);
+    box.querySelectorAll('[data-pick]').forEach(b => b.onclick = () => lookup(+b.dataset.pick));
+    return;
+  }
   if (data.error) shake($('lookup'));
   if (data.error) {
     msg.textContent = data.error === 'locked' ? 'تجاوزت عدد المحاولات المسموح بها، حاول مرة أخرى بعد ساعة.'
-      : data.error === 'not_found' ? `البيانات غير مطابقة. تأكد من رقم الهوية وآخر أربعة أرقام من الجوال المسجل لدى المدرسة.${data.left != null && data.left < 3 ? ` (المحاولات المتبقية: ${data.left})` : ''}`
+      : data.error === 'not_found' ? `البيانات غير مطابقة. تأكد من كتابة الاسم الأول كما هو مسجل في المدرسة، ومن آخر أربعة أرقام من الجوال المسجل.${data.left != null && data.left < 3 ? ` (المحاولات المتبقية: ${data.left})` : ''}`
       : data.error === 'school' ? 'رابط المدرسة غير صحيح، اطلب الرابط من المدرسة.' : 'تحقق من البيانات المدخلة.';
     return;
   }
-  cred = { nid, l4 };
+  clearPick();
+  cred = { token: data.token };
   await ncReady;
   render(data);
-});
+}
+$('form').addEventListener('submit', e => { e.preventDefault(); lookup(); });
 
 function render(d) {
   const st = d.student || {}, list = d.results || [];
@@ -271,7 +283,7 @@ function render(d) {
   $('lookup').classList.add('hidden');
   out.classList.remove('hidden');
   window.scrollTo({ top: 0, behavior: 'smooth' });
-  $('again').onclick = () => { cred = null; out.classList.add('hidden'); out.innerHTML = ''; $('lookup').classList.remove('hidden'); ['nid', 'l4'].forEach(id => { $(id).value = ''; $(id).dispatchEvent(new Event('input')); }); $('nid').focus(); };
+  $('again').onclick = () => { cred = null; out.classList.add('hidden'); out.innerHTML = ''; $('lookup').classList.remove('hidden'); ['nm', 'l4'].forEach(id => { $(id).value = ''; $(id).dispatchEvent(new Event('input')); }); $('nm').focus(); };
   // ظهور البطاقات تباعًا، وعدّاد للأرقام
   out.querySelectorAll('.res').forEach((c, k) => { c.classList.add('rise'); c.style.animationDelay = (0.12 + k * 0.1) + 's'; c.querySelectorAll('tbody tr').forEach((tr, j) => { tr.style.animationDelay = (0.25 + k * 0.1 + j * 0.05) + 's'; }); });
   out.querySelectorAll('[data-count]').forEach(countUp);
@@ -305,7 +317,7 @@ async function loadDoc(el) {
   if (!cred) return fail('أعد الاستعلام لعرض التقرير');
   let url;
   try {
-    const res = await fetch(SUPABASE_URL + '/functions/v1/result-doc', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY }, body: JSON.stringify({ slug, nid: cred.nid, last4: cred.l4, publication: el.dataset.pub }) });
+    const res = await fetch(SUPABASE_URL + '/functions/v1/result-doc', { method: 'POST', headers: { 'Content-Type': 'application/json', apikey: SUPABASE_KEY }, body: JSON.stringify({ token: cred.token, publication: el.dataset.pub }) });
     const j = await res.json();
     if (!j.url) return fail('تعذر تحميل التقرير، حاول مرة أخرى لاحقًا');
     url = j.url;
