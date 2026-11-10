@@ -9,7 +9,7 @@
  * الجاهزية بالمراحل: مرسل ربع، معتمد من القائد نصف، معتمد نهائيًا كامل.
  * محتوى البطاقات من حقيبة التميّز (acc-booklet.js) ما لم تُحفظ بطاقة مخصصة في acc_indicators.card.
  * ========================================================================= */
-import { sb, currentSchoolId, currentUserId, currentProfile, readScopedBySchool, writeWithSchool } from './core.js';
+import { sb, currentSchoolId, currentUserId, currentProfile, readScopedBySchool, writeWithSchool, isOwnerAccount } from './core.js';
 import { BOOKLET_CARDS, LEVELS, EVIDENCE_TEST, FORMS } from './acc-booklet.js';
 import { ACC_GUIDE } from './acc-guide.js';
 import { initForms, libraryHtml, bindLibrary, openFormEditor, printForm, downloadPdf, uploadSigned, FORM_DEFS } from './acc-forms.js';
@@ -49,9 +49,9 @@ const cardOf = i => (i.card && Object.keys(i.card).length ? i.card : BOOKLET_CAR
 const indByCode = c => D.inds.find(i => i.code === c);
 const leadOf = d => { const l = D.leads.find(x => x.scope === 'domain' && String(x.scope_key) === String(d)); return l && l.owner_ids && l.owner_ids[0] || null; };
 const principals = () => (D.roles && Array.isArray(D.roles.principal) ? D.roles.principal : []);
-const isPrincipal = () => currentProfile.role === 'owner' || principals().includes(currentUserId) || (currentProfile.role === 'admin' && !principals().length);
+const isPrincipal = () => isOwnerAccount || currentProfile.role === 'owner' || principals().includes(currentUserId) || (currentProfile.role === 'admin' && !principals().length);
 // منسق الاعتماد (acc_settings.roles.coordinator): يطّلع على جميع المجالات ويراجع ويُسند مثل قائد المجال، ويرفع الشواهد في أي مؤشر
-const isCoord = () => !!(D.roles && Array.isArray(D.roles.coordinator) && D.roles.coordinator.includes(currentUserId));
+const isCoord = () => isOwnerAccount || currentProfile.role === 'owner' || !!(D.roles && Array.isArray(D.roles.coordinator) && D.roles.coordinator.includes(currentUserId));
 const myLeadDomains = () => [1, 2, 3, 4].filter(d => leadOf(d) === currentUserId || isCoord());
 const isLeadOf = d => leadOf(d) === currentUserId || isCoord();
 const isAssigned = i => i.owner_id === currentUserId || (i.uploader_ids || []).includes(currentUserId);
@@ -517,7 +517,7 @@ function openCoords() {
     const qi = m.querySelector('#acx-cq'); qi.oninput = () => { q = qi.value.trim(); const pos = qi.selectionStart; draw(); const n = m.querySelector('#acx-cq'); n.focus(); n.setSelectionRange(pos, pos); };
     m.querySelectorAll('[data-co]').forEach(b => b.onclick = () => { sel.has(b.dataset.co) ? sel.delete(b.dataset.co) : sel.add(b.dataset.co); draw(); });
     m.querySelector('#acx-co-save').onclick = async () => {
-      const { data, error } = await sb.rpc('acc_set_coordinators', { p_ids: [...sel] });
+      const { data, error } = await sb.rpc('acc_set_coordinators', { p_ids: [...sel], p_school: currentSchoolId });
       if (error) { toast(error.message, true); return; }
       D.roles = { ...(D.roles || {}), coordinator: data || [] };
       m.remove(); toast('حُفظ منسقو الاعتماد ✓'); rerender();
