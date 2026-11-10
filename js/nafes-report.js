@@ -90,7 +90,7 @@ async function build(rep, key) {
     return {
       id: r.id, nid: p ? p.national_id : (String(r.id).startsWith('name:') ? '' : r.id),
       name: p ? p.full_name : r.name, section: String((p && p.class_section) || r.section || ''),
-      correct: r.correct, answers: rawBy.get(r.id) || [], total: r.total, max: r.max, pct: r.pct, subj, sk, fails, passed: !fails.length,
+      correct: r.correct, answers: rawBy.get(r.id) || rawBy.get('name:' + String(r.name || '').trim().replace(/\s+/g, ' ')) || [], total: r.total, max: r.max, pct: r.pct, subj, sk, fails, passed: !fails.length,
     };
   });
   // الترتيب على مستوى الصف

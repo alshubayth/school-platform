@@ -120,6 +120,7 @@ function build(reps, plat) {
   });
 }
 
+const normName = t => String(t || '').replace(/[\u064B-\u0652\u0640]/g, '').replace(/[أإآٱ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[^\u0621-\u064A]/g, '');
 export function scoreReport(rep, platMap) {
   const rd = rep.raw_data || {};
   if (!Array.isArray(rd.students) || !rd.students.length) return null;
@@ -135,10 +136,19 @@ export function scoreReport(rep, platMap) {
   const gl = GRADE_CODE[rep.grade_level] || null;
   const seen = new Set();
   const recs = [];
+  // ملف بلا رقم هوية (مثل بعض تصديرات Remark): يُربط الطالب برقم هويته من سجل الطلاب بمطابقة الاسم الكامل،
+  // وإن تعذرت المطابقة يُميَّز باسمه حتى لا تُهمل ورقته
+  let byName = null;
+  const nidByName = nm => {
+    if (!byName) {
+      byName = new Map();
+      for (const p of platMap.values()) { const k = normName(p.full_name); if (!k) continue; byName.set(k, byName.has(k) ? null : String(p.national_id).trim()); }
+    }
+    return byName.get(normName(nm)) || null;
+  };
   rd.students.forEach(st => {
-    // ملف بلا رقم هوية (مثل بعض تصديرات Remark): يُميَّز الطالب باسمه حتى لا تُهمل ورقته
     const nm = String(st.name || '').trim().replace(/\s+/g, ' ');
-    const id = idOf(st.id) || (nm ? 'name:' + nm : null);
+    const id = idOf(st.id) || (nm && nidByName(nm)) || (nm ? 'name:' + nm : null);
     if (!id || seen.has(id)) return;
     const answered = (st.answers || []).some(v => v != null && v !== '');
     if (!answered && typeof st.essay !== 'number') return;   // ورقة فارغة = غائب
