@@ -21,6 +21,7 @@ const plural = (n, one, two, few, many) => (n === 1 ? one : n === 2 ? two : n >=
 const SUBJ_COLORS = ['#3B5BDB', '#0CA678', '#E8590C', '#AE3EC9', '#1098AD', '#F08C00'];
 
 let D = null;          // بيانات التقرير المحسوبة
+let P = { ready: false, tests: [], off: new Set() };   // التطور عبر الاختبارات
 let V = { tab: 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: null, teacher: null };
 
 /* ---------- المستويات ---------- */
@@ -195,6 +196,7 @@ export async function openNafesReport(rep, key) {
   try { D = await build(rep, key); } catch (e) { console.error(e); D = null; }
   if (!D) { ov.innerHTML = `<div class="nr-load"><p>تعذر إعداد التقرير، فلا توجد أوراق طلاب صالحة.</p><button type="button" class="nr-btn" data-close>إغلاق</button></div>`; ov.querySelector('[data-close]').onclick = close; return; }
   V = { tab: 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: D.parts[0].s, teacher: null };
+  P = { ready: false, err: null, tests: [], off: new Set(), subj: 'all', cmp: 'prev', view: 'school', filter: 'all', st: null, q: '' };
   draw();
 }
 function close() { const ov = document.getElementById('nr-ov'); if (ov) ov.classList.add('hidden'); document.body.classList.remove('nr-lock'); document.removeEventListener('keydown', onKey); }
@@ -203,15 +205,16 @@ const studsOf = () => D.students.filter(s => V.sec === 'all' || s.section === V.
 
 function draw() {
   const ov = document.getElementById('nr-ov');
-  const TABS = [['overview', 'لوحة النتائج'], ['skills', 'المهارات والأسئلة'], ['students', 'الطلاب'], ['teachers', 'المعلمون']];
-  const body = V.tab === 'skills' ? viewSkills() : V.tab === 'students' ? viewStudents() : V.tab === 'teachers' ? viewTeachers() : viewOverview();
+  const TABS = [['overview', 'لوحة النتائج'], ['skills', 'المهارات والأسئلة'], ['students', 'الطلاب'], ['teachers', 'المعلمون'], ['progress', '📈 التطور عبر الاختبارات']];
+  if (V.tab === 'progress' && !P.ready) { loadProgress().then(draw); }
+  const body = V.tab === 'progress' ? viewProgress() : V.tab === 'skills' ? viewSkills() : V.tab === 'students' ? viewStudents() : V.tab === 'teachers' ? viewTeachers() : viewOverview();
   ov.innerHTML = `<div class="nr">
     <header class="nr-top">
       <div class="nr-ttl"><span class="nr-badge">نافس</span><div><h2>التقرير الشامل لاختبار نافس</h2><p>${esc(printOrgName())} · ${esc(D.gradeTxt)} · ${D.students.length} طالبًا · الاجتياز ${D.passPct}% في كل مادة</p></div></div>
       <div class="nr-acts"><button type="button" class="nr-btn ghost" id="nr-print">🖨 طباعة هذا القسم</button><button type="button" class="nr-btn pdf" id="nr-pdf">⬇ PDF</button><button type="button" class="nr-x" data-close aria-label="إغلاق">✕</button></div>
       <nav class="nr-tabs">${TABS.map(([k, t]) => `<button type="button" data-tab="${k}" class="${V.tab === k ? 'on' : ''}">${t}</button>`).join('')}</nav>
     </header>
-    ${V.tab !== 'teachers' ? `<div class="nr-secs"><span>الفصل</span>${['all', ...D.sections].map(x => `<button type="button" data-sec="${esc(x)}" class="${V.sec === x ? 'on' : ''}">${x === 'all' ? 'كل الفصول' : 'فصل ' + esc(x)}</button>`).join('')}</div>` : ''}
+    ${V.tab !== 'teachers' && !(V.tab === 'progress' && P.view !== 'students') ? `<div class="nr-secs"><span>الفصل</span>${['all', ...D.sections].map(x => `<button type="button" data-sec="${esc(x)}" class="${V.sec === x ? 'on' : ''}">${x === 'all' ? 'كل الفصول' : 'فصل ' + esc(x)}</button>`).join('')}</div>` : ''}
     <main class="nr-main" id="nr-main">${body}</main></div>`;
   ov.querySelector('[data-close]').onclick = close;
   document.removeEventListener('keydown', onKey); document.addEventListener('keydown', onKey);
@@ -220,6 +223,7 @@ function draw() {
   ov.querySelectorAll('[data-subj]').forEach(b => b.onclick = () => { V.subj = b.dataset.subj; draw(); });
   ov.querySelectorAll('[data-pass]').forEach(b => b.onclick = () => { V.pass = b.dataset.pass; draw(); });
   const so = ov.querySelector('#nr-sort'); if (so) so.onchange = () => { V.sort = so.value; draw(); };
+  bindProgress(ov);
   const q = ov.querySelector('#nr-q'); if (q) q.oninput = () => { V.q = q.value; const pos = q.selectionStart; draw(); const n = ov.querySelector('#nr-q'); n.focus(); n.setSelectionRange(pos, pos); };
   ov.querySelectorAll('[data-st]').forEach(b => b.onclick = () => openCert(b.dataset.st));
   ov.querySelectorAll('[data-tch]').forEach(b => b.onclick = () => { V.teacher = V.teacher === b.dataset.tch ? null : b.dataset.tch; draw(); const el = ov.querySelector('.nr-tdetail'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
@@ -414,6 +418,187 @@ function viewTeachers() {
   return `<div class="nr-sbar"><p class="nr-hint">اختر معلمًا لعرض تحليل طلاب فصوله التي يدرّسها (من الجدول المدرسي).</p><button type="button" class="nr-btn" id="nr-print-teachers">🖨 طباعة تقارير جميع المعلمين</button><button type="button" class="nr-btn pdf" id="nr-pdf-teachers">⬇ PDF</button></div>${cards}${t ? teacherDetail(t) : ''}`;
 }
 
+/* =========================================================================
+ * التطور عبر الاختبارات: كل اختبارات نافس للصف نفسه مرتبة زمنيًا،
+ * مع الفروق والتحسن والانخفاض للمدرسة والفصول والمعلمين وكل طالب.
+ * ========================================================================= */
+const TCOL = ['#94A3B8', '#3B5BDB', '#0CA678', '#E8590C', '#AE3EC9', '#1098AD', '#F08C00', '#C2255C'];
+async function loadProgress() {
+  try {
+    const { data: reps, error } = await readScopedBySchool(sc => { let q = sb.from('exam_reports').select('*').eq('exam_type', 'nafes').eq('grade_level', D.rep.grade_level).order('created_at'); if (sc && currentSchoolId) q = q.eq('school_id', currentSchoolId); return q; });
+    if (error) throw error;
+    const ids = [...new Set((reps || []).map(r => r.key_id || (r.raw_data || {}).keyId).filter(Boolean))];
+    const { data: keys } = ids.length ? await sb.from('answer_keys').select('id, subject, skills, exam_kind, pass_pct, parts, grade_level, choices').in('id', ids) : { data: [] };
+    const km = new Map((keys || []).map(k => [k.id, k]));
+    const tests = [];
+    for (const r of reps || []) {
+      const key = r.id === D.rep.id ? D.key : km.get(r.key_id || (r.raw_data || {}).keyId); if (!key) continue;
+      const d = r.id === D.rep.id ? D : await build(r, key); if (!d) continue;
+      tests.push({ id: r.id, d, date: new Date(r.created_at), cur: r.id === D.rep.id });
+    }
+    tests.forEach((t, i) => { t.no = i + 1; t.label = 'الاختبار ' + (i + 1); t.dateTxt = t.date.toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short' }); t.color = TCOL[i % TCOL.length]; t.by = new Map(t.d.students.map(s => [s.id, s])); });
+    P.tests = tests; P.ready = true;
+  } catch (e) { console.error(e); P.err = 'تعذر تحميل الاختبارات السابقة'; P.ready = true; }
+}
+const ptests = () => P.tests.filter(t => !P.off.has(t.id));
+const subjNames = () => { const all = []; ptests().forEach(t => t.d.parts.forEach(p => { if (!all.some(x => normSj(x) === normSj(p.s))) all.push(p.s); })); return all; };
+const partOf = (t, sj) => t.d.parts.find(p => normSj(p.s) === normSj(sj));
+// قيمة الطالب في اختبار: الكلي أو مادة محددة
+const sVal = (t, s, sj = P.subj) => { if (!s) return null; if (sj === 'all') return s.pct; const p = partOf(t, sj); return p && s.subj[p.s] ? s.subj[p.s].pct : null; };
+const sPass = (t, s, sj = P.subj) => { if (!s) return null; if (sj === 'all') return s.passed; const p = partOf(t, sj); return p && s.subj[p.s] ? s.subj[p.s].pass : null; };
+const gMean = (t, studs, sj) => mean(studs.map(s => sVal(t, s, sj)).filter(v => v != null));
+const gPass = (t, studs, sj) => { const v = studs.map(s => sPass(t, s, sj)).filter(v => v != null); return v.length ? v.filter(Boolean).length / v.length * 100 : null; };
+const dlt = (a, b) => (a == null || b == null ? null : b - a);
+const dTag = (d, unit = '') => d == null ? '<span class="pg-d na">—</span>' : Math.abs(d) < 0.05 ? '<span class="pg-d eq">= 0</span>' : `<span class="pg-d ${d > 0 ? 'up' : 'down'}">${d > 0 ? '▲' : '▼'} ${r1(Math.abs(d))}${unit}</span>`;
+const baseOf = (vals) => { const v = vals.filter(x => x != null); if (v.length < 2) return [null, v[v.length - 1] ?? null]; return [P.cmp === 'first' ? v[0] : v[v.length - 2], v[v.length - 1]]; };
+function trendOf(vals) {
+  const v = vals.filter(x => x != null); if (v.length < 2) return { k: 'na', t: 'اختبار واحد' };
+  const d = v[v.length - 1] - v[0];
+  const ups = v.slice(1).every((x, i) => x >= v[i] - 0.5), downs = v.slice(1).every((x, i) => x <= v[i] + 0.5);
+  if (v.length >= 3 && ups && d >= 3) return { k: 'up2', t: 'تحسّن مستمر' };
+  if (v.length >= 3 && downs && d <= -3) return { k: 'down2', t: 'تراجع مستمر' };
+  if (d >= 5) return { k: 'up', t: 'تحسّن' };
+  if (d <= -5) return { k: 'down', t: 'تراجع' };
+  return { k: 'flat', t: 'مستقر' };
+}
+function spark(vals, w = 110, h = 30) {
+  const pts = vals.map((v, i) => [i, v]).filter(p => p[1] != null); if (pts.length < 2) return '<span class="pg-na">—</span>';
+  const n = vals.length, X = i => w - 4 - (i / Math.max(1, n - 1)) * (w - 8), Y = v => h - 3 - (v / 100) * (h - 6);
+  const last = pts[pts.length - 1], first = pts[0], c = last[1] >= first[1] ? '#2B8A3E' : '#C92A2A';
+  return `<svg class="pg-spark" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}"><polyline fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" points="${pts.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}"/>${pts.map(p => `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="2.4" fill="${c}"/>`).join('')}</svg>`;
+}
+// مخطط خطي متعدد السلاسل (من اليمين لليسار حسب الزمن)
+function lineChart(labels, series, opts = {}) {
+  const W = Math.max(620, labels.length * 120), H = 230, L = 34, R = 30, T = 18, B = 38, n = labels.length;
+  const X = i => W - R - (n === 1 ? (W - L - R) / 2 : i / (n - 1) * (W - L - R)), Y = v => T + (1 - v / 100) * (H - T - B);
+  const ref = opts.ref;
+  return `<svg class="nr-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.label || '')}">
+    ${[0, 25, 50, 75, 100].map(v => `<line x1="${L}" x2="${W - R + 6}" y1="${Y(v)}" y2="${Y(v)}" stroke="#EEF2F7"/><text x="${L - 6}" y="${Y(v) + 3}" font-size="9.5" fill="#98A2B3" text-anchor="end">${v}</text>`).join('')}
+    ${ref != null ? `<line x1="${L}" x2="${W - R + 6}" y1="${Y(ref)}" y2="${Y(ref)}" stroke="#C92A2A" stroke-dasharray="5 4" stroke-width="1.4"/><text x="${W - R}" y="${Y(ref) - 5}" font-size="10" fill="#C92A2A" font-weight="800" text-anchor="start">حد الاجتياز ${ref}%</text>` : ''}
+    ${labels.map((l, i) => `<text x="${X(i)}" y="${H - 20}" text-anchor="middle" font-size="11.5" font-weight="800" fill="#0F2447">${esc(l[0])}</text><text x="${X(i)}" y="${H - 6}" text-anchor="middle" font-size="9.5" fill="#6B7684">${esc(l[1] || '')}</text>`).join('')}
+    ${series.map(s => { const pts = s.v.map((v, i) => [i, v]).filter(p => p[1] != null); return `<polyline fill="none" stroke="${s.color}" stroke-width="${s.w || 2.6}" ${s.dash ? 'stroke-dasharray="6 4"' : ''} stroke-linejoin="round" stroke-linecap="round" points="${pts.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}"/>` + pts.map(p => `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" fill="#fff" stroke="${s.color}" stroke-width="2.4"><title>${esc(s.name)} · ${esc(labels[p[0]][0])}: ${r1(p[1])}%</title></circle>${opts.values !== false ? `<text x="${X(p[0])}" y="${Y(p[1]) - 9}" text-anchor="middle" font-size="10" font-weight="800" fill="${s.color}">${Math.round(p[1])}</text>` : ''}`).join(''); }).join('')}
+  </svg><div class="pg-leg">${series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div>`;
+}
+function viewProgress() {
+  if (!P.ready) return '<div class="nr-load in"><div class="tx-loading"><span></span><span></span><span></span></div><p>جارٍ تحميل اختبارات نافس السابقة وتحليلها...</p></div>';
+  if (P.err) return `<div class="nr-empty">${esc(P.err)}</div>`;
+  if (P.tests.length < 2) return `<div class="nr-empty">يوجد اختبار نافس واحد فقط لهذا الصف. عند رفع اختبار آخر يظهر هنا التطور بين الاختبارات للمدرسة والفصول والمعلمين وكل طالب.</div>`;
+  const T = ptests();
+  const subs = subjNames();
+  const head = `<div class="pg-tests">${P.tests.map(t => { const on = !P.off.has(t.id); const g = groupStats.call(null, t.d.students); return `<button type="button" class="pg-test ${on ? 'on' : ''} ${t.cur ? 'cur' : ''}" data-ptest="${t.id}" style="--tc:${t.color}"><i>${t.no}</i><div><b>${esc(t.label)}</b><small>${esc(t.dateTxt)} · ${t.d.students.length} طالبًا</small></div><em>${r1(mean(t.d.students.map(s => s.pct)))}%</em></button>`; }).join('')}</div>
+    <div class="pg-bar">
+      <div class="nr-chips">${[['all', 'الكلي'], ...subs.map(x => [x, x])].map(([k, l]) => `<button type="button" data-psubj="${esc(k)}" class="${P.subj === k ? 'on' : ''}">${esc(l)}</button>`).join('')}</div>
+      <div class="nr-chips">${[['prev', 'مقارنة بالاختبار السابق'], ['first', 'مقارنة بالاختبار الأول']].map(([k, l]) => `<button type="button" data-pcmp="${k}" class="${P.cmp === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    </div>
+    <nav class="pg-views">${[['school', 'المدرسة'], ['sections', 'الفصول'], ['teachers', 'المعلمون'], ['students', 'الطلاب']].map(([k, l]) => `<button type="button" data-pview="${k}" class="${P.view === k ? 'on' : ''}">${l}</button>`).join('')}</nav>`;
+  if (T.length < 2) return head + '<div class="nr-empty">اختر اختبارين على الأقل للمقارنة.</div>';
+  const body = P.view === 'sections' ? pgSections(T) : P.view === 'teachers' ? pgTeachers(T) : P.view === 'students' ? pgStudents(T) : pgSchool(T, subs);
+  return head + body;
+}
+const lbls = T => T.map(t => [t.label, t.dateTxt]);
+const cmpTxt = () => (P.cmp === 'first' ? 'عن الاختبار الأول' : 'عن الاختبار السابق');
+function pgSchool(T, subs) {
+  const all = T.map(t => t.d.students);
+  const meanV = T.map((t, i) => gMean(t, all[i], P.subj)), passV = T.map((t, i) => gPass(t, all[i], P.subj));
+  const [m0, m1] = baseOf(meanV), [p0, p1] = baseOf(passV);
+  // الطلاب الحاضرون في آخر اختبارين للمقارنة
+  const A = T[P.cmp === 'first' ? 0 : T.length - 2], Bt = T[T.length - 1];
+  const both = Bt.d.students.filter(s => A.by.has(s.id));
+  const ds = both.map(s => ({ s, d: dlt(sVal(A, A.by.get(s.id)), sVal(Bt, s)) })).filter(x => x.d != null);
+  const up = ds.filter(x => x.d >= 5).length, down = ds.filter(x => x.d <= -5).length, flat = ds.length - up - down;
+  const gained = both.filter(s => sPass(Bt, s) && !sPass(A, A.by.get(s.id))).length, lost = both.filter(s => !sPass(Bt, s) && sPass(A, A.by.get(s.id))).length;
+  const subjSeries = subs.map((sj, i) => ({ name: sj, color: SUBJ_COLORS[i % SUBJ_COLORS.length], v: T.map((t, k) => gMean(t, all[k], sj)) }));
+  const passSeries = subs.map((sj, i) => ({ name: sj, color: SUBJ_COLORS[i % SUBJ_COLORS.length], v: T.map((t, k) => gPass(t, all[k], sj)) }));
+  return `<section class="pg-kpis">
+      <div class="pg-k"><span>المتوسط ${P.subj === 'all' ? 'الكلي' : 'في ' + esc(P.subj)}</span><b>${r1(m1)}%</b>${dTag(dlt(m0, m1), ' نقطة')}<small>${cmpTxt()}</small></div>
+      <div class="pg-k"><span>نسبة الاجتياز</span><b>${r1(p1)}%</b>${dTag(dlt(p0, p1), ' نقطة')}<small>${cmpTxt()}</small></div>
+      <div class="pg-k up"><span>تحسّنوا (+5 فأكثر)</span><b>${up}</b><small>من ${ds.length} طالبًا حضروا الاختبارين</small></div>
+      <div class="pg-k down"><span>تراجعوا (−5 فأكثر)</span><b>${down}</b><small>واستقر ${flat}</small></div>
+      <div class="pg-k up"><span>أصبحوا مجتازين</span><b>${gained}</b><small>لم يجتازوا سابقًا</small></div>
+      <div class="pg-k down"><span>فقدوا الاجتياز</span><b>${lost}</b><small>كانوا مجتازين</small></div>
+    </section>
+    <section class="nr-card"><h4>متوسط المواد عبر الاختبارات</h4>${lineChart(lbls(T), [...subjSeries, ...(subs.length > 1 ? [{ name: 'الكلي', color: '#0F2447', w: 3.2, dash: true, v: T.map((t, k) => gMean(t, all[k], 'all')) }] : [])], { label: 'متوسط المواد' })}</section>
+    <section class="nr-card"><h4>نسبة الاجتياز في كل مادة عبر الاختبارات</h4>${lineChart(lbls(T), passSeries, { label: 'نسبة الاجتياز' })}</section>
+    <section class="nr-card"><h4>تحوّل مستويات الأداء <small>${esc(P.subj === 'all' ? 'الكلي' : P.subj)}</small></h4>
+      <div class="pg-lvrows">${T.map(t => { const vals = t.d.students.map(s => sVal(t, s)).filter(v => v != null); const lv = t.d.levels.map(l => ({ ...l, n: vals.filter(v => (t.d.levels.find(x => v >= x.min - 1e-9) || t.d.levels[t.d.levels.length - 1]) === l).length })); return `<div class="pg-lvrow"><span><b>${esc(t.label)}</b><small>${esc(t.dateTxt)}</small></span><div class="nr-lvbar">${lv.map(l => l.n ? `<i style="flex:${l.n};background:${l.c}" title="${esc(l.t)}: ${l.n}"><b>${l.n}</b></i>` : '').join('')}</div></div>`; }).join('')}</div>
+      <div class="nr-lvleg">${D.levels.map(l => `<span><i style="background:${l.c}"></i>${esc(l.t)}</span>`).join('')}</div></section>
+    <section class="nr-card"><h4>المهارات: الأكثر تحسنًا والأكثر تراجعًا <small>${esc(T[0].label)} ← ${esc(T[T.length - 1].label)}</small></h4>${pgSkills(T)}</section>`;
+}
+function pgSkills(T) {
+  const A = T[P.cmp === 'first' ? 0 : T.length - 2], Bt = T[T.length - 1];
+  const rows = [];
+  Bt.d.skills.forEach(g => {
+    if (P.subj !== 'all' && normSj(g.s) !== normSj(P.subj)) return;
+    const ga = A.d.skills.find(x => normSj(x.s) === normSj(g.s) && x.k === g.k); if (!ga) return;
+    const b = mean(Bt.d.students.map(s => s.sk[g.id]).filter(v => v != null)), a = mean(A.d.students.map(s => s.sk[ga.id]).filter(v => v != null));
+    if (a != null && b != null) rows.push({ g, a, b, d: b - a });
+  });
+  if (!rows.length) return '<p class="nr-hint">لا توجد مهارات مشتركة بين الاختبارين (تأكد من تسمية المهارات بالأسماء نفسها في نماذج الإجابة).</p>';
+  rows.sort((x, y) => y.d - x.d);
+  const li = r => `<li><span>${esc(r.g.s)} · ${esc(r.g.k)}</span><small>${r1(r.a)}% ← ${r1(r.b)}%</small>${dTag(r.d)}</li>`;
+  return `<div class="nr-grid2"><div><h5 class="pg-h up">الأكثر تحسنًا</h5><ul class="pg-sk">${rows.filter(r => r.d > 0).slice(0, 6).map(li).join('') || '<li class="na">لا يوجد</li>'}</ul></div>
+    <div><h5 class="pg-h down">الأكثر تراجعًا</h5><ul class="pg-sk">${rows.filter(r => r.d < 0).reverse().slice(0, 6).map(li).join('') || '<li class="na">لا يوجد</li>'}</ul></div></div>`;
+}
+function pgTable(rows, T, firstCol) {
+  return `<div class="nr-twrap"><table class="nr-t pg-t"><thead><tr><th>${firstCol}</th>${T.map(t => `<th style="color:${t.color}">${esc(t.label)}<small>${esc(t.dateTxt)}</small></th>`).join('')}<th>الفرق ${cmpTxt()}</th><th>المنحنى</th><th>الاتجاه</th></tr></thead>
+    <tbody>${rows.map(r => { const [a, b] = baseOf(r.vals), tr = trendOf(r.vals); return `<tr ${r.attr || ''}><td class="pg-nm">${r.name}${r.sub ? `<small>${r.sub}</small>` : ''}</td>${r.vals.map((v, i) => `<td class="c">${v == null ? '<span class="pg-na">غائب</span>' : `<b style="color:${levelOf(v)?.c}">${r1(v)}</b>`}</td>`).join('')}<td class="c">${dTag(dlt(a, b))}</td><td class="c">${spark(r.vals)}</td><td class="c"><span class="pg-tr ${tr.k}">${tr.t}</span></td></tr>`; }).join('')}</tbody></table></div>`;
+}
+function pgSections(T) {
+  const secs = [...new Set(T.flatMap(t => t.d.sections))].sort((a, b) => +a - +b);
+  const rows = secs.map(x => ({ name: 'فصل ' + esc(x), vals: T.map(t => gMean(t, t.d.students.filter(s => s.section === x))), passV: T.map(t => gPass(t, t.d.students.filter(s => s.section === x))) }));
+  return `<section class="nr-card"><h4>متوسط الفصول عبر الاختبارات <small>${esc(P.subj === 'all' ? 'الكلي' : P.subj)}</small></h4>
+      ${lineChart(lbls(T), rows.map((r, i) => ({ name: r.name.replace(/&[^;]+;/g, ''), color: SUBJ_COLORS.concat(TCOL)[i % 14], v: r.vals })), { values: secs.length <= 4 })}</section>
+    <section class="nr-card"><h4>المتوسط %</h4>${pgTable(rows, T, 'الفصل')}</section>
+    <section class="nr-card"><h4>نسبة الاجتياز %</h4>${pgTable(rows.map(r => ({ ...r, vals: r.passV })), T, 'الفصل')}</section>`;
+}
+function pgTeachers(T) {
+  const L = T[T.length - 1];
+  const list = L.d.teachers.filter(t => P.subj === 'all' || normSj(t.subj) === normSj(P.subj));
+  if (!list.length) return '<div class="nr-empty">لا توجد بيانات معلمين لهذه المادة في الجدول المدرسي.</div>';
+  const rows = list.map(t => ({ name: esc(t.name), sub: `${esc(t.subj)} · فصول ${t.secs.map(esc).join('، ')}`, vals: T.map(x => gMean(x, x.d.students.filter(s => t.secs.includes(s.section)), t.subj)), school: T.map(x => gMean(x, x.d.students, t.subj)) }));
+  return `<p class="nr-hint">متوسط طلاب كل معلم في مادته، في الفصول التي يدرّسها حسب الجدول المدرسي الحالي.</p>
+    <section class="nr-card"><h4>متوسط المعلمين عبر الاختبارات</h4>${lineChart(lbls(T), rows.map((r, i) => ({ name: r.name, color: SUBJ_COLORS.concat(TCOL)[i % 14], v: r.vals })), { values: rows.length <= 4 })}</section>
+    <section class="nr-card"><h4>المتوسط % ومقارنته بمتوسط المدرسة في المادة</h4>${pgTable(rows.map(r => ({ ...r, sub: r.sub + ` · المدرسة: ${r.school.map(v => r1(v)).join(' ← ')}` })), T, 'المعلم')}</section>`;
+}
+function pgStudents(T) {
+  const L = T[T.length - 1];
+  const ids = [...new Set(T.flatMap(t => t.d.students.map(s => s.id)))];
+  let rows = ids.map(id => {
+    const ss = T.map(t => t.by.get(id)); const any = ss.slice().reverse().find(Boolean);
+    const vals = T.map((t, i) => sVal(t, ss[i])), [a, b] = baseOf(vals);
+    const pa = (() => { const k = P.cmp === 'first' ? 0 : T.length - 2; return ss[k] ? sPass(T[k], ss[k]) : null; })(), pb = ss[T.length - 1] ? sPass(L, ss[T.length - 1]) : null;
+    return { id, s: any, vals, d: dlt(a, b), tr: trendOf(vals), pa, pb };
+  }).filter(r => r.s && (V.sec === 'all' || r.s.section === V.sec));
+  const q = (P.q || '').trim(); if (q) rows = rows.filter(r => r.s.name.includes(q));
+  const F = { all: () => true, up: r => r.d != null && r.d >= 5, down: r => r.d != null && r.d <= -5, gain: r => r.pb === true && r.pa === false, lost: r => r.pb === false && r.pa === true, abs: r => r.vals.some(v => v == null) };
+  const cnt = k => rows.filter(F[k]).length;
+  const shown = rows.filter(F[P.filter] || F.all).sort((x, y) => P.filter === 'down' ? (x.d ?? 0) - (y.d ?? 0) : P.filter === 'up' ? (y.d ?? 0) - (x.d ?? 0) : (y.vals[y.vals.length - 1] ?? -1) - (x.vals[x.vals.length - 1] ?? -1));
+  return `<div class="nr-sbar"><input type="search" id="pg-q" placeholder="ابحث باسم الطالب..." value="${esc(P.q || '')}">
+      <div class="nr-chips">${[['all', 'الكل'], ['up', '▲ تحسّنوا'], ['down', '▼ تراجعوا'], ['gain', 'أصبحوا مجتازين'], ['lost', 'فقدوا الاجتياز'], ['abs', 'غابوا عن اختبار']].map(([k, l]) => `<button type="button" data-pfilter="${k}" class="${P.filter === k ? 'on' : ''}">${l} <i>${cnt(k)}</i></button>`).join('')}</div></div>
+    ${pgTable(shown.map(r => ({ name: `<button type="button" class="pg-sbtn" data-pst="${esc(r.id)}">${esc(r.s.name)}</button>`, sub: `فصل ${esc(r.s.section)}${r.pb === true && r.pa === false ? ' · <b class="pg-g">أصبح مجتازًا</b>' : r.pb === false && r.pa === true ? ' · <b class="pg-l">فقد الاجتياز</b>' : ''}`, vals: r.vals })), T, `الطالب <small>(${shown.length})</small>`)}
+    ${P.st ? pgStudentCard(T, P.st) : ''}`;
+}
+function pgStudentCard(T, id) {
+  const ss = T.map(t => t.by.get(id)), s = ss.slice().reverse().find(Boolean); if (!s) return '';
+  const subs = subjNames();
+  return `<div class="nr-modal pg-modal" data-pclose><div class="nr-modal-b" onclick="event.stopPropagation()">
+    <header><b>${esc(s.name)}</b><span>فصل ${esc(s.section)}</span><button type="button" class="nr-x" data-pclose aria-label="إغلاق">✕</button></header>
+    ${lineChart(lbls(T), [...subs.map((sj, i) => ({ name: sj, color: SUBJ_COLORS[i % SUBJ_COLORS.length], v: T.map((t, k) => sVal(t, ss[k], sj)) })), { name: 'الكلي', color: '#0F2447', dash: true, w: 3, v: T.map((t, k) => sVal(t, ss[k], 'all')) }], { ref: D.passPct, label: 'تطور الطالب' })}
+    <div class="nr-twrap"><table class="nr-t pg-t"><thead><tr><th>المادة</th>${T.map(t => `<th>${esc(t.label)}<small>${esc(t.dateTxt)}</small></th>`).join('')}<th>الفرق</th></tr></thead>
+      <tbody>${['all', ...subs].map(sj => { const vals = T.map((t, k) => sVal(t, ss[k], sj)), [a, b] = baseOf(vals); return `<tr><td class="pg-nm">${sj === 'all' ? 'الكلي' : esc(sj)}</td>${vals.map((v, k) => `<td class="c">${v == null ? '<span class="pg-na">غائب</span>' : `<b style="color:${levelOf(v)?.c}">${r1(v)}</b>${sPass(T[k], ss[k], sj) ? ' ✓' : ''}`}</td>`).join('')}<td class="c">${dTag(dlt(a, b))}</td></tr>`; }).join('')}</tbody></table></div>
+    <p class="nr-hint">✓ = اجتاز المادة في ذلك الاختبار · الخط المتقطع الأحمر = حد الاجتياز.</p></div></div>`;
+}
+function bindProgress(ov) {
+  ov.querySelectorAll('[data-ptest]').forEach(b => b.onclick = () => { const id = b.dataset.ptest; P.off.has(id) ? P.off.delete(id) : P.off.add(id); draw(); });
+  ov.querySelectorAll('[data-psubj]').forEach(b => b.onclick = () => { P.subj = b.dataset.psubj; draw(); });
+  ov.querySelectorAll('[data-pcmp]').forEach(b => b.onclick = () => { P.cmp = b.dataset.pcmp; draw(); });
+  ov.querySelectorAll('[data-pview]').forEach(b => b.onclick = () => { P.view = b.dataset.pview; P.st = null; draw(); });
+  ov.querySelectorAll('[data-pfilter]').forEach(b => b.onclick = () => { P.filter = b.dataset.pfilter; draw(); });
+  ov.querySelectorAll('[data-pst]').forEach(b => b.onclick = () => { P.st = b.dataset.pst; draw(); });
+  ov.querySelectorAll('[data-pclose]').forEach(b => b.onclick = e => { if (e.target === b) { P.st = null; draw(); } });
+  const q = ov.querySelector('#pg-q'); if (q) q.oninput = () => { P.q = q.value; const pos = q.selectionStart; draw(); const n = ov.querySelector('#pg-q'); n.focus(); n.setSelectionRange(pos, pos); };
+}
+
 /* ---------- الطباعة ---------- */
 function docHtml(title, body, paged, pdf) {
   return `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(title)}</title>
@@ -497,6 +682,36 @@ async function savePdf(title, body, paged) {
 function injectCss() { if (document.getElementById('nr-css')) return; const s = document.createElement('style'); s.id = 'nr-css'; s.textContent = NR_CSS + CERT_CSS; document.head.appendChild(s); }
 const NR_CSS = `
 .nr-ov{ position:fixed; inset:0; z-index:9000; background:#F4F6FB; overflow:hidden; }
+.nr-load.in{ position:static; padding:60px 0; }
+.pg-tests{ display:flex; gap:10px; overflow-x:auto; padding:2px 2px 8px; margin-bottom:12px; }
+.pg-test{ flex:0 0 auto; display:flex; align-items:center; gap:10px; border:2px solid #E3E8F0; background:#fff; border-radius:14px; padding:9px 12px; cursor:pointer; font:inherit; text-align:start; opacity:.55; transition:.15s; }
+.pg-test.on{ opacity:1; border-color:var(--tc); box-shadow:0 4px 14px rgba(15,36,71,.08); }
+.pg-test i{ font-style:normal; width:30px; height:30px; border-radius:50%; background:var(--tc); color:#fff; display:grid; place-items:center; font-weight:900; }
+.pg-test b{ display:block; font-size:13.5px; color:#0F2447; } .pg-test small{ font-size:11.5px; color:#6B7684; } .pg-test em{ font-style:normal; font-weight:900; color:var(--tc); font-size:15px; margin-inline-start:6px; }
+.pg-test.cur{ position:relative; } .pg-test.cur::after{ content:'الحالي'; position:absolute; top:-8px; inset-inline-end:10px; background:#0F2447; color:#fff; font-size:10px; border-radius:6px; padding:0 6px; }
+.pg-bar{ display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; margin-bottom:10px; }
+.pg-views{ display:flex; gap:4px; background:#E9EEF6; border-radius:12px; padding:4px; width:fit-content; margin-bottom:14px; }
+.pg-views button{ border:0; background:none; font:inherit; font-weight:800; font-size:13.5px; padding:7px 16px; border-radius:9px; cursor:pointer; color:#475467; }
+.pg-views button.on{ background:#fff; color:#0F2447; box-shadow:0 2px 6px rgba(15,36,71,.1); }
+.pg-kpis{ display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:14px; }
+.pg-k{ background:#fff; border:1px solid #E6EBF2; border-radius:14px; padding:12px; display:grid; gap:2px; }
+.pg-k span{ font-size:12px; color:#6B7684; font-weight:700; } .pg-k b{ font-size:24px; font-weight:900; color:#0F2447; font-family:'Tajawal',sans-serif; } .pg-k small{ font-size:11px; color:#98A2B3; }
+.pg-k.up b{ color:#2B8A3E; } .pg-k.down b{ color:#C92A2A; }
+.pg-d{ font-weight:900; font-size:12.5px; white-space:nowrap; } .pg-d.up{ color:#2B8A3E; } .pg-d.down{ color:#C92A2A; } .pg-d.eq,.pg-d.na,.pg-na{ color:#98A2B3; font-size:12px; }
+.pg-leg{ display:flex; flex-wrap:wrap; gap:6px 16px; justify-content:center; font-size:12.5px; font-weight:700; color:#344054; margin-top:4px; }
+.pg-leg i{ display:inline-block; width:12px; height:12px; border-radius:3px; margin-inline-end:5px; vertical-align:-1px; }
+.pg-lvrows{ display:grid; gap:8px; } .pg-lvrow{ display:grid; grid-template-columns:120px 1fr; gap:10px; align-items:center; } .pg-lvrow small{ display:block; color:#6B7684; font-size:11px; }
+.pg-h{ margin:0 0 8px; font-size:14px; } .pg-h.up{ color:#2B8A3E; } .pg-h.down{ color:#C92A2A; }
+.pg-sk{ list-style:none; margin:0; padding:0; display:grid; gap:6px; } .pg-sk li{ display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; background:#F8FAFC; border-radius:10px; padding:7px 10px; font-size:13px; } .pg-sk small{ color:#6B7684; } .pg-sk li.na{ display:block; color:#98A2B3; }
+.pg-t th small{ display:block; font-weight:500; font-size:10.5px; opacity:.8; } .pg-t td.c{ text-align:center; } .pg-nm small{ display:block; color:#6B7684; font-size:11.5px; }
+.pg-spark{ display:block; margin:auto; }
+.pg-tr{ font-size:11.5px; font-weight:800; border-radius:20px; padding:2px 9px; white-space:nowrap; } .pg-tr.up,.pg-tr.up2{ background:#EBFBEE; color:#2B8A3E; } .pg-tr.down,.pg-tr.down2{ background:#FFF5F5; color:#C92A2A; } .pg-tr.flat{ background:#F1F3F5; color:#495057; } .pg-tr.na{ color:#98A2B3; } .pg-tr.up2::before{ content:'⇈ '; } .pg-tr.down2::before{ content:'⇊ '; }
+.pg-sbtn{ border:0; background:none; font:inherit; font-weight:800; color:#1971C2; cursor:pointer; padding:0; text-align:start; }
+.pg-g{ color:#2B8A3E; } .pg-l{ color:#C92A2A; }
+.pg-modal .nr-modal-b{ max-width:860px; background:#fff; border-radius:18px; padding:16px 18px; height:fit-content; box-shadow:0 20px 50px rgba(10,24,48,.3); }
+.pg-modal header{ display:flex; align-items:center; gap:10px; margin-bottom:8px; } .pg-modal header b{ font-size:17px; color:#0F2447; } .pg-modal header span{ color:#6B7684; font-size:13px; flex:1; }
+.pg-test,.pg-views button,.pg-sbtn{ width:auto; margin:0; }
+@media (max-width:900px){ .pg-kpis{ grid-template-columns:repeat(2,1fr); } .pg-lvrow{ grid-template-columns:1fr; } }
 .nr-ov.hidden{ display:none; } body.nr-lock{ overflow:hidden; }
 .nr-load{ display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%; gap:12px; color:#475467; font-weight:700; }
 .nr{ display:flex; flex-direction:column; height:100%; color:#14233A; }
