@@ -5014,3 +5014,7 @@ button.acf-box:hover{ border-color:var(--acf-blue); }
 .acx-recall > div{ flex:1; min-width:220px; }
 .acx-recall .acx-ghost{ width:auto; margin:0; background:#fff; border:1.5px solid #E9A54B; color:#8A4B06; font-weight:800; }
 .acx-recall .acx-ghost:hover{ background:#FFEFD6; }
+.acx-coord-btn{ width:auto; margin:10px 0 0; justify-self:start; border:1px solid rgba(255,255,255,.22); background:rgba(255,255,255,.1); color:#fff; font:inherit; font-size:12.5px; font-weight:800; padding:5px 12px; border-radius:99px; cursor:pointer; z-index:2; }
+.acx-coord-btn b{ background:#7CE0B5; color:#0F2447; border-radius:99px; padding:0 7px; margin-inline-start:4px; }
+.acx-coord-btn:hover{ background:rgba(255,255,255,.2); }
+.acx-coord-info{ background:#F1F6FF; border:1px solid #D6E4FF; border-radius:12px; padding:10px 12px; font-size:13px; line-height:1.8; color:#1D2B4F; margin-bottom:10px; }

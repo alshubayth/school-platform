@@ -163,6 +163,7 @@ function hero() {
     <div class="acx-hero-t"><span class="acx-kicker">التقويم المدرسي · الدورة الثانية</span><h2>الاعتماد المدرسي</h2>
       <p>${V.tab === 'overview' ? `${applicable().length} مؤشرًا · ${D.evs.length} شاهدًا مرفوعًا` : V.tab === 'domain' ? `المجال ${DORD[V.dom || myLeadDomains()[0]]}: ${DOMAINS[V.dom || myLeadDomains()[0]]}` : `${scope.length} ${scope.length === 1 ? 'مؤشر مسند إليك' : 'مؤشرات مسندة إليك'}`}</p>
       <div class="acx-lv"><span style="--c:${LVCOL[lv.t]}">مستوى ${lv.t}</span><em>المستهدف: التميّز 90% فأعلى</em></div>
+      ${isPrincipal() ? `<button type="button" class="acx-coord-btn" id="acx-coords">👥 منسقو الاعتماد <b>${(D.roles && D.roles.coordinator || []).length}</b></button>` : ''}
     </div>
     ${ring(p, 116, '#7CE0B5', 'rgba(255,255,255,.16)', label)}
     <div class="acx-visit ${days != null && days <= 14 && days >= 0 ? 'soon' : ''}">
@@ -235,6 +236,7 @@ function bindList(box) {
   box.querySelectorAll('[data-filter]').forEach(b => b.onclick = () => { V.filter = b.dataset.filter; V.domFromOverview ? renderDomainFromOverview() : render(); });
   box.querySelectorAll('[data-assign]').forEach(b => b.onclick = e => { e.stopPropagation(); openAssign(D.inds.find(i => i.id === b.dataset.assign)); });
   const ve = $('acx-visit-edit'); if (ve) ve.onclick = editVisit;
+  const co = $('acx-coords'); if (co) co.onclick = openCoords;
 }
 const rerender = () => (V.domFromOverview && !V.ind ? renderDomainFromOverview() : render());
 // المدير يفتح صفحة مجال من بطاقته دون مغادرة تبويب المتابعة
@@ -493,6 +495,32 @@ function openAssign(i) {
       if (error) { toast(error.message, true); return; }
       Object.assign(i, data); m.remove(); toast('حُفظ الإسناد ✓');
       rerender();
+    };
+  };
+  draw();
+}
+
+/* ---------- منسقو الاعتماد (المدير فقط) ---------- */
+function openCoords() {
+  const sel = new Set((D.roles && D.roles.coordinator) || []); let q = '';
+  const people = [...D.people.values()].filter(p => !(D.roles && (D.roles.principal || []).includes(p.id)));
+  const m = modal('', 'wide');
+  const draw = () => {
+    const list = people.filter(p => !q || p.full_name.includes(q)).sort((a, b) => (sel.has(b.id) - sel.has(a.id)) || a.full_name.localeCompare(b.full_name, 'ar'));
+    m.querySelector('.acx-modal-b').innerHTML = `<header><b>منسقو الاعتماد</b><button type="button" class="acx-x" data-x>✕</button></header>
+      <div class="acx-coord-info"><b>صلاحيات المنسق:</b> الاطلاع على جميع المجالات، وتغيير مسؤولي المؤشرات والمكلّفين بالرفع، ورفع الشواهد وتعديل مسوداتها في أي مؤشر، ومراجعة الشواهد مثل قائد المجال. <b>الاعتماد النهائي يبقى للمدير.</b></div>
+      <div class="acx-asg-sum"><div><small>المنسقون المحددون</small><b>${sel.size ? [...sel].map(u => esc(nameOf(u))).join('، ') : 'لا أحد'}</b></div></div>
+      <input type="search" class="acx-in" id="acx-cq" placeholder="ابحث باسم المنسوب" value="${esc(q)}">
+      <div class="acx-people">${list.map(p => `<div class="acx-person ${sel.has(p.id) ? 'own' : ''}"><span class="acx-av">${esc(p.full_name.trim().charAt(0))}</span><b>${esc(p.full_name)}</b>
+        <button type="button" data-co="${p.id}" class="${sel.has(p.id) ? 'on' : ''}">${sel.has(p.id) ? '✓ منسق' : '+ منسق'}</button></div>`).join('')}</div>
+      <footer><span class="acx-muted">يظهر للمنسق تبويب «المجالات» بعد تحديث صفحته.</span><button type="button" class="acx-btn" id="acx-co-save">حفظ</button></footer>`;
+    const qi = m.querySelector('#acx-cq'); qi.oninput = () => { q = qi.value.trim(); const pos = qi.selectionStart; draw(); const n = m.querySelector('#acx-cq'); n.focus(); n.setSelectionRange(pos, pos); };
+    m.querySelectorAll('[data-co]').forEach(b => b.onclick = () => { sel.has(b.dataset.co) ? sel.delete(b.dataset.co) : sel.add(b.dataset.co); draw(); });
+    m.querySelector('#acx-co-save').onclick = async () => {
+      const { data, error } = await sb.rpc('acc_set_coordinators', { p_ids: [...sel] });
+      if (error) { toast(error.message, true); return; }
+      D.roles = { ...(D.roles || {}), coordinator: data || [] };
+      m.remove(); toast('حُفظ منسقو الاعتماد ✓'); rerender();
     };
   };
   draw();
