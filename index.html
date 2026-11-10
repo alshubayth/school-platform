@@ -1714,12 +1714,12 @@
                 <p id="er-detail-sub">-</p>
               </div>
             </div>
-            <div style="display:flex; gap:8px; flex-wrap:wrap; flex-shrink:0;">
-              <button type="button" class="btn-secondary" id="er-append-file-btn" style="width:auto; padding:8px 14px;" title="ارفع ملفًا يضم طلابًا صُحّحت أوراقهم لاحقًا، ليُضافوا إلى التقرير مع الموجودين">➕ إضافة طلاب من ملف</button>
-              <button type="button" class="text-action-btn" id="er-update-file-btn" style="width:auto; padding:8px 14px;" title="ترفع ملف إكسل جديد (نفس عدد الأسئلة) وتبقى الإجابة الصحيحة كما هي">⭯ تحديث ملف الإكسل</button>
-              <button type="button" class="btn-secondary hidden" id="er-add-sheet-btn" style="width:auto; padding:8px 14px;" title="إضافة ورقة طالب (مثلاً اختبر متأخر) بإدخال إجاباته يدويًا">➕ إضافة ورقة طالب</button>
-              <button type="button" class="btn-secondary hidden" id="er-camera-continue" style="width:auto; padding:8px 14px;">📷 متابعة التصحيح بالجوال</button>
-              <button type="button" class="text-action-btn" id="er-edit-key-btn" style="width:auto; padding:8px 14px;" title="تعديل الإجابة الصحيحة ودرجة كل سؤال وإعادة حساب التقارير">✎ تعديل مفتاح الإجابة والدرجات</button>
+            <div class="er-det-acts" aria-label="إدارة التقرير">
+              <button type="button" class="er-det-act" id="er-append-file-btn" title="ارفع ملفًا يضم طلابًا صُحّحت أوراقهم لاحقًا، ليُضافوا إلى التقرير مع الموجودين"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg><span>إضافة طلاب من ملف</span></button>
+              <button type="button" class="er-det-act" id="er-update-file-btn" title="ترفع ملف إكسل جديدًا (بعدد الأسئلة نفسه) وتبقى الإجابة الصحيحة كما هي"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 0 0-14.500-4.500L4 8"/><path d="M4 4v4h4M4 13a8 8 0 0 0 14.500 4.500L20 16"/><path d="M20 20v-4h-4"/></svg><span>تحديث ملف الإكسل</span></button>
+              <button type="button" class="er-det-act hidden" id="er-add-sheet-btn" title="إضافة ورقة طالب (مثل من اختبر متأخرًا) بإدخال إجاباته يدويًا"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4M12 11v6M9 14h6"/></svg><span>إضافة ورقة طالب</span></button>
+              <button type="button" class="er-det-act hidden" id="er-camera-continue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="2.500" width="10" height="19" rx="2.200"/><circle cx="12" cy="11" r="2.600"/><path d="M11 18.500h2"/></svg><span>متابعة التصحيح بالجوال</span></button>
+              <button type="button" class="er-det-act" id="er-edit-key-btn" title="تعديل الإجابة الصحيحة ودرجة كل سؤال وإعادة حساب التقارير"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.500 6.500l4 4"/></svg><span>تعديل مفتاح الإجابة والدرجات</span></button>
             </div>
           </div>
 

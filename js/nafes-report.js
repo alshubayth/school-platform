@@ -22,7 +22,7 @@ const SUBJ_COLORS = ['#3B5BDB', '#0CA678', '#E8590C', '#AE3EC9', '#1098AD', '#F0
 
 let D = null;          // بيانات التقرير المحسوبة
 let P = { ready: false, tests: [], off: new Set() };   // التطور عبر الاختبارات
-let V = { tab: 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: null, teacher: null };
+let V = { tab: ['overview', 'skills', 'students', 'teachers', 'progress'].includes(startTab) ? startTab : 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: null, teacher: null };
 
 /* ---------- المستويات ---------- */
 function levels(passPct) {
@@ -187,7 +187,7 @@ function hbars(rows, opts = {}) {
 }
 
 /* ---------- الواجهة ---------- */
-export async function openNafesReport(rep, key) {
+export async function openNafesReport(rep, key, startTab = 'overview') {
   let ov = document.getElementById('nr-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'nr-ov'; ov.className = 'nr-ov'; document.body.appendChild(ov); }
   injectCss();
@@ -195,7 +195,7 @@ export async function openNafesReport(rep, key) {
   ov.classList.remove('hidden'); document.body.classList.add('nr-lock');
   try { D = await build(rep, key); } catch (e) { console.error(e); D = null; }
   if (!D) { ov.innerHTML = `<div class="nr-load"><p>تعذر إعداد التقرير، فلا توجد أوراق طلاب صالحة.</p><button type="button" class="nr-btn" data-close>إغلاق</button></div>`; ov.querySelector('[data-close]').onclick = close; return; }
-  V = { tab: 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: D.parts[0].s, teacher: null };
+  V = { tab: ['overview', 'skills', 'students', 'teachers', 'progress'].includes(startTab) ? startTab : 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: D.parts[0].s, teacher: null };
   P = { ready: false, err: null, tests: [], off: new Set(), subj: 'all', cmp: 'prev', view: 'school', filter: 'all', st: null, q: '' };
   draw();
 }
@@ -205,7 +205,7 @@ const studsOf = () => D.students.filter(s => V.sec === 'all' || s.section === V.
 
 function draw() {
   const ov = document.getElementById('nr-ov');
-  const TABS = [['overview', 'لوحة النتائج'], ['skills', 'المهارات والأسئلة'], ['students', 'الطلاب'], ['teachers', 'المعلمون'], ['progress', '📈 التطور عبر الاختبارات']];
+  const TABS = [['overview', 'لوحة النتائج'], ['skills', 'المهارات والأسئلة'], ['students', 'الطلاب'], ['teachers', 'المعلمون'], ['progress', 'التطور عبر الاختبارات']];
   if (V.tab === 'progress' && !P.ready) { loadProgress().then(draw); }
   const body = V.tab === 'progress' ? viewProgress() : V.tab === 'skills' ? viewSkills() : V.tab === 'students' ? viewStudents() : V.tab === 'teachers' ? viewTeachers() : viewOverview();
   ov.innerHTML = `<div class="nr">

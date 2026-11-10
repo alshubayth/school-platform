@@ -85,7 +85,8 @@ function renderSectionHead() {
   const box = document.getElementById('er-sec-head'); if (!box) return;
   const I = SEC_INFO[SECTION];
   const teacher = isTeacherView();
-  const methods = [['camera', '📷', 'التصحيح بالجوال', 'صوّر أوراق الإجابة بالجوال'], ...(teacher ? [] : [['upload', '⬆', 'رفع ملف Remark', 'ملف الإكسل الناتج من الماسح']]), ['manual', '✎', 'إدخال يدوي', 'أضف ورقة طالب لاختبار مصحح']];
+  const mi = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const methods = [['camera', mi('<rect x="7" y="2.5" width="10" height="19" rx="2.2"/><circle cx="12" cy="11" r="2.6"/><path d="M11 18.5h2"/>'), 'التصحيح بالجوال', 'صوّر أوراق الإجابة بالجوال'], ...(teacher ? [] : [['upload', mi('<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 14v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/>'), 'رفع ملف Remark', 'ملف الإكسل الناتج من الماسح']]), ['manual', mi('<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>'), 'إدخال يدوي', 'أضف ورقة طالب لاختبار مصحح']];
   box.innerHTML = `<div class="er-sec">
     <div class="er-sec-top"><div><span>${I.d}</span></div>
       <nav class="er-sec-nav" aria-label="مراحل الاختبار">${['prep', 'grade', 'results'].map(k => `<button type="button" data-sec="${k}" class="${k === SECTION ? 'on' : ''}"><i>${'١٢٣'[SEC_INFO[k].n - 1]}</i>${SEC_INFO[k].t}</button>`).join('<em>←</em>')}</nav></div>
@@ -143,8 +144,34 @@ export async function loadExamReportsModule(sub = null, section = 'results') {
   else document.getElementById('er-nafes-assign').innerHTML = '';
   applySection(false);
   if (section !== 'results') return;
+  const intent = takeIntent();
+  if (intent && intent.act === 'filter') { erFilt = { ...erFilt, q: '', subject: '', type: intent.type || '' }; saveFilt(); }
   await loadSavedList();
-  if (sub && sub !== 'reports') openReport(sub);
+  if (sub && sub !== 'reports') openReport(sub, intent && intent.act === 'tab' ? intent.tab : null);
+  else if (intent) runIntent(intent);
+}
+// نية من «مركز الاختبارات»: فتح خدمة أو تقرير محدد مباشرة
+function takeIntent() {
+  try { const v = sessionStorage.getItem('er-intent'); if (!v) return null; sessionStorage.removeItem('er-intent'); return JSON.parse(v); } catch { return null; }
+}
+async function runIntent(it) {
+  try {
+    if (it.act === 'absence') await openAbsenceReport();
+    else if (it.act === 'audit' && !isTeacherView()) await openAudit();
+    else if (it.act === 'publish' && !isTeacherView()) { const { openResultsPublisher } = await import('./results-publish.js?v=' + ASSET_VERSION); openResultsPublisher(); }
+    else if (it.act === 'nafes') await openNafesFull(it.id, it.tab);
+  } catch (e) { console.error('intent', e); }
+}
+// التقرير الشامل لاختبار نافس مباشرة (دون المرور بتبويب المهارات)
+async function openNafesFull(id, tab = 'overview') {
+  const { data: rep0, error } = await sb.from('exam_reports').select('*').eq('id', id).single();
+  if (error || !rep0) { alert('تعذر فتح تقرير نافس'); return; }
+  const rd = rep0.raw_data || {};
+  const keyId = rep0.key_id || rd.keyId || (rd.models && rd.models.keyId) || null;
+  const { data: key } = keyId ? await sb.from('answer_keys').select('id, subject, skills, exam_kind, models, pass_pct, parts, created_by, grade_level, choices').eq('id', keyId).maybeSingle() : { data: null };
+  if (!key) { openReport(id); return; }
+  const m = await import('./nafes-report.js?v=' + ASSET_VERSION);
+  m.openNafesReport(rep0, key, tab);
 }
 
 /* ---------- التصحيح بالجوال (ملف منفصل يتحمّل عند الحاجة) ---------- */
@@ -711,22 +738,37 @@ function renderFilterBar() {
   const sems = [...new Set(erListData.map(r => r.semester).filter(Boolean))];
   const opt = (v, l, cur) => `<option value="${esc(v)}"${cur === v ? ' selected' : ''}>${esc(l)}</option>`;
   const active = ['type', 'sem', 'grade', 'subject'].some(k => erFilt[k]) || erFilt.q;
-  fb.innerHTML = `<div class="er-filt">
+  const cnt = k => erListData.filter(r => (r.exam_type || 'diagnostic') === k).length;
+  const nafesReps = erListData.filter(r => r.exam_type === 'nafes');
+  const staff = !isTeacherView();
+  const svg = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const svc = (id, tone, icon, t, d) => `<button type="button" class="er-svc-b ${tone}" id="${id}"><span class="er-svc-i">${svg(icon)}</span><span class="er-svc-t"><b>${t}</b><small>${d}</small></span></button>`;
+  const services = SECTION !== 'results' ? '' : [
+    staff ? svc('erf-pubres', 't-blue', '<circle cx="8" cy="8" r="3"/><circle cx="17" cy="9.5" r="2.3"/><path d="M2.5 19c.8-3.2 2.9-5 5.5-5s4.7 1.8 5.5 5M14.5 14.6c.8-.4 1.6-.6 2.5-.6 2.1 0 3.7 1.4 4.5 4"/>', 'نتائج أولياء الأمور', 'نشر النتائج عبر الرابط') : '',
+    erListData.some(r => r.exam_type === 'periodic') ? svc('erf-absrep', 't-red', '<circle cx="10" cy="8" r="3.5"/><path d="M3.5 20c1-3.6 3.4-5.5 6.5-5.5 1.3 0 2.5.3 3.5 1"/><path d="M16.5 15.5l4 4M20.5 15.5l-4 4"/>', 'تقرير الغياب', 'الغائبون عن الفترية') : '',
+    nafesReps.length ? svc('erf-nafes', 't-nafes', '<circle cx="12" cy="14.5" r="5"/><path d="M8.5 10.5L6 3h4l2 4 2-4h4l-2.5 7.5"/>', 'تقرير نافس الشامل', 'الاجتياز والمواد والمهارات') : '',
+    nafesReps.length > 1 ? svc('erf-nafes-pg', 't-nafes', '<path d="M3 17l5.5-5.5 4 4L21 7"/><path d="M15 7h6v6"/>', 'تطور نافس', 'الفروق بين الاختبارات') : '',
+    staff ? svc('erf-audit', 't-green', '<path d="M12 3l7 3v5.5c0 4.3-2.9 7.8-7 9.500-4.100-1.700-7-5.200-7-9.500V6z"/><path d="M9 12l2.200 2.200L15.200 10"/>', 'التحقق من الدرجات', 'إعادة الحساب والمطابقة') : '',
+  ].join('');
+  fb.innerHTML = `${services ? `<div class="er-svc" aria-label="خدمات وتقارير">${services}</div>` : ''}
+  <div class="er-types" role="tablist" aria-label="نوع الاختبار">${[['', 'كل الاختبارات', erListData.length], ['diagnostic', 'تشخيصي', cnt('diagnostic')], ['periodic', 'فتري', cnt('periodic')], ['nafes', 'نافس', cnt('nafes')]].filter(([k, , n]) => !k || n).map(([k, t, n]) => `<button type="button" role="tab" data-type="${k}" class="${erFilt.type === k ? 'on' : ''} ty-${k || 'all'}">${t}<i>${n}</i></button>`).join('')}</div>
+  <div class="er-filt">
     <input type="search" id="erf-q" placeholder="ابحث بعنوان الاختبار..." value="${esc(erFilt.q)}" autocomplete="off" />
     <select id="erf-subject" aria-label="المادة">${opt('', 'كل المواد', erFilt.subject)}${subjects.map(x => opt(x, x, erFilt.subject)).join('')}</select>
     <select id="erf-grade" aria-label="المرحلة">${opt('', 'كل المراحل', erFilt.grade)}${GRADE_ORDER.map(g => opt(g, gradeLabels[g], erFilt.grade)).join('')}</select>
-    <select id="erf-type" aria-label="نوع الاختبار">${opt('', 'كل الأنواع', erFilt.type)}${opt('diagnostic', 'تشخيصي', erFilt.type)}${opt('periodic', 'فتري', erFilt.type)}${opt('nafes', 'نافس', erFilt.type)}</select>
     <select id="erf-sem" aria-label="الفصل الدراسي">${opt('', 'كل الفصول الدراسية', erFilt.sem)}${['الفصل الدراسي الأول', 'الفصل الدراسي الثاني', ...sems].filter((x, i, a) => a.indexOf(x) === i).map(x => opt(x, x, erFilt.sem)).join('')}${erListData.some(r => !r.semester) ? opt('-', 'بدون فصل دراسي', erFilt.sem) : ''}</select>
     ${active ? '<button type="button" class="text-action-btn" id="erf-clear">مسح الفلاتر</button>' : ''}
-    ${erListData.some(r => r.exam_type === 'periodic') ? '<button type="button" class="er-absrep-btn" id="erf-absrep">🖨 تقرير الغياب</button>' : ''}
-    ${!isTeacherView() ? '<button type="button" class="er-pubres-btn" id="erf-pubres">نتائج أولياء الأمور</button>' : ''}
   </div>`;
   const ab = document.getElementById('erf-absrep');
   if (ab) ab.onclick = () => openAbsenceReport();
   const pr = document.getElementById('erf-pubres');
   if (pr) pr.onclick = async () => { const { openResultsPublisher } = await import('./results-publish.js?v=' + ASSET_VERSION); openResultsPublisher(); };
+  const au = document.getElementById('erf-audit'); if (au) au.onclick = () => openAudit();
+  const nf = document.getElementById('erf-nafes'); if (nf) nf.onclick = () => openNafesFull(nafesReps[0].id, 'overview');
+  const np = document.getElementById('erf-nafes-pg'); if (np) np.onclick = () => openNafesFull(nafesReps[0].id, 'progress');
+  fb.querySelectorAll('.er-types [data-type]').forEach(b => b.onclick = () => { erFilt.type = b.dataset.type; saveFilt(); renderSavedList(); });
   const on = (id, k, ev = 'change') => { const el = document.getElementById(id); el.addEventListener(ev, () => { erFilt[k] = el.value; saveFilt(); renderSavedList(id === 'erf-q'); }); };
-  on('erf-subject', 'subject'); on('erf-grade', 'grade'); on('erf-type', 'type'); on('erf-sem', 'sem'); on('erf-q', 'q', 'input');
+  on('erf-subject', 'subject'); on('erf-grade', 'grade'); on('erf-sem', 'sem'); on('erf-q', 'q', 'input');
   const cl = document.getElementById('erf-clear');
   if (cl) cl.onclick = () => { erFilt = { q: '', type: '', sem: '', grade: '', subject: '' }; saveFilt(); renderSavedList(); };
 }
@@ -862,7 +904,7 @@ async function healReport(rep) {
   } catch (e) { console.error('healReport', e); return { rep, removed: 0 }; }
 }
 
-async function openReport(id) {
+async function openReport(id, startTab = null) {
   const { data: data0, error } = await sb.from('exam_reports').select('*').eq('id', id).single();
   if (error || !data0) { alert('تعذر فتح التقرير'); return; }
   const healed = await healReport(data0);
@@ -875,9 +917,9 @@ async function openReport(id) {
   document.getElementById('er-detail-title').textContent = data.title;
   document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`
     + (healed.removed ? ` — دُمجت ${healed.removed === 1 ? 'ورقة مكررة' : healed.removed === 2 ? 'ورقتان مكررتان' : healed.removed + (healed.removed <= 10 ? ' أوراق مكررة' : ' ورقة مكررة')} وأُعيد حساب التقرير` : healed.recalculated ? ' — أُعيد حساب التقرير' : '');
-  showErTab('overview');
+  showErTab(startTab && startTab !== 'skills' && ER_GROUPS[startTab] ? startTab : 'overview');
   const ekb = document.getElementById('er-edit-key-btn');
-  ekb.textContent = data.raw_data && data.raw_data.models ? '↻ إعادة التصحيح بالمفتاح المحفوظ' : '✎ تعديل مفتاح الإجابة والدرجات';
+  (ekb.querySelector('span') || ekb).textContent = data.raw_data && data.raw_data.models ? 'إعادة التصحيح بالمفتاح المحفوظ' : 'تعديل مفتاح الإجابة والدرجات';
   // تقرير الجوال ينبني من الأوراق المصححة: التعديل يكون من شاشة التصحيح نفسها
   const cam = data.source === 'camera';
   ekb.classList.toggle('hidden', cam || isTeacherView());
@@ -888,9 +930,9 @@ async function openReport(id) {
     asb.classList.toggle('hidden', cam || !data.raw_data || !Array.isArray(data.raw_data.students));
     asb.onclick = async () => {
       if (asb.disabled) return;
-      const t = asb.textContent; asb.disabled = true; asb.textContent = 'جارٍ الفتح...';
+      asb.disabled = true;
       try { await openManualSheet(data); } catch (err) { alert('تعذر فتح إضافة الورقة: ' + (err.message || err)); }
-      asb.disabled = false; asb.textContent = t;
+      asb.disabled = false;
     };
   }
   const cc = document.getElementById('er-camera-continue');
@@ -903,7 +945,7 @@ async function openReport(id) {
   skTab.classList.add('hidden');
   import('./skills-analysis.js?v=' + ASSET_VERSION).then(m => m.renderSkillsPanel(data, document.getElementById('er-panel-skills'), skTab))
     // اختبار نافس: يُفتح مباشرة على تحليل المواد والمهارات والاجتياز
-    .then(ok => { if (ok && data.exam_type === 'nafes' && currentReport && currentReport.id === data.id) showErTab('skills'); })
+    .then(ok => { if (ok && (data.exam_type === 'nafes' ? !startTab || startTab === 'skills' : startTab === 'skills') && currentReport && currentReport.id === data.id) showErTab('skills'); })
     .catch(e => console.error('skills', e));
   renderReportStats(data.stats);
 }

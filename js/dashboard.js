@@ -321,6 +321,15 @@ function renderSectionTilesGrid() {
 
 /* صفحة مساحة عمل: عنوان + سطر الحالة + بطاقة لكل قسم فيها */
 export function renderWorkspacePage(groupKey, view) {
+  // «الاختبارات»: مركز موحّد لخدمات القسم وتقاريره بدل شبكة البطاقات العامة
+  if (groupKey === 'exams') {
+    view.innerHTML = '';
+    import('./exams-hub.js?v=' + ASSET_VERSION).then(m => m.renderExamsHub(view)).catch(e => { console.error('exams hub', e); renderWorkspaceGrid(groupKey, view); });
+    return;
+  }
+  renderWorkspaceGrid(groupKey, view);
+}
+function renderWorkspaceGrid(groupKey, view) {
   const g = GROUPS.find(x => x.key === groupKey);
   const list = groupTilesFor(groupKey);
   const [bg, fg] = WS_COLORS[groupKey] || ['var(--sand)', 'var(--ink)'];
