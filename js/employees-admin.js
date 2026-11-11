@@ -91,7 +91,7 @@ document.getElementById('portal-excel-upload').addEventListener('click', async (
           const res = await fetch(`${SUPABASE_URL}/functions/v1/create-user`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
-            body: JSON.stringify({ email: toLoginEmail(email), password, full_name, role }),
+            body: JSON.stringify({ email: toLoginEmail(email), password, full_name, role, school_id: currentSchoolId }),
           });
           const result = await res.json();
           if (!res.ok) { failedRows.push(`"${full_name}" — ${result.error || 'خطأ غير معروف'}`); continue; }
@@ -301,7 +301,7 @@ document.getElementById('newuser-submit').addEventListener('click', async () => 
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ email: toLoginEmail(email), password, full_name: name, role }),
+      body: JSON.stringify({ email: toLoginEmail(email), password, full_name: name, role, school_id: currentSchoolId }),
     });
     const result = await res.json();
 
