@@ -5207,3 +5207,4 @@ button.acf-box:hover{ border-color:var(--acf-blue); }
 .er-subj-card:hover{ border-color:#14325E; box-shadow:none; transform:none; }
 .er-subj-card .erc-ic{ display:none; }
 .er-subj-card .ers-main b{ color:#14325E; }
+.acf-lh-name{ font-size:18px; font-weight:800; color:var(--acf-blue); }

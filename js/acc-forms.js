@@ -4,9 +4,17 @@
  * المسودات في acc_form_docs، والشاهد في acc_evidence (kind=form، sign_state: pending ← signed).
  * ========================================================================= */
 import { FORM_DEFS, FORM_GROUPS, N } from './acc-forms-defs.js';
+import { schoolBrand } from './core.js';
 
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const SCHOOL = 'متوسطة المروج';
+// بيانات المدرسة الحالية (كل مدرسة تظهر باسمها وترويسة جهتها)
+const MUROOJ_ID = '4d02bb10-fa38-4685-8c25-56fe44f26046';
+const schoolName = () => schoolBrand.name || schoolBrand.short || '';
+const letterhead = () => (schoolBrand.authority === 'rc' || schoolBrand.id === MUROOJ_ID
+  ? { src: '/logo-rc-t.png', alt: 'الهيئة الملكية للجبيل وينبع' }
+  : { src: schoolBrand.authorityLogo || schoolBrand.logo || '', alt: schoolBrand.authorityName || schoolName() });
+// «يستخدمه»: أسماء منسوبي المروج لا تظهر لغيرها، وتبقى المسميات العامة
+const usersOf = def => (schoolBrand.id === MUROOJ_ID ? def.u : String(def.u || '').split('،').map(x => x.trim()).filter(x => ['مدير المدرسة', 'المعلمون'].includes(x)).join('، '));
 const YEAR = '1448هـ';
 const LIBS = { html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', jspdf: 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js' };
 const loadLib = k => new Promise((res, rej) => { const s = document.createElement('script'); s.src = LIBS[k]; s.onload = res; s.onerror = () => rej(new Error('تعذر تحميل مكتبة ' + k)); document.head.appendChild(s); });
@@ -60,7 +68,7 @@ function fieldHtml(f, d, edit, ctx) {
   return `<input class="acf-in" data-b="h:${k}" ${t === 'd' ? 'type="date"' : t === 'n' ? 'inputmode="decimal"' : ''} value="${esc(v)}">`;
 }
 function fieldGrid(rowsDef, d, edit, ctx, first) {
-  const rows = first ? [[['المدرسة', '_s', 'fx', SCHOOL], ['العام الدراسي', '_y', 'fx', YEAR]], ...rowsDef] : rowsDef;
+  const rows = first ? [[['المدرسة', '_s', 'fx', schoolName()], ['العام الدراسي', '_y', 'fx', YEAR]], ...rowsDef] : rowsDef;
   return `<div class="acf-grid">${rows.map(r => `<div class="acf-gr ${r.length === 1 ? 'one' : ''}">${r.map(f => `<div class="acf-gc ${f[0] ? '' : 'nolab'}">${f[0] ? `<label>${esc(f[0])}</label>` : ''}${fieldHtml(f, d, edit, ctx)}</div>`).join('')}</div>`).join('')}</div>`;
 }
 function cellHtml(b, col, ci, r, ri, edit) {
@@ -128,7 +136,7 @@ function blockHtml(b, i, d, edit, ctx) {
     default: return '';
   }
 }
-const paraText = (b, d) => esc(b.t).replace(/\{(\w+)\}/g, (_, k) => d[k] ? `<b>${esc(d[k])}</b>` : '<span class="acf-blank"></span>');
+const paraText = (b, d) => esc(b.t).replace('§', esc(schoolName())).replace(/\{(\w+)\}/g, (_, k) => d[k] ? `<b>${esc(d[k])}</b>` : '<span class="acf-blank"></span>');
 function signsHtml(def, d, edit) {
   const s = d._sign || {};
   return `<div class="acf-signs n${def.s.length}">${def.s.map((t, k) => `<div class="acf-sign"><header>${esc(t)}</header>
@@ -138,8 +146,8 @@ function signsHtml(def, d, edit) {
 export function paperHtml(no, d, edit) {
   const def = FORM_DEFS[no], ctx = { no };
   return `<article class="acf-paper ${edit ? 'edit' : 'print'}" data-form="${no}">
-    <header class="acf-lh"><img src="/logo-rc-t.png" alt="الهيئة الملكية للجبيل وينبع"></header>
-    <div class="acf-title"><span class="acf-no" dir="ltr">ن${no}</span><div><h3>${esc(def.t)}</h3><p>${esc(def.d)}</p><em>يستخدمه: ${esc(def.u)}</em></div>${def.secret ? '<b class="acf-secret">سري</b>' : ''}</div>
+    <header class="acf-lh">${letterhead().src ? `<img src="${letterhead().src}" alt="${esc(letterhead().alt)}">` : `<b class="acf-lh-name">${esc(schoolName())}</b>`}</header>
+    <div class="acf-title"><span class="acf-no" dir="ltr">ن${no}</span><div><h3>${esc(def.t)}</h3><p>${esc(def.d)}</p>${usersOf(def) ? `<em>يستخدمه: ${esc(usersOf(def))}</em>` : ''}</div>${def.secret ? '<b class="acf-secret">سري</b>' : ''}</div>
     ${fieldGrid(def.h, d, edit, ctx, true)}
     ${def.b.map((b, i) => `<section class="acf-blk">${blockHtml(b, i, d, edit, ctx)}</section>`).join('')}
     ${signsHtml(def, d, edit)}
@@ -382,7 +390,7 @@ export function libraryHtml(q = '') {
       <em>${myForms.has(n) ? '<i class="tag">في مؤشراتك</i>' : ''}${c ? `<i class="tag d">${c} ${c === 1 ? 'مسودة' : 'مسودات'}</i>` : ''}</em></button>`; };
   const evState = id => { const e = X.D.evs.find(x => x.form_doc === id); if (!e) return '<i class="st">مسودة</i>'; const i = X.D.inds.find(x => x.id === e.indicator_id); return e.sign_state === 'pending' ? `<i class="st wait">بانتظار التوقيع · ${esc(i ? i.code : '')}</i>` : `<i class="st ok">في المؤشر ${esc(i ? i.code : '')}</i>`; };
   return `<div class="acf-lib">
-    <div class="acf-libhead"><div><h3>مكتبة النماذج</h3><p>26 نموذجًا رسميًا من حقيبة التميّز على ترويسة الهيئة الملكية: عبّئ إلكترونيًا، والحسابات تلقائية، ثم اطبع ووقّع توقيعًا حيًا وارفع النسخة الموقعة إلى المؤشر.</p></div>
+    <div class="acf-libhead"><div><h3>مكتبة النماذج</h3><p>26 نموذجًا رسميًا من حقيبة التميّز على ترويسة المدرسة: عبّئ إلكترونيًا، والحسابات تلقائية، ثم اطبع ووقّع توقيعًا حيًا وارفع النسخة الموقعة إلى المؤشر.</p></div>
       <input type="search" class="acx-in" id="acf-q" placeholder="ابحث عن نموذج…" value="${esc(q)}"></div>
     <ol class="acf-steps"><li><b>عبّئ</b><span>إلكترونيًا مع الحفظ التلقائي</span></li><li><b>احفظ في مؤشر</b><span>يظهر بانتظار التوقيع</span></li><li><b>اطبع ووقّع</b><span>توقيع حي بالقلم</span></li><li><b>صوّر وارفع</b><span>تُدمج الصفحات PDF</span></li></ol>
     ${docs.length && !q ? `<section class="acf-sec"><h4>نماذجي <i>${docs.length}</i></h4><div class="acf-docs">${docs.map(x => `<div class="acf-doc"><button type="button" data-opendoc="${x.id}"><span class="acf-cn sm" dir="ltr">ن${x.form_no}</span><b>${esc(x.title || FORM_DEFS[x.form_no].t)}</b><small>${new Date(x.updated_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short' })} ${evState(x.id)}</small></button>${X.D.evs.some(e => e.form_doc === x.id) ? '' : `<button type="button" class="del" data-deldoc="${x.id}" title="حذف">🗑</button>`}</div>`).join('')}</div></section>` : ''}
