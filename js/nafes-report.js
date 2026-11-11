@@ -22,7 +22,7 @@ const SUBJ_COLORS = ['#3B5BDB', '#0CA678', '#E8590C', '#AE3EC9', '#1098AD', '#F0
 
 let D = null;          // بيانات التقرير المحسوبة
 let P = { ready: false, tests: [], off: new Set() };   // التطور عبر الاختبارات
-let V = { tab: ['overview', 'skills', 'students', 'teachers', 'progress'].includes(startTab) ? startTab : 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: null, teacher: null };
+let V = { tab: 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: null, teacher: null };
 
 /* ---------- المستويات ---------- */
 function levels(passPct) {
