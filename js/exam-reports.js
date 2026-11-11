@@ -917,7 +917,8 @@ async function openReport(id, startTab = null) {
   document.getElementById('er-detail-title').textContent = data.title;
   document.getElementById('er-detail-sub').textContent = `${data.subject_name || '-'} — ${data.grade_level || '-'} — ${data.semester || '-'} — ${data.students_count} طالب`
     + (healed.removed ? ` — دُمجت ${healed.removed === 1 ? 'ورقة مكررة' : healed.removed === 2 ? 'ورقتان مكررتان' : healed.removed + (healed.removed <= 10 ? ' أوراق مكررة' : ' ورقة مكررة')} وأُعيد حساب التقرير` : healed.recalculated ? ' — أُعيد حساب التقرير' : '');
-  showErTab(startTab && startTab !== 'skills' && ER_GROUPS[startTab] ? startTab : 'overview');
+  showErTab(startTab && startTab !== 'skills' && ER_GROUPS[startTab] ? startTab : 'brief');
+  { const bp = document.getElementById('er-panel-brief'); bp.innerHTML = ''; import('./exam-summary.js?v=' + ASSET_VERSION).then(m => { if (currentReport && currentReport.id === data.id) m.renderExamSummary(data, bp); }).catch(e => console.error('summary', e)); }
   const ekb = document.getElementById('er-edit-key-btn');
   (ekb.querySelector('span') || ekb).textContent = data.raw_data && data.raw_data.models ? 'إعادة التصحيح بالمفتاح المحفوظ' : 'تعديل مفتاح الإجابة والدرجات';
   // تقرير الجوال ينبني من الأوراق المصححة: التعديل يكون من شاشة التصحيح نفسها
@@ -1295,10 +1296,10 @@ document.getElementById('er-back-to-list').addEventListener('click', () => {
 });
 
 // أربعة تبويبات، كل تبويب يجمع أكثر من لوحة: نظرة عامة / توزيع الدرجات / تحليل الأسئلة / المهارات والعلاج
-const ER_GROUPS = { overview: ['analysis'], grades: ['dist', 'hist'], questions: ['items', 'summary', 'itemstats'], skills: ['skills'] };
-const ER_PANELS = ['dist', 'hist', 'items', 'summary', 'itemstats', 'analysis', 'skills'];
+const ER_GROUPS = { brief: ['brief'], overview: ['analysis'], grades: ['dist', 'hist'], questions: ['items', 'summary', 'itemstats'], skills: ['skills'] };
+const ER_PANELS = ['brief', 'dist', 'hist', 'items', 'summary', 'itemstats', 'analysis', 'skills'];
 function showErTab(tab) {
-  const g = ER_GROUPS[tab] ? tab : (Object.keys(ER_GROUPS).find(k => ER_GROUPS[k].includes(tab)) || 'overview');
+  const g = ER_GROUPS[tab] ? tab : (Object.keys(ER_GROUPS).find(k => ER_GROUPS[k].includes(tab)) || 'brief');
   Object.keys(ER_GROUPS).forEach(k => document.getElementById(`er-tab-${k}`).classList.toggle('active', k === g));
   ER_PANELS.forEach(p => document.getElementById(`er-panel-${p}`).classList.toggle('hidden', !ER_GROUPS[g].includes(p)));
 }
