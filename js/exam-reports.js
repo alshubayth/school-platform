@@ -163,7 +163,7 @@ async function runIntent(it) {
   } catch (e) { console.error('intent', e); }
 }
 // التقرير الشامل لاختبار نافس مباشرة (دون المرور بتبويب المهارات)
-async function openNafesFull(id, tab = 'overview') {
+async function openNafesFull(id, tab = 'brief') {
   const { data: rep0, error } = await sb.from('exam_reports').select('*').eq('id', id).single();
   if (error || !rep0) { alert('تعذر فتح تقرير نافس'); return; }
   const rd = rep0.raw_data || {};
@@ -764,7 +764,7 @@ function renderFilterBar() {
   const pr = document.getElementById('erf-pubres');
   if (pr) pr.onclick = async () => { const { openResultsPublisher } = await import('./results-publish.js?v=' + ASSET_VERSION); openResultsPublisher(); };
   const au = document.getElementById('erf-audit'); if (au) au.onclick = () => openAudit();
-  const nf = document.getElementById('erf-nafes'); if (nf) nf.onclick = () => openNafesFull(nafesReps[0].id, 'overview');
+  const nf = document.getElementById('erf-nafes'); if (nf) nf.onclick = () => openNafesFull(nafesReps[0].id, 'brief');
   const np = document.getElementById('erf-nafes-pg'); if (np) np.onclick = () => openNafesFull(nafesReps[0].id, 'progress');
   fb.querySelectorAll('.er-types [data-type]').forEach(b => b.onclick = () => { erFilt.type = b.dataset.type; saveFilt(); renderSavedList(); });
   const on = (id, k, ev = 'change') => { const el = document.getElementById(id); el.addEventListener(ev, () => { erFilt[k] = el.value; saveFilt(); renderSavedList(id === 'erf-q'); }); };

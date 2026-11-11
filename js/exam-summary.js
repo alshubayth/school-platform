@@ -124,10 +124,17 @@ export function renderExamSummary(rep, panel) {
     </section>
   </article>`;
 
-  panel.querySelector('#xs-print').onclick = () => {
-    document.body.classList.add('xs-printing');
-    const done = () => { document.body.classList.remove('xs-printing'); window.removeEventListener('afterprint', done); };
-    window.addEventListener('afterprint', done);
-    window.print();
-  };
+  panel.querySelector('#xs-print').onclick = () => printSheet(panel.querySelector('.xs-sheet'));
+}
+
+// طباعة ورقة الملخص وحدها: تُنسخ إلى جذر مؤقت ويُخفى ما عداها
+export function printSheet(sheet) {
+  if (!sheet) return;
+  let root = document.getElementById('xs-print-root');
+  if (!root) { root = document.createElement('div'); root.id = 'xs-print-root'; document.body.appendChild(root); }
+  root.innerHTML = ''; root.appendChild(sheet.cloneNode(true));
+  document.body.classList.add('xs-printing');
+  const done = () => { document.body.classList.remove('xs-printing'); root.innerHTML = ''; window.removeEventListener('afterprint', done); };
+  window.addEventListener('afterprint', done);
+  window.print();
 }

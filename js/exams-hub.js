@@ -136,18 +136,18 @@ function draw(view, D) {
       <header class="xh-h"><h2>رحلة الاختبار</h2><span>ثلاث مراحل متتابعة من إعداد الورقة إلى قراءة النتيجة</span></header>
       <div class="xh-path">
         ${allowed('exam-prep') ? `<article class="xh-stage s1">
-          <div class="xh-stage-h"><i>١</i><div><h3>إعداد الاختبار</h3><p>نموذج الإجابة والمهارات وطباعة الأوراق</p></div></div>
+          <div class="xh-stage-h"><i>1</i><div><h3>إعداد الاختبار</h3><p>نموذج الإجابة والمهارات وطباعة الأوراق</p></div></div>
           ${link('prep', I.sheet, 'ورقة إجابة ونموذج إجابة', 'ورقة تظليل لكل طالب برقمه')}
           ${link('prep-paper', I.paper, 'ورقة أسئلة مع التظليل', 'الأسئلة والتظليل في ورقة واحدة')}
         </article>` : ''}
         ${allowed('exam-grading') ? `<article class="xh-stage s2">
-          <div class="xh-stage-h"><i>٢</i><div><h3>التصحيح</h3><p>اختر الطريقة المناسبة لأوراقك</p></div></div>
+          <div class="xh-stage-h"><i>2</i><div><h3>التصحيح</h3><p>اختر الطريقة المناسبة لأوراقك</p></div></div>
           ${link('grade', I.phone, 'التصحيح بالجوال', 'صوّر ورقة الطالب بالكاميرا')}
           ${teacher ? '' : link('grade-upload', I.upload, 'رفع ملف Remark', 'ملف الإكسل الناتج من الماسح')}
           ${link('grade-manual', I.pen, 'إدخال يدوي', 'أضف ورقة طالب لاختبار مصحَّح')}
         </article>` : ''}
         ${allowed('exam-reports') ? `<article class="xh-stage s3">
-          <div class="xh-stage-h"><i>٣</i><div><h3>النتائج والتقارير</h3><p>الدرجات والتحليل والنشر</p></div></div>
+          <div class="xh-stage-h"><i>3</i><div><h3>النتائج والتقارير</h3><p>الدرجات والتحليل والنشر</p></div></div>
           ${link('results', I.list, 'نتائج الاختبارات', reps.length ? `${num(reps.length)} اختبارًا مرتبة حسب المادة` : 'تظهر هنا بعد التصحيح')}
           ${teacher ? '' : link('publish', I.family, 'النشر لأولياء الأمور', 'رابط النتائج وإشعارات الدرجات')}
         </article>` : ''}
@@ -163,7 +163,7 @@ function draw(view, D) {
             <div class="xh-shelf-h"><b>تقارير اختبار محدد</b>
               ${reps.length ? `<label class="xh-pick"><span>الاختبار</span><select id="xh-pick" aria-label="اختر الاختبار">${pickHtml}</select></label>` : ''}</div>
             ${reps.length ? `<div class="xh-reps">
-              ${rep('tab-overview', I.eye, 'نظرة عامة', 'المتوسط والمتفوقون والمتعثرون', 't-teal')}
+              ${rep('tab-brief', I.eye, 'الملخص', 'الخلاصة في صفحة واحدة للطباعة', 't-teal')}
               ${rep('tab-grades', I.bars, 'توزيع الدرجات', 'التقديرات والمدرج التكراري', 't-blue')}
               ${rep('tab-questions', I.target, 'تحليل الأسئلة', 'الصعوبة والتمييز والمشتتات', 't-purple')}
               ${rep('tab-skills', I.heal, 'المهارات والعلاج', 'إتقان المهارات والخطة العلاجية', 't-gold')}
@@ -214,7 +214,7 @@ function draw(view, D) {
     publish: () => go('exam-reports', null, { act: 'publish' }),
     absence: () => go('exam-reports', null, { act: 'absence' }),
     audit: () => go('exam-reports', null, { act: 'audit' }),
-    nafes: () => go('exam-reports', null, { act: 'nafes', id: nafes[0].id, tab: 'overview' }),
+    nafes: () => go('exam-reports', null, { act: 'nafes', id: nafes[0].id, tab: 'brief' }),
     'nafes-progress': () => go('exam-reports', null, { act: 'nafes', id: nafes[0].id, tab: 'progress' }),
     'nafes-students': () => go('exam-reports', null, { act: 'nafes', id: nafes[0].id, tab: 'students' }),
     'final-exams': () => go('exams'), 'final-tracking': () => go('tracking'),

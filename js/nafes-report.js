@@ -187,7 +187,7 @@ function hbars(rows, opts = {}) {
 }
 
 /* ---------- الواجهة ---------- */
-export async function openNafesReport(rep, key, startTab = 'overview') {
+export async function openNafesReport(rep, key, startTab = 'brief') {
   let ov = document.getElementById('nr-ov');
   if (!ov) { ov = document.createElement('div'); ov.id = 'nr-ov'; ov.className = 'nr-ov'; document.body.appendChild(ov); }
   injectCss();
@@ -195,7 +195,7 @@ export async function openNafesReport(rep, key, startTab = 'overview') {
   ov.classList.remove('hidden'); document.body.classList.add('nr-lock');
   try { D = await build(rep, key); } catch (e) { console.error(e); D = null; }
   if (!D) { ov.innerHTML = `<div class="nr-load"><p>تعذر إعداد التقرير، فلا توجد أوراق طلاب صالحة.</p><button type="button" class="nr-btn" data-close>إغلاق</button></div>`; ov.querySelector('[data-close]').onclick = close; return; }
-  V = { tab: ['overview', 'skills', 'students', 'teachers', 'progress'].includes(startTab) ? startTab : 'overview', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: D.parts[0].s, teacher: null };
+  V = { tab: ['brief', 'overview', 'skills', 'students', 'teachers', 'progress'].includes(startTab) ? startTab : 'brief', sec: 'all', q: '', pass: 'all', sort: 'rank', subj: D.parts[0].s, teacher: null };
   P = { ready: false, err: null, tests: [], off: new Set(), subj: 'all', cmp: 'prev', view: 'school', filter: 'all', st: null, q: '' };
   draw();
 }
@@ -205,13 +205,13 @@ const studsOf = () => D.students.filter(s => V.sec === 'all' || s.section === V.
 
 function draw() {
   const ov = document.getElementById('nr-ov');
-  const TABS = [['overview', 'لوحة النتائج'], ['skills', 'المهارات والأسئلة'], ['students', 'الطلاب'], ['teachers', 'المعلمون'], ['progress', 'التطور عبر الاختبارات']];
+  const TABS = [['brief', 'الملخص'], ['overview', 'لوحة النتائج'], ['skills', 'المهارات والأسئلة'], ['students', 'الطلاب'], ['teachers', 'المعلمون'], ['progress', 'التطور عبر الاختبارات']];
   if (V.tab === 'progress' && !P.ready) { loadProgress().then(draw); }
-  const body = V.tab === 'progress' ? viewProgress() : V.tab === 'skills' ? viewSkills() : V.tab === 'students' ? viewStudents() : V.tab === 'teachers' ? viewTeachers() : viewOverview();
+  const body = V.tab === 'brief' ? viewBrief() : V.tab === 'progress' ? viewProgress() : V.tab === 'skills' ? viewSkills() : V.tab === 'students' ? viewStudents() : V.tab === 'teachers' ? viewTeachers() : viewOverview();
   ov.innerHTML = `<div class="nr">
     <header class="nr-top">
       <div class="nr-ttl"><span class="nr-badge">نافس</span><div><h2>التقرير الشامل لاختبار نافس</h2><p>${esc(printOrgName())} · ${esc(D.gradeTxt)} · ${D.students.length} طالبًا · الاجتياز ${D.passPct}% في كل مادة</p></div></div>
-      <div class="nr-acts"><button type="button" class="nr-btn ghost" id="nr-print">🖨 طباعة هذا القسم</button><button type="button" class="nr-btn pdf" id="nr-pdf">⬇ PDF</button><button type="button" class="nr-x" data-close aria-label="إغلاق">✕</button></div>
+      <div class="nr-acts">${V.tab === 'brief' ? '' : '<button type="button" class="nr-btn ghost" id="nr-print">طباعة هذا القسم</button><button type="button" class="nr-btn pdf" id="nr-pdf">تنزيل PDF</button>'}<button type="button" class="nr-x" data-close aria-label="إغلاق">✕</button></div>
       <nav class="nr-tabs">${TABS.map(([k, t]) => `<button type="button" data-tab="${k}" class="${V.tab === k ? 'on' : ''}">${t}</button>`).join('')}</nav>
     </header>
     ${V.tab !== 'teachers' && !(V.tab === 'progress' && P.view !== 'students') ? `<div class="nr-secs"><span>الفصل</span>${['all', ...D.sections].map(x => `<button type="button" data-sec="${esc(x)}" class="${V.sec === x ? 'on' : ''}">${x === 'all' ? 'كل الفصول' : 'فصل ' + esc(x)}</button>`).join('')}</div>` : ''}
@@ -224,6 +224,7 @@ function draw() {
   ov.querySelectorAll('[data-pass]').forEach(b => b.onclick = () => { V.pass = b.dataset.pass; draw(); });
   const so = ov.querySelector('#nr-sort'); if (so) so.onchange = () => { V.sort = so.value; draw(); };
   bindProgress(ov);
+  const xp = ov.querySelector('#xs-print'); if (xp) xp.onclick = () => import('./exam-summary.js?v=' + ASSET_VERSION).then(m => m.printSheet(ov.querySelector('.xs-sheet')));
   const q = ov.querySelector('#nr-q'); if (q) q.oninput = () => { V.q = q.value; const pos = q.selectionStart; draw(); const n = ov.querySelector('#nr-q'); n.focus(); n.setSelectionRange(pos, pos); };
   ov.querySelectorAll('[data-st]').forEach(b => b.onclick = () => openCert(b.dataset.st));
   ov.querySelectorAll('[data-tch]').forEach(b => b.onclick = () => { V.teacher = V.teacher === b.dataset.tch ? null : b.dataset.tch; draw(); const el = ov.querySelector('.nr-tdetail'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
@@ -232,6 +233,59 @@ function draw() {
   both('-teacher', m => { const t = D.teachers.find(x => x.id + '|' + x.subj === V.teacher); if (t) printDoc('تقرير المعلم - ' + t.name, teacherDetail(t, true), false, m); });
   both('-teachers', m => printDoc('تقارير المعلمين', D.teachers.map(t => `<div class="nr-page">${teacherDetail(t, true)}</div>`).join(''), true, m));
   both('', m => printDoc((m === 'pdf' ? 'تقرير نافس - ' : '') + TABS.find(t => t[0] === V.tab)[1], ov.querySelector('#nr-main').innerHTML, false, m));
+}
+
+/* ---------- الملخص: صفحة واحدة ---------- */
+function viewBrief() {
+  const studs = studsOf(); if (!studs.length) return '<div class="nr-empty">لا يوجد طلاب</div>';
+  const Pc = x => `${Math.round(x || 0)}%\u200E`;
+  const cnt = n => (n === 1 ? 'طالب واحد' : n === 2 ? 'طالبان' : n >= 3 && n <= 10 ? `${n} طلاب` : `${n} طالبًا`);
+  const all = groupStats(studs), n = all.n;
+  const subj = D.parts.map(p => ({ p, g: groupStats(studs, p.s) })).sort((a, b) => b.g.mean - a.g.mean);
+  const one = studs.filter(s => !s.passed && s.fails.length === 1).length;
+  const secs = V.sec === 'all' ? D.sections.map(x => { const ss = studs.filter(s => s.section === x); return { x, g: groupStats(ss) }; }).filter(r => r.g.n).sort((a, b) => b.g.passP - a.g.passP || b.g.mean - a.g.mean) : [];
+  const sk = D.skills.map(g => ({ g, m: skillMean(g, studs) })).filter(x => x.m != null).sort((a, b) => a.m - b.m).slice(0, 5);
+  const best = subj[0], worst = subj[subj.length - 1];
+  const verdict = `اجتاز جميع المواد ${cnt(all.pass)} من ${n} بنسبة ${Pc(all.passP)}، ومتوسط الأداء ${Pc(all.mean)}.`;
+  const note = subj.length > 1 ? `أعلى المواد ${esc(best.p.s)} بمتوسط ${Pc(best.g.mean)}، وأدناها ${esc(worst.p.s)} بمتوسط ${Pc(worst.g.mean)}.` : '';
+  const todo = [];
+  if (one) todo.push(`البدء بـ ${cnt(one)} تعثروا في مادة واحدة فقط، فهم الأقرب إلى الاجتياز.`);
+  if (sk.length) todo.push(`تركيز المراجعة على أضعف المهارات: ${sk.slice(0, 3).map(x => `${esc(x.g.k)} (${esc(x.g.s)})`).join('، ')}.`);
+  if (subj.length > 1 && worst.g.passP < 60) todo.push(`زيادة التدريب في ${esc(worst.p.s)}، فنسبة الاجتياز فيها ${Pc(worst.g.passP)}.`);
+  if (secs.length > 1 && secs[0].g.passP - secs[secs.length - 1].g.passP >= 10) todo.push(`دعم فصل ${esc(secs[secs.length - 1].x)}، فنسبة الاجتياز فيه ${Pc(secs[secs.length - 1].g.passP)} مقابل ${Pc(secs[0].g.passP)} في فصل ${esc(secs[0].x)}.`);
+  if (!todo.length) todo.push('النتائج مطمئنة، ولا يظهر ما يستدعي إجراءً علاجيًا عامًّا.');
+  const date = (() => { try { return new Date(D.rep.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } })();
+  const bar = (v, low) => `<td class="bar"><span><i class="${low ? 'low' : ''}" style="width:${Math.max(3, Math.min(100, v || 0))}%"></i></span></td>`;
+  const meta = [['الصف', D.gradeTxt], ['النطاق', V.sec === 'all' ? 'كل الفصول' : 'فصل ' + V.sec], ['عدد الأسئلة', D.n], ['حد الاجتياز', `${D.passPct}% في كل مادة`], ['التاريخ', date]].filter(([, v]) => v);
+  return `<div class="xs-bar"><button type="button" class="xs-print" id="xs-print">طباعة الملخص</button></div>
+  <article class="xs-sheet">
+    <header class="xs-head"><p class="xs-org">${esc(printOrgName())}</p><h2>ملخص نتائج اختبار نافس</h2>
+      <dl class="xs-meta">${meta.map(([k, v]) => `<div><dt>${k}</dt><dd>${esc(v)}</dd></div>`).join('')}</dl></header>
+    <p class="xs-verdict">${verdict}${note ? `<span>${note}</span>` : ''}</p>
+    <div class="xs-nums">
+      <div><b>${Math.round(all.passP)}<i>%</i></b><span>نسبة الاجتياز الكلي</span><small>${all.pass} من ${n}</small></div>
+      <div><b>${Math.round(all.mean)}<i>%</i></b><span>متوسط الأداء</span><small>الوسيط ${Pc(all.med)}</small></div>
+      <div><b>${n - all.pass}</b><span>لم يجتازوا</span><small>${Pc(100 - all.passP)} من الطلاب</small></div>
+      <div><b>${one}</b><span>تعثروا في مادة واحدة</span><small>الأقرب إلى الاجتياز</small></div>
+    </div>
+    <div class="xs-two">
+      <section class="xs-sec"><h3>المواد</h3>
+        <table class="xs-t"><thead><tr><th>المادة</th><th class="n">اجتازوا</th><th colspan="2">المتوسط</th></tr></thead>
+        <tbody>${subj.map(x => `<tr><td>${esc(x.p.s)}</td><td class="n">${Pc(x.g.passP)}</td><td class="n">${Pc(x.g.mean)}</td>${bar(x.g.mean, x.g.mean < D.passPct)}</tr>`).join('')}</tbody></table></section>
+      ${secs.length > 1 ? `<section class="xs-sec"><h3>الفصول</h3>
+        <table class="xs-t"><thead><tr><th>الفصل</th><th class="c">الطلاب</th><th class="n">المتوسط</th><th colspan="2">اجتازوا</th></tr></thead>
+        <tbody>${secs.map(r => `<tr><td>${esc(r.x)}</td><td class="c">${r.g.n}</td><td class="n">${Pc(r.g.mean)}</td><td class="n">${Pc(r.g.passP)}</td>${bar(r.g.passP, r.g.passP < 50)}</tr>`).join('')}</tbody></table></section>` : ''}
+    </div>
+    <div class="xs-two">
+      ${sk.length ? `<section class="xs-sec"><h3>أضعف المهارات</h3>
+        <table class="xs-t"><thead><tr><th>المهارة</th><th colspan="2">نسبة الإتقان</th></tr></thead>
+        <tbody>${sk.map(x => `<tr><td>${esc(x.g.k)}<small>${esc(x.g.s)}</small></td><td class="n">${Pc(x.m)}</td>${bar(x.m, x.m < D.passPct)}</tr>`).join('')}</tbody></table></section>` : ''}
+      <section class="xs-sec"><h3>الأعلى درجة</h3>
+        <table class="xs-t"><thead><tr><th>الطالب</th><th class="c">الفصل</th><th class="n">النسبة</th></tr></thead>
+        <tbody>${[...studs].sort((a, b) => b.pct - a.pct).slice(0, 5).map(s => `<tr><td>${esc(s.name)}</td><td class="c">${esc(s.section)}</td><td class="n">${Pc(s.pct)}</td></tr>`).join('')}</tbody></table></section>
+    </div>
+    <section class="xs-sec xs-todo"><h3>ما يُقترح عمله</h3><ol>${todo.map(t => `<li>${t}</li>`).join('')}</ol></section>
+  </article>`;
 }
 
 /* ---------- لوحة النتائج ---------- */
