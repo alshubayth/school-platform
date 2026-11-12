@@ -193,12 +193,13 @@ export function openFormEditor({ no, doc = null, ind = null, onClose }) {
   const def = FORM_DEFS[no]; if (!def) return;
   const st = { no, id: doc ? doc.id : null, d: doc ? structuredClone(doc.data || {}) : defaultsFor(no, ind), ind: doc ? doc.indicator_id : (ind && ind.id) || null, dirty: false, saving: null, tm: null };
   const ev = st.id ? X.D.evs.find(e => e.form_doc === st.id) : null;
-  const locked = ev && !['draft', 'returned'].includes(ev.status);
+  const foreign = !!(doc && doc.created_by && doc.created_by !== X.currentUserId && !X.isPrincipal());
+  const locked = foreign || (ev && !['draft', 'returned'].includes(ev.status));
   const wrap = document.createElement('div'); wrap.className = 'acf-ed';
   wrap.innerHTML = `<div class="acf-bar"><button type="button" class="acf-b ghost" data-close>→ رجوع</button><div class="acf-bt"><b>ن${no} · ${esc(def.t)}</b><small id="acf-state">${st.id ? 'محفوظ' : 'مسودة جديدة — تُحفظ تلقائيًا'}</small></div>
     <div class="acf-acts"><button type="button" class="acf-b ghost" data-print title="طباعة">🖨<span> طباعة</span></button><button type="button" class="acf-b ghost" data-pdf title="تنزيل PDF">⬇<span> PDF</span></button>
     ${ev ? `<span class="acf-linked">مرتبط بالمؤشر ${esc((X.D.inds.find(i => i.id === ev.indicator_id) || {}).code || '')}</span>` : '<button type="button" class="acf-b" data-toind>📌 حفظ في مؤشر</button>'}</div></div>
-    ${locked ? '<div class="acf-lockmsg">🔒 هذا النموذج مرسل للمراجعة؛ يمكنك الاطلاع والطباعة فقط.</div>' : ''}
+    ${locked ? `<div class="acf-lockmsg">${foreign ? 'هذا النموذج عبّأه ' + esc(X.nameOf(doc.created_by)) + '؛ يمكنك الاطلاع والطباعة فقط.' : 'هذا النموذج مرسل للمراجعة؛ يمكنك الاطلاع والطباعة فقط.'}</div>` : ''}
     <div class="acf-stage">${paperHtml(no, st.d, !locked)}</div>`;
   document.body.appendChild(wrap); document.documentElement.classList.add('acf-open');
   const paper = () => wrap.querySelector('.acf-paper');
@@ -246,7 +247,7 @@ export function openFormEditor({ no, doc = null, ind = null, onClose }) {
     if (t.hasAttribute('data-close')) { await save(); close(); return; }
     if (t.hasAttribute('data-print')) { await save(); printForm(no, st.d); return; }
     if (t.hasAttribute('data-pdf')) { t.disabled = true; try { await save(); await downloadPdf(no, st.d); } catch (er) { X.toast(er.message || 'تعذر إنشاء الملف', true); } t.disabled = false; return; }
-    if (t.hasAttribute('data-toind')) { st.dirty = true; const id = await save(); if (!id) return; pickIndicator(no, st, () => { close(); }); }
+    if (t.hasAttribute('data-toind')) { if (foreign) return; st.dirty = true; const id = await save(); if (!id) return; pickIndicator(no, st, () => { close(); }); }
   });
   wrap.addEventListener('change', async e => {
     const inp = e.target.closest('[data-addph]'); if (!inp) return;
@@ -383,7 +384,13 @@ export function uploadSigned(e, after) {
 /* =================== مكتبة النماذج =================== */
 export function libraryHtml(q = '') {
   const myForms = new Set(X.D.inds.filter(i => !i.not_applicable && X.canUpload(i)).flatMap(i => X.cardOf(i).forms || []));
-  const docs = (X.D.formDocs || []).filter(x => x.created_by === X.currentUserId);
+  const all = X.D.formDocs || [];
+  const mine = all.filter(x => x.created_by === X.currentUserId);
+  const docs = mine;
+  const canAll = X.seesAllForms() && all.some(x => x.created_by !== X.currentUserId);
+  if (!canAll) LS = 'mine';
+  const shown = LS === 'all' ? all : mine;
+  if (q) LV = 'new'; else if (!LV) LV = shown.length || canAll ? 'filled' : 'new';
   const match = n => !q || FORM_DEFS[n].t.includes(q) || FORM_DEFS[n].d.includes(q) || ('ن' + n) === q;
   const card = n => { const f = FORM_DEFS[n]; const c = docs.filter(x => x.form_no === n).length;
     return `<button type="button" class="acf-card ${myForms.has(n) ? 'mine' : ''}" data-newform="${n}"><span class="acf-cn" dir="ltr">ن${n}</span><b>${esc(f.t)}</b><small>${esc(f.d)}</small>
@@ -392,15 +399,31 @@ export function libraryHtml(q = '') {
   return `<div class="acf-lib">
     <div class="acf-libhead"><div><h3>مكتبة النماذج</h3><p>26 نموذجًا رسميًا من حقيبة التميّز على ترويسة المدرسة: عبّئ إلكترونيًا، والحسابات تلقائية، ثم اطبع ووقّع توقيعًا حيًا وارفع النسخة الموقعة إلى المؤشر.</p></div>
       <input type="search" class="acx-in" id="acf-q" placeholder="ابحث عن نموذج…" value="${esc(q)}"></div>
-    <ol class="acf-steps"><li><b>عبّئ</b><span>إلكترونيًا مع الحفظ التلقائي</span></li><li><b>احفظ في مؤشر</b><span>يظهر بانتظار التوقيع</span></li><li><b>اطبع ووقّع</b><span>توقيع حي بالقلم</span></li><li><b>صوّر وارفع</b><span>تُدمج الصفحات PDF</span></li></ol>
-    ${docs.length && !q ? `<section class="acf-sec"><h4>نماذجي <i>${docs.length}</i></h4><div class="acf-docs">${docs.map(x => `<div class="acf-doc"><button type="button" data-opendoc="${x.id}"><span class="acf-cn sm" dir="ltr">ن${x.form_no}</span><b>${esc(x.title || FORM_DEFS[x.form_no].t)}</b><small>${new Date(x.updated_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short' })} ${evState(x.id)}</small></button>${X.D.evs.some(e => e.form_doc === x.id) ? '' : `<button type="button" class="del" data-deldoc="${x.id}" title="حذف">🗑</button>`}</div>`).join('')}</div></section>` : ''}
-    ${FORM_GROUPS.map(g => { const ns = g.n.filter(match); return ns.length ? `<section class="acf-sec"><h4>${esc(g.t)}</h4><div class="acf-cards">${ns.map(card).join('')}</div></section>` : ''; }).join('') || '<div class="acx-empty sm">لا يوجد نموذج بهذا الاسم</div>'}
+    <div class="acf-views" role="tablist"><button type="button" role="tab" data-lv="filled" class="${LV === 'filled' ? 'on' : ''}">النماذج المعبأة <i>${canAll ? all.length : mine.length}</i></button><button type="button" role="tab" data-lv="new" class="${LV === 'new' ? 'on' : ''}">تعبئة نموذج جديد</button></div>
+    ${LV === 'new' ? `<ol class="acf-steps"><li><b>عبّئ</b><span>إلكترونيًا مع الحفظ التلقائي</span></li><li><b>احفظ في مؤشر</b><span>يظهر بانتظار التوقيع</span></li><li><b>اطبع ووقّع</b><span>توقيع حي بالقلم</span></li><li><b>صوّر وارفع</b><span>تُدمج الصفحات PDF</span></li></ol>` : ''}
+    ${LV === 'filled' ? filledHtml(mine, all, evState) : ''}
+    ${LV === 'new' ? (FORM_GROUPS.map(g => { const ns = g.n.filter(match); return ns.length ? `<section class="acf-sec"><h4>${esc(g.t)}</h4><div class="acf-cards">${ns.map(card).join('')}</div></section>` : ''; }).join('') || '<div class="acx-empty sm">لا يوجد نموذج بهذا الاسم</div>') : ''}
   </div>`;
 }
+let LV = null, LS = 'mine'; // العرض (معبأة/جديد) ونطاق المعبأة (نماذجي/كل المدرسة)
+function filledHtml(mine, all, evState) {
+  const canAll = X.seesAllForms() && all.some(x => x.created_by !== X.currentUserId);
+  const list = LS === 'all' && canAll ? all : mine;
+  const when = d => new Date(d).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short' });
+  return `<section class="acf-sec">
+    ${canAll ? `<div class="acf-scope"><button type="button" data-ls="mine" class="${LS === 'mine' ? 'on' : ''}">نماذجي <i>${mine.length}</i></button><button type="button" data-ls="all" class="${LS === 'all' ? 'on' : ''}">كل نماذج المدرسة <i>${all.length}</i></button></div>` : ''}
+    ${list.length ? `<div class="acf-flist">${list.map(x => { const own = x.created_by === X.currentUserId; return `<div class="acf-frow"><button type="button" data-opendoc="${x.id}">
+      <span class="acf-cn sm" dir="ltr">ن${x.form_no}</span><span class="acf-fname"><b>${esc(x.title || FORM_DEFS[x.form_no].t)}</b><small>${own ? '' : esc(X.nameOf(x.created_by)) + ' · '}آخر تعديل ${when(x.updated_at)}</small></span>${evState(x.id)}</button>
+      ${own || X.isPrincipal() ? `<button type="button" class="del" data-deldoc="${x.id}" title="حذف النموذج" aria-label="حذف النموذج">حذف</button>` : ''}</div>`; }).join('')}</div>`
+    : `<div class="acx-empty sm">${LS === 'mine' && canAll ? 'لم تعبّئ أي نموذج بعد. اختر «كل نماذج المدرسة» للاطلاع على نماذج المنسوبين.' : 'لا توجد نماذج معبأة بعد. اختر «تعبئة نموذج جديد» للبدء.'}</div>`}
+  </section>`;
+}
 export function bindLibrary(box, rerender) {
+  box.querySelectorAll('[data-lv]').forEach(b => b.onclick = () => { LV = b.dataset.lv; rerender(''); });
+  box.querySelectorAll('[data-ls]').forEach(b => b.onclick = () => { LS = b.dataset.ls; rerender(); });
   const q = box.querySelector('#acf-q');
   if (q) q.oninput = () => { const v = q.value.trim(), pos = q.selectionStart; rerender(v); const n = document.getElementById('acf-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
-  box.querySelectorAll('[data-newform]').forEach(b => b.onclick = () => openFormEditor({ no: +b.dataset.newform, onClose: () => rerender() }));
+  box.querySelectorAll('[data-newform]').forEach(b => b.onclick = () => openFormEditor({ no: +b.dataset.newform, onClose: () => { LV = 'filled'; LS = 'mine'; rerender(''); } }));
   box.querySelectorAll('[data-opendoc]').forEach(b => b.onclick = () => { const doc = X.D.formDocs.find(x => x.id === b.dataset.opendoc); openFormEditor({ no: doc.form_no, doc, onClose: () => rerender() }); });
   box.querySelectorAll('[data-deldoc]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف هذا النموذج نهائيًا؟')) return;

@@ -125,7 +125,7 @@ function tabsFor() {
   if (isPrincipal()) t.push(['overview', 'المتابعة']);
   if (myLeadDomains().length) t.push(['domain', isCoord() ? 'المجالات' : myLeadDomains().length > 1 ? 'مجالاتي' : 'مجالي']);
   if (myInds().length || !t.length) t.push(['mine', 'مؤشراتي']);
-  t.push(['forms', '📄 النماذج']);
+  t.push(['forms', '📄 النماذج' + (D.formDocs && D.formDocs.length ? ` (${D.formDocs.filter(x => x.created_by === currentUserId || isPrincipal() || isCoord()).length})` : '')]);
   return t;
 }
 
@@ -145,6 +145,7 @@ const FX = {
   sb, get D() { return D; }, get currentUserId() { return currentUserId; }, get currentSchoolId() { return currentSchoolId; },
   toast, modal, nameOf: id => nameOf(id), canUpload: i => canUpload(i), cardOf: i => cardOf(i), writeWithSchool, BUCKET,
   openIndicator: id => { V.ind = id; render(); },
+  isPrincipal: () => isPrincipal(), seesAllForms: () => isPrincipal() || isCoord(),
 };
 const formDoc = e => (e && e.form_doc ? D.formDocs.find(x => x.id === e.form_doc) : null);
 async function ensureDoc(e) {
