@@ -71,7 +71,7 @@ function autoGeom(n, slots, essayTotal = 0) {
 }
 
 /* ---------- التنسيق والدرجات والأسئلة المقالية (لا تدخل في توقيع الهيكل ولا في شبكة التظليل) ---------- */
-const FMT_DEF = { size: 'm', opts: 'auto', gap: 'm', heads: true, showMarks: true, total: true, time: '' };
+const FMT_DEF = { size: 'm', opts: 'auto', gap: 'm', cols: 1, heads: true, showMarks: true, total: true, time: '' };
 const FS = { s: 9, m: 10, l: 11.5 };
 const fmtOf = paper => ({ ...FMT_DEF, ...((paper.settings || {}).fmt || {}) });
 const essaysOf = paper => (Array.isArray((paper.settings || {}).essays) ? paper.settings.essays : []);
@@ -137,7 +137,6 @@ function identityPerm(paper) {
  * ========================================================================= */
 const PAPER_STYLES = `
   * { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
-  @page { size:A4 portrait; margin:0; }
   html, body { background:#fff; }
   body { font-family:'Tahoma','Arial',sans-serif; color:#16233A; }
   .qp-page { position:relative; width:210mm; height:297mm; overflow:hidden; background:#fff; page-break-after:always; break-after:page; }
@@ -158,6 +157,10 @@ const PAPER_STYLES = `
   .qb-q .n { color:#1d3557; font-weight:900; margin-inline-end:1.2mm; }
   .qb-opts { display:grid; font-size:var(--ofs,9.6pt); line-height:1.4; }
   .qb-opts.c3 { grid-template-columns:repeat(3, minmax(0,1fr)); }
+  .qb-opts.c4 { grid-template-columns:repeat(4, minmax(0,1fr)); }
+  .qb-opts.c4 .qb-o:not(:nth-child(4n+1)) { border-inline-start:0.2mm solid #dde3ec; }
+  .qp-qarea.two { display:flex; flex-wrap:wrap; align-content:flex-start; column-gap:3mm; }
+  .qp-qarea.two .qb { width:calc(50% - 1.5mm); } .qp-qarea.two .qb.es, .qp-qarea.two .qb-head { width:100%; }
   .qb-opts.c2 { grid-template-columns:repeat(2, minmax(0,1fr)); }
   .qb-opts.c1 { grid-template-columns:minmax(0,1fr); }
   .qb-o { display:flex; align-items:flex-start; gap:1.4mm; padding:0.8mm 1.8mm; border-top:0.2mm solid #dde3ec; }
@@ -212,13 +215,16 @@ const PAPER_STYLES = `
   .qp-a3 .qp-cut3 { position:absolute; left:210mm; top:0; bottom:0; width:0; border-left:0.3mm dashed #888; z-index:3; }
   .qp-a3 .qp-cut3 span { position:absolute; left:-2.4mm; font-size:10pt; color:#666; background:#fff; }
   @media screen { .qp-a3 { margin:0 auto 8mm; box-shadow:0 2px 14px rgba(0,0,0,.18); } }
-  @media screen { body { background:#e9ecf1; padding:10mm 0; } .qp-page { margin:0 auto 8mm; box-shadow:0 2px 14px rgba(0,0,0,.18); } .qp-bar { position:sticky; top:0; z-index:5; display:flex; gap:10px; justify-content:center; align-items:center; padding:10px; background:#16233A; color:#fff; font:600 14px Tahoma; margin:-10mm 0 10mm; } .qp-bar button { font:700 14px Tahoma; padding:8px 18px; border-radius:8px; border:0; cursor:pointer; background:#fff; color:#16233A; } }
+  @media screen { body { background:#e9ecf1; padding:10mm 0; } .qp-page { margin:0 auto 8mm; box-shadow:0 2px 14px rgba(0,0,0,.18); } .qp-bar { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; gap:6px 14px; justify-content:center; align-items:center; padding:10px; background:#16233A; color:#fff; font:600 14px Tahoma; margin:-10mm 0 10mm; } .qp-bar button { font:700 14px Tahoma; padding:8px 18px; border-radius:8px; border:0; cursor:pointer; background:#fff; color:#16233A; } }
   @media print { .qp-bar { display:none; } }
 `;
 
 // توزيع الخيارات: ٣ بسطر للقصيرة، وإلا ٢ أو كل خيار بسطر
-function optCols(texts, mode) {
+function optCols(texts, mode, half) {
   if (mode === 'col') return 'c1';
+  if (half && mode !== 'row') { const mx = Math.max(0, ...texts.map(t => String(t || '').replace(/\$/g, '').length)); return texts.length === 2 ? (mx <= 36 ? 'c2' : 'c1') : texts.length === 4 ? (mx <= 9 ? 'c4' : mx <= 30 ? 'c2' : 'c1') : (mx <= 16 ? 'c3' : 'c1'); }
+  if (texts.length === 4 && mode !== 'row') { const m4 = Math.max(0, ...texts.map(t => String(t || '').length)); return m4 <= 34 ? 'c4' : m4 <= 80 ? 'c2' : 'c1'; }
+  if (mode === 'row' && texts.length === 4) return 'c4';
   if (mode === 'row') return texts.length === 2 ? 'c2' : 'c3';
   const max = Math.max(0, ...texts.map(t => String(t || '').length));
   if (texts.length === 2) return max <= 80 ? 'c2' : 'c1';
@@ -236,7 +242,7 @@ function questionBlock(paper, perm, pos, key) {
     opts = `<div class="qb-opts c2">${['صح', 'خطأ'].map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${s === 0 ? '✓' : '✗'}</span><span>${t}</span></div>`).join('')}</div>`;
   } else {
     const texts = perm.o[pos].map(oi => q.options[oi]);
-    opts = `<div class="qb-opts ${optCols(texts, f.opts)}">${texts.map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${AR[s]}</span><span>${rich(t)}</span></div>`).join('')}</div>`;
+    opts = `<div class="qb-opts ${optCols(texts, f.opts, Number(f.cols) === 2)}">${texts.map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${AR[s]}</span><span>${rich(t)}</span></div>`).join('')}</div>`;
   }
   return `<div class="qb"><div class="qb-q">${mk}<span class="n">${n}-</span>${rich(q.text)}</div>${opts}</div>`;
 }
@@ -381,7 +387,7 @@ function firstPageHtml(paper, perm, student, opts) {
   h += `</div>`;
   h += `<div class="qp-instr" style="left:${mm(P.side)}; top:${mm(P.instrTop)}; width:${mm(P.innerW)}; height:${mm(P.instrH)};">اقرأ كل سؤال، ثم ظلّل الإجابة الصحيحة في «نموذج الإجابة» ${isAuto(paper) ? 'آخر الورقة' : 'أسفل الصفحة'} — إجابة واحدة لكل سؤال${perm.q.length ? ` · عدد الأسئلة ${perm.q.length + essaysOf(paper).length}` : ''}${f.time ? ` · الزمن: ${esc(f.time)}` : ''}</div>`;
   const auto = isAuto(paper);
-  h += `<div class="qp-qarea gap-${f.gap}" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm((auto ? P.h - GA.bottom : P.qBottom) - P.qTop)};"></div>`;
+  h += `<div class="qp-qarea gap-${f.gap}${Number(f.cols) === 2 ? ' two' : ''}" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm((auto ? P.h - GA.bottom : P.qBottom) - P.qTop)};"></div>`;
   if (!auto) h += gridHtml(paper, perm, opts.key);
   const ag = auto ? autoGeom(perm.q.length, slotsOf(paper), totalsOf(paper).essay) : null;
   h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">${auto ? `ورقة أسئلة · قالب Remark لهذه الورقة: ${perm.q.length} سؤالًا · ${ag.blocks} مجموعات × ${GA.block} · ${slotsOf(paper)} دوائر بكل سطر${ag.essayH ? ' · درجة المقالي' : ''}` : `ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر`}</div>`;
@@ -390,7 +396,7 @@ function firstPageHtml(paper, perm, student, opts) {
 
 function contPageHtml(paper, student) {
   return `<div class="qp-page qp-next"><div class="qp-cont" style="left:${mm(P.side)}; top:${mm(10)}; width:${mm(P.innerW)};"><span>${esc(paper.title || '')}</span><span>${esc(student ? student.full_name : '')}</span></div>
-    <div class="qp-qarea gap-${fmtOf(paper).gap}" style="left:${mm(P.side)}; top:${mm(18)}; width:${mm(P.innerW)}; height:${mm(P.h - 18 - (isAuto(paper) ? GA.bottom : 12))};"></div>
+    <div class="qp-qarea gap-${fmtOf(paper).gap}${Number(fmtOf(paper).cols) === 2 ? ' two' : ''}" style="left:${mm(P.side)}; top:${mm(18)}; width:${mm(P.innerW)}; height:${mm(P.h - 18 - (isAuto(paper) ? GA.bottom : 12))};"></div>
     <div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - (isAuto(paper) ? P.markInset + P.mark - 0.6 : 9))};">${isAuto(paper) ? esc(paper.title || '') : 'التظليل في الصفحة الأولى'}</div></div>`;
 }
 
@@ -493,7 +499,8 @@ const FLOW_SCRIPT = `(function(){
         var cut = document.createElement('div'); cut.className = 'qp-cut3'; cut.innerHTML = '<span style="top:3mm;">✂</span><span style="bottom:3mm;">✂</span>'; sh.appendChild(cut);
       }
     });
-    var st = document.createElement('style'); st.textContent = '@page { size:A3 landscape; margin:0; }'; document.head.appendChild(st);
+    var st = document.getElementById('qp-pg'); if (st) st.textContent = '@page { size:A3 landscape; margin:0; }';
+    var hp = document.getElementById('qp-hint'); if (hp) hp.textContent = 'في نافذة الطباعة: حجم الورق A3 · المقياس 100% (الحجم الفعلي) · الهوامش: بلا';
     var u = document.getElementById('qp-unit'); if (u) u.textContent = 'ورقة A3 بالعرض (تُقص نصفين)';
   }
   var mxP = 0; document.querySelectorAll('.qp-stu').forEach(function(stu){ mxP = Math.max(mxP, stu.querySelectorAll('.qp-page').length); });
@@ -503,7 +510,6 @@ const FLOW_SCRIPT = `(function(){
 
 // A4 بالعرض: ورقتين A5 (نفس تصميم A4 مصغّر بنسبة ١/√٢ بالضبط) مع خط قص بالنص - الطالب الأول يمين
 const TWO_UP_STYLES = `
-  @page { size:A4 landscape; margin:0; }
   .qp-sheet2 { position:relative; width:297mm; height:210mm; overflow:hidden; background:#fff; page-break-after:always; break-after:page; }
   .qp-sheet2:last-child { page-break-after:auto; break-after:auto; }
   .qp-slot { position:absolute; top:0; width:148.5mm; height:210mm; overflow:hidden; }
@@ -526,8 +532,8 @@ function openPrintWindow(win, title, bundles, note, layout = 'A4', fs = 10) {
     }
   }
   win.document.open();
-  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAPER_STYLES}${two ? TWO_UP_STYLES : ''}</style></head><body>
-    <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> <span id="qp-unit">${two ? 'ورقة A4 بالعرض' : 'صفحة'}</span></span><b id="qp-warn" style="color:#ffd27a;"></b><button onclick="window.print()">🖨️ طباعة</button></div>
+  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style id="qp-pg">@page { size:${two ? 'A4 landscape' : 'A4 portrait'}; margin:0; }</style><style>${PAPER_STYLES}${two ? TWO_UP_STYLES : ''}</style></head><body>
+    <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> <span id="qp-unit">${two ? 'ورقة A4 بالعرض' : 'صفحة'}</span></span><b id="qp-warn" style="color:#ffd27a;"></b><span id="qp-hint" style="font-weight:400; font-size:12px; color:#cfe3ff;">في نافذة الطباعة: المقياس 100% (الحجم الفعلي) · الهوامش: بلا</span><button onclick="window.print()">🖨️ طباعة</button></div>
     ${body}
     <script>window.QP_SINGLE = ${two ? 'true' : 'false'};window.QP_A3 = ${layout === 'A3' ? 'true' : 'false'};window.QP_FS = ${Number(fs) || 10};${FLOW_SCRIPT}<\/script></body></html>`);
   win.document.close();
@@ -688,6 +694,7 @@ function renderEditor() {
             <label class="as-f">حجم الخط<select id="qp-f-size" ${ro ? 'disabled' : ''}>${[['s', 'صغير'], ['m', 'متوسط'], ['l', 'كبير']].map(([v, t]) => `<option value="${v}"${fmtOf(p).size === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
             <label class="as-f">تباعد الأسئلة<select id="qp-f-gap" ${ro ? 'disabled' : ''}>${[['s', 'مضغوط'], ['m', 'عادي'], ['l', 'واسع']].map(([v, t]) => `<option value="${v}"${fmtOf(p).gap === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
           </div>
+          <label class="as-f">عرض الأسئلة الموضوعية<select id="qp-f-cols" ${ro ? 'disabled' : ''}><option value="1"${Number(fmtOf(p).cols) === 2 ? '' : ' selected'}>عمود واحد بعرض الورقة</option><option value="2"${Number(fmtOf(p).cols) === 2 ? ' selected' : ''}>عمودان متجاوران (يوفّر المساحة للأسئلة القصيرة)</option></select></label>
           <label class="as-f">توزيع الخيارات<select id="qp-f-opts" ${ro ? 'disabled' : ''}>${[['auto', 'تلقائي حسب طول الخيار'], ['row', 'متجاورة في سطر واحد'], ['col', 'كل خيار في سطر']].map(([v, t]) => `<option value="${v}"${fmtOf(p).opts === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
           <label class="as-f">شبكة التظليل<select id="qp-f-grid" ${ro ? 'disabled' : ''}><option value="auto"${isAuto(p) ? ' selected' : ''}>متكيفة: آخر الورقة، حسب عدد الأسئلة والخيارات</option><option value="fixed"${isAuto(p) ? '' : ' selected'}>ثابتة: 10 أسئلة و3 خيارات (قالب Remark واحد)</option></select></label>
           <label class="as-f">زمن الاختبار (اختياري)<input type="text" id="qp-f-time" value="${esc(fmtOf(p).time)}" placeholder="مثال: 45 دقيقة" ${ro ? 'disabled' : ''}/></label>
@@ -785,6 +792,7 @@ function renderEditor() {
     };
     const setF = (k, v) => { s.fmt = { ...fmtOf(p), [k]: v }; };
     bind('qp-f-grid', el => { s.grid = el.value; renderQuestions(); const r = $('qp-remark-note'); if (r) r.innerHTML = remarkNote(p); });
+    bind('qp-f-cols', el => setF('cols', Number(el.value)));
     bind('qp-f-size', el => setF('size', el.value)); bind('qp-f-gap', el => setF('gap', el.value)); bind('qp-f-opts', el => setF('opts', el.value));
     bind('qp-f-time', el => setF('time', el.value.trim())); bind('qp-f-heads', el => setF('heads', el.checked));
     bind('qp-f-marks', el => setF('showMarks', el.checked)); bind('qp-f-total', el => setF('total', el.checked));
