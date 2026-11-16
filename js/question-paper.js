@@ -578,6 +578,14 @@ function renderEditor() {
             <button type="button" class="text-action-btn" id="qp-paste-btn">لصق أسئلة جاهزة</button>
           </div>`}
         </div>
+        ${ro ? '' : `<div class="qp-struct" id="qp-struct">
+          <b>هيكل الورقة</b>
+          ${[['mcq', 'اختيار من متعدد'], ['tf', 'صح وخطأ'], ['es', 'مقالي']].map(([k, t]) => `<div class="qp-st-g"><span>${t}</span>
+            <label>العدد<input type="number" id="qp-n-${k}" min="0" max="${k === 'es' ? 20 : CAP}" step="1" inputmode="numeric"/></label>
+            <label>درجة السؤال<input type="number" id="qp-m-${k}" min="0.25" step="0.25" inputmode="decimal" placeholder="—"/></label></div>`).join('')}
+          <button type="button" class="btn-primary" id="qp-st-go" style="width:auto; padding:9px 18px;">تجهيز الأسئلة</button>
+          <span id="qp-st-msg" class="qp-status"></span>
+        </div>`}
         <div id="qp-math" class="qp-math hidden">
           <div class="qp-math-row">${[['معادلة', '$ $', 2], ['كسر', '${ }/{ }$', 3], ['أس', '^{ }', 2], ['دليل', '_{ }', 2], ['جذر', '√{ }', 2]].map(([t, v, c]) => `<button type="button" class="qp-sym tpl" data-v="${esc(v)}" data-c="${c}">${t}</button>`).join('')}</div>
           <div class="qp-math-row">${['×', '÷', '±', '−', '=', '≠', '≈', '<', '>', '≤', '≥', '√', 'π', '∞', '°', '%', '²', '³', '½', '¼', '¾', '∠', '△', '⊥', '∥', '∈', '∪', '∩', '⊂', '∅', 'θ', 'α', 'β', '∑', '←', '→'].map(c => `<button type="button" class="qp-sym" data-v="${c}">${c}</button>`).join('')}</div>
@@ -611,6 +619,33 @@ function renderEditor() {
     $('qp-add-mcq').onclick = () => { p.questions.push(newMcq()); markDirty(); renderQuestions(true); };
     $('qp-add-tf').onclick = () => { p.questions.push(newTf()); markDirty(); renderQuestions(true); };
     $('qp-add-es').onclick = () => { s.essays = essaysOf(p).concat([{ text: '', marks: 2, lines: 4, model: '' }]); markDirty(); renderQuestions(); const c = [...document.querySelectorAll('.qp-q.es')].pop(); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.querySelector('textarea').focus(); } };
+    // هيكل الورقة: يحدد المعلم عدد كل نوع ودرجة سؤاله، فتُجهَّز خانات الأسئلة دفعة واحدة
+    $('qp-st-go').onclick = () => {
+      const msg = $('qp-st-msg'); const say = (t, warn) => { msg.textContent = t; msg.className = 'qp-status' + (warn ? ' warn' : ' ok'); };
+      const want = k => { const v = $('qp-n-' + k).value.trim(); return v === '' ? null : Math.max(0, Math.round(Number(v) || 0)); };
+      const mk = k => { const v = Number($('qp-m-' + k).value); return v > 0 ? v : null; };
+      const nM = want('mcq'), nT = want('tf'), nE = want('es');
+      const curM = p.questions.filter(q => q.type === 'mcq').length, curT = p.questions.length - curM;
+      const tM = nM == null ? curM : nM, tT = nT == null ? curT : nT, tE = nE == null ? essaysOf(p).length : Math.min(20, nE);
+      if (tM + tT > CAP) { say(`مجموع الاختيار من متعدد والصح والخطأ ${tM + tT}، والحد الأقصى ${CAP} أسئلة (شبكة التظليل ثابتة)`, true); return; }
+      const filled = q => String(q.text || '').trim() || (q.options || []).some(o => String(o || '').trim());
+      // الحذف من الفارغ أولًا ثم من آخر القائمة
+      const plan = (list, target) => { const drop = []; let extra = list.length - target; for (let i = list.length - 1; i >= 0 && extra > 0; i--) if (!filled(list[i])) { drop.push(list[i]); extra--; } for (let i = list.length - 1; i >= 0 && extra > 0; i--) if (!drop.includes(list[i])) { drop.push(list[i]); extra--; } return drop; };
+      const dM = plan(p.questions.filter(q => q.type === 'mcq'), tM), dT = plan(p.questions.filter(q => q.type === 'tf'), tT), dE = plan(essaysOf(p), tE);
+      const lost = [...dM, ...dT, ...dE].filter(filled).length;
+      if (lost && !confirm(`سيُحذف ${lost === 1 ? 'سؤال مكتوب واحد' : lost + ' أسئلة مكتوبة'} لأن العدد المطلوب أقل من الموجود. هل تريد المتابعة؟`)) return;
+      p.questions = p.questions.filter(q => !dM.includes(q) && !dT.includes(q));
+      for (let i = curM - dM.length; i < tM; i++) p.questions.push(newMcq());
+      for (let i = curT - dT.length; i < tT; i++) p.questions.push(newTf());
+      const es = essaysOf(p).filter(q => !dE.includes(q));
+      while (es.length < tE) es.push({ text: '', marks: mk('es') || 2, lines: 4, model: '' });
+      s.essays = es;
+      [['mcq', q => q.type === 'mcq'], ['tf', q => q.type === 'tf']].forEach(([k, f]) => { const m = mk(k); if (m) p.questions.filter(f).forEach(q => { if (m === 1) delete q.marks; else q.marks = m; }); });
+      if (mk('es')) s.essays.forEach(q => { q.marks = mk('es'); });
+      markDirty(); renderQuestions();
+      const t = totalsOf(p);
+      say(`جاهز: ${tM} اختيار من متعدد، ${tT} صح وخطأ، ${tE} مقالي — مجموع الدرجات ${num(t.all)}. اكتب نصوص الأسئلة في الخانات.`);
+    };
     const setF = (k, v) => { s.fmt = { ...fmtOf(p), [k]: v }; };
     bind('qp-f-size', el => setF('size', el.value)); bind('qp-f-gap', el => setF('gap', el.value)); bind('qp-f-opts', el => setF('opts', el.value));
     bind('qp-f-time', el => setF('time', el.value.trim())); bind('qp-f-heads', el => setF('heads', el.checked));
@@ -669,6 +704,7 @@ function renderQuestions(scrollLast = false) {
   const order = displayOrder();
   const mcq = p.questions.filter(q => q.type === 'mcq').length;
   const es = essaysOf(p), tot = totalsOf(p);
+  [['mcq', mcq], ['tf', p.questions.length - mcq], ['es', es.length]].forEach(([k, v]) => { const el = $('qp-n-' + k); if (el && document.activeElement !== el) el.value = v; });
   $('qp-count').textContent = `${p.questions.length} من ${CAP} سؤال موضوعي · ${mcq} اختيار متعدد · ${p.questions.length - mcq} صح وخطأ${es.length ? ` · ${es.length} مقالي` : ''} · مجموع الدرجات ${num(tot.all)}${es.length ? ` (موضوعي ${num(tot.obj)} + مقالي ${num(tot.essay)})` : ''}`;
   if (!p.questions.length && !es.length) { box.innerHTML = '<div class="ex-empty"><b>لا توجد أسئلة</b><span>أضف سؤالًا أو الصق أسئلة جاهزة.</span></div>'; return; }
   const esHtml = !es.length ? '' : `<div class="qp-sec">مقالي <small>(لا يدخل في التظليل، ويصححه المعلم يدويًا)</small></div>` + es.map((q, i) => `<div class="qp-q es${String(q.text || '').trim() ? '' : ' bad'}" data-e="${i}">

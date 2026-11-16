@@ -5297,3 +5297,12 @@ button.acf-box:hover{ border-color:var(--acf-blue); }
 #qp-math-out .fr span:first-child{border-bottom:1.5px solid currentColor;padding:0 4px 1px} #qp-math-out .fr span:last-child{padding:1px 4px 0}
 #qp-math-out .rd{border-top:1.5px solid currentColor;padding:0 2px} #qp-math-out sup,#qp-math-out sub{font-size:.72em;line-height:0}
 @media (max-width:600px){.qp-fmt{grid-template-columns:1fr}.qp-q-h{flex-wrap:wrap}}
+/* ورقة الأسئلة: هيكل الورقة (عدد كل نوع ودرجته) */
+.qp-struct{display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 16px;background:#fff;border:1px solid var(--line,#e3e7ee);border-top:4px solid #14325E;border-radius:12px;padding:12px 14px;margin-bottom:12px}
+.qp-struct > b{flex:1 1 100%;font-size:14px;font-weight:800;color:#14325E}
+.qp-st-g{display:flex;align-items:flex-end;gap:8px;padding-inline-end:16px;border-inline-end:1px solid #E6EAF1}
+.qp-st-g > span{font-size:13px;font-weight:800;color:#14325E;padding-bottom:9px;white-space:nowrap}
+.qp-st-g label{display:flex;flex-direction:column;gap:3px;font-size:11.5px;font-weight:700;color:var(--slate)}
+.qp-st-g input{width:76px;margin:0;padding:7px 6px;text-align:center;font-size:14px;border-radius:8px}
+.qp-struct .qp-status{flex:1 1 100%}
+@media (max-width:700px){.qp-st-g{flex:1 1 100%;border-inline-end:0;padding-inline-end:0;border-bottom:1px solid #E6EAF1;padding-bottom:10px}.qp-st-g > span{flex:1}}
