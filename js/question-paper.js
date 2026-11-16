@@ -24,7 +24,7 @@ const CAP = G_COLS * G_ROWS;  // أقصى عدد أسئلة في الشبكة ا
 const CAP_AUTO = 40, SLOTS_AUTO = 4; // الشبكة المتكيفة: حتى ٤٠ سؤالًا و٤ خيارات
 /* الشبكة المتكيفة: تُرسم آخر الورقة (أسفل الصفحة الأخيرة) بعدد أسئلة الورقة وخياراتها.
  * مكانها ثابت من أسفل الصفحة، فالأوراق التي لها العدد نفسه من الأسئلة والخيارات تشترك في قالب Remark واحد. */
-const GA = { numW: 11, pitch: 10.5, bubble: 6.4, pad: 2.5, rowH: 8.2, titleH: 7, headH: 6, gap: 5, stripH: 13, bottom: 16 };
+const GA = { numW: 9, pitch: 9, bubble: 6.2, pad: 2, rowH: 8, titleH: 7, headH: 5.5, gap: 4, bandGap: 3, block: 5, stripH: 13, bottom: 16 };
 
 /* ---------- أبعاد الصفحة الأولى (مم) - ثابتة لكل الأوراق ---------- */
 const P = {
@@ -55,12 +55,15 @@ const isAuto = paper => gridMode(paper) === 'auto';
 const capOf = paper => (isAuto(paper) ? CAP_AUTO : CAP);
 const maxOptsOf = paper => (isAuto(paper) ? SLOTS_AUTO : SLOTS);
 const slotsOf = paper => (isAuto(paper) ? Math.max(2, ...paper.questions.map(q => (q.type === 'tf' ? 2 : (q.options || []).length))) : SLOTS);
+// الشبكة مجموعات، كل مجموعة ٥ أسئلة، تُصف متجاورة من اليمين؛ وما زاد عن عرض الورقة ينزل صفًّا ثانيًا
 function autoGeom(n, slots) {
   const colW = GA.numW + slots * GA.pitch + 2 * GA.pad;
-  const maxCols = Math.max(1, Math.floor((P.innerW + GA.gap) / (colW + GA.gap)));
-  const cols = Math.min(maxCols, n <= 6 ? 1 : n <= 20 ? 2 : n <= 30 ? 3 : 4);
-  const rows = Math.ceil(n / cols);
-  return { cols, rows, colW, bodyH: GA.headH + rows * GA.rowH, h: GA.titleH + 2 + GA.headH + rows * GA.rowH };
+  const perBand = Math.max(1, Math.floor((P.innerW + GA.gap) / (colW + GA.gap)));
+  const blocks = Math.max(1, Math.ceil(n / GA.block));
+  const bands = Math.ceil(blocks / perBand);
+  const bandH = GA.headH + GA.block * GA.rowH;
+  const bodyH = bands * bandH + (bands - 1) * GA.bandGap;
+  return { colW, perBand, blocks, bands, bandH, bodyH, cols: Math.min(blocks, perBand), h: GA.titleH + 2 + bodyH };
 }
 
 /* ---------- التنسيق والدرجات والأسئلة المقالية (لا تدخل في توقيع الهيكل ولا في شبكة التظليل) ---------- */
@@ -183,6 +186,8 @@ const PAPER_STYLES = `
   .qb.es .es-ln { display:block; height:var(--lh, 8mm); border-bottom:0.2mm dotted #5c6779; }
   .qp-qarea.gap-s .es-ln { height:var(--lh, 7mm); } .qp-qarea.gap-l .es-ln { height:var(--lh, 9mm); }
   .qp-page.gm .qp-cont { padding-inline:9mm; }
+  .qp-stu.tight .qb { margin-bottom:0.6mm; } .qp-stu.tight .qb-q { padding:0.35mm 2mm; line-height:1.3; } .qp-stu.tight .qb-o { padding:0.3mm 1.6mm; line-height:1.25; }
+  .qp-stu.tight .qb-head { margin:0.6mm 0 0.7mm; padding-bottom:0.4mm; } .qp-stu.tight .qb.es .es-body { padding-bottom:0.8mm; } .qp-stu.tight .qb.es .es-score { margin-top:0.7mm; }
   .qb.es .es-key { position:absolute; inset:0 2mm auto 2mm; padding-top:1.6mm; font-size:var(--ofs,9.6pt); line-height:8mm; color:#0b6b3a; font-weight:700; white-space:pre-wrap; }
   .qb.es .es-score { display:block; width:max-content; margin:1.4mm auto 0 0; background:#fff; border:0.3mm solid #1d3557; border-radius:1.2mm; padding:0.5mm 2mm; font-size:8.5pt; font-weight:700; color:#1d3557; direction:rtl; }
   .qp-score { position:absolute; border:0.4mm solid #1d3557; border-radius:2mm; display:flex; flex-direction:column; overflow:hidden; background:#fff; text-align:center; }
@@ -289,23 +294,26 @@ function gridHtml(paper, perm, key) {
 // الشبكة المتكيفة: بلوك يُثبَّت أسفل الصفحة الأخيرة؛ شريط الاسم والباركود يظهر إذا لم تكن الصفحة الأولى
 function autoGridHtml(paper, perm, key, student) {
   const n = perm.q.length, slots = slotsOf(paper), g = autoGeom(n, slots);
-  const totalW = g.cols * g.colW + (g.cols - 1) * GA.gap, off = (P.innerW - totalW) / 2;
   let b = '';
-  for (let c = 0; c < g.cols; c++) {
-    const x = P.innerW - off - (c + 1) * g.colW - c * GA.gap; // العمود الأول يمين
-    b += `<div class="qp-gbox" style="left:${mm(x)}; top:0; width:${mm(g.colW)}; height:${mm(g.bodyH)};"></div>`;
-    b += `<div class="qp-ghead" style="left:${mm(x + g.colW - GA.numW)}; top:0; width:${mm(GA.numW)}; height:${mm(GA.headH)}; font-size:8pt;">السؤال</div>`;
-    b += `<div class="qp-ghead" style="left:${mm(x)}; top:0; width:${mm(g.colW - GA.numW)}; height:${mm(GA.headH)}; font-size:8.5pt; border-inline-end:0.3mm solid #fff;">الإجابة</div>`;
-    for (let r = 0; r < g.rows; r++) {
-      const pos = c * g.rows + r, y = GA.headH + r * GA.rowH;
+  for (let k = 0; k < g.blocks; k++) {
+    const band = Math.floor(k / g.perBand), c = k % g.perBand;
+    const inBand = Math.min(g.perBand, g.blocks - band * g.perBand);
+    const off = (P.innerW - (inBand * g.colW + (inBand - 1) * GA.gap)) / 2;
+    const x = P.innerW - off - (c + 1) * g.colW - c * GA.gap; // المجموعة الأولى يمين
+    const y0 = band * (g.bandH + GA.bandGap);
+    b += `<div class="qp-gbox" style="left:${mm(x)}; top:${mm(y0)}; width:${mm(g.colW)}; height:${mm(g.bandH)};"></div>`;
+    b += `<div class="qp-ghead" style="left:${mm(x + g.colW - GA.numW)}; top:${mm(y0)}; width:${mm(GA.numW)}; height:${mm(GA.headH)}; font-size:7.5pt;">س</div>`;
+    b += `<div class="qp-ghead" style="left:${mm(x)}; top:${mm(y0)}; width:${mm(g.colW - GA.numW)}; height:${mm(GA.headH)}; font-size:8pt; border-inline-end:0.3mm solid #fff;">الإجابة</div>`;
+    for (let r = 0; r < GA.block; r++) {
+      const pos = k * GA.block + r, y = y0 + GA.headH + r * GA.rowH;
       if (r > 0) b += `<div class="qp-grule" style="left:${mm(x)}; top:${mm(y)}; width:${mm(g.colW)};"></div>`;
-      b += `<div class="qp-gnum" style="left:${mm(x + g.colW - GA.numW)}; top:${mm(y)}; width:${mm(GA.numW)}; height:${mm(GA.rowH)}; font-size:11pt;">${pos < n ? pos + 1 : ''}</div>`;
+      b += `<div class="qp-gnum" style="left:${mm(x + g.colW - GA.numW)}; top:${mm(y)}; width:${mm(GA.numW)}; height:${mm(GA.rowH)}; font-size:10.5pt;">${pos < n ? pos + 1 : ''}</div>`;
       if (pos >= n) continue;
       const q = paper.questions[perm.q[pos]];
       const correctSlot = key ? perm.o[pos].indexOf(q.answer) : -1;
       for (let sI = 0; sI < optCount(q); sI++) {
         const bx = x + g.colW - GA.numW - GA.pad - (sI + 1) * GA.pitch + (GA.pitch - GA.bubble) / 2;
-        b += `<div class="qp-bubble${sI === correctSlot ? ' fill' : ''}" style="left:${mm(bx)}; top:${mm(y + (GA.rowH - GA.bubble) / 2)}; width:${mm(GA.bubble)}; height:${mm(GA.bubble)}; font-size:9pt;">${q.type === 'tf' ? (sI === 0 ? '✓' : '✗') : AR[sI]}</div>`;
+        b += `<div class="qp-bubble${sI === correctSlot ? ' fill' : ''}" style="left:${mm(bx)}; top:${mm(y + (GA.rowH - GA.bubble) / 2)}; width:${mm(GA.bubble)}; height:${mm(GA.bubble)}; font-size:8.5pt;">${q.type === 'tf' ? (sI === 0 ? '✓' : '✗') : AR[sI]}</div>`;
       }
     }
   }
@@ -355,7 +363,7 @@ function firstPageHtml(paper, perm, student, opts) {
   h += `<div class="qp-qarea gap-${f.gap}" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm((auto ? P.h - GA.bottom : P.qBottom) - P.qTop)};"></div>`;
   if (!auto) h += gridHtml(paper, perm, opts.key);
   const ag = auto ? autoGeom(perm.q.length, slotsOf(paper)) : null;
-  h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">${auto ? `ورقة أسئلة · قالب Remark لهذه الورقة: ${perm.q.length} سؤالًا · ${ag.cols} أعمدة × ${ag.rows} · ${slotsOf(paper)} دوائر بكل سطر` : `ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر`}</div>`;
+  h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">${auto ? `ورقة أسئلة · قالب Remark لهذه الورقة: ${perm.q.length} سؤالًا · ${ag.blocks} مجموعات × ${GA.block} · ${slotsOf(paper)} دوائر بكل سطر` : `ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر`}</div>`;
   return h + `</div>`;
 }
 
@@ -415,22 +423,31 @@ const FLOW_SCRIPT = `(function(){
     g.classList.toggle('with-strip', !first); page.appendChild(g);
     if (!first) { page.classList.add('gm'); var m = document.createElement('div'); m.innerHTML = stu.querySelector('template.qp-marks-tpl').innerHTML; Array.prototype.slice.call(m.children).forEach(function(x){ x.classList.add('x'); page.appendChild(x); }); }
   }
-  document.querySelectorAll('.qp-stu').forEach(function(stu){
-    var F0 = window.QP_FS || 10;
-    var base = fill(stu, F0), best = F0, bestPages = base;
-    var minF = window.QP_SINGLE ? 6.5 : Math.max(7.5, F0 - 2);
-    for (var f = F0 - 0.5; bestPages > 1 && f >= minF; f -= 0.5) { var pg = fill(stu, f); if (pg < bestPages) { best = f; bestPages = pg; } }
-    if (window.QP_SINGLE && bestPages > 1) best = minF;
-    // سطور المقالي: تُضيَّق قليلًا إذا كان ذلك يوفّر صفحة
-    stu.style.removeProperty('--lh');
-    if (!window.QP_SINGLE && bestPages > 1 && stu.querySelector('template.qp-blocks').innerHTML.indexOf('es-ln') > -1) {
-      var tries = [[best, 7.2], [best, 6.6], [Math.max(minF, best - 1), 7.2], [Math.max(minF, best - 1), 6.6], [minF, 6.6]], done = false;
-      for (var k = 0; k < tries.length && !done; k++) { stu.style.setProperty('--lh', tries[k][1] + 'mm'); var pk = fill(stu, tries[k][0]); if (pk < bestPages) { bestPages = pk; best = tries[k][0]; done = true; } }
-      if (!done) stu.style.removeProperty('--lh');
-      else { for (var fb = F0; fb > best; fb -= 0.5) { if (fill(stu, fb) <= bestPages) { best = fb; break; } } }
+  // الضبط: حجم الخط، ارتفاع سطر المقالي، والتراص. يُجرَّب من الأوسع إلى الأضيق حتى أقل عدد صفحات
+  // (الهدف ألا تتجاوز الورقة صفحتين = ورقة A3 واحدة). يُحسب لأول طالب ويُعاد استعماله لمن بعده.
+  function apply(stu, c){ if (c.lh) stu.style.setProperty('--lh', c.lh + 'mm'); else stu.style.removeProperty('--lh'); stu.classList.toggle('tight', !!c.tight); return fill(stu, c.fs); }
+  var F0 = window.QP_FS || 10, CFG = null, CFGP = 0;
+  function search(stu){
+    if (window.QP_SINGLE) {
+      var best = F0, bp = apply(stu, { fs: F0 });
+      for (var f = F0 - 0.5; bp > 1 && f >= 6.5; f -= 0.5) { var pg = apply(stu, { fs: f }); if (pg < bp) { best = f; bp = pg; } }
+      if (bp > 1) best = 6.5;
+      return { c: { fs: best }, p: bp };
     }
-    fill(stu, best);
-    if (window.QP_SINGLE && bestPages > 1) stu.querySelector('.qp-first .qp-qarea').style.outline = '0.8mm solid #e00';
+    var list = [{ fs: F0 }], f2;
+    for (f2 = F0 - 0.5; f2 >= Math.max(8, F0 - 2); f2 -= 0.5) list.push({ fs: f2 });
+    [[F0 - 0.5, 7.2], [F0 - 1, 6.8], [F0 - 1.5, 6.4], [Math.max(8, F0 - 2), 6.2]].forEach(function(x){ list.push({ fs: Math.max(7.5, x[0]), lh: x[1] }); });
+    [[Math.max(8, F0 - 1.5), 6.4], [Math.max(8, F0 - 2), 6], [7.5, 6], [7, 5.6]].forEach(function(x){ list.push({ fs: x[0], lh: x[1], tight: 1 }); });
+    var bestC = list[0], bestP = apply(stu, list[0]);
+    for (var i = 1; i < list.length && bestP > 1; i++) { var pp = apply(stu, list[i]); if (pp < bestP) { bestP = pp; bestC = list[i]; } }
+    return { c: bestC, p: bestP };
+  }
+  document.querySelectorAll('.qp-stu').forEach(function(stu){
+    var r = null;
+    if (CFG) { var pg0 = apply(stu, CFG); if (pg0 <= CFGP) r = { c: CFG, p: pg0 }; }
+    if (!r) { r = search(stu); if (!CFG) { CFG = r.c; CFGP = r.p; } }
+    apply(stu, r.c);
+    if (window.QP_SINGLE && r.p > 1) stu.querySelector('.qp-first .qp-qarea').style.outline = '0.8mm solid #e00';
   });
   // توحيد مكان الشبكة: كل الطلاب على عدد الصفحات نفسه لتكون الشبكة في الصفحة نفسها (قالب Remark واحد للورقة)
   if (!window.QP_SINGLE && document.querySelector('.qp-agrid')) {
@@ -458,6 +475,8 @@ const FLOW_SCRIPT = `(function(){
     var st = document.createElement('style'); st.textContent = '@page { size:A3 landscape; margin:0; }'; document.head.appendChild(st);
     var u = document.getElementById('qp-unit'); if (u) u.textContent = 'ورقة A3 بالعرض (تُقص نصفين)';
   }
+  var mxP = 0; document.querySelectorAll('.qp-stu').forEach(function(stu){ mxP = Math.max(mxP, stu.querySelectorAll('.qp-page').length); });
+  if (!window.QP_SINGLE && mxP > 2) { var w = document.getElementById('qp-warn'); if (w) w.textContent = 'تنبيه: الورقة ' + mxP + ' صفحات وتتجاوز ورقة A3 واحدة. قلّل سطور المقالي أو عدد الأسئلة، أو اختر خطًّا أصغر وتباعدًا مضغوطًا.'; }
   var n = document.querySelectorAll('.qp-sheet2').length || document.querySelectorAll('.qp-a3').length || document.querySelectorAll('.qp-page').length; var c = document.getElementById('qp-count'); if (c) c.textContent = n;
 })();`;
 
@@ -487,7 +506,7 @@ function openPrintWindow(win, title, bundles, note, layout = 'A4', fs = 10) {
   }
   win.document.open();
   win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAPER_STYLES}${two ? TWO_UP_STYLES : ''}</style></head><body>
-    <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> <span id="qp-unit">${two ? 'ورقة A4 بالعرض' : 'صفحة'}</span></span><button onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> <span id="qp-unit">${two ? 'ورقة A4 بالعرض' : 'صفحة'}</span></span><b id="qp-warn" style="color:#ffd27a;"></b><button onclick="window.print()">🖨️ طباعة</button></div>
     ${body}
     <script>window.QP_SINGLE = ${two ? 'true' : 'false'};window.QP_A3 = ${layout === 'A3' ? 'true' : 'false'};window.QP_FS = ${Number(fs) || 10};${FLOW_SCRIPT}<\/script></body></html>`);
   win.document.close();
@@ -795,7 +814,7 @@ function remarkNote(p) {
   if (!isAuto(p)) return `<p>«نموذج الإجابة» أسفل الصفحة الأولى في المكان نفسه بكل الأوراق: <b>${G_COLS} أعمدة × ${G_ROWS} أسئلة</b>، وبكل سطر <b>${SLOTS} دوائر</b> (أ ب ج من اليمين). عرّف قالب Remark واحدًا: الباركود ← StudentID، والشبكة ← ${CAP} أسئلة اختيار متعدد، وهو يقرأ كل الاختبارات.</p>
     <p>إذا طبعت A4 بالعرض (طالبان)، فقص الورقة من المنتصف ليصبح كل نصف ورقة A5 بالتصميم نفسه مصغّرًا، وعرّف له قالب A5 مستقلًا.</p>${up}`;
   const n = p.questions.length, sl = slotsOf(p), g = n ? autoGeom(n, sl) : null;
-  return `<p>الشبكة متكيفة وتُطبع <b>آخر الورقة</b> (أسفل الصفحة الأخيرة) ومعها الباركود.${g ? ` لهذه الورقة: <b>${n} سؤالًا</b> في <b>${g.cols} ${g.cols === 1 ? 'عمود' : 'أعمدة'} × ${g.rows} صفوف</b>، وبكل سطر <b>${sl} دوائر</b> (أ من اليمين).` : ''}</p>
+  return `<p>الشبكة متكيفة وتُطبع <b>آخر الورقة</b> (أسفل الصفحة الأخيرة) ومعها الباركود.${g ? ` لهذه الورقة: <b>${n} سؤالًا</b> في <b>${g.blocks === 1 ? 'مجموعة واحدة' : g.blocks + ' مجموعات'}</b> كل مجموعة ${GA.block} أسئلة${g.bands > 1 ? ` (على ${g.bands} صفوف)` : ''}، وبكل سطر <b>${sl} دوائر</b> (أ من اليمين).` : ''}</p>
     <p><b>تنبيه:</b> يلزم تعريف قالب Remark لكل تشكيلة مختلفة. الأوراق التي لها العدد نفسه من الأسئلة والخيارات وعدد الصفحات نفسه تشترك في قالب واحد، لأن مكان الشبكة ثابت من أسفل الصفحة.</p>${up}`;
 }
 function markDirty() { dirty = true; const st = $('qp-status'); if (st) { st.textContent = 'توجد تعديلات غير محفوظة'; st.className = 'qp-status warn'; } }
