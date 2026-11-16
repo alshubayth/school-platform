@@ -45,6 +45,40 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const mm = v => `${Math.round(v * 100) / 100}mm`;
 
+/* ---------- التنسيق والدرجات والأسئلة المقالية (لا تدخل في توقيع الهيكل ولا في شبكة التظليل) ---------- */
+const FMT_DEF = { size: 'm', opts: 'auto', gap: 'm', heads: true, showMarks: true, total: true, time: '' };
+const FS = { s: 9, m: 10, l: 11.5 };
+const fmtOf = paper => ({ ...FMT_DEF, ...((paper.settings || {}).fmt || {}) });
+const essaysOf = paper => (Array.isArray((paper.settings || {}).essays) ? paper.settings.essays : []);
+const markOf = q => { const v = Number(q && q.marks); return Number.isFinite(v) && v > 0 ? v : 1; };
+const num = v => String(Math.round(v * 100) / 100);
+const marksTxt = v => (v === 1 ? 'درجة واحدة' : v === 2 ? 'درجتان' : v >= 3 && v <= 10 && Number.isInteger(v) ? `${num(v)} درجات` : `${num(v)} درجة`);
+function totalsOf(paper) {
+  const obj = paper.questions.reduce((a, q) => a + markOf(q), 0);
+  const essay = essaysOf(paper).reduce((a, q) => a + markOf(q), 0);
+  return { obj, essay, all: obj + essay };
+}
+
+/* ---------- الرياضيات: ما بين علامتي $ يُعرض معادلةً (كسر، أس، دليل، جذر) ----------
+ * {بسط}/{مقام} أو 3/4 ← كسر · س^2 أو س^{2ن} ← أس · س_1 ← دليل · √{...} ← جذر
+ * الاتجاه تلقائي: معادلة فيها حروف لاتينية تُكتب من اليسار، وغيرها من اليمين كما في الكتاب المدرسي */
+const TOK = '[0-9A-Za-z\\u0660-\\u0669\\u0621-\\u064A.]+';
+function mathHtml(src) {
+  let t = esc(src);
+  const frac = (a, b) => `<span class="fr"><span>${a}</span><span>${b}</span></span>`;
+  t = t.replace(/√\{([^{}]*)\}|√\(([^()]*)\)/g, (_, a, b) => `<span class="rt">√<span class="rd">${a != null ? a : b}</span></span>`);
+  t = t.replace(/\{([^{}]*)\}\s*\/\s*\{([^{}]*)\}/g, (_, a, b) => frac(a, b));
+  t = t.replace(/\^\{([^{}]*)\}/g, '<sup>$1</sup>').replace(/_\{([^{}]*)\}/g, '<sub>$1</sub>');
+  t = t.replace(new RegExp(`(${TOK})\\/(${TOK})`, 'g'), (_, a, b) => frac(a, b));
+  t = t.replace(/\^([0-9A-Za-z\u0660-\u0669\u0621-\u064A+\-−]+)/g, '<sup>$1</sup>').replace(/_([0-9A-Za-z\u0660-\u0669\u0621-\u064A]+)/g, '<sub>$1</sub>');
+  return t;
+}
+export function rich(text) {
+  const parts = String(text == null ? '' : text).split('$');
+  if (parts.length < 3 || parts.length % 2 === 0) return esc(text);
+  return parts.map((seg, i) => (i % 2 ? `<span class="mth" dir="${/[A-Za-z]/.test(seg) ? 'ltr' : 'rtl'}">${mathHtml(seg)}</span>` : esc(seg))).join('');
+}
+
 /* ---------- العشوائية: ثابتة لكل طالب (نفس الطالب = نفس الورقة لو انطبعت مرة ثانية) ---------- */
 function hashStr(s) { let h = 1779033703 ^ s.length; for (let i = 0; i < s.length; i++) { h = Math.imul(h ^ s.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); } return h >>> 0; }
 function rng(seed) { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
@@ -117,12 +151,38 @@ const PAPER_STYLES = `
   .qp-ex { display:inline-block; width:3.4mm; height:3.4mm; border:0.3mm solid #000; border-radius:50%; vertical-align:middle; margin:0 0.8mm; }
   .qp-ex.fill { background:#000; }
   .qp-cont { position:absolute; display:flex; justify-content:space-between; align-items:center; font-size:9pt; font-weight:700; border-bottom:0.4mm solid #1d3557; padding-bottom:1mm; }
+  .mth { unicode-bidi:isolate; display:inline-block; white-space:nowrap; font-family:'Cambria Math','Times New Roman','Tahoma',serif; font-size:1.06em; padding:0 0.6mm; }
+  .mth .fr { display:inline-flex; flex-direction:column; vertical-align:middle; text-align:center; margin:0 0.5mm; line-height:1.15; font-size:0.92em; }
+  .mth .fr span:first-child { border-bottom:0.25mm solid currentColor; padding:0 0.8mm 0.2mm; } .mth .fr span:last-child { padding:0.2mm 0.8mm 0; }
+  .mth .rt { white-space:nowrap; } .mth .rd { border-top:0.25mm solid currentColor; padding:0 0.5mm; margin-inline-start:-0.2mm; }
+  .mth sup, .mth sub { font-size:0.72em; line-height:0; }
+  .qb-head { display:flex; justify-content:space-between; align-items:baseline; gap:3mm; font-weight:900; font-size:var(--qfs,10pt); color:#1d3557; border-bottom:0.45mm solid #1d3557; padding:0.6mm 0.5mm 0.8mm; margin:1.2mm 0 1.4mm; break-after:avoid; }
+  .qb-head em { font-style:normal; font-weight:700; font-size:0.86em; white-space:nowrap; }
+  .qb-q .mk { float:left; font-weight:700; font-size:0.84em; color:#3c4a60; margin-inline-start:2mm; white-space:nowrap; }
+  .qp-qarea.gap-s .qb { margin-bottom:0.7mm; } .qp-qarea.gap-s .qb-q { padding:0.5mm 2mm; } .qp-qarea.gap-s .qb-o { padding:0.45mm 1.6mm; }
+  .qp-qarea.gap-l .qb { margin-bottom:2.4mm; } .qp-qarea.gap-l .qb-q { padding:1.5mm 2.4mm; } .qp-qarea.gap-l .qb-o { padding:1.3mm 2mm; }
+  .qb.es .es-body { position:relative; padding:0 2mm 1.6mm; }
+  .qb.es .es-ln { display:block; height:8mm; border-bottom:0.2mm dotted #5c6779; }
+  .qp-qarea.gap-s .es-ln { height:7mm; } .qp-qarea.gap-l .es-ln { height:9mm; }
+  .qb.es .es-key { position:absolute; inset:0 2mm auto 2mm; padding-top:1.6mm; font-size:var(--ofs,9.6pt); line-height:8mm; color:#0b6b3a; font-weight:700; white-space:pre-wrap; }
+  .qb.es .es-score { display:block; width:max-content; margin:1.4mm auto 0 0; background:#fff; border:0.3mm solid #1d3557; border-radius:1.2mm; padding:0.5mm 2mm; font-size:8.5pt; font-weight:700; color:#1d3557; direction:rtl; }
+  .qp-score { position:absolute; border:0.4mm solid #1d3557; border-radius:2mm; display:flex; flex-direction:column; overflow:hidden; background:#fff; text-align:center; }
+  .qp-score b { background:#1d3557; color:#fff; font-size:8pt; padding:0.5mm 0; } .qp-score span { flex:1; display:flex; align-items:flex-end; justify-content:center; font-size:8.5pt; font-weight:700; padding-bottom:0.8mm; color:#1d3557; }
+  .qp-a3 { position:relative; width:420mm; height:297mm; overflow:hidden; background:#fff; page-break-after:always; break-after:page; }
+  .qp-a3:last-child { page-break-after:auto; break-after:auto; }
+  .qp-a3 .qp-page { position:absolute; top:0; margin:0 !important; box-shadow:none !important; page-break-after:auto; break-after:auto; }
+  .qp-a3 .qp-page.pr { right:0; } .qp-a3 .qp-page.pl { left:0; }
+  .qp-a3 .qp-cut3 { position:absolute; left:210mm; top:0; bottom:0; width:0; border-left:0.3mm dashed #888; z-index:3; }
+  .qp-a3 .qp-cut3 span { position:absolute; left:-2.4mm; font-size:10pt; color:#666; background:#fff; }
+  @media screen { .qp-a3 { margin:0 auto 8mm; box-shadow:0 2px 14px rgba(0,0,0,.18); } }
   @media screen { body { background:#e9ecf1; padding:10mm 0; } .qp-page { margin:0 auto 8mm; box-shadow:0 2px 14px rgba(0,0,0,.18); } .qp-bar { position:sticky; top:0; z-index:5; display:flex; gap:10px; justify-content:center; align-items:center; padding:10px; background:#16233A; color:#fff; font:600 14px Tahoma; margin:-10mm 0 10mm; } .qp-bar button { font:700 14px Tahoma; padding:8px 18px; border-radius:8px; border:0; cursor:pointer; background:#fff; color:#16233A; } }
   @media print { .qp-bar { display:none; } }
 `;
 
 // توزيع الخيارات: ٣ بسطر للقصيرة، وإلا ٢ أو كل خيار بسطر
-function optCols(texts) {
+function optCols(texts, mode) {
+  if (mode === 'col') return 'c1';
+  if (mode === 'row') return texts.length === 2 ? 'c2' : 'c3';
   const max = Math.max(0, ...texts.map(t => String(t || '').length));
   if (texts.length === 2) return max <= 80 ? 'c2' : 'c1';
   return max <= 90 ? 'c3' : 'c1';
@@ -131,15 +191,41 @@ function optCols(texts) {
 function questionBlock(paper, perm, pos, key) {
   const q = paper.questions[perm.q[pos]];
   const n = pos + 1;
+  const f = fmtOf(paper);
+  const mk = f.showMarks ? `<span class="mk">(${marksTxt(markOf(q))})</span>` : '';
   const correctSlot = key ? perm.o[pos].indexOf(q.answer) : -1;
   let opts;
   if (q.type === 'tf') {
     opts = `<div class="qb-opts c2">${['صح', 'خطأ'].map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${s === 0 ? '✓' : '✗'}</span><span>${t}</span></div>`).join('')}</div>`;
   } else {
     const texts = perm.o[pos].map(oi => q.options[oi]);
-    opts = `<div class="qb-opts ${optCols(texts)}">${texts.map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${AR[s]}</span><span>${esc(t)}</span></div>`).join('')}</div>`;
+    opts = `<div class="qb-opts ${optCols(texts, f.opts)}">${texts.map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${AR[s]}</span><span>${rich(t)}</span></div>`).join('')}</div>`;
   }
-  return `<div class="qb"><div class="qb-q"><span class="n">${n}-</span>${esc(q.text)}</div>${opts}</div>`;
+  return `<div class="qb"><div class="qb-q">${mk}<span class="n">${n}-</span>${rich(q.text)}</div>${opts}</div>`;
+}
+
+// السؤال المقالي: نص + سطور للإجابة + خانة درجة يكتبها المصحح (لا يدخل شبكة التظليل)
+function essayBlock(paper, i, n, key) {
+  const q = essaysOf(paper)[i];
+  const lines = Math.min(20, Math.max(1, Number(q.lines) || 3));
+  const m = markOf(q);
+  return `<div class="qb es"><div class="qb-q"><span class="mk">(${marksTxt(m)})</span><span class="n">${n}-</span>${rich(q.text)}</div>
+    <div class="es-body">${key && q.model ? `<div class="es-key">${rich(q.model)}</div>` : ''}${'<i class="es-ln"></i>'.repeat(lines)}<span class="es-score">الدرجة: ......... من ${num(m)}</span></div></div>`;
+}
+const ORD = ['الأول', 'الثاني', 'الثالث'];
+const HEAD_TXT = { mcq: 'اختر الإجابة الصحيحة فيما يأتي، ثم ظلّلها في نموذج الإجابة', tf: 'ظلّل (✓) للعبارة الصحيحة و(✗) للعبارة الخاطئة في نموذج الإجابة', essay: 'أجب عن الأسئلة الآتية' };
+// كل بلوكات الورقة بالترتيب: عناوين الأقسام + الموضوعي + المقالي
+function allBlocks(paper, perm, key) {
+  const f = fmtOf(paper), es = essaysOf(paper);
+  let out = '', sec = 0, last = null;
+  const head = (type, total) => (f.heads ? `<div class="qb-head"><span>السؤال ${ORD[sec++] || ''}: ${HEAD_TXT[type]}</span>${f.showMarks ? `<em>${marksTxt(total)}</em>` : ''}</div>` : '');
+  perm.q.forEach((qi, pos) => {
+    const t = paper.questions[qi].type;
+    if (t !== last) { out += head(t, paper.questions.filter(q => q.type === t).reduce((a, q) => a + markOf(q), 0)); last = t; }
+    out += questionBlock(paper, perm, pos, key);
+  });
+  if (es.length) { out += head('essay', es.reduce((a, q) => a + markOf(q), 0)); es.forEach((_, i) => { out += essayBlock(paper, i, perm.q.length + i + 1, key); }); }
+  return out;
 }
 
 function marksHtml() {
@@ -179,7 +265,9 @@ function gridHtml(paper, perm, key) {
 function firstPageHtml(paper, perm, student, opts) {
   let h = `<div class="qp-page qp-first">` + marksHtml();
   const sub = [paper.subject, gradeLabels[paper.grade_level]].filter(Boolean).join(' · ');
-  h += `<div class="qp-title" style="left:${mm(P.side + 10)}; top:${mm(P.titleTop)}; width:${mm(P.innerW - 20)}; height:${mm(P.titleH)};"><b>${esc(paper.title || 'اختبار')}</b><span>${esc(sub)}${opts.key ? ' — <span style="color:#b00;">نسخة المعلم: الإجابات مظللة</span>' : ''}</span></div>`;
+  const f = fmtOf(paper), tot = totalsOf(paper);
+  if (f.total) h += `<div class="qp-score" style="left:${mm(P.side + 9)}; top:${mm(P.titleTop)}; width:${mm(26)}; height:${mm(P.titleH)};"><b>الدرجة</b><span>من ${num(tot.all)}</span></div>`;
+  h += `<div class="qp-title" style="left:${mm(P.side + 37)}; top:${mm(P.titleTop)}; width:${mm(P.innerW - 74)}; height:${mm(P.titleH)};"><b>${esc(paper.title || 'اختبار')}</b><span>${esc(sub)}${opts.key ? ' — <span style="color:#b00;">نسخة المعلم: الإجابات مظللة</span>' : ''}</span></div>`;
   // البيانات يمين، والباركود يسار
   const tblW = P.innerW - P.barcodeW - 4;
   const right = P.w - P.side;
@@ -208,8 +296,8 @@ function firstPageHtml(paper, perm, student, opts) {
     h += code128Svg(id, P.barModule, P.barH).svg + `<div style="font-size:8.5pt; font-family:'Courier New',monospace; font-weight:700; letter-spacing:0.6mm; direction:ltr;">${esc(id)}</div>`;
   } else h += `<div style="font-size:9pt; color:#888;">${opts.key ? 'نسخة المعلم' : 'الباركود'}</div>`;
   h += `</div>`;
-  h += `<div class="qp-instr" style="left:${mm(P.side)}; top:${mm(P.instrTop)}; width:${mm(P.innerW)}; height:${mm(P.instrH)};">اقرأ كل سؤال، ثم ظلّل الإجابة الصحيحة في «نموذج الإجابة» أسفل الصفحة — إجابة واحدة لكل سؤال${perm.q.length ? ` · عدد الأسئلة ${perm.q.length}` : ''}</div>`;
-  h += `<div class="qp-qarea" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm(P.qBottom - P.qTop)};"></div>`;
+  h += `<div class="qp-instr" style="left:${mm(P.side)}; top:${mm(P.instrTop)}; width:${mm(P.innerW)}; height:${mm(P.instrH)};">اقرأ كل سؤال، ثم ظلّل الإجابة الصحيحة في «نموذج الإجابة» أسفل الصفحة — إجابة واحدة لكل سؤال${perm.q.length ? ` · عدد الأسئلة ${perm.q.length + essaysOf(paper).length}` : ''}${f.time ? ` · الزمن: ${esc(f.time)}` : ''}</div>`;
+  h += `<div class="qp-qarea gap-${f.gap}" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm(P.qBottom - P.qTop)};"></div>`;
   h += gridHtml(paper, perm, opts.key);
   h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر</div>`;
   return h + `</div>`;
@@ -217,13 +305,13 @@ function firstPageHtml(paper, perm, student, opts) {
 
 function contPageHtml(paper, student) {
   return `<div class="qp-page qp-next"><div class="qp-cont" style="left:${mm(P.side)}; top:${mm(10)}; width:${mm(P.innerW)};"><span>${esc(paper.title || '')}</span><span>${esc(student ? student.full_name : '')}</span></div>
-    <div class="qp-qarea" style="left:${mm(P.side)}; top:${mm(18)}; width:${mm(P.innerW)}; height:${mm(P.h - 18 - 12)};"></div>
+    <div class="qp-qarea gap-${fmtOf(paper).gap}" style="left:${mm(P.side)}; top:${mm(18)}; width:${mm(P.innerW)}; height:${mm(P.h - 18 - 12)};"></div>
     <div class="qp-foot" style="left:${mm(P.side)}; width:${mm(P.innerW)}; top:${mm(P.h - 9)};">التظليل في الصفحة الأولى</div></div>`;
 }
 
 // كل طالب: الصفحة الأولى (فيها التظليل) + قالب صفحة تكميلية + الأسئلة؛ السكربت يوزع الأسئلة على الصفحات
 function studentBundle(paper, perm, student, opts = {}) {
-  const blocks = perm.q.map((_, pos) => questionBlock(paper, perm, pos, opts.key)).join('');
+  const blocks = allBlocks(paper, perm, opts.key);
   return `<div class="qp-stu">${firstPageHtml(paper, perm, student, opts)}<template class="qp-next-tpl">${contPageHtml(paper, student)}</template><template class="qp-blocks">${blocks}</template></div>`;
 }
 
@@ -249,14 +337,29 @@ const FLOW_SCRIPT = `(function(){
     return pages;
   }
   document.querySelectorAll('.qp-stu').forEach(function(stu){
-    var base = fill(stu, 10), best = 10, bestPages = base;
-    var minF = window.QP_SINGLE ? 6.5 : 7.5;
-    for (var f = 9.5; bestPages > 1 && f >= minF; f -= 0.5) { var pg = fill(stu, f); if (pg < bestPages) { best = f; bestPages = pg; } }
+    var F0 = window.QP_FS || 10;
+    var base = fill(stu, F0), best = F0, bestPages = base;
+    var minF = window.QP_SINGLE ? 6.5 : Math.max(7.5, F0 - 2);
+    for (var f = F0 - 0.5; bestPages > 1 && f >= minF; f -= 0.5) { var pg = fill(stu, f); if (pg < bestPages) { best = f; bestPages = pg; } }
     if (window.QP_SINGLE && bestPages > 1) best = minF;
     fill(stu, best);
     if (window.QP_SINGLE && bestPages > 1) stu.querySelector('.qp-first .qp-qarea').style.outline = '0.8mm solid #e00';
   });
-  var n = document.querySelectorAll('.qp-sheet2').length || document.querySelectorAll('.qp-page').length; var c = document.getElementById('qp-count'); if (c) c.textContent = n;
+  // A3 بالعرض: إذا احتاج أي طالب أكثر من صفحة تُطبع كل صفحتين متجاورتين (الأولى يمين) وتُقص من المنتصف
+  if (window.QP_A3 && document.querySelector('.qp-next')) {
+    document.querySelectorAll('.qp-stu').forEach(function(stu){
+      var pages = Array.prototype.slice.call(stu.querySelectorAll('.qp-page'));
+      for (var i = 0; i < pages.length; i += 2) {
+        var sh = document.createElement('div'); sh.className = 'qp-a3'; pages[i].before(sh);
+        pages[i].classList.add('pr'); sh.appendChild(pages[i]);
+        if (pages[i + 1]) { pages[i + 1].classList.add('pl'); sh.appendChild(pages[i + 1]); }
+        var cut = document.createElement('div'); cut.className = 'qp-cut3'; cut.innerHTML = '<span style="top:3mm;">✂</span><span style="bottom:3mm;">✂</span>'; sh.appendChild(cut);
+      }
+    });
+    var st = document.createElement('style'); st.textContent = '@page { size:A3 landscape; margin:0; }'; document.head.appendChild(st);
+    var u = document.getElementById('qp-unit'); if (u) u.textContent = 'ورقة A3 بالعرض (تُقص نصفين)';
+  }
+  var n = document.querySelectorAll('.qp-sheet2').length || document.querySelectorAll('.qp-a3').length || document.querySelectorAll('.qp-page').length; var c = document.getElementById('qp-count'); if (c) c.textContent = n;
 })();`;
 
 // A4 بالعرض: ورقتين A5 (نفس تصميم A4 مصغّر بنسبة ١/√٢ بالضبط) مع خط قص بالنص - الطالب الأول يمين
@@ -274,7 +377,7 @@ const TWO_UP_STYLES = `
   .qp-cut span { position:absolute; left:-2.4mm; font-size:10pt; color:#666; }
   @media screen { .qp-sheet2 { margin:0 auto 8mm; box-shadow:0 2px 14px rgba(0,0,0,.18); } }
 `;
-function openPrintWindow(win, title, bundles, note, layout = 'A4') {
+function openPrintWindow(win, title, bundles, note, layout = 'A4', fs = 10) {
   const two = layout === 'A4L2';
   let body = bundles.join('');
   if (two) {
@@ -285,9 +388,9 @@ function openPrintWindow(win, title, bundles, note, layout = 'A4') {
   }
   win.document.open();
   win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${PAPER_STYLES}${two ? TWO_UP_STYLES : ''}</style></head><body>
-    <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> ${two ? 'ورقة A4 بالعرض' : 'صفحة'}</span><button onclick="window.print()">🖨️ طباعة</button></div>
+    <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> <span id="qp-unit">${two ? 'ورقة A4 بالعرض' : 'صفحة'}</span></span><button onclick="window.print()">🖨️ طباعة</button></div>
     ${body}
-    <script>window.QP_SINGLE = ${two ? 'true' : 'false'};${FLOW_SCRIPT}<\/script></body></html>`);
+    <script>window.QP_SINGLE = ${two ? 'true' : 'false'};window.QP_A3 = ${layout === 'A3' ? 'true' : 'false'};window.QP_FS = ${Number(fs) || 10};${FLOW_SCRIPT}<\/script></body></html>`);
   win.document.close();
   win.focus();
 }
@@ -350,7 +453,12 @@ export async function applyPaperToParsed(parsed, { skip = false } = {}) {
   parsed.presetLetters = paper.questions.map(q => (q.answer == null ? null : AR[q.answer]));
   parsed.paper = { id: paper.id, title: paper.title };
   parsed.textCoded = false;
-  parsed.hasEssay = false;
+  const es = essaysOf(paper);
+  parsed.hasEssay = es.length > 0;
+  parsed.paperEssayMax = es.length ? es.reduce((a, q) => a + markOf(q), 0) : null;
+  parsed.essayMax = parsed.paperEssayMax;
+  parsed.paperPoints = paper.questions.some(q => markOf(q) !== 1) ? paper.questions.map(markOf) : null;
+  parsed.points = parsed.paperPoints;
   parsed.detected = { subject: paper.subject || parsed.detected.subject || '', grade: gradeLabels[paper.grade_level] || parsed.detected.grade || '' };
   return { paper, unknown, missingPages: [] };
 }
@@ -362,7 +470,7 @@ let papers = [];
 let cur = null;          // الورقة المفتوحة
 let dirty = false;
 let studentsList = null;
-let scope = { grade: '', sections: new Set(), layout: (() => { try { return localStorage.getItem('qp-layout') || 'A4'; } catch (_) { return 'A4'; } })() };
+let scope = { grade: '', sections: new Set(), layout: (() => { try { return localStorage.getItem('qp-layout') || 'A3'; } catch (_) { return 'A3'; } })() };
 
 function blankPaper() {
   return { id: null, title: '', subject: '', grade_level: '', questions: [], settings: { shuffleQ: true, shuffleOpts: true, order: 'mcq' }, perms: {} };
@@ -436,6 +544,18 @@ function renderEditor() {
           <p class="qp-note">يتغيّر ترتيب الأسئلة داخل قسمها، ولا تتغيّر خيارات أسئلة الصح والخطأ.</p>
         </div>
         <div class="form-card">
+          <h4>تنسيق الورقة</h4>
+          <div class="qp-fmt">
+            <label class="as-f">حجم الخط<select id="qp-f-size" ${ro ? 'disabled' : ''}>${[['s', 'صغير'], ['m', 'متوسط'], ['l', 'كبير']].map(([v, t]) => `<option value="${v}"${fmtOf(p).size === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+            <label class="as-f">تباعد الأسئلة<select id="qp-f-gap" ${ro ? 'disabled' : ''}>${[['s', 'مضغوط'], ['m', 'عادي'], ['l', 'واسع']].map(([v, t]) => `<option value="${v}"${fmtOf(p).gap === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+          </div>
+          <label class="as-f">توزيع الخيارات<select id="qp-f-opts" ${ro ? 'disabled' : ''}>${[['auto', 'تلقائي حسب طول الخيار'], ['row', 'متجاورة في سطر واحد'], ['col', 'كل خيار في سطر']].map(([v, t]) => `<option value="${v}"${fmtOf(p).opts === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label class="as-f">زمن الاختبار (اختياري)<input type="text" id="qp-f-time" value="${esc(fmtOf(p).time)}" placeholder="مثال: 45 دقيقة" ${ro ? 'disabled' : ''}/></label>
+          <label class="qp-chk"><input type="checkbox" id="qp-f-heads" ${fmtOf(p).heads ? 'checked' : ''} ${ro ? 'disabled' : ''}/> عناوين الأقسام (السؤال الأول، الثاني…)</label>
+          <label class="qp-chk"><input type="checkbox" id="qp-f-marks" ${fmtOf(p).showMarks ? 'checked' : ''} ${ro ? 'disabled' : ''}/> إظهار درجة كل سؤال</label>
+          <label class="qp-chk"><input type="checkbox" id="qp-f-total" ${fmtOf(p).total ? 'checked' : ''} ${ro ? 'disabled' : ''}/> خانة الدرجة الكلية أعلى الورقة</label>
+        </div>
+        <div class="form-card">
           <h4>الطباعة</h4>
           <div id="qp-print"></div>
         </div>
@@ -453,8 +573,16 @@ function renderEditor() {
           ${ro ? '' : `<div class="qp-qtools">
             <button type="button" class="btn-secondary" id="qp-add-mcq" style="width:auto; padding:8px 12px;">+ اختيار من متعدد</button>
             <button type="button" class="btn-secondary" id="qp-add-tf" style="width:auto; padding:8px 12px;">+ صح وخطأ</button>
+            <button type="button" class="btn-secondary" id="qp-add-es" style="width:auto; padding:8px 12px;">+ سؤال مقالي</button>
+            <button type="button" class="btn-secondary" id="qp-math-btn" style="width:auto; padding:8px 12px;" aria-expanded="false">رموز رياضية</button>
             <button type="button" class="text-action-btn" id="qp-paste-btn">لصق أسئلة جاهزة</button>
           </div>`}
+        </div>
+        <div id="qp-math" class="qp-math hidden">
+          <div class="qp-math-row">${[['معادلة', '$ $', 2], ['كسر', '${ }/{ }$', 3], ['أس', '^{ }', 2], ['دليل', '_{ }', 2], ['جذر', '√{ }', 2]].map(([t, v, c]) => `<button type="button" class="qp-sym tpl" data-v="${esc(v)}" data-c="${c}">${t}</button>`).join('')}</div>
+          <div class="qp-math-row">${['×', '÷', '±', '−', '=', '≠', '≈', '<', '>', '≤', '≥', '√', 'π', '∞', '°', '%', '²', '³', '½', '¼', '¾', '∠', '△', '⊥', '∥', '∈', '∪', '∩', '⊂', '∅', 'θ', 'α', 'β', '∑', '←', '→'].map(c => `<button type="button" class="qp-sym" data-v="${c}">${c}</button>`).join('')}</div>
+          <p class="qp-note">ضع المؤشر في نص السؤال أو الخيار ثم اضغط الرمز. ما يُكتب بين علامتي <b dir="ltr">$ $</b> يُعرض معادلةً: <b dir="ltr">3/4</b> كسر، <b dir="ltr">س^2</b> أس، <b dir="ltr">√{س+1}</b> جذر، و<b dir="ltr">{2س+1}/{3}</b> كسر مركّب.</p>
+          <div class="qp-math-prev"><span>المعاينة</span><div id="qp-math-out">اكتب في أي حقل لتظهر معاينته هنا</div></div>
         </div>
         <div id="qp-paste" class="qp-paste hidden">
           <p>الصق أسئلتك بهذا الشكل، وضع <b>*</b> بجانب الإجابة الصحيحة، و<b>(صح)</b> أو <b>(خطأ)</b> في نهاية سؤال الصح والخطأ:</p>
@@ -482,6 +610,31 @@ function renderEditor() {
     $('qp-save-btn').onclick = () => savePaper();
     $('qp-add-mcq').onclick = () => { p.questions.push(newMcq()); markDirty(); renderQuestions(true); };
     $('qp-add-tf').onclick = () => { p.questions.push(newTf()); markDirty(); renderQuestions(true); };
+    $('qp-add-es').onclick = () => { s.essays = essaysOf(p).concat([{ text: '', marks: 2, lines: 4, model: '' }]); markDirty(); renderQuestions(); const c = [...document.querySelectorAll('.qp-q.es')].pop(); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.querySelector('textarea').focus(); } };
+    const setF = (k, v) => { s.fmt = { ...fmtOf(p), [k]: v }; };
+    bind('qp-f-size', el => setF('size', el.value)); bind('qp-f-gap', el => setF('gap', el.value)); bind('qp-f-opts', el => setF('opts', el.value));
+    bind('qp-f-time', el => setF('time', el.value.trim())); bind('qp-f-heads', el => setF('heads', el.checked));
+    bind('qp-f-marks', el => setF('showMarks', el.checked)); bind('qp-f-total', el => setF('total', el.checked));
+    // الرموز الرياضية: تُدرج عند المؤشر في آخر حقل نصي كان التركيز عليه
+    let lastField = null;
+    const main = root.querySelector('.qp-main');
+    const showPrev = el => { const o = $('qp-math-out'); if (o && el) o.innerHTML = rich(el.value) || '<span class="as-muted">فارغ</span>'; };
+    main.addEventListener('focusin', e => { if (e.target.matches('textarea, input[type="text"]') && e.target.id !== 'qp-paste-text') { lastField = e.target; showPrev(lastField); } });
+    main.addEventListener('input', e => { if (e.target === lastField) showPrev(lastField); });
+    $('qp-math-btn').onclick = () => { const h = $('qp-math').classList.toggle('hidden'); $('qp-math-btn').setAttribute('aria-expanded', String(!h)); };
+    $('qp-math').addEventListener('mousedown', e => { if (e.target.closest('.qp-sym')) e.preventDefault(); });
+    $('qp-math').addEventListener('click', e => {
+      const b = e.target.closest('.qp-sym'); if (!b) return;
+      const el = lastField && document.contains(lastField) ? lastField : main.querySelector('.qp-text');
+      if (!el || el.disabled) return;
+      const v = b.dataset.v, a = el.selectionStart ?? el.value.length, z = el.selectionEnd ?? a;
+      const sel = el.value.slice(a, z);
+      let ins = v, from = a + v.length, to = from;
+      if (b.classList.contains('tpl')) { const i = v.indexOf(' '); ins = sel ? v.slice(0, i) + sel + v.slice(i + 1) : v; from = a + i; to = sel ? from + sel.length : from + 1; }
+      el.value = el.value.slice(0, a) + ins + el.value.slice(z);
+      el.focus(); el.setSelectionRange(from, to);
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     $('qp-paste-btn').onclick = () => { $('qp-paste').classList.toggle('hidden'); $('qp-paste-text').focus(); };
     $('qp-paste-cancel').onclick = () => $('qp-paste').classList.add('hidden');
     $('qp-paste-go').onclick = () => {
@@ -515,8 +668,18 @@ function renderQuestions(scrollLast = false) {
   const ro = !canEdit(p);
   const order = displayOrder();
   const mcq = p.questions.filter(q => q.type === 'mcq').length;
-  $('qp-count').textContent = `${p.questions.length} من ${CAP} سؤال · ${mcq} اختيار متعدد · ${p.questions.length - mcq} صح وخطأ`;
-  if (!p.questions.length) { box.innerHTML = '<div class="ex-empty"><b>لا توجد أسئلة</b><span>أضف سؤال أو الصق أسئلة جاهزة.</span></div>'; return; }
+  const es = essaysOf(p), tot = totalsOf(p);
+  $('qp-count').textContent = `${p.questions.length} من ${CAP} سؤال موضوعي · ${mcq} اختيار متعدد · ${p.questions.length - mcq} صح وخطأ${es.length ? ` · ${es.length} مقالي` : ''} · مجموع الدرجات ${num(tot.all)}${es.length ? ` (موضوعي ${num(tot.obj)} + مقالي ${num(tot.essay)})` : ''}`;
+  if (!p.questions.length && !es.length) { box.innerHTML = '<div class="ex-empty"><b>لا توجد أسئلة</b><span>أضف سؤالًا أو الصق أسئلة جاهزة.</span></div>'; return; }
+  const esHtml = !es.length ? '' : `<div class="qp-sec">مقالي <small>(لا يدخل في التظليل، ويصححه المعلم يدويًا)</small></div>` + es.map((q, i) => `<div class="qp-q es${String(q.text || '').trim() ? '' : ' bad'}" data-e="${i}">
+      <div class="qp-q-h"><span class="qp-q-n">${p.questions.length + i + 1}</span>
+        <label class="qp-mk">الدرجة <input type="number" class="qp-es-marks" data-e="${i}" min="0.25" step="0.25" value="${markOf(q)}" ${ro ? 'disabled' : ''}/></label>
+        <label class="qp-mk">سطور الإجابة <input type="number" class="qp-es-lines" data-e="${i}" min="1" max="20" step="1" value="${Number(q.lines) || 3}" ${ro ? 'disabled' : ''}/></label>
+        ${ro ? '' : `<div class="qp-q-act"><button type="button" class="qp-ic qp-es-up" data-e="${i}" aria-label="لفوق">↑</button><button type="button" class="qp-ic qp-es-down" data-e="${i}" aria-label="لتحت">↓</button><button type="button" class="qp-ic danger qp-es-del" data-e="${i}" aria-label="حذف السؤال">🗑</button></div>`}
+      </div>
+      <textarea class="qp-es-text" data-e="${i}" rows="2" placeholder="نص السؤال المقالي" ${ro ? 'disabled' : ''}>${esc(q.text || '')}</textarea>
+      <textarea class="qp-es-model" data-e="${i}" rows="1" placeholder="الإجابة النموذجية (اختياري، تظهر في نسخة المعلم فقط)" ${ro ? 'disabled' : ''}>${esc(q.model || '')}</textarea>
+    </div>`).join('');
   let lastType = null;
   box.innerHTML = order.map((qi, pos) => {
     const q = p.questions[qi];
@@ -540,6 +703,7 @@ function renderQuestions(scrollLast = false) {
     const issues = questionIssues(q);
     return `${head}<div class="qp-q${issues.length ? ' bad' : ''}" data-q="${qi}">
       <div class="qp-q-h"><span class="qp-q-n">${pos + 1}</span>
+        <label class="qp-mk">الدرجة <input type="number" class="qp-marks" data-q="${qi}" min="0.25" step="0.25" value="${markOf(q)}" ${dis}/></label>
         ${issues.length ? `<span class="qp-q-warn">${esc(issues.join('، '))}</span>` : ''}
         ${ro ? '' : `<div class="qp-q-act">
           <button type="button" class="qp-ic qp-up" data-q="${qi}" aria-label="لفوق">↑</button>
@@ -550,15 +714,27 @@ function renderQuestions(scrollLast = false) {
       <textarea class="qp-text" data-q="${qi}" rows="2" placeholder="${q.type === 'tf' ? 'نص العبارة' : 'نص السؤال'}" ${dis}>${esc(q.text)}</textarea>
       ${body}
     </div>`;
-  }).join('');
+  }).join('') + esHtml;
   if (ro) return;
+  const recount = () => { const t = totalsOf(p), e = essaysOf(p), m = p.questions.filter(q => q.type === 'mcq').length; $('qp-count').textContent = `${p.questions.length} من ${CAP} سؤال موضوعي · ${m} اختيار متعدد · ${p.questions.length - m} صح وخطأ${e.length ? ` · ${e.length} مقالي` : ''} · مجموع الدرجات ${num(t.all)}${e.length ? ` (موضوعي ${num(t.obj)} + مقالي ${num(t.essay)})` : ''}`; };
+  box.querySelectorAll('.qp-marks').forEach(t => t.addEventListener('input', () => { const v = Number(t.value); if (v > 0) { if (v === 1) delete p.questions[t.dataset.q].marks; else p.questions[t.dataset.q].marks = v; markDirty(); recount(); } }));
+  const E = i => p.settings.essays[i];
+  box.querySelectorAll('.qp-es-text').forEach(t => t.addEventListener('input', () => { E(t.dataset.e).text = t.value; markDirty(); t.closest('.qp-q').classList.toggle('bad', !t.value.trim()); }));
+  box.querySelectorAll('.qp-es-model').forEach(t => t.addEventListener('input', () => { E(t.dataset.e).model = t.value; markDirty(); }));
+  box.querySelectorAll('.qp-es-marks').forEach(t => t.addEventListener('input', () => { const v = Number(t.value); if (v > 0) { E(t.dataset.e).marks = v; markDirty(); recount(); } }));
+  box.querySelectorAll('.qp-es-lines').forEach(t => t.addEventListener('input', () => { const v = Math.round(Number(t.value)); if (v >= 1 && v <= 20) { E(t.dataset.e).lines = v; markDirty(); } }));
+  const esMove = (i, d) => { const a = p.settings.essays, j = i + d; if (j < 0 || j >= a.length) return; [a[i], a[j]] = [a[j], a[i]]; markDirty(); renderQuestions(); };
+  box.querySelectorAll('.qp-es-up').forEach(b => b.onclick = () => esMove(Number(b.dataset.e), -1));
+  box.querySelectorAll('.qp-es-down').forEach(b => b.onclick = () => esMove(Number(b.dataset.e), 1));
+  box.querySelectorAll('.qp-es-del').forEach(b => b.onclick = () => { const i = Number(b.dataset.e); if (String(E(i).text || '').trim() && !confirm('حذف هذا السؤال المقالي؟')) return; p.settings.essays.splice(i, 1); markDirty(); renderQuestions(); });
 
   const refreshCard = qi => {
     const card = box.querySelector(`.qp-q[data-q="${qi}"]`);
+    if (!card) return;
     const issues = questionIssues(p.questions[qi]);
     card.classList.toggle('bad', !!issues.length);
     let w = card.querySelector('.qp-q-warn');
-    if (issues.length) { if (!w) { w = document.createElement('span'); w.className = 'qp-q-warn'; card.querySelector('.qp-q-n').after(w); } w.textContent = issues.join('، '); } else if (w) w.remove();
+    if (issues.length) { if (!w) { w = document.createElement('span'); w.className = 'qp-q-warn'; (card.querySelector('.qp-mk') || card.querySelector('.qp-q-n')).after(w); } w.textContent = issues.join('، '); } else if (w) w.remove();
   };
   box.querySelectorAll('.qp-text').forEach(t => t.addEventListener('input', () => { p.questions[t.dataset.q].text = t.value; markDirty(); refreshCard(t.dataset.q); }));
   box.querySelectorAll('.qp-opt-in').forEach(t => t.addEventListener('input', () => { p.questions[t.dataset.q].options[t.dataset.o] = t.value; markDirty(); refreshCard(t.dataset.q); }));
@@ -683,7 +859,8 @@ async function renderPrint() {
   box.innerHTML = `
     <label class="as-f">الصف<select id="qp-pr-grade"><option value="">اختر الصف</option>${GRADES.map(x => `<option value="${x}"${g === x ? ' selected' : ''}>${gradeLabels[x]}</option>`).join('')}</select></label>
     ${g ? `<div class="qp-secs">${secs.map(n => `<button type="button" class="sd-chip sm${scope.sections.has(n) ? ' on' : ''}" data-s="${n}">فصل ${n}</button>`).join('')}</div><p class="qp-note">${scope.sections.size ? '' : 'كل الفصول — '}اضغط على فصل لتحديده.</p>` : ''}
-    <label class="as-f">حجم الطباعة<select id="qp-pr-layout"><option value="A4"${scope.layout !== 'A4L2' ? ' selected' : ''}>A4 بالطول (طالب بالورقة)</option><option value="A4L2"${scope.layout === 'A4L2' ? ' selected' : ''}>A4 بالعرض (طالبين + علامة قص)</option></select></label>
+    <label class="as-f">حجم الطباعة<select id="qp-pr-layout"><option value="A3"${scope.layout === 'A3' ? ' selected' : ''}>تلقائي: A4، وA3 بالعرض إذا لم تكفِ صفحة واحدة</option><option value="A4"${scope.layout === 'A4' ? ' selected' : ''}>A4 بالطول دائمًا (التكملة على ظهر الورقة)</option><option value="A4L2"${scope.layout === 'A4L2' ? ' selected' : ''}>A4 بالعرض (طالبان + علامة قص)</option></select></label>
+    ${scope.layout === 'A3' ? '<p class="qp-note">إذا تجاوزت الأسئلة صفحة واحدة تُطبع صفحتا الطالب متجاورتين على ورقة A3 بالعرض، وتُقص من المنتصف فتصبح ورقتين A4 (التظليل في الأولى بمقاسه نفسه).</p>' : ''}
     <div class="qp-pr-sum">${chosen.length ? (scope.layout === 'A4L2' ? `<b>${chosen.length}</b> طالب — <b>${Math.ceil(chosen.length / 2)}</b> ورقة A4 بالعرض` : `<b>${chosen.length}</b> طالب — ورقة لكل طالب`) : 'اختر الصف'}</div>
     <div class="qp-pr-btns">
       <button type="button" class="btn-primary" id="qp-print-st" style="width:auto; padding:10px 16px;" ${chosen.length ? '' : 'disabled'}>🖨️ أوراق الطلاب</button>
@@ -707,7 +884,8 @@ function selectedStudents(list) {
 
 function readyProblems() {
   const p = cur;
-  if (!p.questions.length) return 'أضف أسئلة أولًا';
+  if (!p.questions.length) return 'أضف سؤالًا موضوعيًا واحدًا على الأقل (اختيار من متعدد أو صح وخطأ)';
+  if (essaysOf(p).some(q => !String(q.text || '').trim())) return 'يوجد سؤال مقالي بدون نص - أكمله أو احذفه قبل الطباعة';
   if (p.questions.length > CAP) return `أقصى عدد ${CAP} سؤال في الورقة (لديك ${p.questions.length})`;
   const bad = p.questions.map((q, i) => (questionIssues(q).length ? i : -1)).filter(i => i >= 0);
   if (bad.length) { const ord = displayOrder(); return `يوجد ${bad.length} ${bad.length === 1 ? 'سؤال ناقص' : 'أسئلة ناقصة'} (رقم ${bad.map(i => ord.indexOf(i) + 1).sort((a, b) => a - b).slice(0, 6).join('، ')}) - يُرجى إكمالها قبل الطباعة`; }
@@ -740,7 +918,7 @@ async function printStudents(previewOnly) {
     const perm = (!previewOnly && p.perms[id]) || makePerm({ ...p, id: p.id || 'preview' }, id);
     return studentBundle(p, perm, st, {});
   });
-  openPrintWindow(win, `${p.title} — أوراق الطلاب`, bundles, previewOnly ? 'معاينة (غير محفوظة)' : `${targets.length} طالب`, scope.layout);
+  openPrintWindow(win, `${p.title} — أوراق الطلاب`, bundles, previewOnly ? 'معاينة (غير محفوظة)' : `${targets.length} طالب`, scope.layout, FS[fmtOf(p).size]);
 }
 
 function printKey() {
@@ -749,5 +927,5 @@ function printKey() {
   if (prob) { msg.textContent = prob; msg.className = 'qp-status warn'; return; }
   const win = window.open('', '_blank');
   if (!win) return;
-  openPrintWindow(win, `${cur.title} — نسخة المعلم`, [studentBundle(cur, identityPerm(cur), null, { key: true })], 'نسخة المعلم بالترتيب الأصلي والإجابات مظللة', scope.layout);
+  openPrintWindow(win, `${cur.title} — نسخة المعلم`, [studentBundle(cur, identityPerm(cur), null, { key: true })], 'نسخة المعلم بالترتيب الأصلي والإجابات مظللة', scope.layout, FS[fmtOf(cur).size]);
 }

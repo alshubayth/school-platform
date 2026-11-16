@@ -410,8 +410,8 @@ function applySavedKey(k) {
   if (k && k.models && k.models.mode) parsedData.modelKey = k; else delete parsedData.modelKey;
   if (!k) {
     delete parsedData.presetLetters;
-    parsedData.essayMax = null;
-    parsedData.points = null;
+    parsedData.essayMax = parsedData.paperEssayMax || null;   // ورقة الأسئلة تحمل درجاتها ومقاليها
+    parsedData.points = parsedData.paperPoints || null;
     if (parsedData._origItemTypes) parsedData.itemTypes = parsedData._origItemTypes.slice();
     parsedData.choiceCounts = parsedData._origChoiceCounts.slice();
     msg.textContent = '';
