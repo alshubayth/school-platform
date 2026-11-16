@@ -16,11 +16,15 @@ import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool,
 import { code128Svg } from './answer-sheet.js';
 import { mapPaperAnswers } from './grading-core.js';
 
-const AR = ['أ', 'ب', 'ج'];
+const AR = ['أ', 'ب', 'ج', 'د'];
 const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 const SLOTS = 3;              // دوائر كل سطر بشبكة التظليل (أ ب ج)
 const G_COLS = 2, G_ROWS = 5;
-const CAP = G_COLS * G_ROWS;  // أقصى عدد أسئلة
+const CAP = G_COLS * G_ROWS;  // أقصى عدد أسئلة في الشبكة الثابتة
+const CAP_AUTO = 40, SLOTS_AUTO = 4; // الشبكة المتكيفة: حتى ٤٠ سؤالًا و٤ خيارات
+/* الشبكة المتكيفة: تُرسم آخر الورقة (أسفل الصفحة الأخيرة) بعدد أسئلة الورقة وخياراتها.
+ * مكانها ثابت من أسفل الصفحة، فالأوراق التي لها العدد نفسه من الأسئلة والخيارات تشترك في قالب Remark واحد. */
+const GA = { numW: 11, pitch: 10.5, bubble: 6.4, pad: 2.5, rowH: 8.2, titleH: 7, headH: 6, gap: 5, stripH: 13, bottom: 16 };
 
 /* ---------- أبعاد الصفحة الأولى (مم) - ثابتة لكل الأوراق ---------- */
 const P = {
@@ -44,6 +48,20 @@ P.gOff = (P.innerW - G_COLS * P.gColW - (G_COLS - 1) * P.gGap) / 2; // توسي�
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const mm = v => `${Math.round(v * 100) / 100}mm`;
+
+// وضع الشبكة: الأوراق المطبوعة سابقًا تبقى على الشبكة الثابتة حتى لا يتغيّر قالبها
+const gridMode = paper => (paper.settings || {}).grid || (Object.keys(paper.perms || {}).length ? 'fixed' : 'auto');
+const isAuto = paper => gridMode(paper) === 'auto';
+const capOf = paper => (isAuto(paper) ? CAP_AUTO : CAP);
+const maxOptsOf = paper => (isAuto(paper) ? SLOTS_AUTO : SLOTS);
+const slotsOf = paper => (isAuto(paper) ? Math.max(2, ...paper.questions.map(q => (q.type === 'tf' ? 2 : (q.options || []).length))) : SLOTS);
+function autoGeom(n, slots) {
+  const colW = GA.numW + slots * GA.pitch + 2 * GA.pad;
+  const maxCols = Math.max(1, Math.floor((P.innerW + GA.gap) / (colW + GA.gap)));
+  const cols = Math.min(maxCols, n <= 6 ? 1 : n <= 20 ? 2 : n <= 30 ? 3 : 4);
+  const rows = Math.ceil(n / cols);
+  return { cols, rows, colW, bodyH: GA.headH + rows * GA.rowH, h: GA.titleH + 2 + GA.headH + rows * GA.rowH };
+}
 
 /* ---------- التنسيق والدرجات والأسئلة المقالية (لا تدخل في توقيع الهيكل ولا في شبكة التظليل) ---------- */
 const FMT_DEF = { size: 'm', opts: 'auto', gap: 'm', heads: true, showMarks: true, total: true, time: '' };
@@ -162,12 +180,18 @@ const PAPER_STYLES = `
   .qp-qarea.gap-s .qb { margin-bottom:0.7mm; } .qp-qarea.gap-s .qb-q { padding:0.5mm 2mm; } .qp-qarea.gap-s .qb-o { padding:0.45mm 1.6mm; }
   .qp-qarea.gap-l .qb { margin-bottom:2.4mm; } .qp-qarea.gap-l .qb-q { padding:1.5mm 2.4mm; } .qp-qarea.gap-l .qb-o { padding:1.3mm 2mm; }
   .qb.es .es-body { position:relative; padding:0 2mm 1.6mm; }
-  .qb.es .es-ln { display:block; height:8mm; border-bottom:0.2mm dotted #5c6779; }
-  .qp-qarea.gap-s .es-ln { height:7mm; } .qp-qarea.gap-l .es-ln { height:9mm; }
+  .qb.es .es-ln { display:block; height:var(--lh, 8mm); border-bottom:0.2mm dotted #5c6779; }
+  .qp-qarea.gap-s .es-ln { height:var(--lh, 7mm); } .qp-qarea.gap-l .es-ln { height:var(--lh, 9mm); }
+  .qp-page.gm .qp-cont { padding-inline:9mm; }
   .qb.es .es-key { position:absolute; inset:0 2mm auto 2mm; padding-top:1.6mm; font-size:var(--ofs,9.6pt); line-height:8mm; color:#0b6b3a; font-weight:700; white-space:pre-wrap; }
   .qb.es .es-score { display:block; width:max-content; margin:1.4mm auto 0 0; background:#fff; border:0.3mm solid #1d3557; border-radius:1.2mm; padding:0.5mm 2mm; font-size:8.5pt; font-weight:700; color:#1d3557; direction:rtl; }
   .qp-score { position:absolute; border:0.4mm solid #1d3557; border-radius:2mm; display:flex; flex-direction:column; overflow:hidden; background:#fff; text-align:center; }
   .qp-score b { background:#1d3557; color:#fff; font-size:8pt; padding:0.5mm 0; } .qp-score span { flex:1; display:flex; align-items:flex-end; justify-content:center; font-size:8.5pt; font-weight:700; padding-bottom:0.8mm; color:#1d3557; }
+  .qp-agrid { position:absolute; display:flex; flex-direction:column; background:#fff; }
+  .qp-astrip { display:none; align-items:center; justify-content:space-between; gap:4mm; border:0.35mm solid #1d3557; border-radius:1.8mm; padding:0 3mm; }
+  .qp-agrid.with-strip .qp-astrip { display:flex; }
+  .qp-astrip b { display:block; font-size:10pt; } .qp-astrip span { font-size:8pt; color:#3c4a60; }
+  .qp-astrip .bc { display:flex; flex-direction:column; align-items:center; direction:ltr; } .qp-astrip .bc i { font-style:normal; font:700 7.5pt 'Courier New',monospace; letter-spacing:0.5mm; }
   .qp-a3 { position:relative; width:420mm; height:297mm; overflow:hidden; background:#fff; page-break-after:always; break-after:page; }
   .qp-a3:last-child { page-break-after:auto; break-after:auto; }
   .qp-a3 .qp-page { position:absolute; top:0; margin:0 !important; box-shadow:none !important; page-break-after:auto; break-after:auto; }
@@ -262,6 +286,36 @@ function gridHtml(paper, perm, key) {
   return h;
 }
 
+// الشبكة المتكيفة: بلوك يُثبَّت أسفل الصفحة الأخيرة؛ شريط الاسم والباركود يظهر إذا لم تكن الصفحة الأولى
+function autoGridHtml(paper, perm, key, student) {
+  const n = perm.q.length, slots = slotsOf(paper), g = autoGeom(n, slots);
+  const totalW = g.cols * g.colW + (g.cols - 1) * GA.gap, off = (P.innerW - totalW) / 2;
+  let b = '';
+  for (let c = 0; c < g.cols; c++) {
+    const x = P.innerW - off - (c + 1) * g.colW - c * GA.gap; // العمود الأول يمين
+    b += `<div class="qp-gbox" style="left:${mm(x)}; top:0; width:${mm(g.colW)}; height:${mm(g.bodyH)};"></div>`;
+    b += `<div class="qp-ghead" style="left:${mm(x + g.colW - GA.numW)}; top:0; width:${mm(GA.numW)}; height:${mm(GA.headH)}; font-size:8pt;">السؤال</div>`;
+    b += `<div class="qp-ghead" style="left:${mm(x)}; top:0; width:${mm(g.colW - GA.numW)}; height:${mm(GA.headH)}; font-size:8.5pt; border-inline-end:0.3mm solid #fff;">الإجابة</div>`;
+    for (let r = 0; r < g.rows; r++) {
+      const pos = c * g.rows + r, y = GA.headH + r * GA.rowH;
+      if (r > 0) b += `<div class="qp-grule" style="left:${mm(x)}; top:${mm(y)}; width:${mm(g.colW)};"></div>`;
+      b += `<div class="qp-gnum" style="left:${mm(x + g.colW - GA.numW)}; top:${mm(y)}; width:${mm(GA.numW)}; height:${mm(GA.rowH)}; font-size:11pt;">${pos < n ? pos + 1 : ''}</div>`;
+      if (pos >= n) continue;
+      const q = paper.questions[perm.q[pos]];
+      const correctSlot = key ? perm.o[pos].indexOf(q.answer) : -1;
+      for (let sI = 0; sI < optCount(q); sI++) {
+        const bx = x + g.colW - GA.numW - GA.pad - (sI + 1) * GA.pitch + (GA.pitch - GA.bubble) / 2;
+        b += `<div class="qp-bubble${sI === correctSlot ? ' fill' : ''}" style="left:${mm(bx)}; top:${mm(y + (GA.rowH - GA.bubble) / 2)}; width:${mm(GA.bubble)}; height:${mm(GA.bubble)}; font-size:9pt;">${q.type === 'tf' ? (sI === 0 ? '✓' : '✗') : AR[sI]}</div>`;
+      }
+    }
+  }
+  const id = student && student.national_id ? String(student.national_id).trim() : '';
+  const strip = `<div class="qp-astrip" style="height:${mm(GA.stripH - 2)}; margin-bottom:2mm;"><div><b>${esc(student ? student.full_name : (key ? 'نسخة المعلم' : ''))}</b><span>${esc(paper.title || '')}</span></div><div class="bc">${id ? code128Svg(id, P.barModule, 7).svg + `<i>${esc(id)}</i>` : ''}</div></div>`;
+  return `<div class="qp-agrid" data-h="${g.h}" data-strip="${GA.stripH}" style="left:${mm(P.side)}; bottom:${mm(GA.bottom)}; width:${mm(P.innerW)};">${strip}
+    <div class="qp-grid-title" style="position:relative; height:${mm(GA.titleH)}; margin-bottom:2mm;">نموذج الإجابة <span style="font-weight:400; font-size:8.5pt;">ظلّل دائرة واحدة لكل سؤال تظليلًا كاملًا <span class="qp-ex fill" style="border-color:#fff; background:#fff;"></span></span></div>
+    <div style="position:relative; height:${mm(g.bodyH)};">${b}</div></div>`;
+}
+
 function firstPageHtml(paper, perm, student, opts) {
   let h = `<div class="qp-page qp-first">` + marksHtml();
   const sub = [paper.subject, gradeLabels[paper.grade_level]].filter(Boolean).join(' · ');
@@ -296,23 +350,25 @@ function firstPageHtml(paper, perm, student, opts) {
     h += code128Svg(id, P.barModule, P.barH).svg + `<div style="font-size:8.5pt; font-family:'Courier New',monospace; font-weight:700; letter-spacing:0.6mm; direction:ltr;">${esc(id)}</div>`;
   } else h += `<div style="font-size:9pt; color:#888;">${opts.key ? 'نسخة المعلم' : 'الباركود'}</div>`;
   h += `</div>`;
-  h += `<div class="qp-instr" style="left:${mm(P.side)}; top:${mm(P.instrTop)}; width:${mm(P.innerW)}; height:${mm(P.instrH)};">اقرأ كل سؤال، ثم ظلّل الإجابة الصحيحة في «نموذج الإجابة» أسفل الصفحة — إجابة واحدة لكل سؤال${perm.q.length ? ` · عدد الأسئلة ${perm.q.length + essaysOf(paper).length}` : ''}${f.time ? ` · الزمن: ${esc(f.time)}` : ''}</div>`;
-  h += `<div class="qp-qarea gap-${f.gap}" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm(P.qBottom - P.qTop)};"></div>`;
-  h += gridHtml(paper, perm, opts.key);
-  h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر</div>`;
+  h += `<div class="qp-instr" style="left:${mm(P.side)}; top:${mm(P.instrTop)}; width:${mm(P.innerW)}; height:${mm(P.instrH)};">اقرأ كل سؤال، ثم ظلّل الإجابة الصحيحة في «نموذج الإجابة» ${isAuto(paper) ? 'آخر الورقة' : 'أسفل الصفحة'} — إجابة واحدة لكل سؤال${perm.q.length ? ` · عدد الأسئلة ${perm.q.length + essaysOf(paper).length}` : ''}${f.time ? ` · الزمن: ${esc(f.time)}` : ''}</div>`;
+  const auto = isAuto(paper);
+  h += `<div class="qp-qarea gap-${f.gap}" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm((auto ? P.h - GA.bottom : P.qBottom) - P.qTop)};"></div>`;
+  if (!auto) h += gridHtml(paper, perm, opts.key);
+  const ag = auto ? autoGeom(perm.q.length, slotsOf(paper)) : null;
+  h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">${auto ? `ورقة أسئلة · قالب Remark لهذه الورقة: ${perm.q.length} سؤالًا · ${ag.cols} أعمدة × ${ag.rows} · ${slotsOf(paper)} دوائر بكل سطر` : `ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر`}</div>`;
   return h + `</div>`;
 }
 
 function contPageHtml(paper, student) {
   return `<div class="qp-page qp-next"><div class="qp-cont" style="left:${mm(P.side)}; top:${mm(10)}; width:${mm(P.innerW)};"><span>${esc(paper.title || '')}</span><span>${esc(student ? student.full_name : '')}</span></div>
-    <div class="qp-qarea gap-${fmtOf(paper).gap}" style="left:${mm(P.side)}; top:${mm(18)}; width:${mm(P.innerW)}; height:${mm(P.h - 18 - 12)};"></div>
-    <div class="qp-foot" style="left:${mm(P.side)}; width:${mm(P.innerW)}; top:${mm(P.h - 9)};">التظليل في الصفحة الأولى</div></div>`;
+    <div class="qp-qarea gap-${fmtOf(paper).gap}" style="left:${mm(P.side)}; top:${mm(18)}; width:${mm(P.innerW)}; height:${mm(P.h - 18 - (isAuto(paper) ? GA.bottom : 12))};"></div>
+    <div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - (isAuto(paper) ? P.markInset + P.mark - 0.6 : 9))};">${isAuto(paper) ? esc(paper.title || '') : 'التظليل في الصفحة الأولى'}</div></div>`;
 }
 
 // كل طالب: الصفحة الأولى (فيها التظليل) + قالب صفحة تكميلية + الأسئلة؛ السكربت يوزع الأسئلة على الصفحات
 function studentBundle(paper, perm, student, opts = {}) {
   const blocks = allBlocks(paper, perm, opts.key);
-  return `<div class="qp-stu">${firstPageHtml(paper, perm, student, opts)}<template class="qp-next-tpl">${contPageHtml(paper, student)}</template><template class="qp-blocks">${blocks}</template></div>`;
+  return `<div class="qp-stu">${firstPageHtml(paper, perm, student, opts)}<template class="qp-next-tpl">${contPageHtml(paper, student)}</template><template class="qp-blocks">${blocks}</template>${isAuto(paper) ? `<template class="qp-agrid-tpl">${autoGridHtml(paper, perm, opts.key, student)}</template><template class="qp-marks-tpl">${marksHtml()}</template>` : ''}</div>`;
 }
 
 // يوزّع الأسئلة: الصفحة الأولى ثم صفحات تكميلية؛ ولو كلها تقريبًا تدخل بالأولى يصغّر الخط شوي
@@ -323,18 +379,41 @@ const FLOW_SCRIPT = `(function(){
     area.style.setProperty('--qfs', fs + 'pt'); area.style.setProperty('--ofs', (fs - 0.4) + 'pt');
     var tmp = document.createElement('div'); tmp.innerHTML = stu.querySelector('template.qp-blocks').innerHTML;
     var blocks = Array.prototype.slice.call(tmp.children), pages = 1, last = stu.querySelector('.qp-first');
-    if (window.QP_SINGLE) { blocks.forEach(function(b){ area.appendChild(b); }); return area.scrollHeight > area.clientHeight + 0.5 ? 2 : 1; }
+    if (area.dataset.cut) { area.style.height = area.dataset.h0; delete area.dataset.cut; } else if (!area.dataset.h0) area.dataset.h0 = area.style.height;
+    if (window.QP_SINGLE) { var gS = stu.querySelector('template.qp-agrid-tpl'); stu.querySelectorAll('.qp-agrid').forEach(function(e){ e.remove(); });
+      if (gS) { var g1 = gridEl(stu); area.style.height = (area.clientHeight - mmPx(area) * (parseFloat(g1.dataset.h) + 3)) + 'px'; area.dataset.cut = '1'; stu.querySelector('.qp-first').appendChild(g1); }
+      blocks.forEach(function(b){ area.appendChild(b); }); return area.scrollHeight > area.clientHeight + 0.5 ? 2 : 1; }
+    var gT = stu.querySelector('template.qp-agrid-tpl');
+    function newPage(){ var holder = document.createElement('div'); holder.innerHTML = stu.querySelector('template.qp-next-tpl').innerHTML; var pg = holder.firstElementChild; last.after(pg); last = pg; pages++; area = pg.querySelector('.qp-qarea'); area.style.setProperty('--qfs', fs + 'pt'); area.style.setProperty('--ofs', (fs - 0.4) + 'pt'); return pg; }
+    stu.querySelectorAll('.qp-agrid, .qp-page .qp-mark.x').forEach(function(e){ e.remove(); });
     blocks.forEach(function(b){
       area.appendChild(b);
       if (area.scrollHeight > area.clientHeight + 0.5 && area.children.length > 1) {
         area.removeChild(b);
-        var holder = document.createElement('div'); holder.innerHTML = stu.querySelector('template.qp-next-tpl').innerHTML;
-        var pg = holder.firstElementChild; last.after(pg); last = pg; pages++;
-        area = pg.querySelector('.qp-qarea'); area.style.setProperty('--qfs', fs + 'pt'); area.style.setProperty('--ofs', (fs - 0.4) + 'pt');
+        // عنوان القسم لا يبقى يتيمًا آخر الصفحة: ينتقل مع أول سؤال فيه
+        var hd = area.lastElementChild && area.lastElementChild.classList.contains('qb-head') && area.children.length > 1 ? area.lastElementChild : null;
+        if (hd) area.removeChild(hd);
+        newPage();
+        if (hd) area.appendChild(hd);
         area.appendChild(b);
       }
     });
+    if (gT) {
+      // الشبكة آخر الورقة: أسفل الصفحة الأخيرة إن اتسعت، وإلا في صفحة جديدة
+      var g = gridEl(stu), first = last.classList.contains('qp-first');
+      var need = (parseFloat(g.dataset.h) + (first ? 0 : parseFloat(g.dataset.strip)) + 3) * mmPx(area);
+      var kids = area.children, used = kids.length ? kids[kids.length - 1].offsetTop + kids[kids.length - 1].offsetHeight : 0;
+      if (area.clientHeight - used < need) newPage();
+      placeGrid(stu, last, g);
+    }
     return pages;
+  }
+  function mmPx(area){ return area.clientWidth / ${P.innerW}; }
+  function gridEl(stu){ var h = document.createElement('div'); h.innerHTML = stu.querySelector('template.qp-agrid-tpl').innerHTML; return h.firstElementChild; }
+  function placeGrid(stu, page, g){
+    var first = page.classList.contains('qp-first');
+    g.classList.toggle('with-strip', !first); page.appendChild(g);
+    if (!first) { page.classList.add('gm'); var m = document.createElement('div'); m.innerHTML = stu.querySelector('template.qp-marks-tpl').innerHTML; Array.prototype.slice.call(m.children).forEach(function(x){ x.classList.add('x'); page.appendChild(x); }); }
   }
   document.querySelectorAll('.qp-stu').forEach(function(stu){
     var F0 = window.QP_FS || 10;
@@ -342,9 +421,29 @@ const FLOW_SCRIPT = `(function(){
     var minF = window.QP_SINGLE ? 6.5 : Math.max(7.5, F0 - 2);
     for (var f = F0 - 0.5; bestPages > 1 && f >= minF; f -= 0.5) { var pg = fill(stu, f); if (pg < bestPages) { best = f; bestPages = pg; } }
     if (window.QP_SINGLE && bestPages > 1) best = minF;
+    // سطور المقالي: تُضيَّق قليلًا إذا كان ذلك يوفّر صفحة
+    stu.style.removeProperty('--lh');
+    if (!window.QP_SINGLE && bestPages > 1 && stu.querySelector('template.qp-blocks').innerHTML.indexOf('es-ln') > -1) {
+      var tries = [[best, 7.2], [best, 6.6], [Math.max(minF, best - 1), 7.2], [Math.max(minF, best - 1), 6.6], [minF, 6.6]], done = false;
+      for (var k = 0; k < tries.length && !done; k++) { stu.style.setProperty('--lh', tries[k][1] + 'mm'); var pk = fill(stu, tries[k][0]); if (pk < bestPages) { bestPages = pk; best = tries[k][0]; done = true; } }
+      if (!done) stu.style.removeProperty('--lh');
+      else { for (var fb = F0; fb > best; fb -= 0.5) { if (fill(stu, fb) <= bestPages) { best = fb; break; } } }
+    }
     fill(stu, best);
     if (window.QP_SINGLE && bestPages > 1) stu.querySelector('.qp-first .qp-qarea').style.outline = '0.8mm solid #e00';
   });
+  // توحيد مكان الشبكة: كل الطلاب على عدد الصفحات نفسه لتكون الشبكة في الصفحة نفسها (قالب Remark واحد للورقة)
+  if (!window.QP_SINGLE && document.querySelector('.qp-agrid')) {
+    var all = Array.prototype.slice.call(document.querySelectorAll('.qp-stu')), mx = 0;
+    all.forEach(function(stu){ mx = Math.max(mx, stu.querySelectorAll('.qp-page').length); });
+    all.forEach(function(stu){
+      var pgs = stu.querySelectorAll('.qp-page'); if (pgs.length >= mx) return;
+      var g = stu.querySelector('.qp-agrid'), lastP = pgs[pgs.length - 1];
+      stu.querySelectorAll('.qp-mark.x').forEach(function(e){ e.remove(); });
+      for (var i = pgs.length; i < mx; i++) { var holder = document.createElement('div'); holder.innerHTML = stu.querySelector('template.qp-next-tpl').innerHTML; var pg = holder.firstElementChild; lastP.after(pg); lastP = pg; }
+      placeGrid(stu, lastP, g);
+    });
+  }
   // A3 بالعرض: إذا احتاج أي طالب أكثر من صفحة تُطبع كل صفحتين متجاورتين (الأولى يمين) وتُقص من المنتصف
   if (window.QP_A3 && document.querySelector('.qp-next')) {
     document.querySelectorAll('.qp-stu').forEach(function(stu){
@@ -440,7 +539,7 @@ export async function applyPaperToParsed(parsed, { skip = false } = {}) {
     const id = idOf(st);
     const perm = paper.perms[id];
     if (!perm || !Array.isArray(perm.q) || perm.q.length !== nQ) { unknown.push(id || st.name || '—'); return; }
-    const answers = mapPaperAnswers(st.answers, perm, paper.questions, { textCoded: parsed.textCoded, tfTwo, slots: SLOTS });
+    const answers = mapPaperAnswers(st.answers, perm, paper.questions, { textCoded: parsed.textCoded, tfTwo, slots: slotsOf(paper) });
     students.push({ ...st, id, model: undefined, modelRaw: null, answers });
   });
   if (!students.length) return null;
@@ -550,6 +649,7 @@ function renderEditor() {
             <label class="as-f">تباعد الأسئلة<select id="qp-f-gap" ${ro ? 'disabled' : ''}>${[['s', 'مضغوط'], ['m', 'عادي'], ['l', 'واسع']].map(([v, t]) => `<option value="${v}"${fmtOf(p).gap === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
           </div>
           <label class="as-f">توزيع الخيارات<select id="qp-f-opts" ${ro ? 'disabled' : ''}>${[['auto', 'تلقائي حسب طول الخيار'], ['row', 'متجاورة في سطر واحد'], ['col', 'كل خيار في سطر']].map(([v, t]) => `<option value="${v}"${fmtOf(p).opts === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+          <label class="as-f">شبكة التظليل<select id="qp-f-grid" ${ro ? 'disabled' : ''}><option value="auto"${isAuto(p) ? ' selected' : ''}>متكيفة: آخر الورقة، حسب عدد الأسئلة والخيارات</option><option value="fixed"${isAuto(p) ? '' : ' selected'}>ثابتة: 10 أسئلة و3 خيارات (قالب Remark واحد)</option></select></label>
           <label class="as-f">زمن الاختبار (اختياري)<input type="text" id="qp-f-time" value="${esc(fmtOf(p).time)}" placeholder="مثال: 45 دقيقة" ${ro ? 'disabled' : ''}/></label>
           <label class="qp-chk"><input type="checkbox" id="qp-f-heads" ${fmtOf(p).heads ? 'checked' : ''} ${ro ? 'disabled' : ''}/> عناوين الأقسام (السؤال الأول، الثاني…)</label>
           <label class="qp-chk"><input type="checkbox" id="qp-f-marks" ${fmtOf(p).showMarks ? 'checked' : ''} ${ro ? 'disabled' : ''}/> إظهار درجة كل سؤال</label>
@@ -560,11 +660,8 @@ function renderEditor() {
           <div id="qp-print"></div>
         </div>
         <div class="form-card qp-remark">
-          <h4>قالب Remark (مرة واحدة)</h4>
-          <p>«نموذج الإجابة» أسفل الصفحة بنفس المكان بكل الأوراق: <b>${G_COLS} أعمدة × ${G_ROWS} أسئلة</b>، وبكل سطر <b>${SLOTS} دوائر</b> (أ ب ج من اليمين). عرّف قالب Remark واحد: الباركود ← StudentID، والشبكة ← ${CAP} سؤال اختيار متعدد. نفس القالب يقرأ كل الاختبارات.</p>
-          <p>إذا طبعت A4 بالعرض (طالبان)، فقص الورقة من المنتصف، ليصبح كل نصف ورقة A5 بالتصميم نفسه مصغّرًا - وعرّف له قالب A5 مستقلًا.</p>
-          
-          <p>ارفع ملف النتائج من «التقارير ← رفع نتائج اختبار»، وستتعرّف المنصة من الباركود على أنه ملف ورقة أسئلة وتصحح كل طالب وفق نموذجه.</p>
+          <h4>قالب Remark</h4>
+          <div id="qp-remark-note">${remarkNote(p)}</div>
         </div>
       </div>
       <div class="qp-main">
@@ -581,7 +678,7 @@ function renderEditor() {
         ${ro ? '' : `<div class="qp-struct" id="qp-struct">
           <b>هيكل الورقة</b>
           ${[['mcq', 'اختيار من متعدد'], ['tf', 'صح وخطأ'], ['es', 'مقالي']].map(([k, t]) => `<div class="qp-st-g"><span>${t}</span>
-            <label>العدد<input type="number" id="qp-n-${k}" min="0" max="${k === 'es' ? 20 : CAP}" step="1" inputmode="numeric"/></label>
+            <label>العدد<input type="number" id="qp-n-${k}" min="0" max="${k === 'es' ? 20 : capOf(p)}" step="1" inputmode="numeric"/></label>
             <label>درجة السؤال<input type="number" id="qp-m-${k}" min="0.25" step="0.25" inputmode="decimal" placeholder="—"/></label></div>`).join('')}
           <button type="button" class="btn-primary" id="qp-st-go" style="width:auto; padding:9px 18px;">تجهيز الأسئلة</button>
           <span id="qp-st-msg" class="qp-status"></span>
@@ -627,7 +724,7 @@ function renderEditor() {
       const nM = want('mcq'), nT = want('tf'), nE = want('es');
       const curM = p.questions.filter(q => q.type === 'mcq').length, curT = p.questions.length - curM;
       const tM = nM == null ? curM : nM, tT = nT == null ? curT : nT, tE = nE == null ? essaysOf(p).length : Math.min(20, nE);
-      if (tM + tT > CAP) { say(`مجموع الاختيار من متعدد والصح والخطأ ${tM + tT}، والحد الأقصى ${CAP} أسئلة (شبكة التظليل ثابتة)`, true); return; }
+      if (tM + tT > capOf(p)) { say(`مجموع الاختيار من متعدد والصح والخطأ ${tM + tT}، والحد الأقصى ${capOf(p)} سؤالًا${isAuto(p) ? '' : ' في الشبكة الثابتة. اختر «شبكة متكيفة» من تنسيق الورقة لزيادة العدد'}`, true); return; }
       const filled = q => String(q.text || '').trim() || (q.options || []).some(o => String(o || '').trim());
       // الحذف من الفارغ أولًا ثم من آخر القائمة
       const plan = (list, target) => { const drop = []; let extra = list.length - target; for (let i = list.length - 1; i >= 0 && extra > 0; i--) if (!filled(list[i])) { drop.push(list[i]); extra--; } for (let i = list.length - 1; i >= 0 && extra > 0; i--) if (!drop.includes(list[i])) { drop.push(list[i]); extra--; } return drop; };
@@ -647,6 +744,7 @@ function renderEditor() {
       say(`جاهز: ${tM} اختيار من متعدد، ${tT} صح وخطأ، ${tE} مقالي — مجموع الدرجات ${num(t.all)}. اكتب نصوص الأسئلة في الخانات.`);
     };
     const setF = (k, v) => { s.fmt = { ...fmtOf(p), [k]: v }; };
+    bind('qp-f-grid', el => { s.grid = el.value; renderQuestions(); const r = $('qp-remark-note'); if (r) r.innerHTML = remarkNote(p); });
     bind('qp-f-size', el => setF('size', el.value)); bind('qp-f-gap', el => setF('gap', el.value)); bind('qp-f-opts', el => setF('opts', el.value));
     bind('qp-f-time', el => setF('time', el.value.trim())); bind('qp-f-heads', el => setF('heads', el.checked));
     bind('qp-f-marks', el => setF('showMarks', el.checked)); bind('qp-f-total', el => setF('total', el.checked));
@@ -691,6 +789,15 @@ function renderEditor() {
   renderPrint();
 }
 
+// شرح قالب Remark حسب وضع الشبكة
+function remarkNote(p) {
+  const up = '<p>ارفع ملف النتائج من «التصحيح ← رفع ملف Remark»، وستتعرّف المنصة من الباركود على أنه ملف ورقة أسئلة وتصحح كل طالب وفق نموذجه.</p>';
+  if (!isAuto(p)) return `<p>«نموذج الإجابة» أسفل الصفحة الأولى في المكان نفسه بكل الأوراق: <b>${G_COLS} أعمدة × ${G_ROWS} أسئلة</b>، وبكل سطر <b>${SLOTS} دوائر</b> (أ ب ج من اليمين). عرّف قالب Remark واحدًا: الباركود ← StudentID، والشبكة ← ${CAP} أسئلة اختيار متعدد، وهو يقرأ كل الاختبارات.</p>
+    <p>إذا طبعت A4 بالعرض (طالبان)، فقص الورقة من المنتصف ليصبح كل نصف ورقة A5 بالتصميم نفسه مصغّرًا، وعرّف له قالب A5 مستقلًا.</p>${up}`;
+  const n = p.questions.length, sl = slotsOf(p), g = n ? autoGeom(n, sl) : null;
+  return `<p>الشبكة متكيفة وتُطبع <b>آخر الورقة</b> (أسفل الصفحة الأخيرة) ومعها الباركود.${g ? ` لهذه الورقة: <b>${n} سؤالًا</b> في <b>${g.cols} ${g.cols === 1 ? 'عمود' : 'أعمدة'} × ${g.rows} صفوف</b>، وبكل سطر <b>${sl} دوائر</b> (أ من اليمين).` : ''}</p>
+    <p><b>تنبيه:</b> يلزم تعريف قالب Remark لكل تشكيلة مختلفة. الأوراق التي لها العدد نفسه من الأسئلة والخيارات وعدد الصفحات نفسه تشترك في قالب واحد، لأن مكان الشبكة ثابت من أسفل الصفحة.</p>${up}`;
+}
 function markDirty() { dirty = true; const st = $('qp-status'); if (st) { st.textContent = 'توجد تعديلات غير محفوظة'; st.className = 'qp-status warn'; } }
 function setStatus(msg, warn = false) { const st = $('qp-status'); if (st) { st.textContent = msg; st.className = 'qp-status' + (warn ? ' warn' : ' ok'); } }
 
@@ -704,8 +811,9 @@ function renderQuestions(scrollLast = false) {
   const order = displayOrder();
   const mcq = p.questions.filter(q => q.type === 'mcq').length;
   const es = essaysOf(p), tot = totalsOf(p);
+  { const rn = $('qp-remark-note'); if (rn) rn.innerHTML = remarkNote(p); }
   [['mcq', mcq], ['tf', p.questions.length - mcq], ['es', es.length]].forEach(([k, v]) => { const el = $('qp-n-' + k); if (el && document.activeElement !== el) el.value = v; });
-  $('qp-count').textContent = `${p.questions.length} من ${CAP} سؤال موضوعي · ${mcq} اختيار متعدد · ${p.questions.length - mcq} صح وخطأ${es.length ? ` · ${es.length} مقالي` : ''} · مجموع الدرجات ${num(tot.all)}${es.length ? ` (موضوعي ${num(tot.obj)} + مقالي ${num(tot.essay)})` : ''}`;
+  $('qp-count').textContent = `${p.questions.length} من ${capOf(p)} سؤال موضوعي · ${mcq} اختيار متعدد · ${p.questions.length - mcq} صح وخطأ${es.length ? ` · ${es.length} مقالي` : ''} · مجموع الدرجات ${num(tot.all)}${es.length ? ` (موضوعي ${num(tot.obj)} + مقالي ${num(tot.essay)})` : ''}`;
   if (!p.questions.length && !es.length) { box.innerHTML = '<div class="ex-empty"><b>لا توجد أسئلة</b><span>أضف سؤالًا أو الصق أسئلة جاهزة.</span></div>'; return; }
   const esHtml = !es.length ? '' : `<div class="qp-sec">مقالي <small>(لا يدخل في التظليل، ويصححه المعلم يدويًا)</small></div>` + es.map((q, i) => `<div class="qp-q es${String(q.text || '').trim() ? '' : ' bad'}" data-e="${i}">
       <div class="qp-q-h"><span class="qp-q-n">${p.questions.length + i + 1}</span>
@@ -730,7 +838,7 @@ function renderQuestions(scrollLast = false) {
           <input type="text" class="qp-opt-in" data-q="${qi}" data-o="${oi}" value="${esc(o)}" placeholder="الخيار ${AR[oi]}" ${dis}/>
           ${!ro && q.options.length > 2 ? `<button type="button" class="qp-x qp-opt-del" data-q="${qi}" data-o="${oi}" aria-label="حذف الخيار">×</button>` : ''}
         </div>`).join('')}
-        <div class="qp-opt-tools">${!ro && q.options.length < SLOTS ? `<button type="button" class="text-action-btn qp-opt-add" data-q="${qi}">+ خيار</button>` : ''}
+        <div class="qp-opt-tools">${!ro && q.options.length < maxOptsOf(p) ? `<button type="button" class="text-action-btn qp-opt-add" data-q="${qi}">+ خيار</button>` : ''}
           <label class="qp-chk sm"><input type="checkbox" class="qp-fix" data-q="${qi}" ${q.fixOpts ? 'checked' : ''} ${dis}/> ثبّت ترتيب الخيارات (مثل: جميع ما سبق)</label></div>
       </div>`;
     } else {
@@ -752,7 +860,7 @@ function renderQuestions(scrollLast = false) {
     </div>`;
   }).join('') + esHtml;
   if (ro) return;
-  const recount = () => { const t = totalsOf(p), e = essaysOf(p), m = p.questions.filter(q => q.type === 'mcq').length; $('qp-count').textContent = `${p.questions.length} من ${CAP} سؤال موضوعي · ${m} اختيار متعدد · ${p.questions.length - m} صح وخطأ${e.length ? ` · ${e.length} مقالي` : ''} · مجموع الدرجات ${num(t.all)}${e.length ? ` (موضوعي ${num(t.obj)} + مقالي ${num(t.essay)})` : ''}`; };
+  const recount = () => { const t = totalsOf(p), e = essaysOf(p), m = p.questions.filter(q => q.type === 'mcq').length; $('qp-count').textContent = `${p.questions.length} من ${capOf(p)} سؤال موضوعي · ${m} اختيار متعدد · ${p.questions.length - m} صح وخطأ${e.length ? ` · ${e.length} مقالي` : ''} · مجموع الدرجات ${num(t.all)}${e.length ? ` (موضوعي ${num(t.obj)} + مقالي ${num(t.essay)})` : ''}`; };
   box.querySelectorAll('.qp-marks').forEach(t => t.addEventListener('input', () => { const v = Number(t.value); if (v > 0) { if (v === 1) delete p.questions[t.dataset.q].marks; else p.questions[t.dataset.q].marks = v; markDirty(); recount(); } }));
   const E = i => p.settings.essays[i];
   box.querySelectorAll('.qp-es-text').forEach(t => t.addEventListener('input', () => { E(t.dataset.e).text = t.value; markDirty(); t.closest('.qp-q').classList.toggle('bad', !t.value.trim()); }));
@@ -810,7 +918,7 @@ function questionIssues(q) {
   const out = [];
   if (!q.text.trim()) out.push('بدون نص');
   if (q.type === 'mcq' && q.options.some(o => !o.trim())) out.push('خيار فارغ');
-  if (q.type === 'mcq' && q.options.length > SLOTS) out.push(`أقصى ${SLOTS} خيارات`);
+  if (q.type === 'mcq' && cur && q.options.length > maxOptsOf(cur)) out.push(`أقصى ${maxOptsOf(cur)} خيارات`);
   if (q.answer == null) out.push('حدد الإجابة الصحيحة');
   return out;
 }
@@ -922,7 +1030,7 @@ function readyProblems() {
   const p = cur;
   if (!p.questions.length) return 'أضف سؤالًا موضوعيًا واحدًا على الأقل (اختيار من متعدد أو صح وخطأ)';
   if (essaysOf(p).some(q => !String(q.text || '').trim())) return 'يوجد سؤال مقالي بدون نص - أكمله أو احذفه قبل الطباعة';
-  if (p.questions.length > CAP) return `أقصى عدد ${CAP} سؤال في الورقة (لديك ${p.questions.length})`;
+  if (p.questions.length > capOf(p)) return `أقصى عدد ${capOf(p)} سؤالًا موضوعيًا في الورقة (لديك ${p.questions.length})`;
   const bad = p.questions.map((q, i) => (questionIssues(q).length ? i : -1)).filter(i => i >= 0);
   if (bad.length) { const ord = displayOrder(); return `يوجد ${bad.length} ${bad.length === 1 ? 'سؤال ناقص' : 'أسئلة ناقصة'} (رقم ${bad.map(i => ord.indexOf(i) + 1).sort((a, b) => a - b).slice(0, 6).join('، ')}) - يُرجى إكمالها قبل الطباعة`; }
   return null;
