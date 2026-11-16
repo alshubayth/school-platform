@@ -56,14 +56,18 @@ const capOf = paper => (isAuto(paper) ? CAP_AUTO : CAP);
 const maxOptsOf = paper => (isAuto(paper) ? SLOTS_AUTO : SLOTS);
 const slotsOf = paper => (isAuto(paper) ? Math.max(2, ...paper.questions.map(q => (q.type === 'tf' ? 2 : (q.options || []).length))) : SLOTS);
 // الشبكة مجموعات، كل مجموعة ٥ أسئلة، تُصف متجاورة من اليمين؛ وما زاد عن عرض الورقة ينزل صفًّا ثانيًا
-function autoGeom(n, slots) {
+// درجة المقالي تُظلَّل بيد المصحح: صف واحد 0..الدرجة حتى 10، وما فوقها صفّان (عشرات + آحاد) كما في ورقة الإجابة
+const ESSAY_BUB_MAX = 40;
+const essayRows = total => { const t = Math.min(ESSAY_BUB_MAX, Math.ceil(total || 0)); if (!t) return []; return t <= 10 ? [Array.from({ length: t + 1 }, (_, i) => i)] : [Array.from({ length: Math.floor(t / 10) + 1 }, (_, i) => i * 10), Array.from({ length: 10 }, (_, i) => i)]; };
+function autoGeom(n, slots, essayTotal = 0) {
+  const er = essayRows(essayTotal), essayH = er.length ? GA.bandGap + er.length * 8 + 2 : 0;
   const colW = GA.numW + slots * GA.pitch + 2 * GA.pad;
   const perBand = Math.max(1, Math.floor((P.innerW + GA.gap) / (colW + GA.gap)));
   const blocks = Math.max(1, Math.ceil(n / GA.block));
   const bands = Math.ceil(blocks / perBand);
   const bandH = GA.headH + GA.block * GA.rowH;
   const bodyH = bands * bandH + (bands - 1) * GA.bandGap;
-  return { colW, perBand, blocks, bands, bandH, bodyH, cols: Math.min(blocks, perBand), h: GA.titleH + 2 + bodyH };
+  return { colW, perBand, blocks, bands, bandH, bodyH, essayH, cols: Math.min(blocks, perBand), h: GA.titleH + 2 + bodyH + essayH };
 }
 
 /* ---------- التنسيق والدرجات والأسئلة المقالية (لا تدخل في توقيع الهيكل ولا في شبكة التظليل) ---------- */
@@ -197,6 +201,10 @@ const PAPER_STYLES = `
   .qp-agrid.with-strip .qp-astrip { display:flex; }
   .qp-astrip b { display:block; font-size:10pt; } .qp-astrip span { font-size:8pt; color:#3c4a60; }
   .qp-astrip .bc { display:flex; flex-direction:column; align-items:center; direction:ltr; } .qp-astrip .bc i { font-style:normal; font:700 7.5pt 'Courier New',monospace; letter-spacing:0.5mm; }
+  .qp-es-strip { border:0.35mm solid #1d3557; border-radius:1.8mm; overflow:hidden; background:#fff; }
+  .qp-es-lab { position:absolute; right:0; top:0; background:#1d3557; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.35; }
+  .qp-es-lab b { font-size:9.5pt; } .qp-es-lab span { font-size:7pt; font-weight:400; }
+  .qp-es-rl { position:absolute; display:flex; align-items:center; justify-content:center; font-size:7.5pt; font-weight:700; color:#1d3557; }
   .qp-a3 { position:relative; width:420mm; height:297mm; overflow:hidden; background:#fff; page-break-after:always; break-after:page; }
   .qp-a3:last-child { page-break-after:auto; break-after:auto; }
   .qp-a3 .qp-page { position:absolute; top:0; margin:0 !important; box-shadow:none !important; page-break-after:auto; break-after:auto; }
@@ -293,7 +301,7 @@ function gridHtml(paper, perm, key) {
 
 // الشبكة المتكيفة: بلوك يُثبَّت أسفل الصفحة الأخيرة؛ شريط الاسم والباركود يظهر إذا لم تكن الصفحة الأولى
 function autoGridHtml(paper, perm, key, student) {
-  const n = perm.q.length, slots = slotsOf(paper), g = autoGeom(n, slots);
+  const n = perm.q.length, slots = slotsOf(paper), esTotal = totalsOf(paper).essay, g = autoGeom(n, slots, esTotal);
   let b = '';
   for (let k = 0; k < g.blocks; k++) {
     const band = Math.floor(k / g.perBand), c = k % g.perBand;
@@ -321,7 +329,20 @@ function autoGridHtml(paper, perm, key, student) {
   const strip = `<div class="qp-astrip" style="height:${mm(GA.stripH - 2)}; margin-bottom:2mm;"><div><b>${esc(student ? student.full_name : (key ? 'نسخة المعلم' : ''))}</b><span>${esc(paper.title || '')}</span></div><div class="bc">${id ? code128Svg(id, P.barModule, 7).svg + `<i>${esc(id)}</i>` : ''}</div></div>`;
   return `<div class="qp-agrid" data-h="${g.h}" data-strip="${GA.stripH}" style="left:${mm(P.side)}; bottom:${mm(GA.bottom)}; width:${mm(P.innerW)};">${strip}
     <div class="qp-grid-title" style="position:relative; height:${mm(GA.titleH)}; margin-bottom:2mm;">نموذج الإجابة <span style="font-weight:400; font-size:8.5pt;">ظلّل دائرة واحدة لكل سؤال تظليلًا كاملًا <span class="qp-ex fill" style="border-color:#fff; background:#fff;"></span></span></div>
-    <div style="position:relative; height:${mm(g.bodyH)};">${b}</div></div>`;
+    <div style="position:relative; height:${mm(g.bodyH)};">${b}</div>${essayStripHtml(esTotal, g)}</div>`;
+}
+
+function essayStripHtml(total, g) {
+  const rows = essayRows(total); if (!rows.length) return '';
+  const h = rows.length * 8 + 2, labW = 44, pitch = 9.4, bub = 6.4;
+  let x = '';
+  rows.forEach((vals, ri) => {
+    const y = 1 + ri * 8 + (8 - bub) / 2;
+    if (rows.length > 1) x += `<div class="qp-es-rl" style="right:${mm(labW + 2)}; top:${mm(1 + ri * 8)}; width:${mm(13)}; height:${mm(8)};">${ri === 0 ? 'عشرات' : 'آحاد'}</div>`;
+    vals.forEach((v, i) => { x += `<div class="qp-bubble" style="right:${mm(labW + (rows.length > 1 ? 17 : 4) + i * pitch)}; top:${mm(y)}; width:${mm(bub)}; height:${mm(bub)}; font-size:8pt; color:#555; direction:ltr;">${v}</div>`; });
+  });
+  return `<div class="qp-es-strip" style="position:relative; height:${mm(h)}; margin-top:${mm(GA.bandGap)};">
+    <div class="qp-es-lab" style="width:${mm(labW)}; height:${mm(h)};"><b>درجة المقالي</b><span>يظلّلها المصحح · من ${num(Math.ceil(total))}</span></div>${x}</div>`;
 }
 
 function firstPageHtml(paper, perm, student, opts) {
@@ -362,8 +383,8 @@ function firstPageHtml(paper, perm, student, opts) {
   const auto = isAuto(paper);
   h += `<div class="qp-qarea gap-${f.gap}" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm((auto ? P.h - GA.bottom : P.qBottom) - P.qTop)};"></div>`;
   if (!auto) h += gridHtml(paper, perm, opts.key);
-  const ag = auto ? autoGeom(perm.q.length, slotsOf(paper)) : null;
-  h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">${auto ? `ورقة أسئلة · قالب Remark لهذه الورقة: ${perm.q.length} سؤالًا · ${ag.blocks} مجموعات × ${GA.block} · ${slotsOf(paper)} دوائر بكل سطر` : `ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر`}</div>`;
+  const ag = auto ? autoGeom(perm.q.length, slotsOf(paper), totalsOf(paper).essay) : null;
+  h += `<div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - P.markInset - P.mark + 0.6)};">${auto ? `ورقة أسئلة · قالب Remark لهذه الورقة: ${perm.q.length} سؤالًا · ${ag.blocks} مجموعات × ${GA.block} · ${slotsOf(paper)} دوائر بكل سطر${ag.essayH ? ' · درجة المقالي' : ''}` : `ورقة أسئلة · قالب Remark: ${G_COLS} أعمدة × ${G_ROWS} أسئلة · ${SLOTS} دوائر بكل سطر`}</div>`;
   return h + `</div>`;
 }
 
@@ -813,8 +834,9 @@ function remarkNote(p) {
   const up = '<p>ارفع ملف النتائج من «التصحيح ← رفع ملف Remark»، وستتعرّف المنصة من الباركود على أنه ملف ورقة أسئلة وتصحح كل طالب وفق نموذجه.</p>';
   if (!isAuto(p)) return `<p>«نموذج الإجابة» أسفل الصفحة الأولى في المكان نفسه بكل الأوراق: <b>${G_COLS} أعمدة × ${G_ROWS} أسئلة</b>، وبكل سطر <b>${SLOTS} دوائر</b> (أ ب ج من اليمين). عرّف قالب Remark واحدًا: الباركود ← StudentID، والشبكة ← ${CAP} أسئلة اختيار متعدد، وهو يقرأ كل الاختبارات.</p>
     <p>إذا طبعت A4 بالعرض (طالبان)، فقص الورقة من المنتصف ليصبح كل نصف ورقة A5 بالتصميم نفسه مصغّرًا، وعرّف له قالب A5 مستقلًا.</p>${up}`;
-  const n = p.questions.length, sl = slotsOf(p), g = n ? autoGeom(n, sl) : null;
+  const n = p.questions.length, sl = slotsOf(p), et = totalsOf(p).essay, g = n ? autoGeom(n, sl, et) : null, er = essayRows(et);
   return `<p>الشبكة متكيفة وتُطبع <b>آخر الورقة</b> (أسفل الصفحة الأخيرة) ومعها الباركود.${g ? ` لهذه الورقة: <b>${n} سؤالًا</b> في <b>${g.blocks === 1 ? 'مجموعة واحدة' : g.blocks + ' مجموعات'}</b> كل مجموعة ${GA.block} أسئلة${g.bands > 1 ? ` (على ${g.bands} صفوف)` : ''}، وبكل سطر <b>${sl} دوائر</b> (أ من اليمين).` : ''}</p>
+    ${er.length ? `<p><b>درجة المقالي:</b> شريط تحت الشبكة يظلّله المصحح بعد تصحيح المقالي: ${er.length === 1 ? `صف واحد من 0 إلى ${er[0].length - 1}` : 'صفّان (عشرات وآحاد) يُجمعان'}. عرّفه في Remark عمودًا رقميًا باسم «المقالي» لتُقرأ الدرجة مع الملف.${et > ESSAY_BUB_MAX ? ` الحد الأعلى للتظليل ${ESSAY_BUB_MAX} درجة.` : ''}${et !== Math.ceil(et) ? ' تُظلَّل الدرجة بالأعداد الصحيحة فقط.' : ''}</p>` : ''}
     <p><b>تنبيه:</b> يلزم تعريف قالب Remark لكل تشكيلة مختلفة. الأوراق التي لها العدد نفسه من الأسئلة والخيارات وعدد الصفحات نفسه تشترك في قالب واحد، لأن مكان الشبكة ثابت من أسفل الصفحة.</p>${up}`;
 }
 function markDirty() { dirty = true; const st = $('qp-status'); if (st) { st.textContent = 'توجد تعديلات غير محفوظة'; st.className = 'qp-status warn'; } }
