@@ -5372,3 +5372,6 @@ html.booting #boot-splash{ display:flex; position:fixed; inset:0; z-index:9999; 
 .qp-img-tools label{display:inline-flex;align-items:center;gap:6px;font-weight:700}
 .qp-img-tools select{width:auto;margin:0;padding:5px 8px;font-size:13px}
 .qp-img-rep{cursor:pointer}
+/* نشر النتائج: تاريخ كل اختبار لتمييز الاختبارات المتشابهة (نافس) */
+.rp-rep input{ grid-row:span 3; }
+.rp-rep .rp-date{ font-size:11px; color:#0F6E78; font-weight:700; }

@@ -37,7 +37,7 @@ export async function openResultsPublisher() {
   document.body.classList.add('db-noscroll');
   back.onclick = e => { if (e.target === back) close(); };
   const [{ data: reps }, { data: ps, error }, { data: sch }] = await Promise.all([
-    R(() => sb.from('exam_reports').select('id, title, subject_name, grade_level, semester, exam_type, created_at').order('created_at', { ascending: false })),
+    R(() => sb.from('exam_reports').select('id, title, subject_name, grade_level, semester, exam_type, created_at, students_count').order('created_at', { ascending: false })),
     R(() => sb.from('result_publications').select('*').order('created_at', { ascending: false })),
     currentSchoolId ? sb.from('schools').select('slug').eq('id', currentSchoolId).maybeSingle() : Promise.resolve({ data: null }),
   ]);
@@ -106,6 +106,11 @@ function renderList() {
   });
 }
 
+// تاريخ التقرير: يميّز الاختبارات المتشابهة في العنوان (مثل تجارب نافس المتكررة)
+const repDate = r => { try { return new Date(r.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return ''; } };
+const repShortDate = r => { try { return new Date(r.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long' }); } catch (e) { return ''; } };
+const repMeta = r => [repDate(r), r.students_count ? `${r.students_count} طالبًا` : ''].filter(Boolean).join(' · ');
+
 /* ---------- نموذج الإنشاء والتعديل ---------- */
 function renderForm(edit) {
   const box = $('rp-back').querySelector('.rp');
@@ -119,12 +124,25 @@ function renderForm(edit) {
     GRADE_ORDER.forEach(g => { if (reportsMeta.some(r => r.gl === g)) f.grades.add(g); });
   }
   const matching = () => reportsMeta.filter(r => (r.exam_type || 'periodic') === f.type && (!f.sem || r.semester === f.sem) && f.grades.has(r.gl))
-    .sort((a, b) => GRADE_ORDER.indexOf(a.gl) - GRADE_ORDER.indexOf(b.gl) || String(a.subject_name).localeCompare(String(b.subject_name), 'ar'));
-  const autoTitle = () => {
-    if (f.mode === 'single') { const r = reportsMeta.find(x => x.id === f.single); return r ? `نتيجة ${r.title}` : ''; }
-    return `${f.type === 'nafes' ? 'نتائج اختبار نافس' : `نتائج الاختبارات ${TYPE_LABEL[f.type] || ''}`}${f.sem ? ' - ' + f.sem : ''}`;
+    .sort((a, b) => GRADE_ORDER.indexOf(a.gl) - GRADE_ORDER.indexOf(b.gl) || String(a.subject_name).localeCompare(String(b.subject_name), 'ar') || String(b.created_at).localeCompare(String(a.created_at)));
+  // الاختيار الافتراضي: كل الاختبارات، إلا نافس فيُختار أحدث اختبار لكل صف فقط (تجاربه تتكرر بالعنوان نفسه)
+  const defaultPick = () => {
+    const list = matching();
+    if (f.type !== 'nafes') return new Set(list.map(r => r.id));
+    const seen = new Set(), out = new Set();
+    list.forEach(r => { if (!seen.has(r.gl)) { seen.add(r.gl); out.add(r.id); } });
+    return out;
   };
-  if (!edit) f.picked = new Set(matching().map(r => r.id));
+  const autoTitle = () => {
+    if (f.mode === 'single') { const r = reportsMeta.find(x => x.id === f.single); return r ? `نتيجة ${r.title}${r.exam_type === 'nafes' ? ' - ' + repShortDate(r) : ''}` : ''; }
+    if (f.type === 'nafes') {
+      const ps = matching().filter(r => f.picked.has(r.id));
+      const ds = [...new Set(ps.map(repShortDate))];
+      return `نتائج اختبار نافس${ds.length === 1 ? ' - ' + ds[0] : ''}`;
+    }
+    return `نتائج الاختبارات ${TYPE_LABEL[f.type] || ''}${f.sem ? ' - ' + f.sem : ''}`;
+  };
+  if (!edit) f.picked = defaultPick();
 
   const draw = () => {
     if (!f.titleTouched) f.title = autoTitle();
@@ -140,8 +158,8 @@ function renderForm(edit) {
           <div class="rp-lbl">الصفوف</div>
           <div class="rp-chips">${GRADE_ORDER.map(g => `<button type="button" data-g="${g}" class="${f.grades.has(g) ? 'on' : ''}">${esc(gradeLabels[g])}</button>`).join('')}</div>
           <div class="rp-lbl">الاختبارات المشمولة <small>(${[...f.picked].filter(id => list.some(r => r.id === id)).length} من ${list.length})</small></div>
-          <div class="rp-reps">${list.length ? list.map(r => `<label class="rp-rep"><input type="checkbox" data-r="${r.id}"${f.picked.has(r.id) ? ' checked' : ''}><b>${esc(r.subject_name || r.title)}</b><span>${esc(gradeLabels[r.gl] || r.grade_level || '')} · ${esc(r.title)}</span></label>`).join('') : '<div class="rp-empty sm">لا توجد تقارير مطابقة</div>'}</div>`
-        : `<label class="rp-full">التقرير<select id="rp-single"><option value="">اختر التقرير...</option>${reportsMeta.map(r => `<option value="${r.id}"${r.id === f.single ? ' selected' : ''}>${esc(r.title)}</option>`).join('')}</select></label>`}
+          <div class="rp-reps">${list.length ? list.map(r => `<label class="rp-rep"><input type="checkbox" data-r="${r.id}"${f.picked.has(r.id) ? ' checked' : ''}><b>${esc(r.subject_name || r.title)}</b><span>${esc(gradeLabels[r.gl] || r.grade_level || '')} · ${esc(r.title)}</span><span class="rp-date">${esc(repMeta(r))}</span></label>`).join('') : '<div class="rp-empty sm">لا توجد تقارير مطابقة</div>'}</div>`
+        : `<label class="rp-full">التقرير<select id="rp-single"><option value="">اختر التقرير...</option>${reportsMeta.map(r => `<option value="${r.id}"${r.id === f.single ? ' selected' : ''}>${esc(r.title)} — ${esc(repMeta(r))}</option>`).join('')}</select></label>`}
         <label class="rp-full">العنوان الظاهر لولي الأمر<input type="text" id="rp-title" value="${esc(f.title)}" maxlength="120"></label>
         <label class="rp-chk"><input type="checkbox" id="rp-avg"${f.avg ? ' checked' : ''}> إظهار متوسط الفصل بجانب درجة الطالب</label>
         <p class="rp-note">تُحسب الدرجة من التقرير كما في تقارير الاختبارات. يظهر لولي الأمر درجة ابنه ونسبته وتقديره في كل مادة، ولا يظهر له اسم أي طالب آخر.</p>
@@ -150,8 +168,8 @@ function renderForm(edit) {
       </div>`;
     wireHead(box);
     box.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { if (b.dataset.mode === 'docs') { renderDocsForm(null); return; } f.mode = b.dataset.mode; draw(); });
-    const t = $('rp-type'); if (t) t.onchange = () => { f.type = t.value; f.picked = new Set(matching().map(r => r.id)); draw(); };
-    const s = $('rp-sem'); if (s) s.onchange = () => { f.sem = s.value; f.picked = new Set(matching().map(r => r.id)); draw(); };
+    const t = $('rp-type'); if (t) t.onchange = () => { f.type = t.value; f.sem = reportsMeta.find(r => (r.exam_type || 'periodic') === f.type && r.semester)?.semester || ''; f.picked = defaultPick(); draw(); };
+    const s = $('rp-sem'); if (s) s.onchange = () => { f.sem = s.value; f.picked = defaultPick(); draw(); };
     box.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { f.grades.has(b.dataset.g) ? f.grades.delete(b.dataset.g) : f.grades.add(b.dataset.g); matching().forEach(r => f.picked.add(r.id)); draw(); });
     box.querySelectorAll('[data-r]').forEach(c => c.onchange = () => { c.checked ? f.picked.add(c.dataset.r) : f.picked.delete(c.dataset.r); draw(); });
     const sg = $('rp-single'); if (sg) sg.onchange = () => { f.single = sg.value; draw(); };
