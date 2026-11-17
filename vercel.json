@@ -1,6 +1,12 @@
 {
   "redirects": [
     {
+      "source": "/",
+      "has": [{ "type": "host", "value": "school-platform-theta-eight.vercel.app" }],
+      "destination": "https://www.mudaar.online/",
+      "permanent": false
+    },
+    {
       "source": "/:path*",
       "has": [{ "type": "host", "value": "school-platform-theta-eight.vercel.app" }],
       "destination": "https://www.mudaar.online/:path*",
