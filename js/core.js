@@ -475,7 +475,7 @@ async function enterSchool(schoolId, school) {
   renderMyDutyBanner();
 }
 
-document.getElementById('school-picker-logout-btn').addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+document.getElementById('school-picker-logout-btn').addEventListener('click', () => doLogout());
 document.getElementById('switch-school-btn').addEventListener('click', () => { showSchoolPicker(); });
 
 function finishShowingDashboard(schoolNameOverride) {
@@ -556,9 +556,22 @@ export async function loadProfileAndShowDashboard(userId) {
   renderMyDutyBanner();
 }
 
-document.getElementById('logout-btn').addEventListener('click', async () => { await sb.auth.signOut(); location.reload(); });
+// تسجيل الخروج: يُنهي جلسة هذا الجهاز فقط، ولا يتوقف على الشبكة.
+// (الخروج العام كان يُسقط جلسات الأجهزة الأخرى، وإذا تعذّر الاتصال يبقى المستخدم داخلًا)
+let loggingOut = false;
+async function doLogout() {
+  if (loggingOut) return; loggingOut = true;
+  const btn = document.getElementById('logout-btn');
+  if (btn) { btn.disabled = true; btn.lastChild.textContent = ' جارٍ تسجيل الخروج...'; }
+  try { await Promise.race([sb.auth.signOut({ scope: 'local' }), new Promise(r => setTimeout(r, 3500))]); } catch (e) { console.warn('signOut', e); }
+  try { Object.keys(localStorage).filter(k => /^sb-.*-auth-token/.test(k)).forEach(k => localStorage.removeItem(k)); } catch (e) { /* التخزين ممنوع */ }
+  try { sessionStorage.clear(); } catch (e) { /* التخزين ممنوع */ }
+  location.replace(location.pathname);
+}
+document.getElementById('logout-btn').addEventListener('click', () => doLogout());
+const bootDone = () => document.documentElement.classList.remove('booting');
 
-sb.auth.getSession().then(({ data }) => { if (data.session) loadProfileAndShowDashboard(data.session.user.id); });
+sb.auth.getSession().then(({ data }) => { if (data.session) return loadProfileAndShowDashboard(data.session.user.id); }).catch(e => console.error('boot', e)).finally(bootDone);
 
 /* ===== أدوات مشتركة لعزل بيانات كل مدرسة (المرحلة الثانية) =====
  * تُستخدم بكل الملفات اللي تحتاج تفلتر قراءة/كتابة جدول بعمود school_id، مع نفس منطق التوافق
@@ -821,6 +834,7 @@ export function openWorkspace(groupKey) {
 /* ===== قائمة الحساب (الاسم، تبديل المدرسة، الخروج) ===== */
 function closeUserMenu() {
   document.getElementById('user-menu').classList.add('hidden');
+  document.getElementById('um-backdrop').classList.add('hidden');
   document.getElementById('user-menu-btn').setAttribute('aria-expanded', 'false');
 }
 document.getElementById('settings-open-btn').addEventListener('click', () => { closeUserMenu(); openTile('settings'); });
@@ -828,9 +842,10 @@ document.getElementById('user-menu-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   const m = document.getElementById('user-menu');
   const open = m.classList.toggle('hidden') === false;
+  document.getElementById('um-backdrop').classList.toggle('hidden', !open);
   document.getElementById('user-menu-btn').setAttribute('aria-expanded', open ? 'true' : 'false');
 });
-document.addEventListener('click', (e) => { if (!e.target.closest('.tn-user')) closeUserMenu(); });
+document.addEventListener('click', (e) => { if (!e.target.closest('.tn-user') || e.target.id === 'um-backdrop') closeUserMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeUserMenu(); });
 document.getElementById('tn-brand').addEventListener('click', (e) => { e.preventDefault(); backToTiles(); });
 

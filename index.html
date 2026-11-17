@@ -17,6 +17,14 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<!-- عند تحديث الصفحة والجلسة محفوظة: لا تظهر شاشة الدخول لحظة، بل شاشة تحميل قصيرة حتى تفتح المنصة -->
+<script>
+  try {
+    for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (/^sb-.*-auth-token$/.test(k) && localStorage.getItem(k)) { document.documentElement.classList.add('booting'); break; } }
+    setTimeout(function(){ document.documentElement.classList.remove('booting'); }, 15000);
+  } catch (e) {}
+</script>
+<div id="boot-splash" aria-hidden="true"><img src="mark-white.svg" alt="" /><i></i></div>
 
 <!-- ===== شاشة تسجيل الدخول ===== -->
 <div id="login-screen">
@@ -124,6 +132,7 @@
         </button>
         <div class="tn-user">
           <button type="button" class="tn-avatar" id="user-menu-btn" aria-haspopup="true" aria-expanded="false" aria-label="حسابي"><span id="user-avatar"></span></button>
+          <div class="um-backdrop hidden" id="um-backdrop"></div>
           <div class="user-menu hidden" id="user-menu" role="menu">
             <div class="um-head">
               <div class="name" id="user-name"></div>

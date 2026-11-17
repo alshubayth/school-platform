@@ -5328,3 +5328,36 @@ button.acf-box:hover{ border-color:var(--acf-blue); }
 .lp-none{ color:var(--slate); list-style:none; margin-right:-20px !important; font-size:12.5px !important; }
 .lp-miss{ margin-top:4px; padding:4px 10px; border-radius:8px; background:#FDECEC; color:#B2382F; font-size:12px; font-weight:700; }
 @media print{ .lp-les-weeks{ display:block; } .lp-wk{ margin-bottom:10px; box-shadow:none; } .lp-les-head select{ border:0; } #lp-csv{ display:none; } }
+
+/* ===================== الإقلاع: شاشة تحميل بدل وميض شاشة الدخول عند تحديث الصفحة ===================== */
+#boot-splash{ display:none; }
+html.booting #login-screen{ display:none !important; }
+html.booting #boot-splash{ display:flex; position:fixed; inset:0; z-index:9999; flex-direction:column; align-items:center; justify-content:center; gap:22px; background:linear-gradient(135deg, #0F2447, #12305E); }
+#boot-splash img{ height:64px; width:auto; }
+#boot-splash i{ width:34px; height:34px; border-radius:50%; border:3px solid rgba(255,255,255,.22); border-top-color:#38C1D3; animation:bootspin .8s linear infinite; }
+@keyframes bootspin{ to{ transform:rotate(360deg); } }
+@media (prefers-reduced-motion: reduce){ #boot-splash i{ animation-duration:2.4s; } }
+
+/* ===================== الجوال: الشريط العلوي وقائمة الحساب ===================== */
+.um-backdrop{ display:none; }
+.um-item{ touch-action:manipulation; -webkit-tap-highlight-color:transparent; }
+.um-item:disabled{ opacity:.6; }
+@media (max-width: 899px){
+  .topnav .brand{ flex:1 1 0; min-width:0; }
+  .topnav .brand span{ min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  .tn-actions{ gap:6px; }
+  /* قائمة الحساب ورقة سفلية بعرض الشاشة: لا تنقطع عند الحافة، وأزرارها كبيرة للمس */
+  .um-backdrop:not(.hidden){ display:block; position:fixed; inset:0; background:rgba(11,27,51,.42); z-index:199; }
+  .user-menu{ position:fixed; top:auto; left:10px; right:10px; bottom:calc(10px + env(safe-area-inset-bottom, 0px)); min-width:0; border-radius:18px; padding:8px; z-index:200; box-shadow:0 -8px 44px rgba(11,27,51,.3); }
+  .user-menu .um-head{ padding:12px 14px 14px; }
+  .um-item{ padding:14px; min-height:52px; font-size:15px; border-radius:12px; }
+  /* حقول الإدخال بحجم 16 حتى لا يكبّر آيفون الصفحة عند الكتابة */
+  #dashboard-screen input:not([type="checkbox"]):not([type="radio"]), #dashboard-screen select, #dashboard-screen textarea,
+  #login-screen input, .search-modal input{ font-size:16px; }
+}
+@media (max-width: 420px){
+  .topnav .tn-search, .topnav .tn-gear, .topnav .tn-avatar, .topnav .tn-bell{ width:40px; height:40px; }
+  .tn-inner{ padding-inline:12px; }
+}
+@media (max-width: 420px){ .tn-pills{ margin:0 -12px; padding-inline:12px; } }
+@media (max-width: 899px){ #dashboard-screen canvas{ max-width:100%; } }
