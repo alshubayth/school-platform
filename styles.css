@@ -5306,3 +5306,25 @@ button.acf-box:hover{ border-color:var(--acf-blue); }
 .qp-st-g input{width:76px;margin:0;padding:7px 6px;text-align:center;font-size:14px;border-radius:8px}
 .qp-struct .qp-status{flex:1 1 100%}
 @media (max-width:700px){.qp-st-g{flex:1 1 100%;border-inline-end:0;padding-inline-end:0;border-bottom:1px solid #E6EAF1;padding-bottom:10px}.qp-st-g > span{flex:1}}
+
+/* متابعة التحضير: عناوين الدروس */
+.lp-les-head{ display:flex; align-items:flex-end; gap:14px; flex-wrap:wrap; }
+.lp-les-pick{ display:flex; flex-direction:column; gap:4px; font-size:12.5px; font-weight:700; color:var(--slate); }
+.lp-les-pick select{ width:auto; min-width:260px; margin:0; padding:8px 10px; border:1px solid var(--border); border-radius:10px; font:inherit; font-size:14px; }
+.lp-les-meta{ flex:1; font-size:12.5px; color:var(--slate); }
+.lp-les-title{ display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin:16px 4px 10px; }
+.lp-les-title h2{ margin:0; font-family:'Tajawal'; font-size:20px; color:var(--ink); }
+.lp-les-title span{ font-size:13px; color:var(--slate); }
+.lp-les-weeks{ display:grid; grid-template-columns:repeat(auto-fill,minmax(340px,1fr)); gap:12px; }
+.lp-wk{ background:#fff; border:1px solid var(--border); border-radius:16px; padding:12px 14px; box-shadow:var(--shadow-sm); break-inside:avoid; }
+.lp-wk.empty{ background:#FAFBFD; box-shadow:none; }
+.lp-wk header{ display:flex; align-items:center; gap:8px; padding-bottom:8px; border-bottom:1px dashed var(--border); margin-bottom:8px; }
+.lp-wk header b{ font-size:15px; color:var(--ink); } .lp-wk header small{ flex:1; font-size:12px; color:var(--slate); }
+.lp-wk.empty header{ border:0; margin:0; padding:0; }
+.lp-mini.idle{ background:#EEF1F5; color:var(--slate); }
+.lp-gr{ margin:6px 0 10px; } .lp-gr-name{ font-size:12.5px; font-weight:800; color:#0B6F80; margin-bottom:4px; }
+.lp-gr ol{ margin:0; padding-right:20px; } .lp-gr li{ margin:4px 0; font-size:13.5px; line-height:1.6; }
+.lp-gr li b{ color:var(--ink); } .lp-cls{ display:block; font-size:12px; color:var(--slate); } .lp-gr li small{ font-size:11.5px; color:#1D7B57; font-weight:700; }
+.lp-none{ color:var(--slate); list-style:none; margin-right:-20px !important; font-size:12.5px !important; }
+.lp-miss{ margin-top:4px; padding:4px 10px; border-radius:8px; background:#FDECEC; color:#B2382F; font-size:12px; font-weight:700; }
+@media print{ .lp-les-weeks{ display:block; } .lp-wk{ margin-bottom:10px; box-shadow:none; } .lp-les-head select{ border:0; } #lp-csv{ display:none; } }

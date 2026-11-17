@@ -122,7 +122,7 @@ function render() {
       <button class="lp-nav" data-w="7" title="الأسبوع التالي">‹</button>
     </div>
     <div class="lp-actions">
-      <div class="lp-seg"><button data-v="day" class="${S.view === 'day' ? 'on' : ''}">جدول اليوم</button><button data-v="week" class="${S.view === 'week' ? 'on' : ''}">ملخص الأسبوع</button><button data-v="report" class="${S.view === 'report' ? 'on' : ''}">التقرير الشامل</button></div>
+      <div class="lp-seg"><button data-v="day" class="${S.view === 'day' ? 'on' : ''}">جدول اليوم</button><button data-v="week" class="${S.view === 'week' ? 'on' : ''}">ملخص الأسبوع</button><button data-v="report" class="${S.view === 'report' ? 'on' : ''}">التقرير الشامل</button><button data-v="lessons" class="${S.view === 'lessons' ? 'on' : ''}">عناوين الدروس</button></div>
       <span class="lp-grow"></span>
       <button class="btn-primary lp-btn" id="lp-sync-day" ${S.busy ? 'disabled' : ''}>${S.busy ? 'جارٍ التحديث...' : 'تحديث اليوم من مدرستي'}</button>
       <button class="btn-secondary lp-btn" id="lp-sync-week" ${S.busy ? 'disabled' : ''}>تحديث الأسبوع</button>
@@ -130,8 +130,32 @@ function render() {
     </div>
     <div class="lp-status" id="lp-status">${S.lastError ? esc(S.lastError) : meta ? `آخر تحديث لهذا اليوم: ${new Date(meta.synced_at).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}${meta.hijri ? ' · ' + esc(meta.hijri) : ''}` : 'لم يُقرأ هذا اليوم بعد. اضغط «تحديث اليوم من مدرستي» (يتطلب إضافة مُدار وفتح منصة مدرستي بدور القائد أو الوكيل).'}</div>
   </div>
-  ${S.view === 'day' ? dayView() : S.view === 'week' ? weekView() : reportView()}`;
+  ${S.view === 'day' ? dayView() : S.view === 'week' ? weekView() : S.view === 'lessons' ? lessonsView() : reportView()}`;
   bind();
+
+  // عناوين الدروس المحضّرة لكل معلم أسبوعًا بأسبوع منذ بداية الفصل
+  function lessonsView() {
+    const L = S.lessons;
+    const teachers = (L && L.teachers) || [];
+    const head = `<div class="form-card lp-rep-head lp-les-head">
+      <label class="lp-les-pick">المعلم<select id="lp-teacher"><option value="">اختر المعلم</option>${teachers.map(t => `<option value="${esc(t.teacher_key)}" ${t.teacher_key === S.lesTeacher ? 'selected' : ''}>${esc(t.teacher_name)}</option>`).join('')}</select></label>
+      <div class="lp-les-meta">${L && L.rows ? `من ${esc(fmtDay(S.start))} إلى ${esc(fmtDay(iso(new Date())))} · ${L.weeks.length} أسبوع` : 'يعرض عناوين الدروس التي حضّرها المعلم في منصة مدرستي، مجمّعة حسب الأسبوع والصف، مع الفصول التي دُرّست فيها.'}</div>
+      ${L && L.rows ? '<button class="text-action-btn" id="lp-csv">تصدير Excel</button>' : ''}</div>`;
+    if (!L) return head + '<div class="form-card lp-empty">جارٍ التحميل...</div>';
+    if (!S.lesTeacher) return head;
+    if (!L.rows) return head + '<div class="form-card lp-empty">جارٍ تحميل دروس المعلم...</div>';
+    const t = teachers.find(x => x.teacher_key === S.lesTeacher) || {};
+    const totP = L.rows.length, totOk = L.rows.filter(r => r.prepared).length;
+    const uniq = new Set(L.rows.filter(r => r.prepared && r.lesson).map(r => r.lesson)).size;
+    return head + `
+    <div class="lp-les-title"><h2>${esc(t.teacher_name || '')}</h2><span>${totOk} حصة محضّرة من ${totP} · ${uniq} درسًا مختلفًا · نسبة التحضير ${totP ? Math.round(totOk / totP * 100) : 0}%</span></div>
+    <div class="lp-les-weeks">${L.weeks.map(w => {
+      if (!w.n) return `<section class="lp-wk empty"><header><b>الأسبوع ${w.no}</b><small>${esc(fmtDay(w.from))} – ${esc(fmtDay(w.to))}</small><span class="lp-mini idle">${w.read ? 'لا حصص' : 'لم يُقرأ'}</span></header></section>`;
+      const p = Math.round(w.ok / w.n * 100);
+      return `<section class="lp-wk"><header><b>الأسبوع ${w.no}</b><small>${esc(fmtDay(w.from))} – ${esc(fmtDay(w.to))}</small><span class="lp-mini ${pctCls(p)}">${w.ok}/${w.n} محضّرة</span></header>
+        ${w.grades.map(g => `<div class="lp-gr"><div class="lp-gr-name">${esc(g.name)}</div><ol>${g.lessons.map(x => `<li><b>${esc(x.title)}</b><span class="lp-cls">${x.classes.map(esc).join('، ')}</span><small>${x.count} ${x.count === 1 ? 'حصة' : 'حصص'}</small></li>`).join('') || '<li class="lp-none">لم يُحضَّر أي درس لهذا الصف</li>'}</ol>${g.missed ? `<div class="lp-miss">${g.missed} ${g.missed === 1 ? 'حصة غير محضّرة' : 'حصص غير محضّرة'}: ${g.missedClasses.map(esc).join('، ')}</div>` : ''}</div>`).join('')}
+      </section>`; }).join('')}</div>`;
+  }
 
   function reportView() {
     const R = S.report;
@@ -211,12 +235,13 @@ function bind() {
   const root = $('lp-root');
   root.querySelectorAll('[data-d]').forEach(b => b.onclick = () => { S.day = b.dataset.d; render(); });
   root.querySelectorAll('[data-w]').forEach(b => b.onclick = async () => { S.week = addDays(S.week, +b.dataset.w); S.day = addDays(S.day, +b.dataset.w); await load(); render(); });
-  root.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { S.view = b.dataset.v; if (S.view === 'report' && !S.report) { render(); await loadReport(); } render(); });
+  root.querySelectorAll('[data-v]').forEach(b => b.onclick = async () => { S.view = b.dataset.v; if (S.view === 'report' && !S.report) { render(); await loadReport(); } if (S.view === 'lessons' && !S.lessons) { render(); await loadLessonTeachers(); if (S.lesTeacher) await loadLessons(); } render(); });
   const q = $('lp-q'); if (q) q.oninput = () => { S.q = q.value; const pos = q.selectionStart; render(); const n = $('lp-q'); n.focus(); n.setSelectionRange(pos, pos); };
   const m = $('lp-miss'); if (m) m.onchange = () => { S.onlyMissing = m.checked; render(); };
   $('lp-sync-day').onclick = () => refresh([S.day]);
   $('lp-sync-week').onclick = () => refresh(DAYS.map((_, i) => addDays(S.week, i)).filter(d => d <= iso(new Date())));
   $('lp-print').onclick = () => window.print();
+  const tsel = $('lp-teacher'); if (tsel) tsel.onchange = async () => { S.lesTeacher = tsel.value; S.lessons.rows = null; render(); if (S.lesTeacher) { await loadLessons(); render(); } };
   const so = $('lp-sort'); if (so) so.onchange = () => { S.reportSort = so.value; render(); };
   const rr = $('lp-rep-run'); if (rr) rr.onclick = async () => { S.start = $('lp-from').value || S.start; S.repTo = $('lp-to').value || null; await saveStart(); await loadReport(); render(); };
   const bf = $('lp-backfill'); if (bf) bf.onclick = () => { S.start = $('lp-from').value || S.start; S.repTo = $('lp-to').value || null; backfill(); };
@@ -225,6 +250,16 @@ function bind() {
 }
 
 function exportCsv() {
+  if (S.view === 'lessons' && S.lessons && S.lessons.rows) {
+    const cell3 = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const t = (S.lessons.teachers.find(x => x.teacher_key === S.lesTeacher) || {}).teacher_name || '';
+    const rows = [];
+    S.lessons.weeks.forEach(w => w.grades.forEach(g => g.lessons.forEach(x => rows.push([w.no, w.from, g.name, x.title, x.classes.join('، '), x.count]))));
+    const csv = '\ufeff' + [['الأسبوع', 'بداية الأسبوع', 'الصف', 'عنوان الدرس', 'الفصول', 'عدد الحصص'], ...rows].map(r => r.map(cell3).join(',')).join('\r\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = `عناوين-الدروس-${t}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    return;
+  }
   if (S.view === 'report' && S.report) {
     const cell2 = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
     const rows = S.report.rows.map(t => [t.teacher_name, t.weeks ? Math.round(t.periods / t.weeks) : '', t.periods, t.prepared, t.missed, t.pct + '%', t.last_missed || '']);
@@ -241,6 +276,45 @@ function exportCsv() {
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   a.download = `متابعة-التحضير-${S.view === 'day' ? S.day : 'أسبوع-' + S.week}.csv`;
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+}
+
+/* ---------- عناوين الدروس ---------- */
+const GRADE_ORDER = { 'أول': 1, 'ثاني': 2, 'ثالث': 3 };
+const GRADE_NAME = { 'أول': 'الصف الأول المتوسط', 'ثاني': 'الصف الثاني المتوسط', 'ثالث': 'الصف الثالث المتوسط' };
+async function loadLessonTeachers() {
+  const { data } = await sb.rpc('lesson_prep_summary', { p_school: currentSchoolId, p_from: S.start, p_to: iso(new Date()) });
+  S.lessons = { teachers: (data || []).sort((a, b) => a.teacher_name.localeCompare(b.teacher_name, 'ar')), rows: null, weeks: [] };
+}
+async function loadLessons() {
+  const to = iso(new Date()); const rows = [];
+  for (let off = 0; off < 5000; off += 1000) {
+    const { data, error } = await sb.from('lesson_prep').select('prep_date, slot, class_name, prepared, lesson')
+      .eq('school_id', currentSchoolId).eq('teacher_key', S.lesTeacher).gte('prep_date', S.start).lte('prep_date', to).order('prep_date').order('slot').range(off, off + 999);
+    if (error) { toast('تعذر تحميل الدروس: ' + error.message, true); break; }
+    rows.push(...data); if (data.length < 1000) break;
+  }
+  const { data: days } = await sb.from('lesson_prep_days').select('prep_date').eq('school_id', currentSchoolId).gte('prep_date', S.start).lte('prep_date', to);
+  const read = new Set((days || []).map(d => d.prep_date));
+  const weeks = [];
+  for (let w = sundayOf(S.start), no = 1; w <= to; w = addDays(w, 7), no++) {
+    const end = addDays(w, 4);
+    const R = rows.filter(r => r.prep_date >= w && r.prep_date <= end);
+    const byGrade = new Map();
+    for (const r of R) {
+      const g = (String(r.class_name).trim().split(/\s+/)[0]) || 'أخرى';
+      if (!byGrade.has(g)) byGrade.set(g, { key: g, name: GRADE_NAME[g] || g, lessons: new Map(), missed: 0, missedClasses: new Set() });
+      const G = byGrade.get(g);
+      if (r.prepared && r.lesson) {
+        if (!G.lessons.has(r.lesson)) G.lessons.set(r.lesson, { title: r.lesson, classes: new Set(), count: 0, first: r.prep_date + r.slot });
+        const x = G.lessons.get(r.lesson); x.count++; String(r.class_name).split(' + ').forEach(c => x.classes.add(c));
+      } else { G.missed++; String(r.class_name).split(' + ').forEach(c => G.missedClasses.add(c)); }
+    }
+    const sortCls = a => [...a].sort((x, y) => (parseInt(x.split(' ').pop()) || 0) - (parseInt(y.split(' ').pop()) || 0));
+    weeks.push({ no, from: w, to: end, n: R.length, ok: R.filter(r => r.prepared).length, read: [0, 1, 2, 3, 4].some(i => read.has(addDays(w, i))),
+      grades: [...byGrade.values()].sort((a, b) => (GRADE_ORDER[a.key] || 9) - (GRADE_ORDER[b.key] || 9)).map(G => ({ name: G.name, missed: G.missed, missedClasses: sortCls(G.missedClasses),
+        lessons: [...G.lessons.values()].sort((a, b) => a.first.localeCompare(b.first)).map(x => ({ title: x.title, count: x.count, classes: sortCls(x.classes) })) })) });
+  }
+  S.lessons.rows = rows; S.lessons.weeks = weeks;
 }
 
 /* ---------- التقرير الشامل ---------- */
