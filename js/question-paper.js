@@ -91,8 +91,8 @@ function autoGeom(n, slots, essayTotal = 0) {
 /* ---------- مواقع عناصر الورقة للتصحيح بكاميرا الجوال (بنفس صيغة sheetGeometry) ----------
  * الشبكة مثبّتة من أسفل الصفحة، فمواقع الدوائر واحدة سواء جاءت في الصفحة الأولى أو في صفحة لاحقة.
  * الباركود في رأس الصفحة الأولى، أو في شريط الاسم فوق الشبكة إذا جاءت الشبكة في صفحة لاحقة. */
-export function paperScanSpec(paper) {
-  const en = isEn(paper), auto = isAuto(paper);
+export function paperScanSpec(paper, force = null) {
+  const en = isEn(paper), auto = force ? force === 'auto' : isAuto(paper);
   const s = paper.settings || {};
   const types = (s.order === 'tf' ? ['tf', 'mcq'] : ['mcq', 'tf']);
   const kinds = [].concat(...types.map(t => paper.questions.filter(q => q.type === t).map(() => t)));
@@ -133,7 +133,7 @@ export function paperScanSpec(paper) {
     }
   }
   geo.barcode = headBc;
-  return { geo, stripBc, kinds, n, slots: auto ? slots : SLOTS, essayTotal: auto ? tot.essay : 0, essayAll: tot.essay, lang: langOf(paper), tfCount: kinds.filter(k => k === 'tf').length, tfFirst: s.order === 'tf', points: paper.questions.map(markOf) };
+  return { mode: auto ? 'auto' : 'fixed', geo, stripBc, kinds, n, slots: auto ? slots : SLOTS, essayTotal: auto ? tot.essay : 0, essayAll: tot.essay, lang: langOf(paper), tfCount: kinds.filter(k => k === 'tf').length, tfFirst: s.order === 'tf', points: paper.questions.map(markOf) };
 }
 
 /* ---------- التنسيق والدرجات والأسئلة المقالية (لا تدخل في توقيع الهيكل ولا في شبكة التظليل) ---------- */

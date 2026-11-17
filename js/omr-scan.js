@@ -44,7 +44,10 @@ async function loadPaperKeys() {
     const { data } = await qp.fetchPapers();
     return (data || []).filter(p => Object.keys(p.perms || {}).length && (p.questions || []).length).map(p => {
       const spec = qp.paperScanSpec(p);
-      return { id: p.id, isPaper: true, paper: p, spec, title: p.title || 'ورقة أسئلة', subject: p.subject, grade_level: p.grade_level, size: 'A4', questions: spec.n, choices: spec.slots,
+      // الورقة قد تكون طُبعت بالشبكة الأخرى (متكيفة/ثابتة): تُجرَّب الشبكتان عند القراءة ويُؤخذ الأوضح
+      const fits = spec.n <= 10 && p.questions.every(q => q.type === 'tf' || (q.options || []).length <= 3);
+      const alt = spec.mode === 'fixed' ? qp.paperScanSpec(p, 'auto') : (fits ? qp.paperScanSpec(p, 'fixed') : null);
+      return { id: p.id, isPaper: true, paper: p, spec, alt, title: p.title || 'ورقة أسئلة', subject: p.subject, grade_level: p.grade_level, size: 'A4', questions: spec.n, choices: spec.slots,
         lang: spec.lang, essay_total: spec.essayAll || 0, tf_count: spec.tfCount, tf_first: spec.tfFirst, answers: [], created_by: p.created_by };
     });
   } catch (e) { return []; }
@@ -420,20 +423,36 @@ async function processFiles(files) {
 function processCanvas(canvas, quad = null) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const g = grayFromImageData(ctx.getImageData(0, 0, canvas.width, canvas.height));
-  const loc = locateSheet(g, S.geo, keyOpts(S.key).size, quad ? { quad } : {});
-  if (!loc.ok) {
-    return { ok: false, msg: loc.reason === 'marks' || loc.reason === 'shape' ? 'لم يُعثر على المربعات الأربعة - صوّر الورقة كاملة' : 'الصورة غير واضحة أو الورقة ليست لهذا الاختبار' };
+  const k = S.key;
+  const specs = k.isPaper ? [k.spec, k.alt].filter(Boolean) : [null];
+  let best = null, fail = null;
+  for (const sp of specs) {
+    const geo = sp ? sp.geo : S.geo;
+    const loc = locateSheet(g, geo, keyOpts(k).size, quad ? { quad } : {});
+    if (!loc.ok) { fail = fail || loc; continue; }
+    const reads = [];
+    for (const ox of loc.layout.sheets) {
+      const r = readSheet(g, geo, loc, ox);
+      if (r.contrast < 8) continue;
+      // ورقة الأسئلة: إذا جاءت الشبكة في صفحة لاحقة فالباركود في شريط الاسم فوقها
+      if (sp && !r.barcode && sp.stripBc) r.barcode = readBarcode(g, loc.H, { barcode: sp.stripBc }, ox);
+      reads.push({ r, ox });
+    }
+    const score = reads.reduce((a, x) => Math.max(a, x.r.contrast), 0);
+    if (reads.length && (!best || score > best.score)) best = { geo, loc, reads, score };
+  }
+  if (!best) {
+    if (fail) return { ok: false, msg: fail.reason === 'marks' || fail.reason === 'shape' ? 'لم يُعثر على المربعات الأربعة - صوّر الورقة كاملة' : 'الصورة غير واضحة أو الورقة ليست لهذا الاختبار' };
+    return { ok: false, msg: 'هذه ورقة النموذج أو أن الورقة غير واضحة' };
   }
   const items = [];
-  for (const ox of loc.layout.sheets) {
-    const r = readSheet(g, S.geo, loc, ox);
-    if (r.contrast < 8) continue;
-    // ورقة الأسئلة: إذا جاءت الشبكة في صفحة لاحقة فالباركود في شريط الاسم فوقها
-    if (S.key.isPaper && !r.barcode && S.key.spec.stripBc) r.barcode = readBarcode(g, loc.H, { barcode: S.key.spec.stripBc }, ox);
+  for (const { r, ox } of best.reads) {
     if (r.barcode === KEY_ID) continue;   // ورقة النموذج نفسها
     const thumb = document.createElement('canvas');
-    rectifyToCanvas(g, loc.H, ox, S.geo.w, S.geo.h, 2.4, thumb);
-    items.push(fromRead(r, thumb, ox));
+    rectifyToCanvas(g, best.loc.H, ox, best.geo.w, best.geo.h, 2.4, thumb);
+    const it = fromRead(r, thumb, ox);
+    it.geo = best.geo;
+    items.push(it);
   }
   if (!items.length) return { ok: false, msg: 'هذه ورقة النموذج أو أن الورقة غير واضحة' };
   return { ok: true, items };
@@ -646,7 +665,7 @@ function reviewOne(it, next, remaining) {
 
 // علامات على صورة الورقة المصححة: دائرة خضراء = الإجابة الصحيحة، حمراء = اختيار خاطئ، صفراء = راجعها
 function drawThumbMarks(it) {
-  const c = it.thumb, ctx = c.getContext('2d'), s = 2.4, key = keyFor(it), geo = S.geo;
+  const c = it.thumb, ctx = c.getContext('2d'), s = 2.4, key = keyFor(it), geo = it.geo || S.geo;
   const r = geo.bubble / 2 * s + 1.5;
   ctx.lineWidth = 2.2;
   geo.items.forEach((row, q) => {
