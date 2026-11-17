@@ -834,7 +834,7 @@ export function openWorkspace(groupKey) {
 /* ===== قائمة الحساب (الاسم، تبديل المدرسة، الخروج) ===== */
 function closeUserMenu() {
   document.getElementById('user-menu').classList.add('hidden');
-  document.getElementById('um-backdrop').classList.add('hidden');
+  const bd = document.getElementById('um-backdrop'); if (bd) bd.classList.add('hidden');
   document.getElementById('user-menu-btn').setAttribute('aria-expanded', 'false');
 }
 document.getElementById('settings-open-btn').addEventListener('click', () => { closeUserMenu(); openTile('settings'); });
@@ -842,7 +842,7 @@ document.getElementById('user-menu-btn').addEventListener('click', (e) => {
   e.stopPropagation();
   const m = document.getElementById('user-menu');
   const open = m.classList.toggle('hidden') === false;
-  document.getElementById('um-backdrop').classList.toggle('hidden', !open);
+  const bd = document.getElementById('um-backdrop'); if (bd) bd.classList.toggle('hidden', !open);
   document.getElementById('user-menu-btn').setAttribute('aria-expanded', open ? 'true' : 'false');
 });
 document.addEventListener('click', (e) => { if (!e.target.closest('.tn-user') || e.target.id === 'um-backdrop') closeUserMenu(); });
