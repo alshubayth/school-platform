@@ -17,6 +17,24 @@ import { code128Svg } from './answer-sheet.js';
 import { mapPaperAnswers } from './grading-core.js';
 
 const AR = ['أ', 'ب', 'ج', 'د'];
+const EN = ['A', 'B', 'C', 'D'];
+// لغة الورقة: العربية (من اليمين) أو الإنجليزية (من اليسار، حروف A B C D، والشبكة معكوسة أفقيًا)
+const langOf = paper => ((paper && paper.settings || {}).lang === 'en' ? 'en' : 'ar');
+const isEn = paper => langOf(paper) === 'en';
+const lettersOf = paper => (isEn(paper) ? EN : AR);
+const EN_GRADES = { first_intermediate: 'Grade 7 (1st Intermediate)', second_intermediate: 'Grade 8 (2nd Intermediate)', third_intermediate: 'Grade 9 (3rd Intermediate)' };
+const gradeTxt = (paper, g) => (isEn(paper) && EN_GRADES[g]) || gradeLabels[g] || '';
+const TX = {
+  ar: { tf: ['صح', 'خطأ'], name: 'اسم الطالب', school: 'المدرسة', grade: 'الصف', cls: 'الفصل', score: 'الدرجة', outOf: 'من', exam: 'اختبار', keyCopy: 'نسخة المعلم: الإجابات مظللة', teacher: 'نسخة المعلم', barcode: 'الباركود',
+    gridTitle: 'نموذج الإجابة', gridHint: 'ظلّل دائرة واحدة لكل سؤال تظليلًا كاملًا', q: 'السؤال', qs: 'س', ans: 'الإجابة', essayMark: 'درجة المقالي', byMarker: 'يظلّلها المصحح · من', tens: 'عشرات', ones: 'آحاد',
+    esScore: (m) => `الدرجة: ......... من ${m}`, qCount: 'عدد الأسئلة', time: 'الزمن', gridOnFirst: 'التظليل في الصفحة الأولى',
+    instr: (where) => `اقرأ كل سؤال، ثم ظلّل الإجابة الصحيحة في «نموذج الإجابة» ${where} — إجابة واحدة لكل سؤال`, last: 'آخر الورقة', bottom: 'أسفل الصفحة' },
+  en: { tf: ['True', 'False'], name: 'Student name', school: 'School', grade: 'Grade', cls: 'Class', score: 'Score', outOf: 'out of', exam: 'Exam', keyCopy: 'Teacher copy: answers shaded', teacher: 'Teacher copy', barcode: 'Barcode',
+    gridTitle: 'Answer Sheet', gridHint: 'Shade one circle completely for each question', q: 'No.', qs: 'Q', ans: 'Answer', essayMark: 'Essay mark', byMarker: 'Shaded by the teacher · out of', tens: 'Tens', ones: 'Ones',
+    esScore: (m) => `Mark: ......... / ${m}`, qCount: 'Questions', time: 'Time', gridOnFirst: 'Shade your answers on the first page',
+    instr: (where) => `Shade the correct answer in the Answer Sheet ${where} — one answer per question`, last: 'at the end of the paper', bottom: 'at the bottom of the page' },
+};
+const tx = paper => TX[langOf(paper)];
 const GRADES = ['first_intermediate', 'second_intermediate', 'third_intermediate'];
 const SLOTS = 3;              // دوائر كل سطر بشبكة التظليل (أ ب ج)
 const G_COLS = 2, G_ROWS = 5;
@@ -70,6 +88,54 @@ function autoGeom(n, slots, essayTotal = 0) {
   return { colW, perBand, blocks, bands, bandH, bodyH, essayH, cols: Math.min(blocks, perBand), h: GA.titleH + 2 + bodyH + essayH };
 }
 
+/* ---------- مواقع عناصر الورقة للتصحيح بكاميرا الجوال (بنفس صيغة sheetGeometry) ----------
+ * الشبكة مثبّتة من أسفل الصفحة، فمواقع الدوائر واحدة سواء جاءت في الصفحة الأولى أو في صفحة لاحقة.
+ * الباركود في رأس الصفحة الأولى، أو في شريط الاسم فوق الشبكة إذا جاءت الشبكة في صفحة لاحقة. */
+export function paperScanSpec(paper) {
+  const en = isEn(paper), auto = isAuto(paper);
+  const s = paper.settings || {};
+  const types = (s.order === 'tf' ? ['tf', 'mcq'] : ['mcq', 'tf']);
+  const kinds = [].concat(...types.map(t => paper.questions.filter(q => q.type === t).map(() => t)));
+  const n = kinds.length, slots = slotsOf(paper), tot = totalsOf(paper);
+  const X = x => (en ? P.w - x : x);                       // مرآة أفقية للورقة الإنجليزية
+  const m = P.markInset + P.mark / 2;
+  const geo = { w: P.w, h: P.h, mark: P.mark, marks: [[m, m], [P.w - m, m], [m, P.h - m], [P.w - m, P.h - m]], model: null, essay: null, items: [] };
+  const bcW = code128Svg('1000000000', P.barModule, 7).wMm;
+  const headBc = { x: en ? P.w - P.side - P.barcodeW : P.side, y: P.infoTop + 4, w: P.barcodeW, h: 12 };
+  let stripBc = null;
+  if (auto) {
+    const g = autoGeom(n, slots, tot.essay), bottom = P.h - GA.bottom;
+    const bodyTop = bottom - g.essayH - g.bodyH, stripTop = bodyTop - 2 - GA.titleH - GA.stripH;
+    geo.bubble = GA.bubble; geo.pitch = GA.pitch; geo.rowH = GA.rowH;
+    for (let pos = 0; pos < n; pos++) {
+      const k = Math.floor(pos / GA.block), r = pos % GA.block, band = Math.floor(k / g.perBand), c = k % g.perBand;
+      const inBand = Math.min(g.perBand, g.blocks - band * g.perBand);
+      const off = (P.innerW - (inBand * g.colW + (inBand - 1) * GA.gap)) / 2;
+      const x = P.innerW - off - (c + 1) * g.colW - c * GA.gap;
+      const y = bodyTop + band * (g.bandH + GA.bandGap) + GA.headH + r * GA.rowH + GA.rowH / 2;
+      geo.items[pos] = Array.from({ length: kinds[pos] === 'tf' ? 2 : slots }, (_, sI) => [X(P.side + x + g.colW - GA.numW - GA.pad - (sI + 1) * GA.pitch + GA.pitch / 2), y]);
+    }
+    const rows = essayRows(tot.essay);
+    if (rows.length) {
+      const top = bottom - (rows.length * 8 + 2), labW = 44, pitch = 9.4, bub = 6.4;
+      geo.essay = rows.map((values, ri) => ({ values, pts: values.map((_, i) => [X(P.w - P.side - (labW + (rows.length > 1 ? 17 : 4) + i * pitch) - bub / 2), top + 1 + ri * 8 + 4]) }));
+    }
+    // شريط الاسم: الباركود ملاصق لطرف الشريط (يسارًا في العربية)
+    const x0 = P.side + 3.35;
+    stripBc = { x: (en ? P.w - x0 - bcW : x0) - 2, y: stripTop + 0.3, w: bcW + 4, h: 7.6 };
+  } else {
+    geo.bubble = P.gBubble; geo.pitch = P.gPitch; geo.rowH = P.gridRowH;
+    for (let pos = 0; pos < Math.min(n, CAP); pos++) {
+      const c = Math.floor(pos / G_ROWS), r = pos % G_ROWS;
+      const x = P.w - P.side - P.gOff - (c + 1) * P.gColW - c * P.gGap;
+      const y = P.gridRowsTop + r * P.gridRowH + P.gridRowH / 2;
+      geo.items[pos] = Array.from({ length: kinds[pos] === 'tf' ? 2 : SLOTS }, (_, sI) => [X(x + P.gColW - P.gNumW - P.gPad - (sI + 1) * P.gPitch + P.gPitch / 2), y]);
+    }
+  }
+  geo.barcode = headBc;
+  return { geo, stripBc, kinds, n, slots: auto ? slots : SLOTS, essayTotal: auto ? tot.essay : 0, essayAll: tot.essay, lang: langOf(paper), tfCount: kinds.filter(k => k === 'tf').length, tfFirst: s.order === 'tf', points: paper.questions.map(markOf) };
+}
+
 /* ---------- التنسيق والدرجات والأسئلة المقالية (لا تدخل في توقيع الهيكل ولا في شبكة التظليل) ---------- */
 const FMT_DEF = { size: 'm', opts: 'auto', gap: 'm', cols: 1, heads: true, showMarks: true, total: true, time: '' };
 const FS = { s: 9, m: 10, l: 11.5 };
@@ -77,7 +143,7 @@ const fmtOf = paper => ({ ...FMT_DEF, ...((paper.settings || {}).fmt || {}) });
 const essaysOf = paper => (Array.isArray((paper.settings || {}).essays) ? paper.settings.essays : []);
 const markOf = q => { const v = Number(q && q.marks); return Number.isFinite(v) && v > 0 ? v : 1; };
 const num = v => String(Math.round(v * 100) / 100);
-const marksTxt = v => (v === 1 ? 'درجة واحدة' : v === 2 ? 'درجتان' : v >= 3 && v <= 10 && Number.isInteger(v) ? `${num(v)} درجات` : `${num(v)} درجة`);
+const marksTxt = (v, en) => (en ? `${num(v)} ${v === 1 ? 'mark' : 'marks'}` : v === 1 ? 'درجة واحدة' : v === 2 ? 'درجتان' : v >= 3 && v <= 10 && Number.isInteger(v) ? `${num(v)} درجات` : `${num(v)} درجة`);
 function totalsOf(paper) {
   const obj = paper.questions.reduce((a, q) => a + markOf(q), 0);
   const essay = essaysOf(paper).reduce((a, q) => a + markOf(q), 0);
@@ -199,13 +265,18 @@ const PAPER_STYLES = `
   .qb.es .es-score { display:block; width:max-content; margin:1.4mm auto 0 0; background:#fff; border:0.3mm solid #1d3557; border-radius:1.2mm; padding:0.5mm 2mm; font-size:8.5pt; font-weight:700; color:#1d3557; direction:rtl; }
   .qp-score { position:absolute; border:0.4mm solid #1d3557; border-radius:2mm; display:flex; flex-direction:column; overflow:hidden; background:#fff; text-align:center; }
   .qp-score b { background:#1d3557; color:#fff; font-size:8pt; padding:0.5mm 0; } .qp-score span { flex:1; display:flex; align-items:flex-end; justify-content:center; font-size:8.5pt; font-weight:700; padding-bottom:0.8mm; color:#1d3557; }
+  .qb-img { display:flex; justify-content:center; padding:1.2mm 2mm 1mm; background:#fff; }
+  .qb-img img { display:block; object-fit:contain; }
+  .qp-stu.ltr .qb-q .mk { float:right; }
+  .qp-stu.ltr .qb.es .es-score { margin:1.4mm 0 0 auto; direction:ltr; }
+  .qp-stu.ltr .qp-qarea, .qp-stu.ltr .qp-instr, .qp-stu.ltr .qp-title { direction:ltr; }
   .qp-agrid { position:absolute; display:flex; flex-direction:column; background:#fff; }
   .qp-astrip { display:none; align-items:center; justify-content:space-between; gap:4mm; border:0.35mm solid #1d3557; border-radius:1.8mm; padding:0 3mm; }
   .qp-agrid.with-strip .qp-astrip { display:flex; }
   .qp-astrip b { display:block; font-size:10pt; } .qp-astrip span { font-size:8pt; color:#3c4a60; }
   .qp-astrip .bc { display:flex; flex-direction:column; align-items:center; direction:ltr; } .qp-astrip .bc i { font-style:normal; font:700 7.5pt 'Courier New',monospace; letter-spacing:0.5mm; }
   .qp-es-strip { border:0.35mm solid #1d3557; border-radius:1.8mm; overflow:hidden; background:#fff; }
-  .qp-es-lab { position:absolute; right:0; top:0; background:#1d3557; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.35; }
+  .qp-es-lab { position:absolute; top:0; background:#1d3557; color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; line-height:1.35; }
   .qp-es-lab b { font-size:9.5pt; } .qp-es-lab span { font-size:7pt; font-weight:400; }
   .qp-es-rl { position:absolute; display:flex; align-items:center; justify-content:center; font-size:7.5pt; font-weight:700; color:#1d3557; }
   .qp-a3 { position:relative; width:420mm; height:297mm; overflow:hidden; background:#fff; page-break-after:always; break-after:page; }
@@ -231,20 +302,31 @@ function optCols(texts, mode, half) {
   return max <= 90 ? 'c3' : 'c1';
 }
 
+// صورة السؤال (رسم هندسي، شكل، خريطة…): تُطبع تحت نص السؤال بعرض ثابت بالمليمتر حتى لا يتغيّر توزيع الصفحات
+const IMG_W = { s: 34, m: 52, l: 76 };
+function imgHtml(q, half) {
+  const im = q && q.img; if (!im || !im.src) return '';
+  let w = Math.min(IMG_W[im.size] || IMG_W.m, half ? 80 : 170);
+  const ratio = im.w > 0 && im.h > 0 ? im.h / im.w : 0.6;
+  let h = w * ratio; if (h > 75) { h = 75; w = h / ratio; }
+  return `<div class="qb-img"><img src="${esc(im.src)}" alt="" style="width:${mm(w)}; height:${mm(h)};"></div>`;
+}
+
 function questionBlock(paper, perm, pos, key) {
   const q = paper.questions[perm.q[pos]];
   const n = pos + 1;
   const f = fmtOf(paper);
-  const mk = f.showMarks ? `<span class="mk">(${marksTxt(markOf(q))})</span>` : '';
+  const en = isEn(paper), LT = lettersOf(paper);
+  const mk = f.showMarks ? `<span class="mk">(${marksTxt(markOf(q), en)})</span>` : '';
   const correctSlot = key ? perm.o[pos].indexOf(q.answer) : -1;
   let opts;
   if (q.type === 'tf') {
-    opts = `<div class="qb-opts c2">${['صح', 'خطأ'].map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${s === 0 ? '✓' : '✗'}</span><span>${t}</span></div>`).join('')}</div>`;
+    opts = `<div class="qb-opts c2">${tx(paper).tf.map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${s === 0 ? '✓' : '✗'}</span><span>${t}</span></div>`).join('')}</div>`;
   } else {
     const texts = perm.o[pos].map(oi => q.options[oi]);
-    opts = `<div class="qb-opts ${optCols(texts, f.opts, Number(f.cols) === 2)}">${texts.map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${AR[s]}</span><span>${rich(t)}</span></div>`).join('')}</div>`;
+    opts = `<div class="qb-opts ${optCols(texts, f.opts, Number(f.cols) === 2)}">${texts.map((t, s) => `<div class="qb-o${s === correctSlot ? ' correct' : ''}"><span class="l">${LT[s]}</span><span>${rich(t)}</span></div>`).join('')}</div>`;
   }
-  return `<div class="qb"><div class="qb-q">${mk}<span class="n">${n}-</span>${rich(q.text)}</div>${opts}</div>`;
+  return `<div class="qb"><div class="qb-q">${mk}<span class="n">${n}-</span>${rich(q.text)}</div>${imgHtml(q, Number(f.cols) === 2)}${opts}</div>`;
 }
 
 // السؤال المقالي: نص + سطور للإجابة + خانة درجة يكتبها المصحح (لا يدخل شبكة التظليل)
@@ -252,16 +334,18 @@ function essayBlock(paper, i, n, key) {
   const q = essaysOf(paper)[i];
   const lines = Math.min(20, Math.max(1, Number(q.lines) || 3));
   const m = markOf(q);
-  return `<div class="qb es"><div class="qb-q"><span class="mk">(${marksTxt(m)})</span><span class="n">${n}-</span>${rich(q.text)}</div>
-    <div class="es-body">${key && q.model ? `<div class="es-key">${rich(q.model)}</div>` : ''}${'<i class="es-ln"></i>'.repeat(lines)}<span class="es-score">الدرجة: ......... من ${num(m)}</span></div></div>`;
+  return `<div class="qb es"><div class="qb-q"><span class="mk">(${marksTxt(m, isEn(paper))})</span><span class="n">${n}-</span>${rich(q.text)}</div>${imgHtml(q, false)}
+    <div class="es-body">${key && q.model ? `<div class="es-key">${rich(q.model)}</div>` : ''}${'<i class="es-ln"></i>'.repeat(lines)}<span class="es-score">${tx(paper).esScore(num(m))}</span></div></div>`;
 }
 const ORD = ['الأول', 'الثاني', 'الثالث'];
+const HEAD_EN = { mcq: 'Choose the correct answer, then shade it in the Answer Sheet', tf: 'Shade (✓) if the statement is true and (✗) if it is false in the Answer Sheet', essay: 'Answer the following questions' };
 const HEAD_TXT = { mcq: 'اختر الإجابة الصحيحة فيما يأتي، ثم ظلّلها في نموذج الإجابة', tf: 'ظلّل (✓) للعبارة الصحيحة و(✗) للعبارة الخاطئة في نموذج الإجابة', essay: 'أجب عن الأسئلة الآتية' };
 // كل بلوكات الورقة بالترتيب: عناوين الأقسام + الموضوعي + المقالي
 function allBlocks(paper, perm, key) {
   const f = fmtOf(paper), es = essaysOf(paper);
   let out = '', sec = 0, last = null;
-  const head = (type, total) => (f.heads ? `<div class="qb-head"><span>السؤال ${ORD[sec++] || ''}: ${HEAD_TXT[type]}</span>${f.showMarks ? `<em>${marksTxt(total)}</em>` : ''}</div>` : '');
+  const en = isEn(paper);
+  const head = (type, total) => (f.heads ? `<div class="qb-head"><span>${en ? `Question ${++sec}: ${HEAD_EN[type]}` : `السؤال ${ORD[sec++] || ''}: ${HEAD_TXT[type]}`}</span>${f.showMarks ? `<em>${marksTxt(total, en)}</em>` : ''}</div>` : '');
   perm.q.forEach((qi, pos) => {
     const t = paper.questions[qi].type;
     if (t !== last) { out += head(t, paper.questions.filter(q => q.type === t).reduce((a, q) => a + markOf(q), 0)); last = t; }
@@ -278,27 +362,28 @@ function marksHtml() {
 
 // شبكة التظليل أسفل الصفحة الأولى: الأعمدة من اليمين (١-١٠ أقصى اليمين)، أ أقصى يمين كل سطر
 function gridHtml(paper, perm, key) {
-  const n = perm.q.length;
-  let h = `<div class="qp-grid-title" style="left:${mm(P.side)}; top:${mm(P.gridTop)}; width:${mm(P.innerW)}; height:${mm(P.gridTitleH)};">نموذج الإجابة <span style="font-weight:400; font-size:8.5pt;">ظلّل دائرة واحدة لكل سؤال تظليلًا كاملًا <span class="qp-ex fill" style="border-color:#fff; background:#fff;"></span></span></div>`;
+  const n = perm.q.length, en = isEn(paper), t = tx(paper), LT = lettersOf(paper);
+  const mx = (left, w) => (en ? P.w - left - w : left);
+  let h = `<div class="qp-grid-title" style="left:${mm(P.side)}; top:${mm(P.gridTop)}; width:${mm(P.innerW)}; height:${mm(P.gridTitleH)};">${t.gridTitle} <span style="font-weight:400; font-size:8.5pt;">${t.gridHint} <span class="qp-ex fill" style="border-color:#fff; background:#fff;"></span></span></div>`;
   const top = P.gridTop + P.gridTitleH + 2;
   for (let c = 0; c < G_COLS; c++) {
     const x = P.w - P.side - P.gOff - (c + 1) * P.gColW - c * P.gGap; // العمود الأول يمين
     const boxH = P.gridHeadH + G_ROWS * P.gridRowH;
-    h += `<div class="qp-gbox" style="left:${mm(x)}; top:${mm(top)}; width:${mm(P.gColW)}; height:${mm(boxH)};"></div>`;
-    h += `<div class="qp-ghead" style="left:${mm(x + P.gColW - P.gNumW)}; top:${mm(top)}; width:${mm(P.gNumW)}; height:${mm(P.gridHeadH)};">السؤال</div>`;
-    h += `<div class="qp-ghead" style="left:${mm(x)}; top:${mm(top)}; width:${mm(P.gColW - P.gNumW)}; height:${mm(P.gridHeadH)}; border-inline-end:0.3mm solid #fff;">الإجابة</div>`;
+    h += `<div class="qp-gbox" style="left:${mm(mx(x, P.gColW))}; top:${mm(top)}; width:${mm(P.gColW)}; height:${mm(boxH)};"></div>`;
+    h += `<div class="qp-ghead" style="left:${mm(mx(x + P.gColW - P.gNumW, P.gNumW))}; top:${mm(top)}; width:${mm(P.gNumW)}; height:${mm(P.gridHeadH)};">${t.q}</div>`;
+    h += `<div class="qp-ghead" style="left:${mm(mx(x, P.gColW - P.gNumW))}; top:${mm(top)}; width:${mm(P.gColW - P.gNumW)}; height:${mm(P.gridHeadH)};">${t.ans}</div>`;
     for (let r = 0; r < G_ROWS; r++) {
       const pos = c * G_ROWS + r;
       const y = P.gridRowsTop + r * P.gridRowH;
-      if (r > 0) h += `<div class="qp-grule" style="left:${mm(x)}; top:${mm(y)}; width:${mm(P.gColW)};"></div>`;
-      h += `<div class="qp-gnum" style="left:${mm(x + P.gColW - P.gNumW)}; top:${mm(y)}; width:${mm(P.gNumW)}; height:${mm(P.gridRowH)};">${pos < n ? pos + 1 : ''}</div>`;
+      if (r > 0) h += `<div class="qp-grule" style="left:${mm(mx(x, P.gColW))}; top:${mm(y)}; width:${mm(P.gColW)};"></div>`;
+      h += `<div class="qp-gnum" style="left:${mm(mx(x + P.gColW - P.gNumW, P.gNumW))}; top:${mm(y)}; width:${mm(P.gNumW)}; height:${mm(P.gridRowH)};">${pos < n ? pos + 1 : ''}</div>`;
       if (pos >= n) continue;
       const q = paper.questions[perm.q[pos]];
       const correctSlot = key ? perm.o[pos].indexOf(q.answer) : -1;
       for (let s = 0; s < optCount(q); s++) {
         const bx = x + P.gColW - P.gNumW - P.gPad - (s + 1) * P.gPitch + (P.gPitch - P.gBubble) / 2;
-        const label = q.type === 'tf' ? (s === 0 ? '✓' : '✗') : AR[s];
-        h += `<div class="qp-bubble${s === correctSlot ? ' fill' : ''}" style="left:${mm(bx)}; top:${mm(y + (P.gridRowH - P.gBubble) / 2)}; width:${mm(P.gBubble)}; height:${mm(P.gBubble)};">${label}</div>`;
+        const label = q.type === 'tf' ? (s === 0 ? '✓' : '✗') : LT[s];
+        h += `<div class="qp-bubble${s === correctSlot ? ' fill' : ''}" style="left:${mm(mx(bx, P.gBubble))}; top:${mm(y + (P.gridRowH - P.gBubble) / 2)}; width:${mm(P.gBubble)}; height:${mm(P.gBubble)};">${label}</div>`;
       }
     }
   }
@@ -308,6 +393,8 @@ function gridHtml(paper, perm, key) {
 // الشبكة المتكيفة: بلوك يُثبَّت أسفل الصفحة الأخيرة؛ شريط الاسم والباركود يظهر إذا لم تكن الصفحة الأولى
 function autoGridHtml(paper, perm, key, student) {
   const n = perm.q.length, slots = slotsOf(paper), esTotal = totalsOf(paper).essay, g = autoGeom(n, slots, esTotal);
+  const en = isEn(paper), t = tx(paper), LT = lettersOf(paper);
+  const mi = (left, w) => (en ? P.innerW - left - w : left);
   let b = '';
   for (let k = 0; k < g.blocks; k++) {
     const band = Math.floor(k / g.perBand), c = k % g.perBand;
@@ -315,56 +402,59 @@ function autoGridHtml(paper, perm, key, student) {
     const off = (P.innerW - (inBand * g.colW + (inBand - 1) * GA.gap)) / 2;
     const x = P.innerW - off - (c + 1) * g.colW - c * GA.gap; // المجموعة الأولى يمين
     const y0 = band * (g.bandH + GA.bandGap);
-    b += `<div class="qp-gbox" style="left:${mm(x)}; top:${mm(y0)}; width:${mm(g.colW)}; height:${mm(g.bandH)};"></div>`;
-    b += `<div class="qp-ghead" style="left:${mm(x + g.colW - GA.numW)}; top:${mm(y0)}; width:${mm(GA.numW)}; height:${mm(GA.headH)}; font-size:7.5pt;">س</div>`;
-    b += `<div class="qp-ghead" style="left:${mm(x)}; top:${mm(y0)}; width:${mm(g.colW - GA.numW)}; height:${mm(GA.headH)}; font-size:8pt; border-inline-end:0.3mm solid #fff;">الإجابة</div>`;
+    b += `<div class="qp-gbox" style="left:${mm(mi(x, g.colW))}; top:${mm(y0)}; width:${mm(g.colW)}; height:${mm(g.bandH)};"></div>`;
+    b += `<div class="qp-ghead" style="left:${mm(mi(x + g.colW - GA.numW, GA.numW))}; top:${mm(y0)}; width:${mm(GA.numW)}; height:${mm(GA.headH)}; font-size:7.5pt;">${t.qs}</div>`;
+    b += `<div class="qp-ghead" style="left:${mm(mi(x, g.colW - GA.numW))}; top:${mm(y0)}; width:${mm(g.colW - GA.numW)}; height:${mm(GA.headH)}; font-size:8pt;">${t.ans}</div>`;
     for (let r = 0; r < GA.block; r++) {
       const pos = k * GA.block + r, y = y0 + GA.headH + r * GA.rowH;
-      if (r > 0) b += `<div class="qp-grule" style="left:${mm(x)}; top:${mm(y)}; width:${mm(g.colW)};"></div>`;
-      b += `<div class="qp-gnum" style="left:${mm(x + g.colW - GA.numW)}; top:${mm(y)}; width:${mm(GA.numW)}; height:${mm(GA.rowH)}; font-size:10.5pt;">${pos < n ? pos + 1 : ''}</div>`;
+      if (r > 0) b += `<div class="qp-grule" style="left:${mm(mi(x, g.colW))}; top:${mm(y)}; width:${mm(g.colW)};"></div>`;
+      b += `<div class="qp-gnum" style="left:${mm(mi(x + g.colW - GA.numW, GA.numW))}; top:${mm(y)}; width:${mm(GA.numW)}; height:${mm(GA.rowH)}; font-size:10.5pt;">${pos < n ? pos + 1 : ''}</div>`;
       if (pos >= n) continue;
       const q = paper.questions[perm.q[pos]];
       const correctSlot = key ? perm.o[pos].indexOf(q.answer) : -1;
       for (let sI = 0; sI < optCount(q); sI++) {
         const bx = x + g.colW - GA.numW - GA.pad - (sI + 1) * GA.pitch + (GA.pitch - GA.bubble) / 2;
-        b += `<div class="qp-bubble${sI === correctSlot ? ' fill' : ''}" style="left:${mm(bx)}; top:${mm(y + (GA.rowH - GA.bubble) / 2)}; width:${mm(GA.bubble)}; height:${mm(GA.bubble)}; font-size:8.5pt;">${q.type === 'tf' ? (sI === 0 ? '✓' : '✗') : AR[sI]}</div>`;
+        b += `<div class="qp-bubble${sI === correctSlot ? ' fill' : ''}" style="left:${mm(mi(bx, GA.bubble))}; top:${mm(y + (GA.rowH - GA.bubble) / 2)}; width:${mm(GA.bubble)}; height:${mm(GA.bubble)}; font-size:8.5pt;">${q.type === 'tf' ? (sI === 0 ? '✓' : '✗') : LT[sI]}</div>`;
       }
     }
   }
   const id = student && student.national_id ? String(student.national_id).trim() : '';
-  const strip = `<div class="qp-astrip" style="height:${mm(GA.stripH - 2)}; margin-bottom:2mm;"><div><b>${esc(student ? student.full_name : (key ? 'نسخة المعلم' : ''))}</b><span>${esc(paper.title || '')}</span></div><div class="bc">${id ? code128Svg(id, P.barModule, 7).svg + `<i>${esc(id)}</i>` : ''}</div></div>`;
+  const strip = `<div class="qp-astrip" style="height:${mm(GA.stripH - 2)}; margin-bottom:2mm;"><div><b>${esc(student ? student.full_name : (key ? t.teacher : ''))}</b><span>${esc(paper.title || '')}</span></div><div class="bc">${id ? code128Svg(id, P.barModule, 7).svg + `<i>${esc(id)}</i>` : ''}</div></div>`;
   return `<div class="qp-agrid" data-h="${g.h}" data-strip="${GA.stripH}" style="left:${mm(P.side)}; bottom:${mm(GA.bottom)}; width:${mm(P.innerW)};">${strip}
-    <div class="qp-grid-title" style="position:relative; height:${mm(GA.titleH)}; margin-bottom:2mm;">نموذج الإجابة <span style="font-weight:400; font-size:8.5pt;">ظلّل دائرة واحدة لكل سؤال تظليلًا كاملًا <span class="qp-ex fill" style="border-color:#fff; background:#fff;"></span></span></div>
-    <div style="position:relative; height:${mm(g.bodyH)};">${b}</div>${essayStripHtml(esTotal, g)}</div>`;
+    <div class="qp-grid-title" style="position:relative; height:${mm(GA.titleH)}; margin-bottom:2mm;">${t.gridTitle} <span style="font-weight:400; font-size:8.5pt;">${t.gridHint} <span class="qp-ex fill" style="border-color:#fff; background:#fff;"></span></span></div>
+    <div style="position:relative; height:${mm(g.bodyH)};">${b}</div>${essayStripHtml(esTotal, g, paper)}</div>`;
 }
 
-function essayStripHtml(total, g) {
+function essayStripHtml(total, g, paper) {
+  const en = isEn(paper), t = tx(paper), side = en ? 'left' : 'right';
   const rows = essayRows(total); if (!rows.length) return '';
   const h = rows.length * 8 + 2, labW = 44, pitch = 9.4, bub = 6.4;
   let x = '';
   rows.forEach((vals, ri) => {
     const y = 1 + ri * 8 + (8 - bub) / 2;
-    if (rows.length > 1) x += `<div class="qp-es-rl" style="right:${mm(labW + 2)}; top:${mm(1 + ri * 8)}; width:${mm(13)}; height:${mm(8)};">${ri === 0 ? 'عشرات' : 'آحاد'}</div>`;
-    vals.forEach((v, i) => { x += `<div class="qp-bubble" style="right:${mm(labW + (rows.length > 1 ? 17 : 4) + i * pitch)}; top:${mm(y)}; width:${mm(bub)}; height:${mm(bub)}; font-size:8pt; color:#555; direction:ltr;">${v}</div>`; });
+    if (rows.length > 1) x += `<div class="qp-es-rl" style="${side}:${mm(labW + 2)}; top:${mm(1 + ri * 8)}; width:${mm(13)}; height:${mm(8)};">${ri === 0 ? t.tens : t.ones}</div>`;
+    vals.forEach((v, i) => { x += `<div class="qp-bubble" style="${side}:${mm(labW + (rows.length > 1 ? 17 : 4) + i * pitch)}; top:${mm(y)}; width:${mm(bub)}; height:${mm(bub)}; font-size:8pt; color:#555; direction:ltr;">${v}</div>`; });
   });
   return `<div class="qp-es-strip" style="position:relative; height:${mm(h)}; margin-top:${mm(GA.bandGap)};">
-    <div class="qp-es-lab" style="width:${mm(labW)}; height:${mm(h)};"><b>درجة المقالي</b><span>يظلّلها المصحح · من ${num(Math.ceil(total))}</span></div>${x}</div>`;
+    <div class="qp-es-lab" style="${side}:0; width:${mm(labW)}; height:${mm(h)};"><b>${t.essayMark}</b><span>${t.byMarker} ${num(Math.ceil(total))}</span></div>${x}</div>`;
 }
 
 function firstPageHtml(paper, perm, student, opts) {
   let h = `<div class="qp-page qp-first">` + marksHtml();
-  const sub = [paper.subject, gradeLabels[paper.grade_level]].filter(Boolean).join(' · ');
+  const en = isEn(paper), t = tx(paper);
+  const mx = (left, w) => (en ? P.w - left - w : left);
+  const sub = [paper.subject, gradeTxt(paper, paper.grade_level)].filter(Boolean).join(' · ');
   const f = fmtOf(paper), tot = totalsOf(paper);
-  if (f.total) h += `<div class="qp-score" style="left:${mm(P.side + 9)}; top:${mm(P.titleTop)}; width:${mm(26)}; height:${mm(P.titleH)};"><b>الدرجة</b><span>من ${num(tot.all)}</span></div>`;
-  h += `<div class="qp-title" style="left:${mm(P.side + 37)}; top:${mm(P.titleTop)}; width:${mm(P.innerW - 74)}; height:${mm(P.titleH)};"><b>${esc(paper.title || 'اختبار')}</b><span>${esc(sub)}${opts.key ? ' — <span style="color:#b00;">نسخة المعلم: الإجابات مظللة</span>' : ''}</span></div>`;
+  if (f.total) h += `<div class="qp-score" style="left:${mm(mx(P.side + 9, 26))}; top:${mm(P.titleTop)}; width:${mm(26)}; height:${mm(P.titleH)};"><b>${t.score}</b><span>${t.outOf} ${num(tot.all)}</span></div>`;
+  h += `<div class="qp-title" style="left:${mm(P.side + 37)}; top:${mm(P.titleTop)}; width:${mm(P.innerW - 74)}; height:${mm(P.titleH)};"><b>${esc(paper.title || t.exam)}</b><span>${esc(sub)}${opts.key ? ` — <span style="color:#b00;">${t.keyCopy}</span>` : ''}</span></div>`;
   // البيانات يمين، والباركود يسار
   const tblW = P.innerW - P.barcodeW - 4;
   const right = P.w - P.side;
-  const g = student ? (gradeLabels[student.grade_level] || '') : (gradeLabels[paper.grade_level] || '');
+  const g = gradeTxt(paper, student ? student.grade_level : paper.grade_level);
   const rows = [
-    [['اسم الطالب', student ? student.full_name : '', 22, null]],
-    [['المدرسة', printOrgName(), 22, null]],
-    [['الصف', g, 22, null], ['الفصل', student && student.class_section ? String(student.class_section) : '', 16, 18]],
+    [[t.name, student ? student.full_name : '', en ? 27 : 22, null]],
+    [[t.school, printOrgName(), en ? 27 : 22, null]],
+    [[t.grade, g, en ? 27 : 22, null], [t.cls, student && student.class_section ? String(student.class_section) : '', 16, 18]],
   ];
   rows.forEach((cells, ri) => {
     const fixed = cells.reduce((a, c) => a + c[2] + (c[3] || 0), 0);
@@ -373,19 +463,19 @@ function firstPageHtml(paper, perm, student, opts) {
     const y = P.infoTop + ri * (P.infoRowH + 0.6);
     cells.forEach(([lbl, val, lw, vw0]) => {
       const vw = vw0 == null ? flexW : vw0;
-      h += `<div class="qp-cell lbl" style="left:${mm(right - off - lw)}; top:${mm(y)}; width:${mm(lw)}; height:${mm(P.infoRowH)};">${lbl}</div>`;
-      h += `<div class="qp-cell val" style="left:${mm(right - off - lw - vw)}; top:${mm(y)}; width:${mm(vw)}; height:${mm(P.infoRowH)}; direction:rtl;">${esc(val || '')}</div>`;
+      h += `<div class="qp-cell lbl" style="left:${mm(mx(right - off - lw, lw))}; top:${mm(y)}; width:${mm(lw)}; height:${mm(P.infoRowH)};">${lbl}</div>`;
+      h += `<div class="qp-cell val" style="left:${mm(mx(right - off - lw - vw, vw))}; top:${mm(y)}; width:${mm(vw)}; height:${mm(P.infoRowH)}; direction:${en ? 'ltr' : 'rtl'};" dir="auto">${esc(val || '')}</div>`;
       off += lw + vw;
     });
   });
   const bcH = 3 * P.infoRowH + 1.2;
-  h += `<div class="qp-bcbox" style="left:${mm(P.side)}; top:${mm(P.infoTop)}; width:${mm(P.barcodeW)}; height:${mm(bcH)};">`;
+  h += `<div class="qp-bcbox" style="left:${mm(mx(P.side, P.barcodeW))}; top:${mm(P.infoTop)}; width:${mm(P.barcodeW)}; height:${mm(bcH)};">`;
   if (student && student.national_id) {
     const id = String(student.national_id).trim();
     h += code128Svg(id, P.barModule, P.barH).svg + `<div style="font-size:8.5pt; font-family:'Courier New',monospace; font-weight:700; letter-spacing:0.6mm; direction:ltr;">${esc(id)}</div>`;
-  } else h += `<div style="font-size:9pt; color:#888;">${opts.key ? 'نسخة المعلم' : 'الباركود'}</div>`;
+  } else h += `<div style="font-size:9pt; color:#888;">${opts.key ? t.teacher : t.barcode}</div>`;
   h += `</div>`;
-  h += `<div class="qp-instr" style="left:${mm(P.side)}; top:${mm(P.instrTop)}; width:${mm(P.innerW)}; height:${mm(P.instrH)};">اقرأ كل سؤال، ثم ظلّل الإجابة الصحيحة في «نموذج الإجابة» ${isAuto(paper) ? 'آخر الورقة' : 'أسفل الصفحة'} — إجابة واحدة لكل سؤال${perm.q.length ? ` · عدد الأسئلة ${perm.q.length + essaysOf(paper).length}` : ''}${f.time ? ` · الزمن: ${esc(f.time)}` : ''}</div>`;
+  h += `<div class="qp-instr" style="left:${mm(P.side)}; top:${mm(P.instrTop)}; width:${mm(P.innerW)}; height:${mm(P.instrH)};">${t.instr(isAuto(paper) ? t.last : t.bottom)}${perm.q.length ? ` · ${t.qCount}${en ? ':' : ''} ${perm.q.length + essaysOf(paper).length}` : ''}${f.time ? ` · ${t.time}: ${esc(f.time)}` : ''}</div>`;
   const auto = isAuto(paper);
   h += `<div class="qp-qarea gap-${f.gap}${Number(f.cols) === 2 ? ' two' : ''}" style="left:${mm(P.side)}; top:${mm(P.qTop)}; width:${mm(P.innerW)}; height:${mm((auto ? P.h - GA.bottom : P.qBottom) - P.qTop)};"></div>`;
   if (!auto) h += gridHtml(paper, perm, opts.key);
@@ -397,13 +487,13 @@ function firstPageHtml(paper, perm, student, opts) {
 function contPageHtml(paper, student) {
   return `<div class="qp-page qp-next"><div class="qp-cont" style="left:${mm(P.side)}; top:${mm(10)}; width:${mm(P.innerW)};"><span>${esc(paper.title || '')}</span><span>${esc(student ? student.full_name : '')}</span></div>
     <div class="qp-qarea gap-${fmtOf(paper).gap}${Number(fmtOf(paper).cols) === 2 ? ' two' : ''}" style="left:${mm(P.side)}; top:${mm(18)}; width:${mm(P.innerW)}; height:${mm(P.h - 18 - (isAuto(paper) ? GA.bottom : 12))};"></div>
-    <div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - (isAuto(paper) ? P.markInset + P.mark - 0.6 : 9))};">${isAuto(paper) ? esc(paper.title || '') : 'التظليل في الصفحة الأولى'}</div></div>`;
+    <div class="qp-foot" style="left:${mm(P.side + P.mark)}; width:${mm(P.innerW - 2 * P.mark)}; top:${mm(P.h - (isAuto(paper) ? P.markInset + P.mark - 0.6 : 9))};">${isAuto(paper) ? esc(paper.title || '') : tx(paper).gridOnFirst}</div></div>`;
 }
 
 // كل طالب: الصفحة الأولى (فيها التظليل) + قالب صفحة تكميلية + الأسئلة؛ السكربت يوزع الأسئلة على الصفحات
 function studentBundle(paper, perm, student, opts = {}) {
   const blocks = allBlocks(paper, perm, opts.key);
-  return `<div class="qp-stu">${firstPageHtml(paper, perm, student, opts)}<template class="qp-next-tpl">${contPageHtml(paper, student)}</template><template class="qp-blocks">${blocks}</template>${isAuto(paper) ? `<template class="qp-agrid-tpl">${autoGridHtml(paper, perm, opts.key, student)}</template><template class="qp-marks-tpl">${marksHtml()}</template>` : ''}</div>`;
+  return `<div class="qp-stu${isEn(paper) ? ' ltr' : ''}" dir="${isEn(paper) ? 'ltr' : 'rtl'}">${firstPageHtml(paper, perm, student, opts)}<template class="qp-next-tpl">${contPageHtml(paper, student)}</template><template class="qp-blocks">${blocks}</template>${isAuto(paper) ? `<template class="qp-agrid-tpl">${autoGridHtml(paper, perm, opts.key, student)}</template><template class="qp-marks-tpl">${marksHtml()}</template>` : ''}</div>`;
 }
 
 // يوزّع الأسئلة: الصفحة الأولى ثم صفحات تكميلية؛ ولو كلها تقريبًا تدخل بالأولى يصغّر الخط شوي
@@ -494,8 +584,9 @@ const FLOW_SCRIPT = `(function(){
       var pages = Array.prototype.slice.call(stu.querySelectorAll('.qp-page'));
       for (var i = 0; i < pages.length; i += 2) {
         var sh = document.createElement('div'); sh.className = 'qp-a3'; pages[i].before(sh);
-        pages[i].classList.add('pr'); sh.appendChild(pages[i]);
-        if (pages[i + 1]) { pages[i + 1].classList.add('pl'); sh.appendChild(pages[i + 1]); }
+        var lt = stu.classList.contains('ltr');
+        pages[i].classList.add(lt ? 'pl' : 'pr'); sh.appendChild(pages[i]);
+        if (pages[i + 1]) { pages[i + 1].classList.add(lt ? 'pr' : 'pl'); sh.appendChild(pages[i + 1]); }
         var cut = document.createElement('div'); cut.className = 'qp-cut3'; cut.innerHTML = '<span style="top:3mm;">✂</span><span style="bottom:3mm;">✂</span>'; sh.appendChild(cut);
       }
     });
@@ -585,7 +676,7 @@ export async function applyPaperToParsed(parsed, { skip = false } = {}) {
     const id = idOf(st);
     const perm = paper.perms[id];
     if (!perm || !Array.isArray(perm.q) || perm.q.length !== nQ) { unknown.push(id || st.name || '—'); return; }
-    const answers = mapPaperAnswers(st.answers, perm, paper.questions, { textCoded: parsed.textCoded, tfTwo, slots: slotsOf(paper) });
+    const answers = mapPaperAnswers(st.answers, perm, paper.questions, { textCoded: parsed.textCoded, tfTwo, slots: slotsOf(paper), ltr: isEn(paper) });
     students.push({ ...st, id, model: undefined, modelRaw: null, answers });
   });
   if (!students.length) return null;
@@ -668,6 +759,8 @@ function renderEditor() {
   const p = cur;
   const ro = !canEdit(p);
   const s = p.settings;
+  // نوع الشبكة يُثبَّت عند فتح الورقة، حتى لا تنقلب المتكيفة إلى الثابتة بعد أول طباعة
+  if (!s.grid) s.grid = gridMode(p);
   root.innerHTML = `
     <div class="qp-top">
       <button type="button" class="btn-secondary" id="qp-back" style="width:auto; padding:9px 16px;">→ أوراق الأسئلة</button>
@@ -680,6 +773,7 @@ function renderEditor() {
           <label class="as-f">عنوان الاختبار<input type="text" id="qp-title" value="${esc(p.title)}" placeholder="مثال: اختبار الفترة الأولى" ${ro ? 'disabled' : ''}/></label>
           <label class="as-f">المادة<input type="text" id="qp-subject" value="${esc(p.subject || '')}" placeholder="مثال: العلوم" ${ro ? 'disabled' : ''}/></label>
           <label class="as-f">الصف<select id="qp-grade" ${ro ? 'disabled' : ''}><option value="">—</option>${GRADES.map(g => `<option value="${g}"${p.grade_level === g ? ' selected' : ''}>${gradeLabels[g]}</option>`).join('')}</select></label>
+          <label class="as-f">لغة الورقة<select id="qp-lang" ${ro ? 'disabled' : ''}><option value="ar"${isEn(p) ? '' : ' selected'}>العربية (من اليمين إلى اليسار)</option><option value="en"${isEn(p) ? ' selected' : ''}>الإنجليزية (من اليسار إلى اليمين · A B C D)</option></select></label>
         </div>
         <div class="form-card">
           <h4>العشوائية</h4>
@@ -756,6 +850,7 @@ function renderEditor() {
     bind('qp-title', el => { p.title = el.value; });
     bind('qp-subject', el => { p.subject = el.value; });
     bind('qp-grade', el => { p.grade_level = el.value; if (!scope.grade) { scope.grade = el.value; renderPrint(); } });
+    bind('qp-lang', el => { s.lang = el.value === 'en' ? 'en' : 'ar'; renderQuestions(); });
     bind('qp-shq', el => { s.shuffleQ = el.checked; });
     bind('qp-sho', el => { s.shuffleOpts = el.checked; });
     bind('qp-order', el => { s.order = el.value; renderQuestions(); });
@@ -870,8 +965,9 @@ function renderQuestions(scrollLast = false) {
         <label class="qp-mk">سطور الإجابة <input type="number" class="qp-es-lines" data-e="${i}" min="1" max="20" step="1" value="${Number(q.lines) || 3}" ${ro ? 'disabled' : ''}/></label>
         ${ro ? '' : `<div class="qp-q-act"><button type="button" class="qp-ic qp-es-up" data-e="${i}" aria-label="لفوق">↑</button><button type="button" class="qp-ic qp-es-down" data-e="${i}" aria-label="لتحت">↓</button><button type="button" class="qp-ic danger qp-es-del" data-e="${i}" aria-label="حذف السؤال">🗑</button></div>`}
       </div>
-      <textarea class="qp-es-text" data-e="${i}" rows="2" placeholder="نص السؤال المقالي" ${ro ? 'disabled' : ''}>${esc(q.text || '')}</textarea>
-      <textarea class="qp-es-model" data-e="${i}" rows="1" placeholder="الإجابة النموذجية (اختياري، تظهر في نسخة المعلم فقط)" ${ro ? 'disabled' : ''}>${esc(q.model || '')}</textarea>
+      <textarea class="qp-es-text" dir="auto" data-e="${i}" rows="2" placeholder="نص السؤال المقالي" ${ro ? 'disabled' : ''}>${esc(q.text || '')}</textarea>
+      ${imgEdHtml(q, 'e', i, ro)}
+      <textarea class="qp-es-model" dir="auto" data-e="${i}" rows="1" placeholder="الإجابة النموذجية (اختياري، تظهر في نسخة المعلم فقط)" ${ro ? 'disabled' : ''}>${esc(q.model || '')}</textarea>
     </div>`).join('');
   let lastType = null;
   box.innerHTML = order.map((qi, pos) => {
@@ -883,15 +979,15 @@ function renderQuestions(scrollLast = false) {
     if (q.type === 'mcq') {
       body = `<div class="qp-opts-ed">${q.options.map((o, oi) => `
         <div class="qp-opt-ed${q.answer === oi ? ' on' : ''}">
-          <label class="qp-radio" title="الإجابة الصحيحة"><input type="radio" name="qp-ans-${qi}" data-q="${qi}" data-o="${oi}" class="qp-ans" ${q.answer === oi ? 'checked' : ''} ${dis}/><b>${AR[oi]}</b></label>
-          <input type="text" class="qp-opt-in" data-q="${qi}" data-o="${oi}" value="${esc(o)}" placeholder="الخيار ${AR[oi]}" ${dis}/>
+          <label class="qp-radio" title="الإجابة الصحيحة"><input type="radio" name="qp-ans-${qi}" data-q="${qi}" data-o="${oi}" class="qp-ans" ${q.answer === oi ? 'checked' : ''} ${dis}/><b>${lettersOf(p)[oi]}</b></label>
+          <input type="text" dir="auto" class="qp-opt-in" data-q="${qi}" data-o="${oi}" value="${esc(o)}" placeholder="${isEn(p) ? 'Option ' + EN[oi] : 'الخيار ' + AR[oi]}" ${dis}/>
           ${!ro && q.options.length > 2 ? `<button type="button" class="qp-x qp-opt-del" data-q="${qi}" data-o="${oi}" aria-label="حذف الخيار">×</button>` : ''}
         </div>`).join('')}
         <div class="qp-opt-tools">${!ro && q.options.length < maxOptsOf(p) ? `<button type="button" class="text-action-btn qp-opt-add" data-q="${qi}">+ خيار</button>` : ''}
           <label class="qp-chk sm"><input type="checkbox" class="qp-fix" data-q="${qi}" ${q.fixOpts ? 'checked' : ''} ${dis}/> ثبّت ترتيب الخيارات (مثل: جميع ما سبق)</label></div>
       </div>`;
     } else {
-      body = `<div class="qp-tf-ed">${['صح ✓', 'خطأ ✗'].map((l, oi) => `<label class="qp-tf-opt${q.answer === oi ? ' on' : ''}"><input type="radio" name="qp-ans-${qi}" data-q="${qi}" data-o="${oi}" class="qp-ans" ${q.answer === oi ? 'checked' : ''} ${dis}/> ${l}</label>`).join('')}</div>`;
+      body = `<div class="qp-tf-ed">${(isEn(p) ? ['True ✓', 'False ✗'] : ['صح ✓', 'خطأ ✗']).map((l, oi) => `<label class="qp-tf-opt${q.answer === oi ? ' on' : ''}"><input type="radio" name="qp-ans-${qi}" data-q="${qi}" data-o="${oi}" class="qp-ans" ${q.answer === oi ? 'checked' : ''} ${dis}/> ${l}</label>`).join('')}</div>`;
     }
     const issues = questionIssues(q);
     return `${head}<div class="qp-q${issues.length ? ' bad' : ''}" data-q="${qi}">
@@ -904,7 +1000,8 @@ function renderQuestions(scrollLast = false) {
           <button type="button" class="qp-ic qp-dup" data-q="${qi}" aria-label="تكرار">⧉</button>
           <button type="button" class="qp-ic danger qp-del-q" data-q="${qi}" aria-label="حذف السؤال">🗑</button></div>`}
       </div>
-      <textarea class="qp-text" data-q="${qi}" rows="2" placeholder="${q.type === 'tf' ? 'نص العبارة' : 'نص السؤال'}" ${dis}>${esc(q.text)}</textarea>
+      <textarea class="qp-text" dir="auto" data-q="${qi}" rows="2" placeholder="${q.type === 'tf' ? 'نص العبارة' : 'نص السؤال'}" ${dis}>${esc(q.text)}</textarea>
+      ${imgEdHtml(q, 'q', qi, ro)}
       ${body}
     </div>`;
   }).join('') + esHtml;
@@ -920,6 +1017,23 @@ function renderQuestions(scrollLast = false) {
   box.querySelectorAll('.qp-es-up').forEach(b => b.onclick = () => esMove(Number(b.dataset.e), -1));
   box.querySelectorAll('.qp-es-down').forEach(b => b.onclick = () => esMove(Number(b.dataset.e), 1));
   box.querySelectorAll('.qp-es-del').forEach(b => b.onclick = () => { const i = Number(b.dataset.e); if (String(E(i).text || '').trim() && !confirm('حذف هذا السؤال المقالي؟')) return; p.settings.essays.splice(i, 1); markDirty(); renderQuestions(); });
+
+  // صورة السؤال: اختيار ملف أو لصق صورة من الحافظة داخل نص السؤال
+  const target = (k, i) => (k === 'e' ? E(i) : p.questions[i]);
+  const setImg = async (k, i, file) => {
+    try { target(k, i).img = await fileToImg(file); markDirty(); renderQuestions(); }
+    catch (e) { alert('تعذّر قراءة الصورة. جرّب صورة بصيغة PNG أو JPG.'); }
+  };
+  box.querySelectorAll('.qp-img-file').forEach(inp => inp.addEventListener('change', () => { const f = inp.files && inp.files[0]; inp.value = ''; if (f) setImg(inp.dataset.k, Number(inp.dataset.i), f); }));
+  box.querySelectorAll('.qp-img-del').forEach(b => b.onclick = () => { delete target(b.dataset.k, Number(b.dataset.i)).img; markDirty(); renderQuestions(); });
+  box.querySelectorAll('.qp-img-size').forEach(sel => sel.addEventListener('change', () => { const im = target(sel.dataset.k, Number(sel.dataset.i)).img; if (im) { im.size = sel.value; markDirty(); } }));
+  box.querySelectorAll('.qp-text, .qp-es-text').forEach(t => t.addEventListener('paste', ev => {
+    const it = [...((ev.clipboardData && ev.clipboardData.items) || [])].find(x => x.kind === 'file' && /^image\//.test(x.type));
+    if (!it) return;
+    ev.preventDefault();
+    const isE = t.classList.contains('qp-es-text');
+    setImg(isE ? 'e' : 'q', Number(isE ? t.dataset.e : t.dataset.q), it.getAsFile());
+  }));
 
   const refreshCard = qi => {
     const card = box.querySelector(`.qp-q[data-q="${qi}"]`);
@@ -961,6 +1075,35 @@ function renderQuestions(scrollLast = false) {
     p.questions.splice(qi, 1); markDirty(); renderQuestions();
   });
   if (scrollLast) { const cards = box.querySelectorAll('.qp-q'); const last = [...cards].find(c => Number(c.dataset.q) === p.questions.length - 1) || cards[cards.length - 1]; if (last) { last.scrollIntoView({ behavior: 'smooth', block: 'center' }); const t = last.querySelector('.qp-text'); if (t) t.focus(); } }
+}
+
+// محرر صورة السؤال
+function imgEdHtml(q, k, i, ro) {
+  const im = q.img;
+  if (!im || !im.src) return ro ? '' : `<label class="qp-img-add"><input type="file" class="qp-img-file" data-k="${k}" data-i="${i}" accept="image/*" hidden/><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 16l-5-5-8 8"/></svg> إضافة صورة أو رسم <small>(أو الصق الصورة داخل نص السؤال)</small></label>`;
+  return `<div class="qp-img-ed"><img src="${esc(im.src)}" alt="صورة السؤال"/>
+    <div class="qp-img-tools"><label>حجم الصورة في الورقة <select class="qp-img-size" data-k="${k}" data-i="${i}" ${ro ? 'disabled' : ''}>${[['s', 'صغير'], ['m', 'متوسط'], ['l', 'كبير']].map(([v, t]) => `<option value="${v}"${(im.size || 'm') === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+    ${ro ? '' : `<label class="text-action-btn qp-img-rep"><input type="file" class="qp-img-file" data-k="${k}" data-i="${i}" accept="image/*" hidden/>استبدال</label><button type="button" class="text-action-btn danger qp-img-del" data-k="${k}" data-i="${i}">حذف الصورة</button>`}</div></div>`;
+}
+// تصغير الصورة قبل حفظها مع الورقة: أطول ضلع 1000 بكسل على خلفية بيضاء
+function fileToImg(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !/^image\//.test(file.type || '')) { reject(new Error('type')); return; }
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => {
+      URL.revokeObjectURL(url);
+      const k = Math.min(1, 1000 / Math.max(im.naturalWidth, im.naturalHeight));
+      const w = Math.max(1, Math.round(im.naturalWidth * k)), h = Math.max(1, Math.round(im.naturalHeight * k));
+      const c = document.createElement('canvas'); c.width = w; c.height = h;
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(im, 0, 0, w, h);
+      let src = c.toDataURL('image/jpeg', 0.85);
+      // الرسوم الخطية الصغيرة تبقى PNG إذا كانت أخف
+      try { const png = c.toDataURL('image/png'); if (png.length < src.length) src = png; } catch (_) { /* نبقي JPEG */ }
+      resolve({ src, w, h, size: 'm' });
+    };
+    im.onerror = () => { URL.revokeObjectURL(url); reject(new Error('load')); };
+    im.src = url;
+  });
 }
 
 function questionIssues(q) {

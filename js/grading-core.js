@@ -462,7 +462,7 @@ export function scoreReportStudents(rep) {
  * perm.o[pos][slot] = رقم الخيار الأصلي المطبوع في الخانة slot من ذلك الموضع
  * ========================================================================= */
 // إجابات ملف Remark (بترتيب ورقة الطالب) ← ترميز عادي بترتيب الأسئلة الأصلي (أ = ١، -2 فارغ، -3 متعدد/غير مقروء)
-export function mapPaperAnswers(stAnswers, perm, questions, { textCoded = false, tfTwo = [], slots = 3 } = {}) {
+export function mapPaperAnswers(stAnswers, perm, questions, { textCoded = false, tfTwo = [], slots = 3, ltr = false } = {}) {
   const nQ = questions.length;
   const answers = Array(nQ).fill(null);
   perm.q.forEach((qi, pos) => {
@@ -471,8 +471,9 @@ export function mapPaperAnswers(stAnswers, perm, questions, { textCoded = false,
     if (typeof v === 'number' && v <= 0) { answers[qi] = v === -3 ? -3 : -2; return; }
     const q = questions[qi];
     // ترميز Remark: أرقام معكوسة (أقصى يمين = أعلى رقم) أو حروف نصية (أ = ١)
-    const width = textCoded ? null : (q.type === 'tf' && tfTwo[pos] ? 2 : slots);
-    const slot = textCoded ? v - 1 : width - v;
+    // الورقة الإنجليزية شبكتها من اليسار: أول دائرة = A = ١
+    const width = textCoded || ltr ? null : (q.type === 'tf' && tfTwo[pos] ? 2 : slots);
+    const slot = textCoded || ltr ? v - 1 : width - v;
     const orig = perm.o[pos] && perm.o[pos][slot];
     answers[qi] = orig == null ? -3 : orig + 1;
   });

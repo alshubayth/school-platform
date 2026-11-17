@@ -5361,3 +5361,14 @@ html.booting #boot-splash{ display:flex; position:fixed; inset:0; z-index:9999; 
 }
 @media (max-width: 420px){ .tn-pills{ margin:0 -12px; padding-inline:12px; } }
 @media (max-width: 899px){ #dashboard-screen canvas{ max-width:100%; } }
+
+/* ===================== ورقة الأسئلة: صورة السؤال ===================== */
+.qp-img-add{display:inline-flex;align-items:center;gap:7px;margin:6px 0 2px;padding:6px 12px;border:1px dashed #B9C3D1;border-radius:10px;font-size:12.5px;font-weight:700;color:var(--slate);cursor:pointer;background:#fff}
+.qp-img-add:hover{border-color:var(--meadow);color:var(--meadow-dark)}
+.qp-img-add small{font-weight:400;color:#8A93A3}
+.qp-img-ed{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:8px 0 4px;padding:10px;border:1px solid var(--border);border-radius:12px;background:#FAFBFD}
+.qp-img-ed img{max-width:180px;max-height:120px;border-radius:8px;border:1px solid var(--border);background:#fff;object-fit:contain}
+.qp-img-tools{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--slate)}
+.qp-img-tools label{display:inline-flex;align-items:center;gap:6px;font-weight:700}
+.qp-img-tools select{width:auto;margin:0;padding:5px 8px;font-size:13px}
+.qp-img-rep{cursor:pointer}

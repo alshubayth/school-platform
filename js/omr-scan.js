@@ -8,7 +8,7 @@
  * ========================================================================= */
 import { sb, currentUserId, currentProfile, currentSchoolId, readScopedBySchool, writeWithSchool, gradeLabels, ASSET_VERSION } from './core.js';
 import { fetchSavedKeys, sheetGeometry, PAGE, itemKinds, TF_LETTERS } from './answer-sheet.js';
-import { grayFromImageData, findMarkInRegion, locateSheet, readSheet, rectifyToCanvas } from './omr.js';
+import { grayFromImageData, findMarkInRegion, locateSheet, readSheet, readBarcode, rectifyToCanvas } from './omr.js';
 import { computeExamStats, gradeWithModels, rawFromIdx, canonSubject, canonGrade } from './exam-reports.js';
 
 const AR = ['أ', 'ب', 'ج', 'د', 'هـ', 'و'];
@@ -31,11 +31,27 @@ export async function openOmrPanel(opts = {}) {
   root.innerHTML = '<div class="placeholder" style="padding:20px;"><p>جارٍ التحميل...</p></div>';
   const [keysRes] = await Promise.all([fetchSavedKeys(), loadStudents()]);
   if (keysRes.error) { root.innerHTML = `<div class="omr-err">${esc(keysRes.error)}</div>`; return; }
-  S.keys = keysRes.data.filter(k => k.questions > 0 || k.essay_total > 0);
+  S.keys = keysRes.data.filter(k => k.questions > 0 || k.essay_total > 0).concat(await loadPaperKeys());
   renderPanel();
   const want = opts.keyId || (S.key && S.key.id);
   if (want && S.keys.some(k => k.id === want)) { $('omr-key').value = want; await selectKey(want); }
 }
+
+// أوراق الأسئلة مع التظليل المطبوعة من المنصة: تُصحَّح بالكاميرا مثل ورقة الإجابة، وكل طالب بترتيب ورقته
+async function loadPaperKeys() {
+  try {
+    const qp = await import('./question-paper.js?v=' + ASSET_VERSION);
+    const { data } = await qp.fetchPapers();
+    return (data || []).filter(p => Object.keys(p.perms || {}).length && (p.questions || []).length).map(p => {
+      const spec = qp.paperScanSpec(p);
+      return { id: p.id, isPaper: true, paper: p, spec, title: p.title || 'ورقة أسئلة', subject: p.subject, grade_level: p.grade_level, size: 'A4', questions: spec.n, choices: spec.slots,
+        lang: spec.lang, essay_total: spec.essayAll || 0, tf_count: spec.tfCount, tf_first: spec.tfFirst, answers: [], created_by: p.created_by };
+    });
+  } catch (e) { return []; }
+}
+const permOf = it => { const k = S.key; if (!k || !k.isPaper || !it || !it.student) return null; return (k.paper.perms || {})[String(it.student.national_id).trim()] || null; };
+// أعلى درجة للأسئلة الموضوعية (ورقة الأسئلة قد تحمل درجات مختلفة للأسئلة)
+const mcMax = k => (k.isPaper ? k.spec.points.reduce((a, b) => a + b, 0) : k.questions);
 
 async function loadStudents() {
   if (S.students.length) return;
@@ -67,7 +83,7 @@ function keyOpts(k) {
 function renderPanel() {
   const root = $('omr-root');
   if (!S.keys.length) {
-    root.innerHTML = `<div class="ex-empty"><b>لا توجد مفاتيح إجابة محفوظة</b><span>يتطلب التصحيح بالجوال حفظ مفتاح الاختبار من «ورقة الإجابة والمفتاح»${currentProfile && currentProfile.role === 'teacher' ? ' - يمكنك إعداده من تبويب «ورقة الإجابة والمفتاح» أو طلبه من الإدارة' : ''}.</span></div>`;
+    root.innerHTML = `<div class="ex-empty"><b>لا توجد مفاتيح إجابة محفوظة ولا أوراق أسئلة مطبوعة</b><span>يتطلب التصحيح بالجوال حفظ مفتاح الاختبار من «ورقة الإجابة والمفتاح»، أو طباعة «ورقة أسئلة مع التظليل» للطلاب${currentProfile && currentProfile.role === 'teacher' ? ' - يمكنك إعداده من تبويب «ورقة الإجابة والمفتاح» أو طلبه من الإدارة' : ''}.</span></div>`;
     return;
   }
   root.innerHTML = `
@@ -76,8 +92,12 @@ function renderPanel() {
         <span class="omr-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="3.2"/></svg></span>
         <div><b>التصحيح بكاميرا الجوال</b><span>خيار مساند للماسح الضوئي: صوّر ورقة الطالب لتقرأ المنصة الباركود والإجابات وتُظهر التقرير</span></div>
       </div>
-      <label class="omr-lbl" for="omr-key">الاختبار (المفتاح المحفوظ)</label>
-      <select id="omr-key"><option value="">اختر الاختبار...</option>${S.keys.map(k => `<option value="${k.id}">${esc(k.title)}${k.subject ? ' — ' + esc(k.subject) : ''} (${k.questions} سؤال${k.essay_total ? ' + مقالي' : ''})</option>`).join('')}</select>
+      <label class="omr-lbl" for="omr-key">الاختبار (مفتاح محفوظ أو ورقة أسئلة مطبوعة)</label>
+      <select id="omr-key"><option value="">اختر الاختبار...</option>${(() => {
+        const opt = k => `<option value="${k.id}">${esc(k.title)}${k.subject ? ' — ' + esc(k.subject) : ''} (${k.questions} سؤال${k.essay_total ? ' + مقالي' : ''})</option>`;
+        const keys = S.keys.filter(k => !k.isPaper), papers = S.keys.filter(k => k.isPaper);
+        return papers.length ? `<optgroup label="ورقة إجابة ومفتاح">${keys.map(opt).join('')}</optgroup><optgroup label="ورقة أسئلة مع التظليل">${papers.map(opt).join('')}</optgroup>` : keys.map(opt).join('');
+      })()}</select>
       <div id="omr-key-info" class="omr-key-info"></div>
       <div class="omr-actions hidden" id="omr-actions">
         <button type="button" class="btn-primary" id="omr-start">📷 ابدأ التصحيح بالكاميرا</button>
@@ -88,7 +108,8 @@ function renderPanel() {
       <div class="omr-tips">
         <b>«ابدأ التصحيح»</b> أسرع (يلتقط الأوراق تلقائيًا ورقة تلو الأخرى)، و<b>«صورة بكاميرا الجوال»</b> أدق لأنها بدقة الكاميرا الكاملة - استخدمها إذا لم يُقرأ الباركود.<br>
         <b>للحصول على قراءة دقيقة:</b> صوّر الورقة كاملة بحيث تظهر <b>المربعات السوداء الأربع</b> بالزوايا، على سطح مستوٍ وبإضاءة جيدة بدون ظل على الورقة.
-        يمكنك تصوير ورقة A4 بالعرض (طالبان) كاملة قبل القص، فتُقرأ الورقتان معًا.
+        يمكنك تصوير ورقة A4 بالعرض (طالبان) كاملة قبل القص، فتُقرأ الورقتان معًا.<br>
+        <b>ورقة الأسئلة مع التظليل:</b> صوّر الصفحة التي فيها «نموذج الإجابة» وحدها (بعد قص ورقة A3)، ويُصحَّح كل طالب وفق ترتيب ورقته.
       </div>
     </div>
     <div id="omr-scans"></div>`;
@@ -110,10 +131,10 @@ async function selectKey(id) {
   const info = $('omr-key-info');
   if (!S.key) { info.innerHTML = ''; $('omr-scans').innerHTML = ''; return; }
   const k = S.key, o = keyOpts(k);
-  try { S.geo = sheetGeometry(o); } catch (e) { info.innerHTML = `<span class="omr-err">${esc(e.message)}</span>`; $('omr-actions').classList.add('hidden'); return; }
-  const missing = (k.answers || []).slice(0, k.questions).filter(v => v == null).length + Math.max(0, k.questions - (k.answers || []).length);
+  try { S.geo = k.isPaper ? k.spec.geo : sheetGeometry(o); } catch (e) { info.innerHTML = `<span class="omr-err">${esc(e.message)}</span>`; $('omr-actions').classList.add('hidden'); return; }
+  const missing = k.isPaper ? k.paper.questions.filter(q => q.answer == null).length : (k.answers || []).slice(0, k.questions).filter(v => v == null).length + Math.max(0, k.questions - (k.answers || []).length);
   info.innerHTML = [
-    `<i>${PAGE[o.size] ? esc(PAGE[o.size].label) : esc(o.size)}</i>`, `<i>${k.questions} سؤال × ${k.choices} خيارات</i>`,
+    k.isPaper ? `<i>ورقة أسئلة مع التظليل · عدد الطلاب المطبوعة لهم: ${Object.keys(k.paper.perms || {}).length}</i>` : `<i>${PAGE[o.size] ? esc(PAGE[o.size].label) : esc(o.size)}</i>`, `<i>${k.questions} سؤال × ${k.choices} خيارات</i>`,
     k.essay_total ? `<i>مقالي من ${k.essay_total}</i>` : '', o.modelsOn ? `<i>نموذجين (${o.modelBubble ? 'الطالب يظلّل نموذجه' : 'موزّعة من المنصة'})</i>` : '',
     (() => {
       const sc = k.sections && typeof k.sections === 'object' && !Array.isArray(k.sections) ? k.sections : null;
@@ -146,11 +167,11 @@ async function loadScans() {
   renderScans();
 }
 
-function totalOf(k) { return (k.questions || 0) + (k.essay_total || 0); }
+function totalOf(k) { return mcMax(k) + (k.essay_total || 0); }
 function scoreText(s) {
   const k = S.key;
   const mc = s.score != null ? s.score : 0;
-  return k.essay_total ? `${fmt(mc + (Number(s.essay) || 0))} / ${totalOf(k)}` : `${fmt(mc)} / ${k.questions}`;
+  return k.essay_total ? `${fmt(mc + (Number(s.essay) || 0))} / ${fmt(totalOf(k))}` : `${fmt(mc)} / ${fmt(mcMax(k))}`;
 }
 const fmt = n => (Math.round(n * 10) / 10).toString();
 
@@ -407,6 +428,8 @@ function processCanvas(canvas, quad = null) {
   for (const ox of loc.layout.sheets) {
     const r = readSheet(g, S.geo, loc, ox);
     if (r.contrast < 8) continue;
+    // ورقة الأسئلة: إذا جاءت الشبكة في صفحة لاحقة فالباركود في شريط الاسم فوقها
+    if (S.key.isPaper && !r.barcode && S.key.spec.stripBc) r.barcode = readBarcode(g, loc.H, { barcode: S.key.spec.stripBc }, ox);
     if (r.barcode === KEY_ID) continue;   // ورقة النموذج نفسها
     const thumb = document.createElement('canvas');
     rectifyToCanvas(g, loc.H, ox, S.geo.w, S.geo.h, 2.4, thumb);
@@ -443,15 +466,19 @@ function fromSaved(s) {
 }
 
 /* ---------- الدرجة ---------- */
-function keyFor(model) {
-  const k = S.key;
+function keyFor(it) {
+  const k = S.key, model = it && it.model;
+  if (k.isPaper) {   // مفتاح الطالب بترتيب ورقته: موضع ← خانة الإجابة الصحيحة
+    const pm = permOf(it);
+    return pm ? pm.q.map((qi, pos) => { const a = k.paper.questions[qi].answer; return a == null ? null : pm.o[pos].indexOf(a); }) : [];
+  }
   if (model === MODEL_B && k.models && Array.isArray(k.models.answers_b)) return k.models.answers_b;
   return k.answers || [];
 }
-function scoreOf(answers, model) {
-  const key = keyFor(model);
+function scoreOf(answers, it) {
+  const key = keyFor(it), pm = permOf(it);
   let s = 0;
-  answers.forEach((a, i) => { if (a != null && a >= 0 && (Array.isArray(key[i]) ? key[i].includes(a) : key[i] === a)) s++; });
+  answers.forEach((a, i) => { if (a != null && a >= 0 && (Array.isArray(key[i]) ? key[i].includes(a) : key[i] === a)) s += pm ? S.key.spec.points[pm.q[i]] : 1; });
   return s;
 }
 
@@ -505,7 +532,8 @@ function reviewOne(it, next, remaining) {
     $w('.omr-rev-st').innerHTML = st
       ? `<b>${esc(st.full_name || ('رقم الهوية ' + st.national_id))}</b><span>${esc(gradeLabels[st.grade_level] || st.grade_level || '')} ${esc(st.class_section || '')}${it.barcode && !it.saved ? ' · من الباركود ✓' : ''}</span>
          ${it.saved ? '' : '<button type="button" class="ope-link omr-change-st">تغيير</button>'}
-         ${dup ? `<div class="omr-dup">سبق تصحيح ورقته (${scoreText(dup)}) - الحفظ يستبدلها</div>` : ''}`
+         ${dup ? `<div class="omr-dup">سبق تصحيح ورقته (${scoreText(dup)}) - الحفظ يستبدلها</div>` : ''}
+         ${k.isPaper && !permOf(it) ? '<div class="omr-dup">لم تُطبع لهذا الطالب ورقة أسئلة من المنصة، فلا يمكن تصحيح ورقته. اختر الطالب صاحب الورقة.</div>' : ''}`
       : `<b class="${it.manual ? '' : 'omr-warn'}">${it.manual ? 'إدخال يدوي - اختر الطالب وظلّل إجاباته بالضغط على كل سؤال' : it.barcode ? `رقم الهوية ${esc(it.barcode)} غير موجود في قائمة طلابك` : 'لم يُقرأ الباركود'}${it.manual ? '' : ' - اختر الطالب:'}</b>
          ${it.barcode && /^\d{6,}$/.test(it.barcode) ? `<button type="button" class="ope-link omr-use-id">أو احفظها برقم الهوية فقط</button>` : ''}${pickerHtml()}`;
     if (!st) bindPicker();
@@ -557,7 +585,7 @@ function reviewOne(it, next, remaining) {
 
   // الإجابات
   const renderGrid = () => {
-    const key = keyFor(it.model);
+    const key = keyFor(it);
     $w('.omr-grid').innerHTML = it.answers.map((a, i) => {
       const ok = a != null && a >= 0 && (Array.isArray(key[i]) ? key[i].includes(a) : key[i] === a);
       const cls = a === -1 || a === -2 || a == null ? 'bl' : ok ? 'ok' : 'no';
@@ -576,11 +604,11 @@ function reviewOne(it, next, remaining) {
     pop.querySelectorAll('button').forEach(b => b.addEventListener('click', () => { it.answers[q] = +b.dataset.v; it.unsure[q] = false; pop.remove(); renderAll(); }));
   };
   const renderScore = () => {
-    const mc = scoreOf(it.answers, it.model);
+    const mc = scoreOf(it.answers, it);
     const un = it.unsure.filter(Boolean).length + (it.essayUnsure ? 1 : 0) + (it.modelUnsure ? 1 : 0);
     const essay = Number(it.essay) || 0;
-    $w('.omr-rev-score').innerHTML = `<span class="omr-big">${fmt(mc + (k.essay_total ? essay : 0))}<small> / ${k.essay_total ? totalOf(k) : k.questions}</small></span>
-      <span class="omr-sub">${k.essay_total ? `اختيار من متعدد ${mc} / ${k.questions} · مقالي ${it.essay == null ? '؟' : fmt(essay)} / ${k.essay_total}` : `${it.answers.filter(a => a === -1).length} فارغة · ${it.answers.filter(a => a === -2).length} متعددة`}</span>
+    $w('.omr-rev-score').innerHTML = `<span class="omr-big">${fmt(mc + (k.essay_total ? essay : 0))}<small> / ${fmt(k.essay_total ? totalOf(k) : mcMax(k))}</small></span>
+      <span class="omr-sub">${k.essay_total ? `الموضوعي ${fmt(mc)} / ${fmt(mcMax(k))} · مقالي ${it.essay == null ? '؟' : fmt(essay)} / ${k.essay_total}` : `${it.answers.filter(a => a === -1).length} فارغة · ${it.answers.filter(a => a === -2).length} متعددة`}</span>
       ${un ? `<span class="omr-unsure">⚠ ${un} ${un === 1 ? 'خانة' : 'خانات'} تحتاج مراجعة (مظللة بالأصفر)</span>` : ''}`;
   };
   const renderModel = () => {
@@ -604,6 +632,7 @@ function reviewOne(it, next, remaining) {
 
   $w('.omr-save').addEventListener('click', async () => {
     if (!it.student) { alert('اختر الطالب أولًا'); return; }
+    if (k.isPaper && !permOf(it)) { alert('لم تُطبع لهذا الطالب ورقة أسئلة من المنصة، فلا يمكن تصحيح ورقته.'); return; }
     if (o.modelsOn && !it.model) { alert('حدد نموذج الطالب'); return; }
     if (k.essay_total && it.essay == null && !confirm('لم تحدد درجة المقالي - هل تريد الحفظ بدونها (صفر)؟')) return;
     const btn = $w('.omr-save');
@@ -617,7 +646,7 @@ function reviewOne(it, next, remaining) {
 
 // علامات على صورة الورقة المصححة: دائرة خضراء = الإجابة الصحيحة، حمراء = اختيار خاطئ، صفراء = راجعها
 function drawThumbMarks(it) {
-  const c = it.thumb, ctx = c.getContext('2d'), s = 2.4, key = keyFor(it.model), geo = S.geo;
+  const c = it.thumb, ctx = c.getContext('2d'), s = 2.4, key = keyFor(it), geo = S.geo;
   const r = geo.bubble / 2 * s + 1.5;
   ctx.lineWidth = 2.2;
   geo.items.forEach((row, q) => {
@@ -638,7 +667,7 @@ async function saveScan(it) {
   const row = {
     key_id: k.id, national_id: id, student_name: st.full_name || null, grade_level: st.grade_level || null,
     class_section: st.class_section != null ? String(st.class_section) : null, model: it.model || null,
-    answers: it.answers, essay: k.essay_total ? (it.essay == null ? 0 : it.essay) : null, score: scoreOf(it.answers, it.model),
+    answers: it.answers, essay: k.essay_total ? (it.essay == null ? 0 : it.essay) : null, score: scoreOf(it.answers, it),
     flags: { unsure: it.unsure, manual: !!it.manual || !!(it.saved && it.saved.flags && it.saved.flags.manual), edited: it.answers.some((a, i) => a !== it.auto[i]) || (it.saved && it.saved.flags && it.saved.flags.edited) || false },
     scanned_by: currentUserId, scanned_at: new Date().toISOString(),
   };
@@ -658,7 +687,28 @@ async function saveScan(it) {
   return e2;
 }
 
+// تقرير ورقة الأسئلة: إجابات كل طالب تُعاد إلى ترتيب الأسئلة الأصلي (أ = ١) كما في رفع ملف Remark
+function paperPayload(scans) {
+  const k = S.key, P = k.paper, n = P.questions.length;
+  const choiceCounts = P.questions.map(q => (q.type === 'tf' ? 2 : (q.options || []).length));
+  const itemTypes = P.questions.map(q => (q.type === 'tf' ? 'tf' : 'mcq'));
+  const students = scans.map(s => {
+    const pm = (P.perms || {})[s.national_id], answers = Array(n).fill(-2);
+    if (pm) pm.q.forEach((qi, pos) => { const a = (s.answers || [])[pos]; answers[qi] = a == null || a === -1 ? -2 : a === -2 ? -3 : ((pm.o[pos] || [])[a] == null ? -3 : pm.o[pos][a] + 1); });
+    return { id: s.national_id, name: s.student_name || '', grade: gradeLabels[s.grade_level] || s.grade_level || '', section: s.class_section || '', subject: k.subject || '', modelRaw: null, answers, essay: s.essay };
+  });
+  const grades = [...new Set(students.map(s => s.grade).filter(Boolean))];
+  const pts = k.spec.points.some(v => v !== 1) ? k.spec.points.slice() : null;
+  const base = { title: k.title, subject_name: canonSubject(k.subject) || null, grade_level: canonGrade(grades.length === 1 ? grades[0] : (gradeLabels[k.grade_level] || '')) || null, item_count: n, students_count: students.length };
+  const rd = { students, choiceCounts, itemTypes, reversedOrder: false, source: 'camera', paper: { id: P.id, title: P.title }, ...(pts ? { points: pts } : {}), ...(k.essay_total ? { essayMax: k.essay_total, hasEssay: true } : {}) };
+  if (!students.length || !n) return { ...base, key_raw: [], stats: null, raw_data: rd };
+  const keyRaw = rawFromIdx(P.questions.map(q => q.answer), choiceCounts, false);
+  const stats = computeExamStats({ itemCount: n, keyRaw, choiceCounts, students, reversedOrder: false, itemTypes, points: pts });
+  return { ...base, key_raw: keyRaw, stats, raw_data: rd };
+}
+
 function reportPayload(scans) {
+  if (S.key.isPaper) return paperPayload(scans);
   const k = S.key, o = keyOpts(k);
   const reversed = o.lang !== 'en';
   const n = k.questions;
