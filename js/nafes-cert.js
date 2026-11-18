@@ -20,7 +20,7 @@ function bar(p, pass, big = false) {
 export function certAnalysisLines(c) {
   const fails = c.subjects.filter(x => !x.pass);
   return [
-    fails.length ? `<b>لم يجتز الطالب في:</b> ${fails.map(x => esc(x.s)).join('، ')}.` : `<b>اجتاز الطالب جميع المواد</b> بتحقيقه ${c.passPct}% فأكثر في كل مادة.`,
+    fails.length ? `<b>لم يجتز الطالب في:</b> ${fails.map(x => esc(x.s)).join('، ')}.` : `<b>اجتاز الطالب جميع المواد</b> ${c.subjects.every(x => (x.passPct || c.passPct) === (c.subjects[0].passPct || c.passPct)) ? `بتحقيقه ${c.subjects[0] ? (c.subjects[0].passPct || c.passPct) : c.passPct}% فأكثر في كل مادة` : 'بتحقيقه حد الاجتياز في كل مادة'}.`,
     `<b>نقاط القوة:</b> ${c.strong.length ? c.strong.map(x => `${esc(x.k)} (${esc(x.s)})`).join('، ') : 'لا توجد مهارة بلغ فيها الطالب 80% بعد'}.`,
     `<b>يحتاج إلى الدعم في:</b> ${c.weak.length ? c.weak.map(x => `${esc(x.k)} (${esc(x.s)})`).join('، ') : 'لا توجد مهارة دون 50%'}.`,
   ];
@@ -41,10 +41,10 @@ export function certFromData(c, m = {}) {
       </div>
       ${c.subjects.map(s => `<section class="nc-sj">
         <h3><span class="nc-sjn">${esc(s.s)}</span><span class="nc-sjs">${fmt(s.got)} من ${fmt(s.w)} <small>(<bdi>${fmt(s.pct)}%</bdi>)</small></span><em class="${s.pass ? 'ok' : 'no'}">${s.pass ? '✓ اجتاز' : '✕ لم يجتز'}</em></h3>
-        <div class="nc-sjbar">${bar(s.pct, pass, true)}</div>
-        <table><tbody>${s.skills.map(k => `<tr><td class="nc-k">${esc(k.k)}</td><td class="nc-b">${bar(k.pct, pass)}</td><td class="nc-p t-${zone(k.pct, pass)}">${Math.round(+k.pct || 0)}%</td><td class="nc-l">${lvTag(k.lv)}</td></tr>`).join('')}</tbody></table>
+        <div class="nc-sjbar">${bar(s.pct, s.passPct || pass, true)}</div>
+        <table><tbody>${s.skills.map(k => `<tr><td class="nc-k">${esc(k.k)}</td><td class="nc-b">${bar(k.pct, s.passPct || pass)}</td><td class="nc-p t-${zone(k.pct, s.passPct || pass)}">${Math.round(+k.pct || 0)}%</td><td class="nc-l">${lvTag(k.lv)}</td></tr>`).join('')}</tbody></table>
       </section>`).join('')}
-      <div class="nc-leg"><span><i class="z1"></i>دون 50%</span><span><i class="z2"></i>من 50% إلى أقل من ${pass}%</span><span><i class="z3"></i>${pass}% فأكثر (منطقة الاجتياز)</span><span><em></em>حد الاجتياز</span></div>
+      <div class="nc-leg"><span><i class="z1"></i>دون 50%</span>${c.subjects.some(x => x.passPct && x.passPct !== pass) ? `<span><i class="z2"></i>من 50% إلى أقل من حد المادة</span><span><i class="z3"></i>حد المادة فأكثر (${c.subjects.map(x => `${esc(x.s)} ${fmt(x.passPct || pass)}%`).join('، ')})</span>` : `<span><i class="z2"></i>من 50% إلى أقل من ${pass}%</span><span><i class="z3"></i>${pass}% فأكثر (منطقة الاجتياز)</span>`}<span><em></em>حد الاجتياز</span></div>
       <section class="nc-an"><h3>التحليل</h3><ul class="nc-anl">${certAnalysisLines(c).map((x, i) => `<li><span>${i + 1}</span><div>${x}</div></li>`).join('')}</ul></section>
     </div>
   </article>`;

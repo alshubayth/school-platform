@@ -78,7 +78,9 @@ export async function renderSkillsPanel(rep, panel, tabBtn) {
   const subjMax = [...subjQs.values()].map(qs => qs.reduce((a, j) => a + PW(j), 0));
   const refMax = subjMax.length ? Math.max(...subjMax) : 0;
   const subjW = Object.fromEntries([...subjQs].map(([sj, qs]) => [sj, qs.reduce((a, j) => a + PW(j), 0)]));
-  A = { rep, key, nafes, list, students, unlinked, differentB, grade: sr.gl || '', passPct, refMax, subjects: [...subjQs.keys()], subjW };
+  // حد اجتياز خاص بكل مادة (يُضبط من التقرير الشامل لنافس)، وإلا الحد العام
+  const pp = {}; (Array.isArray(key.parts) ? key.parts : []).forEach(pt => { if (pt && pt.s && +pt.pass > 0) pp[pt.s] = +pt.pass; });
+  A = { rep, key, nafes, list, students, unlinked, differentB, grade: sr.gl || '', passPct, pp, refMax, subjects: [...subjQs.keys()], subjW };
   view = { sec: 'all', subj: 'all', open: null, pass: 'all' };
   draw(panel);
   return true;
@@ -88,7 +90,9 @@ function filtered() {
   return A.students.filter(s => view.sec === 'all' || s.section === view.sec);
 }
 // نافس: يجتاز الطالب إذا حقق النسبة المطلوبة في كل مادة من مواد الاختبار
-const subjPass = (s, sj) => { const x = s.subjScore[sj]; return !x || !x.w || x.got >= (A.passPct / 100) * x.w - 1e-6; };
+const passOfSj = sj => (A.pp && A.pp[sj]) || A.passPct;
+const mixedPass = () => A.subjects.some(sj => Math.abs(passOfSj(sj) - passOfSj(A.subjects[0])) > 0.01);
+const subjPass = (s, sj) => { const x = s.subjScore[sj]; return !x || !x.w || x.got >= (passOfSj(sj) / 100) * x.w - 1e-6; };
 const failedSubjects = s => Object.keys(s.subjScore).filter(sj => !subjPass(s, sj));
 const passScoreOf = () => Math.round((A.passPct / 100) * A.refMax * 100) / 100;
 const passed = s => !failedSubjects(s).length;
@@ -127,8 +131,8 @@ function draw(panel) {
     ${A.nafes ? `<button type="button" class="sk-nafes-cta" id="sk-nafes-full"><span class="sk-nafes-i">📊</span><span><b>التقرير الشامل لنافس</b><small>لوحة نتائج برسوم بيانية، وشهادة تحليلية لكل طالب، وتحليل المعلمين حسب فصولهم</small></span><em>فتح ←</em></button>` : ''}
     ${A.nafes ? `<div class="sk-pass">
       <div class="sk-pass-n"><span>المجتازون</span><b>${nPass} <small>من ${studs.length}</small></b><em>${studs.length ? r1(nPass / studs.length * 100) : 0}%</em></div>
-      <div class="sk-pass-t">يجتاز الطالب المادة إذا حقق <label><input type="number" id="sk-pass-pct" min="1" max="${A.refMax}" step="1" value="${passScoreOf()}" ${canEditKey() ? '' : 'disabled'}></label> من ${A.refMax} فأعلى، ويجتاز الاختبار إذا اجتاز: ${A.subjects.map(esc).join('، ')}<span id="sk-pass-msg"></span></div>
-      <div class="sk-pass-s">${A.subjects.map(sj => { const w = A.subjW[sj] || 0, need = Math.round((A.passPct / 100) * w * 100) / 100; return `<span>${esc(sj)}: <b>${passBySubj[sj]}</b> اجتازوا المادة <small>(${need} من ${w})</small></span>`; }).join('')}</div>
+      <div class="sk-pass-t">يجتاز الطالب المادة إذا حقق <label><input type="number" id="sk-pass-pct" min="1" max="${A.refMax}" step="1" value="${mixedPass() ? '' : passScoreOf()}" placeholder="${mixedPass() ? 'مختلف' : ''}" ${canEditKey() ? '' : 'disabled'}></label> من ${A.refMax} فأعلى، ويجتاز الاختبار إذا اجتاز: ${A.subjects.map(esc).join('، ')}<span id="sk-pass-msg"></span></div>
+      <div class="sk-pass-s">${A.subjects.map(sj => { const w = A.subjW[sj] || 0, need = Math.round((passOfSj(sj) / 100) * w * 100) / 100; return `<span>${esc(sj)}: <b>${passBySubj[sj]}</b> اجتازوا المادة <small>(${need} من ${w})</small></span>`; }).join('')}</div>
     </div>` : ''}
     <div class="sk-cards">
       ${bySubj.map(x => { const l = lvl(x.m); return `<button type="button" class="sk-card ${l.c}${view.subj === x.s ? ' on' : ''}" data-subj="${esc(x.s)}"><span>${esc(x.s || 'الاختبار')}</span><b>${r1(x.m)}%</b><small>${l.t} · ${x.n} ${x.n === 1 ? 'مهارة' : x.n === 2 ? 'مهارتان' : 'مهارات'}</small></button>`; }).join('')}
@@ -167,7 +171,11 @@ function draw(panel) {
     const sc = Math.max(1, Math.min(A.refMax, +pp.value || 1));
     const v = Math.round(sc / A.refMax * 10000) / 100;
     A.passPct = v;
-    const { error } = await sb.from('answer_keys').update({ pass_pct: v }).eq('id', A.key.id);
+    // توحيد الحد لكل المواد: يُلغى الحد الخاص بكل مادة
+    const upd = { pass_pct: v };
+    if (Array.isArray(A.key.parts) && A.key.parts.some(pt => pt && pt.pass)) { upd.parts = A.key.parts.map(({ pass, ...pt }) => pt); A.key.parts = upd.parts; }
+    A.pp = {};
+    const { error } = await sb.from('answer_keys').update(upd).eq('id', A.key.id);
     setTimeout(() => { draw(panel); const m = panel.querySelector('#sk-pass-msg'); if (m) m.textContent = error ? ' · تعذر حفظ النسبة' : ' · حُفظت للاختبار ✓'; }, 0);
   };
   panel.querySelector('#sk-plan').onclick = () => printPlan(needs, stats, studs);

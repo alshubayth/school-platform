@@ -883,7 +883,7 @@ async function saveKey() {
   const prevKey = currentKeyId ? (savedKeys.find(k => k.id === currentKeyId) || {}) : {};
   if (skillsOn() && keySkills.some(Boolean)) row.skills = keySkills.map(x => (x ? { s: x.s || o.subject, k: x.k } : null));
   else if (prevKey.skills) row.skills = null;
-  if (isNafes()) { row.exam_kind = 'nafes'; row.parts = keyParts.map(p => ({ s: p.s, from: p.from, to: p.to, teacher_id: p.teacher_id || null })); if (!prevKey.pass_pct) row.pass_pct = Math.round(NAFES_DEFAULT.passScore / Math.max(1, Math.round(o.questions / NAFES_SUBJECTS.length)) * 10000) / 100; }
+  if (isNafes()) { row.exam_kind = 'nafes'; row.parts = keyParts.map(p => ({ s: p.s, from: p.from, to: p.to, teacher_id: p.teacher_id || null, ...(p.pass ? { pass: p.pass } : {}) })); if (!prevKey.pass_pct) row.pass_pct = Math.round(NAFES_DEFAULT.passScore / Math.max(1, Math.round(o.questions / NAFES_SUBJECTS.length)) * 10000) / 100; }
   else if (prevKey.exam_kind) { row.exam_kind = null; row.parts = null; }
   const hadPoints = currentKeyId && (savedKeys.find(k => k.id === currentKeyId) || {}).points;
   if (pointsOn() && keyPoints.some(v => v !== 1)) row.points = keyPoints.slice();
@@ -957,7 +957,7 @@ function loadKeyIntoForm(k) {
   keyAnswers = Array.isArray(k.answers) ? k.answers.slice() : [];
   keySkills = Array.isArray(k.skills) ? k.skills.map(x => (x && x.k ? { s: x.s || '', k: x.k } : null)) : [];
   if ($('as-skills-on')) $('as-skills-on').checked = keySkills.some(Boolean) || k.exam_kind === 'nafes';
-  keyParts = Array.isArray(k.parts) ? k.parts.map(p => ({ s: p.s, from: +p.from, to: +p.to, teacher_id: p.teacher_id || '' })) : [];
+  keyParts = Array.isArray(k.parts) ? k.parts.map(p => ({ s: p.s, from: +p.from, to: +p.to, teacher_id: p.teacher_id || '', ...(p.pass ? { pass: +p.pass } : {}) })) : [];
   keyPoints = Array.isArray(k.points) ? k.points.map(ptVal) : [];
   if ($('as-points-on')) $('as-points-on').checked = Array.isArray(k.points) && k.points.length > 0;
   const m = k.models && k.models.mode ? k.models : null;
@@ -1470,7 +1470,7 @@ function renderParts(n) {
   const box = $('as-parts'); if (!box) return;
   box.classList.toggle('hidden', !isNafes());
   if (!isNafes()) return;
-  if (!keyParts.length || keyParts.some(p => p.to > n)) keyParts = defaultParts(n).map((p, i) => ({ ...p, teacher_id: (keyParts[i] || {}).teacher_id || '' }));
+  if (!keyParts.length || keyParts.some(p => p.to > n)) keyParts = defaultParts(n).map((p, i) => ({ ...p, teacher_id: (keyParts[i] || {}).teacher_id || '', ...((keyParts[i] || {}).pass ? { pass: keyParts[i].pass } : {}) }));
   const staff = staffList || [];
   const prog = p => { let a = 0, k = 0; for (let q = p.from - 1; q < p.to; q++) { if (keyAnswers[q] != null) a++; if (keySkills[q]) k++; } const t = p.to - p.from + 1; return `<span class="as-pp${a === t && k === t ? ' ok' : ''}">الإجابات ${a}/${t} · المهارات ${k}/${t}</span>`; };
   box.innerHTML = `<div class="as-parts-h"><b>أجزاء الاختبار والمعلم المشرف</b><small>يظهر لكل معلم مشرف النموذج في حسابه، فيدخل إجابات أسئلة مادته ومهاراتها.</small></div>

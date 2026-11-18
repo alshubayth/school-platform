@@ -6,7 +6,7 @@
  * - المعلمون: تحليل طلاب كل معلم في فصوله (من الجدول المدرسي) مقارنةً بمتوسط المدرسة.
  * الحساب من أوراق الطلاب ومفتاح التقرير نفسه (key_raw) وأجزاء المواد ومهارات الأسئلة في نموذج الإجابة.
  * ========================================================================= */
-import { sb, printOrgName, printLogo, ASSET_VERSION, currentSchoolId, readScopedBySchool, gradeLabels } from './core.js';
+import { sb, printOrgName, printLogo, ASSET_VERSION, currentSchoolId, readScopedBySchool, gradeLabels, currentProfile, currentUserId } from './core.js';
 import { letterFor } from './grading-core.js';
 import { certFromData, CERT_CSS } from './nafes-cert.js';
 
@@ -55,9 +55,14 @@ async function build(rep, key) {
   const ansKey = rep.key_raw || [];
 
   // المواد (أجزاء الاختبار) ومهارات كل مادة
+  // حد اجتياز كل مادة (٪): المحفوظ للمادة، وإلا حد الاختبار العام
   const parts = (Array.isArray(key.parts) && key.parts.length ? key.parts : [{ s: key.subject || 'الاختبار', from: 1, to: n }])
-    .map((pt, i) => { const qs = []; for (let q = +pt.from - 1; q < Math.min(n, +pt.to); q++) qs.push(q); return { s: pt.s, qs, w: qs.reduce((a, j) => a + PW(j), 0), color: SUBJ_COLORS[i % SUBJ_COLORS.length], teacherId: pt.teacher_id || null }; })
+    .map((pt, i) => { const qs = []; for (let q = +pt.from - 1; q < Math.min(n, +pt.to); q++) qs.push(q); return { s: pt.s, from: +pt.from, to: +pt.to, qs, w: qs.reduce((a, j) => a + PW(j), 0), color: SUBJ_COLORS[i % SUBJ_COLORS.length], teacherId: pt.teacher_id || null, pass: Number.isFinite(+pt.pass) && +pt.pass > 0 ? +pt.pass : passPct }; })
     .filter(p => p.qs.length);
+  // الحد العام (للمستوى الكلي والخطوط المرجعية): متوسط حدود المواد موزونًا بدرجاتها
+  const wSum = parts.reduce((a, p) => a + p.w, 0);
+  const passAll = wSum ? Math.round(parts.reduce((a, p) => a + p.pass * p.w, 0) / wSum * 100) / 100 : passPct;
+  const samePass = parts.every(p => Math.abs(p.pass - parts[0].pass) < 0.01);
   const subjOfQ = new Map(); parts.forEach(p => p.qs.forEach(j => subjOfQ.set(j, p)));
   const skills = new Map();
   (key.skills || []).slice(0, n).forEach((x, j) => {
@@ -82,7 +87,7 @@ async function build(rep, key) {
     const subj = {};
     parts.forEach(pt => {
       const got = pt.qs.reduce((a, j) => a + (r.correct[j] ? PW(j) : 0), 0);
-      subj[pt.s] = { got, w: pt.w, pct: pt.w ? got / pt.w * 100 : null, pass: got >= (passPct / 100) * pt.w - 1e-6 };
+      subj[pt.s] = { got, w: pt.w, pct: pt.w ? got / pt.w * 100 : null, pass: got >= (pt.pass / 100) * pt.w - 1e-6 };
     });
     const sk = {};
     skills.forEach(g => { const got = g.qs.reduce((a, j) => a + (r.correct[j] ? PW(j) : 0), 0); sk[g.id] = g.w ? got / g.w * 100 : null; });
@@ -137,7 +142,7 @@ async function build(rep, key) {
       .sort((a, b) => parts.findIndex(p => p.s === a.subj) - parts.findIndex(p => p.s === b.subj) || a.name.localeCompare(b.name, 'ar'));
   }
   const sections = [...new Set(students.map(s => s.section).filter(Boolean))].sort((a, b) => +a - +b);
-  return { rep, key, passPct, parts, skills: [...skills.values()], students, items, teachers, sections, levels: levels(passPct), n, gradeTxt: rep.grade_level || gradeLabels[gradeCode] || '' };
+  return { rep, key, passPct: passAll, samePass, parts, skills: [...skills.values()], students, items, teachers, sections, levels: levels(passAll), n, gradeTxt: rep.grade_level || gradeLabels[gradeCode] || '' };
 }
 
 /* ---------- مؤشرات مجموعة طلاب ---------- */
@@ -199,6 +204,54 @@ export async function openNafesReport(rep, key, startTab = 'brief') {
   P = { ready: false, err: null, tests: [], off: new Set(), subj: 'all', cmp: 'prev', view: 'school', filter: 'all', st: null, q: '' };
   draw();
 }
+// نص حد الاجتياز: موحّد أو لكل مادة
+function passTxt(long) {
+  if (D.samePass) return `${long ? '' : 'الاجتياز '}${r1(D.parts[0] ? D.parts[0].pass : D.passPct)}% في كل مادة`;
+  return (long ? '' : 'الاجتياز: ') + D.parts.map(p => `${p.s} ${r1(p.pass)}%`).join(' · ');
+}
+const passOf = sj => { const p = D.parts.find(x => x.s === sj); return p ? p.pass : D.passPct; };
+const canEditPass = () => { const r = currentProfile && currentProfile.role; return ['owner', 'admin', 'deputy'].includes(r) || (D.key && D.key.created_by && D.key.created_by === currentUserId); };
+
+// تعديل حد الاجتياز لكل مادة: يُحفظ في نموذج الإجابة، فيُطبَّق على كل تقارير هذا النموذج
+function openPassEditor() {
+  const old = document.querySelector('.nr-modal'); if (old) old.remove();
+  const m = document.createElement('div'); m.className = 'nr-modal';
+  const rows = D.parts.map((p, i) => `<label class="nr-pe-row"><b style="color:${p.color}">${esc(p.s)}</b>
+      <span class="nr-pe-in"><input type="number" data-i="${i}" min="0" max="${p.w}" step="0.5" value="${r2(p.pass / 100 * p.w)}" inputmode="decimal"><small>من ${p.w} درجة</small></span>
+      <em data-o="${i}">${r1(p.pass)}%</em></label>`).join('');
+  m.innerHTML = `<div class="nr-mbox nr-pe" role="dialog" aria-modal="true" aria-label="تعديل حد الاجتياز">
+    <header><h3>حد الاجتياز لكل مادة</h3><button type="button" class="nr-x" data-x aria-label="إغلاق">✕</button></header>
+    <p class="nr-pe-p">اكتب أقل درجة يجتاز بها الطالب المادة. يُطبَّق الحد على هذا الاختبار وكل اختبار يستخدم نموذج الإجابة نفسه.</p>
+    <div class="nr-pe-rows">${rows}</div>
+    <div class="nr-pe-all"><span>توحيد النسبة لكل المواد</span><input type="number" id="nr-pe-pct" min="1" max="100" step="1" placeholder="مثال: 75" inputmode="decimal"><small>%</small><button type="button" class="nr-btn ghost" id="nr-pe-apply">تطبيق</button></div>
+    <p class="nr-pe-err" id="nr-pe-err"></p>
+    <footer><button type="button" class="nr-btn ghost" data-x>إلغاء</button><button type="button" class="nr-btn" id="nr-pe-save">حفظ وإعادة الحساب</button></footer></div>`;
+  document.getElementById('nr-ov').appendChild(m);
+  const ins = [...m.querySelectorAll('input[data-i]')];
+  const sync = inp => { const p = D.parts[+inp.dataset.i], v = parseFloat(inp.value); m.querySelector(`[data-o="${inp.dataset.i}"]`).textContent = Number.isFinite(v) && p.w ? r1(v / p.w * 100) + '%' : '—'; };
+  ins.forEach(inp => inp.addEventListener('input', () => sync(inp)));
+  m.querySelector('#nr-pe-apply').onclick = () => { const pc = parseFloat(m.querySelector('#nr-pe-pct').value); if (!(pc > 0 && pc <= 100)) return; ins.forEach(inp => { const p = D.parts[+inp.dataset.i]; inp.value = r2(pc / 100 * p.w); sync(inp); }); };
+  m.querySelectorAll('[data-x]').forEach(b => b.onclick = () => m.remove());
+  m.addEventListener('click', e => { if (e.target === m) m.remove(); });
+  m.querySelector('#nr-pe-save').onclick = async () => {
+    const err = m.querySelector('#nr-pe-err'); err.textContent = '';
+    const vals = ins.map(inp => ({ i: +inp.dataset.i, v: parseFloat(inp.value) }));
+    const bad = vals.find(x => !(x.v > 0 && x.v <= D.parts[x.i].w));
+    if (bad) { err.textContent = `درجة الاجتياز في ${D.parts[bad.i].s} يجب أن تكون بين 0.5 و${D.parts[bad.i].w}`; return; }
+    const pcts = vals.map(x => Math.round(x.v / D.parts[x.i].w * 10000) / 100);
+    const base = Array.isArray(D.key.parts) && D.key.parts.length ? D.key.parts : D.parts.map(p => ({ s: p.s, from: p.from, to: p.to }));
+    const parts = base.map(pt => { const k = D.parts.findIndex(p => p.s === pt.s); return k >= 0 ? { ...pt, pass: pcts[k] } : pt; });
+    const btn = m.querySelector('#nr-pe-save'); btn.disabled = true; btn.textContent = 'جارٍ الحفظ...';
+    const { data, error } = await sb.from('answer_keys').update({ parts, updated_at: new Date().toISOString() }).eq('id', D.key.id).select('id');
+    if (error || !data || !data.length) { btn.disabled = false; btn.textContent = 'حفظ وإعادة الحساب'; err.textContent = error ? 'تعذّر الحفظ: ' + error.message : 'لا تملك صلاحية تعديل نموذج هذا الاختبار'; return; }
+    const key = { ...D.key, parts };
+    const nd = await build(D.rep, key);
+    if (nd) { D = nd; P.ready = false; P.tests = []; }
+    m.remove(); draw();
+    const ov = document.getElementById('nr-ov'); const t = document.createElement('div'); t.className = 'nr-toast'; t.textContent = 'حُفظ حد الاجتياز وأُعيد حساب النتائج ✓ (النتائج المنشورة لأولياء الأمور تتحدّث من «تحديث الدرجات»)'; ov.appendChild(t); setTimeout(() => t.remove(), 6000);
+  };
+}
+
 function close() { const ov = document.getElementById('nr-ov'); if (ov) ov.classList.add('hidden'); document.body.classList.remove('nr-lock'); document.removeEventListener('keydown', onKey); }
 function onKey(e) { if (e.key === 'Escape') { const m = document.querySelector('.nr-modal'); if (m) m.remove(); else close(); } }
 const studsOf = () => D.students.filter(s => V.sec === 'all' || s.section === V.sec);
@@ -210,13 +263,14 @@ function draw() {
   const body = V.tab === 'brief' ? viewBrief() : V.tab === 'progress' ? viewProgress() : V.tab === 'skills' ? viewSkills() : V.tab === 'students' ? viewStudents() : V.tab === 'teachers' ? viewTeachers() : viewOverview();
   ov.innerHTML = `<div class="nr">
     <header class="nr-top">
-      <div class="nr-ttl"><span class="nr-badge">نافس</span><div><h2>التقرير الشامل لاختبار نافس</h2><p>${esc(printOrgName())} · ${esc(D.gradeTxt)} · ${D.students.length} طالبًا · الاجتياز ${D.passPct}% في كل مادة</p></div></div>
-      <div class="nr-acts">${V.tab === 'brief' ? '' : '<button type="button" class="nr-btn ghost" id="nr-print">طباعة هذا القسم</button><button type="button" class="nr-btn pdf" id="nr-pdf">تنزيل PDF</button>'}<button type="button" class="nr-x" data-close aria-label="إغلاق">✕</button></div>
+      <div class="nr-ttl"><span class="nr-badge">نافس</span><div><h2>التقرير الشامل لاختبار نافس</h2><p>${esc(printOrgName())} · ${esc(D.gradeTxt)} · ${D.students.length} طالبًا · ${passTxt()}</p></div></div>
+      <div class="nr-acts">${canEditPass() ? '<button type="button" class="nr-btn ghost" id="nr-pass">حد الاجتياز</button>' : ''}${V.tab === 'brief' ? '' : '<button type="button" class="nr-btn ghost" id="nr-print">طباعة هذا القسم</button><button type="button" class="nr-btn pdf" id="nr-pdf">تنزيل PDF</button>'}<button type="button" class="nr-x" data-close aria-label="إغلاق">✕</button></div>
       <nav class="nr-tabs">${TABS.map(([k, t]) => `<button type="button" data-tab="${k}" class="${V.tab === k ? 'on' : ''}">${t}</button>`).join('')}</nav>
     </header>
     ${V.tab !== 'teachers' && !(V.tab === 'progress' && P.view !== 'students') ? `<div class="nr-secs"><span>الفصل</span>${['all', ...D.sections].map(x => `<button type="button" data-sec="${esc(x)}" class="${V.sec === x ? 'on' : ''}">${x === 'all' ? 'كل الفصول' : 'فصل ' + esc(x)}</button>`).join('')}</div>` : ''}
     <main class="nr-main" id="nr-main">${body}</main></div>`;
   ov.querySelector('[data-close]').onclick = close;
+  const pe = ov.querySelector('#nr-pass'); if (pe) pe.onclick = openPassEditor;
   document.removeEventListener('keydown', onKey); document.addEventListener('keydown', onKey);
   ov.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { V.tab = b.dataset.tab; draw(); ov.querySelector('.nr-main').scrollTop = 0; });
   ov.querySelectorAll('[data-sec]').forEach(b => b.onclick = () => { V.sec = b.dataset.sec; draw(); });
@@ -256,7 +310,7 @@ function viewBrief() {
   if (!todo.length) todo.push('النتائج مطمئنة، ولا يظهر ما يستدعي إجراءً علاجيًا عامًّا.');
   const date = (() => { try { return new Date(D.rep.created_at).toLocaleDateString('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'long', year: 'numeric' }); } catch { return ''; } })();
   const bar = (v, low) => `<td class="bar"><span><i class="${low ? 'low' : ''}" style="width:${Math.max(3, Math.min(100, v || 0))}%"></i></span></td>`;
-  const meta = [['الصف', D.gradeTxt], ['النطاق', V.sec === 'all' ? 'كل الفصول' : 'فصل ' + V.sec], ['عدد الأسئلة', D.n], ['حد الاجتياز', `${D.passPct}% في كل مادة`], ['التاريخ', date]].filter(([, v]) => v);
+  const meta = [['الصف', D.gradeTxt], ['النطاق', V.sec === 'all' ? 'كل الفصول' : 'فصل ' + V.sec], ['عدد الأسئلة', D.n], ['حد الاجتياز', passTxt(true)], ['التاريخ', date]].filter(([, v]) => v);
   return `<div class="xs-bar"><button type="button" class="xs-print" id="xs-print">طباعة الملخص</button></div>
   <article class="xs-sheet">
     <header class="xs-head"><p class="xs-org">${esc(printOrgName())}</p><h2>ملخص نتائج اختبار نافس</h2>
@@ -271,7 +325,7 @@ function viewBrief() {
     <div class="xs-two">
       <section class="xs-sec"><h3>المواد</h3>
         <table class="xs-t"><thead><tr><th>المادة</th><th class="n">اجتازوا</th><th colspan="2">المتوسط</th></tr></thead>
-        <tbody>${subj.map(x => `<tr><td>${esc(x.p.s)}</td><td class="n">${Pc(x.g.passP)}</td><td class="n">${Pc(x.g.mean)}</td>${bar(x.g.mean, x.g.mean < D.passPct)}</tr>`).join('')}</tbody></table></section>
+        <tbody>${subj.map(x => `<tr><td>${esc(x.p.s)}</td><td class="n">${Pc(x.g.passP)}</td><td class="n">${Pc(x.g.mean)}</td>${bar(x.g.mean, x.g.mean < x.p.pass)}</tr>`).join('')}</tbody></table></section>
       ${secs.length > 1 ? `<section class="xs-sec"><h3>الفصول</h3>
         <table class="xs-t"><thead><tr><th>الفصل</th><th class="c">الطلاب</th><th class="n">المتوسط</th><th colspan="2">اجتازوا</th></tr></thead>
         <tbody>${secs.map(r => `<tr><td>${esc(r.x)}</td><td class="c">${r.g.n}</td><td class="n">${Pc(r.g.mean)}</td><td class="n">${Pc(r.g.passP)}</td>${bar(r.g.passP, r.g.passP < 50)}</tr>`).join('')}</tbody></table></section>` : ''}
@@ -279,7 +333,7 @@ function viewBrief() {
     <div class="xs-two">
       ${sk.length ? `<section class="xs-sec"><h3>أضعف المهارات</h3>
         <table class="xs-t"><thead><tr><th>المهارة</th><th colspan="2">نسبة الإتقان</th></tr></thead>
-        <tbody>${sk.map(x => `<tr><td>${esc(x.g.k)}<small>${esc(x.g.s)}</small></td><td class="n">${Pc(x.m)}</td>${bar(x.m, x.m < D.passPct)}</tr>`).join('')}</tbody></table></section>` : ''}
+        <tbody>${sk.map(x => `<tr><td>${esc(x.g.k)}<small>${esc(x.g.s)}</small></td><td class="n">${Pc(x.m)}</td>${bar(x.m, x.m < passOf(x.g.s))}</tr>`).join('')}</tbody></table></section>` : ''}
       <section class="xs-sec"><h3>الأعلى درجة</h3>
         <table class="xs-t"><thead><tr><th>الطالب</th><th class="c">الفصل</th><th class="n">النسبة</th></tr></thead>
         <tbody>${[...studs].sort((a, b) => b.pct - a.pct).slice(0, 5).map(s => `<tr><td>${esc(s.name)}</td><td class="c">${esc(s.section)}</td><td class="n">${Pc(s.pct)}</td></tr>`).join('')}</tbody></table></section>
@@ -296,7 +350,7 @@ function insights(studs) {
   if (st.length > 1) out.push(`أعلى المواد أداءً <b>${esc(best.p.s)}</b> بمتوسط ${r1(best.g.mean)}%، وأدناها <b>${esc(worst.p.s)}</b> بمتوسط ${r1(worst.g.mean)}%.`);
   const sk = D.skills.map(g => ({ g, m: skillMean(g, studs) })).filter(x => x.m != null).sort((a, b) => a.m - b.m);
   if (sk.length) out.push(`أضعف المهارات <b>${esc(sk[0].g.s)} · ${esc(sk[0].g.k)}</b> (${r1(sk[0].m)}%)، وأقواها <b>${esc(sk[sk.length - 1].g.s)} · ${esc(sk[sk.length - 1].g.k)}</b> (${r1(sk[sk.length - 1].m)}%).`);
-  const near = studs.filter(s => !s.passed && s.fails.length === 1 && D.parts.some(p => s.fails[0] === p.s && s.subj[p.s].got >= (D.passPct / 100) * p.w - 2)).length;
+  const near = studs.filter(s => !s.passed && s.fails.length === 1 && D.parts.some(p => s.fails[0] === p.s && s.subj[p.s].got >= (p.pass / 100) * p.w - 2)).length;
   if (near) out.push(`<b>${near}</b> ${near === 1 ? 'طالب' : 'طالبًا'} على بُعد سؤال أو سؤالين من الاجتياز في مادة واحدة، وهم أولوية للدعم السريع.`);
   const hard = [...D.items].sort((a, b) => a.p - b.p).slice(0, 3);
   if (hard.length) out.push(`أصعب الأسئلة: ${hard.map(i => `<b>س${i.j + 1}</b> (${esc(i.subj)}، ${r1(i.p)}% أجابوا صحيحًا)`).join('، ')}.`);
@@ -323,7 +377,7 @@ function viewOverview() {
     </div>
   </section>
   <section class="nr-subjs">${D.parts.map(p => { const g = groupStats(studs, p.s); return `<article class="nr-subj" style="--sc:${p.color}">
-    <header><h3>${esc(p.s)}</h3><small>${p.qs.length} سؤالًا · ${p.w} درجة · الاجتياز ${r2(D.passPct / 100 * p.w)} درجة</small></header>
+    <header><h3>${esc(p.s)}</h3><small>${p.qs.length} سؤالًا · ${p.w} درجة · الاجتياز ${r2(p.pass / 100 * p.w)} درجة (${r1(p.pass)}%)</small></header>
     <div class="nr-subj-b">${ring(g.mean, p.color, 104, 'المتوسط')}<div class="nr-subj-n"><div><b>${g.pass}</b><span>اجتازوا (${r1(g.passP)}%)</span></div><div><b>${r2(g.mean / 100 * p.w)}</b><span>متوسط الدرجة من ${p.w}</span></div><div><b>${r2(g.hi / 100 * p.w)} / ${r2(g.lo / 100 * p.w)}</b><span>أعلى / أدنى درجة</span></div></div></div>
     ${levelBar(g.lv, g.n)}</article>`; }).join('')}</section>
   <section class="nr-grid2">
@@ -393,7 +447,7 @@ function certData(s) {
   const sk = D.skills.map(g => ({ g, v: s.sk[g.id] })).filter(x => x.v != null);
   return {
     v: 1, passPct: D.passPct, passed: s.passed, total: r2n(s.total), max: s.max, pct: r2n(s.pct), lv: lv(s.pct),
-    subjects: D.parts.map(p => { const x = s.subj[p.s]; return { s: p.s, color: p.color, got: r2n(x.got), w: p.w, pct: r2n(x.pct), pass: x.pass, need: x.pass ? 0 : Math.max(0, Math.ceil((D.passPct / 100) * p.w - x.got - 1e-9)), skills: p.skills.map(g => ({ k: g.k, pct: r2n(s.sk[g.id]), lv: lv(s.sk[g.id]) })) }; }),
+    subjects: D.parts.map(p => { const x = s.subj[p.s]; return { s: p.s, color: p.color, got: r2n(x.got), w: p.w, pct: r2n(x.pct), pass: x.pass, passPct: p.pass, need: x.pass ? 0 : Math.max(0, Math.ceil((p.pass / 100) * p.w - x.got - 1e-9)), skills: p.skills.map(g => ({ k: g.k, pct: r2n(s.sk[g.id]), lv: lv(s.sk[g.id]) })) }; }),
     strong: sk.filter(x => x.v >= 80).sort((a, b) => b.v - a.v).slice(0, 4).map(x => ({ k: x.g.k, s: x.g.s })),
     weak: sk.filter(x => x.v < 50).sort((a, b) => a.v - b.v).slice(0, 4).map(x => ({ k: x.g.k, s: x.g.s })),
   };
@@ -431,7 +485,7 @@ function teacherDetail(t, print = false) {
   const sk = p.skills.map(x => ({ x, m: skillMean(x, studs), s: skillMean(x, D.students) })).sort((a, b) => a.m - b.m);
   const hardQ = p.qs.map(j => ({ j, v: studs.filter(s => s.correct[j]).length / studs.length * 100, it: D.items[j] })).sort((a, b) => a.v - b.v).slice(0, 5);
   const fails = studs.filter(s => !s.subj[p.s].pass).sort((a, b) => a.subj[p.s].got - b.subj[p.s].got);
-  const near = fails.filter(s => s.subj[p.s].got >= (D.passPct / 100) * p.w - 2);
+  const near = fails.filter(s => s.subj[p.s].got >= (p.pass / 100) * p.w - 2);
   const ins = [];
   ins.push(`متوسط طلاب المعلم في ${esc(p.s)} <b>${r1(g.mean)}%</b> مقابل ${r1(sch.mean)}% لمتوسط المدرسة (${diff >= 0 ? 'أعلى' : 'أدنى'} بفارق ${r1(Math.abs(diff))} نقطة).`);
   ins.push(`اجتاز المادة <b>${g.pass}</b> من ${g.n} طالبًا (${r1(g.passP)}%)، ومتوسط المدرسة ${r1(sch.passP)}%.`);
@@ -845,6 +899,22 @@ const NR_CSS = `
 .nr-empty{ padding:30px; text-align:center; color:#667085; }
 .nr-modal{ position:absolute; inset:0; background:rgba(10,24,48,.55); backdrop-filter:blur(3px); display:flex; justify-content:center; overflow:auto; padding:18px 10px; z-index:2; }
 .nr-modal-b{ width:min(860px,100%); } .nr-modal-b .nc{ box-shadow:0 20px 50px rgba(10,24,48,.3); }
+.nr-pe{ width:min(520px,100%); align-self:flex-start; margin-top:40px; background:#fff; border-radius:16px; padding:16px 18px; box-shadow:0 20px 50px rgba(10,24,48,.3); }
+.nr-pe header{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.nr-pe h3{ margin:0; font-size:17px; color:#0F2447; }
+.nr-pe-p{ font-size:13px; color:#5B6575; line-height:1.8; margin:8px 0 12px; }
+.nr-pe-rows{ display:flex; flex-direction:column; gap:8px; }
+.nr-pe-row{ display:grid; grid-template-columns:1fr auto 64px; align-items:center; gap:10px; border:1px solid #E3E8EF; border-radius:12px; padding:9px 12px; margin:0; }
+.nr-pe-row b{ font-size:14px; }
+.nr-pe-in{ display:flex; align-items:center; gap:6px; }
+.nr-pe-in input{ width:84px; margin:0; padding:7px 8px; text-align:center; font-size:15px; font-weight:700; }
+.nr-pe-in small{ font-size:12px; color:#5B6575; white-space:nowrap; }
+.nr-pe-row em{ font-style:normal; font-weight:800; color:#1971C2; text-align:center; }
+.nr-pe-all{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px; padding:10px 12px; background:#F5F7FA; border-radius:12px; font-size:13px; color:#3A4558; }
+.nr-pe-all input{ width:70px; margin:0; padding:6px 8px; text-align:center; }
+.nr-pe-err{ color:#C92A2A; font-size:13px; min-height:18px; margin:8px 0 0; }
+.nr-pe footer{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
+.nr-toast{ position:absolute; bottom:22px; left:50%; transform:translateX(-50%); background:#0F2447; color:#fff; padding:11px 18px; border-radius:12px; font-size:13.5px; z-index:20; box-shadow:0 10px 30px rgba(10,24,48,.3); max-width:92%; text-align:center; }
 .nr-modal-t{ display:flex; gap:8px; align-items:center; margin-bottom:10px; color:#fff; font-weight:800; }
 .nr-modal-t span{ flex:1; text-align:center; } .nr-modal-t .nr-x{ background:rgba(255,255,255,.2); }
 .nr-cert{ position:relative; background:#fff; border-radius:22px; padding:20px 22px; box-shadow:0 20px 50px rgba(10,24,48,.25); overflow:hidden; }
