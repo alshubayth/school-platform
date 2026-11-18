@@ -1,4 +1,4 @@
-import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, printOrgName, printLogo, firstName as firstNameOf } from './core.js';
+import { sb, currentUserId, setupCollapsible, backToTiles, gradeLabels, currentSchoolId, readScopedBySchool, writeWithSchool, setSubRoute, printOrgName, printLogo, firstName as firstNameOf, ASSET_VERSION } from './core.js';
 import { initOverlayCard, setOverlayPeriod } from './overlay-print.js';
 import { loadXLSX } from './lib-loader.js';
 
@@ -389,14 +389,36 @@ document.getElementById('exam-special-search-btn').addEventListener('click', asy
   });
 });
 
+// طلاب صعوبات التعلم المسجّل لهم «لجنة خاصة» في بيانات الطلاب: إضافتهم دفعة واحدة
+async function drawSpecialLd(existingIds) {
+  const box = document.getElementById('exam-special-ld'); if (!box) return;
+  let m, all;
+  try { m = await import('./student-support.js?v=' + ASSET_VERSION); all = await m.loadSupport(); } catch (e) { box.innerHTML = ''; return; }
+  const want = [...all].filter(([, r]) => m.needsSpecialCommittee(r));
+  const missing = want.filter(([id]) => !existingIds.has(id));
+  if (!want.length) { box.innerHTML = '<p class="ex-ld-p">لا يوجد طلاب صعوبات تعلم مسجّل لهم «لجنة خاصة». يُسجَّلون من «بيانات الطلاب».</p>'; return; }
+  box.innerHTML = missing.length
+    ? `<p class="ex-ld-p"><b>${missing.length}</b> من طلاب صعوبات التعلم مسجّل لهم «لجنة خاصة» ولم يُضافوا بعد.</p><button type="button" class="btn-secondary" id="exam-special-ld-go" style="width:auto; padding:9px 16px;">إضافة طلاب صعوبات التعلم (${missing.length})</button>`
+    : `<p class="ex-ld-p ok">طلاب صعوبات التعلم المسجّل لهم «لجنة خاصة» (${want.length}) مضافون كلهم ✓</p>`;
+  const go = document.getElementById('exam-special-ld-go');
+  if (go) go.onclick = async () => {
+    go.disabled = true;
+    const rows = missing.map(([id, r]) => ({ period_id: currentPeriodId, student_id: id, condition_note: m.supportLabel(r) || 'صعوبات تعلم' }));
+    const { error } = await writeWithSchool(extra => sb.from('exam_special_members').upsert(rows.map(x => ({ ...x, ...extra })), { onConflict: 'period_id,student_id', ignoreDuplicates: true }));
+    if (error) { go.disabled = false; alert('تعذرت الإضافة: ' + error.message); return; }
+    await refreshSpecialList();
+  };
+}
+
 async function refreshSpecialList() {
   const { data } = await readScopedBySchool(scoped => {
-    let q = sb.from('exam_special_members').select('id, condition_note, students(full_name, national_id, grade_level)').eq('period_id', currentPeriodId);
+    let q = sb.from('exam_special_members').select('id, student_id, condition_note, students(full_name, national_id, grade_level)').eq('period_id', currentPeriodId);
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q;
   });
   const list = document.getElementById('exam-special-list');
   list.innerHTML = '';
+  drawSpecialLd(new Set((data || []).map(x => x.student_id)));
   const pr = progressByPeriod.get(currentPeriodId) || { located: 0, special: 0 };
   pr.special = (data || []).length;
   progressByPeriod.set(currentPeriodId, pr);

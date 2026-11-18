@@ -42,17 +42,32 @@ async function loadPaperKeys() {
   try {
     const qp = await import('./question-paper.js?v=' + ASSET_VERSION);
     const { data } = await qp.fetchPapers();
-    return (data || []).filter(p => Object.keys(p.perms || {}).length && (p.questions || []).length).map(p => {
+    const out = [];
+    (data || []).filter(p => Object.keys(p.perms || {}).length && (p.questions || []).length).forEach(p => {
+      out.push(mk(p));
+      // نموذج صعوبات التعلم: خيار مستقل بمفتاحه وتقريره
+      const lp = qp.ldPaperOf(p);
+      if (lp && Object.values(p.perms || {}).some(x => x && x.m === 'ld')) {
+        const sp = qp.paperScanSpec(lp);
+        out.push({ id: p.settings.ld.id, isPaper: true, isLd: true, paper: lp, spec: sp, alt: null, title: (p.title || 'ورقة أسئلة') + ' — نموذج صعوبات التعلم', subject: p.subject, grade_level: p.grade_level, size: 'A4', questions: sp.n, choices: sp.slots,
+          lang: sp.lang, essay_total: sp.essayAll || 0, tf_count: sp.tfCount, tf_first: sp.tfFirst, answers: [], created_by: p.created_by });
+      }
+    });
+    return out;
+    function mk(p) {
       const spec = qp.paperScanSpec(p);
       // الورقة قد تكون طُبعت بالشبكة الأخرى (متكيفة/ثابتة): تُجرَّب الشبكتان عند القراءة ويُؤخذ الأوضح
       const fits = spec.n <= 10 && p.questions.every(q => q.type === 'tf' || (q.options || []).length <= 3);
       const alt = spec.mode === 'fixed' ? qp.paperScanSpec(p, 'auto') : (fits ? qp.paperScanSpec(p, 'fixed') : null);
       return { id: p.id, isPaper: true, paper: p, spec, alt, title: p.title || 'ورقة أسئلة', subject: p.subject, grade_level: p.grade_level, size: 'A4', questions: spec.n, choices: spec.slots,
         lang: spec.lang, essay_total: spec.essayAll || 0, tf_count: spec.tfCount, tf_first: spec.tfFirst, answers: [], created_by: p.created_by };
-    });
+    }
   } catch (e) { return []; }
 }
-const permOf = it => { const k = S.key; if (!k || !k.isPaper || !it || !it.student) return null; return (k.paper.perms || {})[String(it.student.national_id).trim()] || null; };
+// خريطة ورقة الطالب، بشرط أن تكون من النموذج المختار (الرئيسي أو الصعوبات)
+const rawPerm = it => { const k = S.key; if (!k || !k.isPaper || !it || !it.student) return null; return (k.paper.perms || {})[String(it.student.national_id).trim()] || null; };
+const permOf = it => { const pm = rawPerm(it); return pm && (pm.m === 'ld') === !!S.key.isLd ? pm : null; };
+const permMsg = it => { const pm = rawPerm(it); if (!pm) return 'لم تُطبع لهذا الطالب ورقة أسئلة من المنصة، فلا يمكن تصحيح ورقته. اختر الطالب صاحب الورقة.'; return pm.m === 'ld' ? 'ورقة هذا الطالب من «نموذج صعوبات التعلم». اختر الاختبار نفسه بعنوان «— نموذج صعوبات التعلم» لتصحيحها.' : 'ورقة هذا الطالب من النموذج الرئيسي، لا من نموذج صعوبات التعلم. اختر الاختبار بعنوانه الأصلي لتصحيحها.'; };
 // أعلى درجة للأسئلة الموضوعية (ورقة الأسئلة قد تحمل درجات مختلفة للأسئلة)
 const mcMax = k => (k.isPaper ? k.spec.points.reduce((a, b) => a + b, 0) : k.questions);
 
@@ -137,7 +152,7 @@ async function selectKey(id) {
   try { S.geo = k.isPaper ? k.spec.geo : sheetGeometry(o); } catch (e) { info.innerHTML = `<span class="omr-err">${esc(e.message)}</span>`; $('omr-actions').classList.add('hidden'); return; }
   const missing = k.isPaper ? k.paper.questions.filter(q => q.answer == null).length : (k.answers || []).slice(0, k.questions).filter(v => v == null).length + Math.max(0, k.questions - (k.answers || []).length);
   info.innerHTML = [
-    k.isPaper ? `<i>ورقة أسئلة مع التظليل · عدد الطلاب المطبوعة لهم: ${Object.keys(k.paper.perms || {}).length}</i>` : `<i>${PAGE[o.size] ? esc(PAGE[o.size].label) : esc(o.size)}</i>`, `<i>${k.questions} سؤال × ${k.choices} خيارات</i>`,
+    k.isPaper ? `<i>${k.isLd ? 'نموذج صعوبات التعلم' : 'ورقة أسئلة مع التظليل'} · عدد الطلاب المطبوعة لهم: ${Object.values(k.paper.perms || {}).filter(x => x && (x.m === 'ld') === !!k.isLd).length}</i>` : `<i>${PAGE[o.size] ? esc(PAGE[o.size].label) : esc(o.size)}</i>`, `<i>${k.questions} سؤال × ${k.choices} خيارات</i>`,
     k.essay_total ? `<i>مقالي من ${k.essay_total}</i>` : '', o.modelsOn ? `<i>نموذجين (${o.modelBubble ? 'الطالب يظلّل نموذجه' : 'موزّعة من المنصة'})</i>` : '',
     (() => {
       const sc = k.sections && typeof k.sections === 'object' && !Array.isArray(k.sections) ? k.sections : null;
@@ -552,7 +567,7 @@ function reviewOne(it, next, remaining) {
       ? `<b>${esc(st.full_name || ('رقم الهوية ' + st.national_id))}</b><span>${esc(gradeLabels[st.grade_level] || st.grade_level || '')} ${esc(st.class_section || '')}${it.barcode && !it.saved ? ' · من الباركود ✓' : ''}</span>
          ${it.saved ? '' : '<button type="button" class="ope-link omr-change-st">تغيير</button>'}
          ${dup ? `<div class="omr-dup">سبق تصحيح ورقته (${scoreText(dup)}) - الحفظ يستبدلها</div>` : ''}
-         ${k.isPaper && !permOf(it) ? '<div class="omr-dup">لم تُطبع لهذا الطالب ورقة أسئلة من المنصة، فلا يمكن تصحيح ورقته. اختر الطالب صاحب الورقة.</div>' : ''}`
+         ${k.isPaper && !permOf(it) ? `<div class="omr-dup">${permMsg(it)}</div>` : ''}`
       : `<b class="${it.manual ? '' : 'omr-warn'}">${it.manual ? 'إدخال يدوي - اختر الطالب وظلّل إجاباته بالضغط على كل سؤال' : it.barcode ? `رقم الهوية ${esc(it.barcode)} غير موجود في قائمة طلابك` : 'لم يُقرأ الباركود'}${it.manual ? '' : ' - اختر الطالب:'}</b>
          ${it.barcode && /^\d{6,}$/.test(it.barcode) ? `<button type="button" class="ope-link omr-use-id">أو احفظها برقم الهوية فقط</button>` : ''}${pickerHtml()}`;
     if (!st) bindPicker();
@@ -651,7 +666,7 @@ function reviewOne(it, next, remaining) {
 
   $w('.omr-save').addEventListener('click', async () => {
     if (!it.student) { alert('اختر الطالب أولًا'); return; }
-    if (k.isPaper && !permOf(it)) { alert('لم تُطبع لهذا الطالب ورقة أسئلة من المنصة، فلا يمكن تصحيح ورقته.'); return; }
+    if (k.isPaper && !permOf(it)) { alert(permMsg(it)); return; }
     if (o.modelsOn && !it.model) { alert('حدد نموذج الطالب'); return; }
     if (k.essay_total && it.essay == null && !confirm('لم تحدد درجة المقالي - هل تريد الحفظ بدونها (صفر)؟')) return;
     const btn = $w('.omr-save');

@@ -675,7 +675,7 @@ export async function applyPaperToParsed(parsed, { skip = false } = {}) {
   parsed.students.forEach(st => {
     const id = idOf(st);
     const perm = paper.perms[id];
-    if (!perm || !Array.isArray(perm.q) || perm.q.length !== nQ) { unknown.push(id || st.name || '—'); return; }
+    if (!perm || perm.m === 'ld' || !Array.isArray(perm.q) || perm.q.length !== nQ) { unknown.push(id || st.name || '—'); return; }
     const answers = mapPaperAnswers(st.answers, perm, paper.questions, { textCoded: parsed.textCoded, tfTwo, slots: slotsOf(paper), ltr: isEn(paper) });
     students.push({ ...st, id, model: undefined, modelRaw: null, answers });
   });
@@ -711,18 +711,55 @@ let scope = { grade: '', sections: new Set(), layout: (() => { try { return loca
 function blankPaper() {
   return { id: null, title: '', subject: '', grade_level: '', questions: [], settings: { shuffleQ: true, shuffleOpts: true, order: 'mcq' }, perms: {} };
 }
-const newMcq = () => ({ type: 'mcq', text: '', options: ['', '', ''], answer: null });
+// نموذج صعوبات التعلم: الاختيار من متعدد بخيارين افتراضيًا
+const newMcq = () => ({ type: 'mcq', text: '', options: qView === 'ld' ? ['', ''] : ['', '', ''], answer: null });
 const newTf = () => ({ type: 'tf', text: '', answer: null });
 const canEdit = p => !p.id || p.created_by === currentUserId || ['admin', 'deputy'].includes(currentProfile && currentProfile.role);
 const isManager = () => ['admin', 'deputy', 'owner'].includes(currentProfile && currentProfile.role);
 const isMine = p => !p.id || p.created_by === currentUserId;
 // حالة النشر للإدارة: مسودة / منشورة / عُدّلت بعد النشر
 // بصمة محتوى الأسئلة (العنوان والأسئلة والمقالي)، حتى لا تُعدّ الطباعة أو حفظ التنسيق تعديلًا بعد النشر
-const contentSig = p => { const t = JSON.stringify([p.title || '', p.subject || '', p.grade_level || '', p.questions || [], essaysOf(p)]); let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + '.' + t.length; };
+const contentSig = p => { const [mq, me, lq, le] = canonParts(p); const t = JSON.stringify([p.title || '', p.subject || '', p.grade_level || '', mq, me, ...(lq.length || le.length ? [lq, le] : [])]); let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + '.' + t.length; };
 const pubState = p => (!p.published_at ? 'draft' : ((p.settings || {}).pubSig && p.settings.pubSig !== contentSig(p) ? 'edited' : 'published'));
 const fmtWhen = iso => { try { return new Date(iso).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } };
 const PUB_TAG = { draft: '<i class="muted">مسودة - لم تُنشر للإدارة</i>', published: '<i class="pub">منشورة للإدارة</i>', edited: '<i class="warn">عُدّلت بعد النشر</i>' };
 let listFilter = null, authors = {};
+
+/* ---------- نموذج صعوبات التعلم ----------
+ * أسئلة مستقلة في settings.ld = { on, id, questions, essays }، تُطبع تلقائيًا لطلاب صعوبات التعلم
+ * ضمن ترتيب أوراق فصلهم. في المحرر تُبدَّل أسئلة النموذجين في مكانها (qView) ليعمل المحرر نفسه على أيهما. */
+let qView = 'main', supportMap = null;
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); }));
+const ldInfo = p => ((p && p.settings) || {}).ld || null;
+function swapLd(p) {
+  const ld = p.settings.ld, q = p.questions, e = essaysOf(p);
+  p.questions = ld.questions || []; ld.questions = q;
+  p.settings.essays = ld.essays || []; ld.essays = e;
+}
+function setView(v) {
+  if (!cur || v === qView) return;
+  if (v === 'ld' && !cur.settings.ld) cur.settings.ld = { on: true, id: newId(), questions: [], essays: [] };
+  swapLd(cur); qView = v;
+}
+// أسئلة النموذجين بحالتها الأصلية مهما كان النموذج المعروض في المحرر
+function canonParts(p) {
+  const ld = ldInfo(p) || {};
+  if (p === cur && qView === 'ld') return [ld.questions || [], ld.essays || [], p.questions, essaysOf(p)];
+  return [p.questions || [], essaysOf(p), ld.questions || [], ld.essays || []];
+}
+// ورقة نموذج الصعوبات (من ورقة بحالتها الأصلية): الشبكة متكيفة دائمًا
+export function ldPaperOf(p) {
+  const ld = ldInfo(p);
+  if (!ld || ld.on === false || !(ld.questions || []).length) return null;
+  const { ld: _skip, ...st } = p.settings;
+  return { ...p, questions: ld.questions, settings: { ...st, essays: ld.essays || [], grid: 'auto', seed: (Number(st.seed) || 0) + 7, isLd: true } };
+}
+async function loadSupportMap() {
+  if (supportMap) return supportMap;
+  try { const m = await import('./student-support.js?v=' + ASSET_VERSION); const all = await m.loadSupport(); supportMap = new Map([...all].filter(([, r]) => m.needsAltPaper(r))); }
+  catch (e) { supportMap = new Map(); }
+  return supportMap;
+}
 
 export async function openQuestionPapers() {
   const root = $('qp-root');
@@ -783,6 +820,7 @@ function renderEditor() {
   const p = cur;
   const ro = !canEdit(p);
   const s = p.settings;
+  qView = 'main';
   // نوع الشبكة يُثبَّت عند فتح الورقة، حتى لا تنقلب المتكيفة إلى الثابتة بعد أول طباعة
   if (!s.grid) s.grid = gridMode(p);
   root.innerHTML = `
@@ -831,6 +869,7 @@ function renderEditor() {
         </div>
       </div>
       <div class="qp-main">
+        <div id="qp-models"></div>
         <div class="qp-qhead">
           <h4>الأسئلة <span id="qp-count" class="qp-count"></span></h4>
           ${ro ? '' : `<div class="qp-qtools">
@@ -870,7 +909,8 @@ function renderEditor() {
     </div>`;
 
   drawPub();
-  $('qp-back').onclick = () => { if (dirty && !confirm('توجد تعديلات غير محفوظة. هل تريد الرجوع دون حفظ؟')) return; cur = null; dirty = false; renderList(); };
+  drawModels();
+  $('qp-back').onclick = () => { if (dirty && !confirm('توجد تعديلات غير محفوظة. هل تريد الرجوع دون حفظ؟')) return; setView('main'); cur = null; dirty = false; renderList(); };
   if (!ro) {
     const bind = (id, fn) => { const el = $(id); el.addEventListener('input', () => { fn(el); markDirty(); }); el.addEventListener('change', () => { fn(el); markDirty(); }); };
     bind('qp-title', el => { p.title = el.value; });
@@ -974,17 +1014,60 @@ function setStatus(msg, warn = false) { const st = $('qp-status'); if (st) { st.
 // ترتيب العرض بالمحرر: نفس ترتيب الأقسام بالورقة الأصلية
 function displayOrder() { return identityPerm(cur).q; }
 
+// تبويبا النموذجين وشريط نموذج الصعوبات
+function drawModels() {
+  const box = $('qp-models'); if (!box || !cur) return;
+  const p = cur, ro = !canEdit(p), ld = ldInfo(p);
+  const [mq, me, lq, le] = canonParts(p);
+  const has = !!(ld && ((lq || []).length || (le || []).length));
+  if (ro && !has) { box.innerHTML = ''; return; }
+  const n = (q, e) => q.length + e.length;
+  box.innerHTML = `<div class="qp-models" role="tablist" aria-label="نماذج الاختبار">
+      <button type="button" role="tab" data-view="main" aria-selected="${qView === 'main'}" class="${qView === 'main' ? 'on' : ''}">النموذج الرئيسي <i>${n(mq, me)}</i></button>
+      <button type="button" role="tab" data-view="ld" aria-selected="${qView === 'ld'}" class="ld${qView === 'ld' ? ' on' : ''}">${has ? 'نموذج صعوبات التعلم' : '+ نموذج صعوبات التعلم'}${has ? ` <i>${n(lq, le)}</i>` : ''}</button>
+    </div>
+    ${qView === 'ld' ? `<div class="qp-ldbar">
+      <p><b>نموذج صعوبات التعلم</b> أسئلته مستقلة عن النموذج الرئيسي، والاختيار من متعدد فيه بخيارين افتراضيًا. عند طباعة أوراق الفصل تُطبع هذه الورقة تلقائيًا لطلاب صعوبات التعلم في مكانهم من ترتيب الأوراق، بالعنوان والتصميم نفسيهما، فلا يتميّزون عن زملائهم.</p>
+      <p class="qp-note">يُحدَّد طلاب صعوبات التعلم من «بيانات الطلاب» (الحالة والتسهيلات: «نموذج أسئلة خاص»).</p>
+      ${ro ? '' : `<div class="qp-ldbtns"><button type="button" class="btn-secondary" id="qp-ld-copy" style="width:auto; padding:8px 12px;">نسخ أسئلة النموذج الرئيسي (بخيارين)</button>${has ? '<button type="button" class="text-action-btn danger" id="qp-ld-del">حذف نموذج الصعوبات</button>' : ''}</div>`}
+    </div>` : ''}`;
+  box.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { if (b.dataset.view === qView) return; setView(b.dataset.view); drawModels(); renderQuestions(); renderPrint(); });
+  const cp = $('qp-ld-copy');
+  if (cp) cp.onclick = () => {
+    if ((p.questions.length || essaysOf(p).length) && !confirm('سيُستبدل ما في نموذج الصعوبات بنسخة من أسئلة النموذج الرئيسي. أكمل؟')) return;
+    // الاختيار من متعدد: الإجابة الصحيحة وأول خيار غيرها، بترتيبهما الأصلي
+    p.questions = mq.map(q => {
+      const c = JSON.parse(JSON.stringify(q));
+      if (c.type === 'mcq' && (c.options || []).length > 2) {
+        const keep = c.answer != null ? [c.answer, c.options.findIndex((_, i) => i !== c.answer)].sort((a, b) => a - b) : [0, 1];
+        c.options = keep.map(i => c.options[i]); c.answer = c.answer != null ? keep.indexOf(q.answer) : null;
+      }
+      return c;
+    });
+    p.settings.essays = JSON.parse(JSON.stringify(me));
+    markDirty(); drawModels(); renderQuestions(); renderPrint();
+  };
+  const dl = $('qp-ld-del');
+  if (dl) dl.onclick = () => {
+    if (!confirm('حذف نموذج صعوبات التعلم وكل أسئلته؟ تُطبع بعدها ورقة النموذج الرئيسي لكل الطلاب.')) return;
+    setView('main'); delete p.settings.ld; markDirty(); drawModels(); renderQuestions(); renderPrint();
+  };
+}
+// الطباعة والنشر تعمل على النموذج الرئيسي بحالته الأصلية
+function toMain() { if (qView !== 'ld') return; setView('main'); drawModels(); renderQuestions(); }
+
 function renderQuestions(scrollLast = false) {
   const box = $('qp-questions');
   const p = cur;
+  if ($('qp-models')) { const t = $('qp-models').querySelectorAll('[data-view] i'); if (t.length) { const [mq, me, lq, le] = canonParts(p); t[0].textContent = mq.length + me.length; if (t[1]) t[1].textContent = lq.length + le.length; } }
   const ro = !canEdit(p);
   const order = displayOrder();
   const mcq = p.questions.filter(q => q.type === 'mcq').length;
   const es = essaysOf(p), tot = totalsOf(p);
-  { const rn = $('qp-remark-note'); if (rn) rn.innerHTML = remarkNote(p); }
+  { const rn = $('qp-remark-note'); if (rn) rn.innerHTML = qView === 'ld' ? '<p>نموذج صعوبات التعلم يُصحَّح بالتصحيح بالجوال (يظهر فيه باسم «نموذج صعوبات التعلم»)، أو يدويًا. قالب Remark هنا للنموذج الرئيسي.</p>' : remarkNote(p); }
   [['mcq', mcq], ['tf', p.questions.length - mcq], ['es', es.length]].forEach(([k, v]) => { const el = $('qp-n-' + k); if (el && document.activeElement !== el) el.value = v; });
   $('qp-count').textContent = `${p.questions.length} من ${capOf(p)} سؤال موضوعي · ${mcq} اختيار متعدد · ${p.questions.length - mcq} صح وخطأ${es.length ? ` · ${es.length} مقالي` : ''} · مجموع الدرجات ${num(tot.all)}${es.length ? ` (موضوعي ${num(tot.obj)} + مقالي ${num(tot.essay)})` : ''}`;
-  if (!p.questions.length && !es.length) { box.innerHTML = '<div class="ex-empty"><b>لا توجد أسئلة</b><span>أضف سؤالًا أو الصق أسئلة جاهزة.</span></div>'; return; }
+  if (!p.questions.length && !es.length) { box.innerHTML = qView === 'ld' ? '<div class="ex-empty"><b>لا توجد أسئلة في نموذج صعوبات التعلم</b><span>انسخ أسئلة النموذج الرئيسي ثم بسّطها، أو أضف أسئلة جديدة، أو استخدم «هيكل الورقة».</span></div>' : '<div class="ex-empty"><b>لا توجد أسئلة</b><span>أضف سؤالًا أو الصق أسئلة جاهزة.</span></div>'; return; }
   const esHtml = !es.length ? '' : `<div class="qp-sec">مقالي <small>(لا يدخل في التظليل، ويصححه المعلم يدويًا)</small></div>` + es.map((q, i) => `<div class="qp-q es${String(q.text || '').trim() ? '' : ' bad'}" data-e="${i}">
       <div class="qp-q-h"><span class="qp-q-n">${p.questions.length + i + 1}</span>
         <label class="qp-mk">الدرجة <input type="number" class="qp-es-marks" data-e="${i}" min="0.25" step="0.25" value="${markOf(q)}" ${ro ? 'disabled' : ''}/></label>
@@ -1177,6 +1260,11 @@ function parsePasted(text) {
 
 /* ---------- الحفظ ---------- */
 async function savePaper(silent = false) {
+  const wasLd = qView === 'ld';
+  if (wasLd) setView('main');
+  try { return await savePaperCanon(silent); } finally { if (wasLd && cur) setView('ld'); }
+}
+async function savePaperCanon(silent) {
   const p = cur;
   if (!p.title.trim()) { setStatus('اكتب عنوان الاختبار', true); $('qp-title').focus(); return false; }
   const sig = structSig(p);
@@ -1185,7 +1273,16 @@ async function savePaper(silent = false) {
     if (!confirm(`طُبعت الورقة لـ ${printed} طالب، وتغيّر عدد الأسئلة أو أنواعها أو خياراتها أو إعدادات الخلط.\nلن تُصحَّح الأوراق المطبوعة سابقًا تصحيحًا سليمًا - يجب طباعتها من جديد.\nأكمل الحفظ؟`)) return false;
     p.perms = {};
   }
-  const row = { title: p.title.trim(), subject: (p.subject || '').trim() || null, grade_level: p.grade_level || null, questions: p.questions, settings: { ...p.settings, permSig: Object.keys(p.perms).length ? sig : (p.settings.permSig || null) }, perms: p.perms, updated_at: new Date().toISOString() };
+  // نموذج الصعوبات: لو تغيّر هيكله بعد طباعته تُلغى أوراقه فقط
+  const ldp = ldPaperOf(p), ldSig = ldp ? structSig(ldp) : null;
+  const ldPrinted = Object.keys(p.perms || {}).filter(k => p.perms[k] && p.perms[k].m === 'ld');
+  if (ldPrinted.length && p.settings.ldSig && p.settings.ldSig !== ldSig) {
+    if (!confirm(`طُبعت ورقة نموذج صعوبات التعلم لـ ${ldPrinted.length} طالب، وتغيّر هيكل أسئلتها.\nيجب طباعة أوراقهم من جديد. أكمل الحفظ؟`)) return false;
+    ldPrinted.forEach(k => { delete p.perms[k]; });
+  }
+  const mainPrinted = Object.keys(p.perms || {}).some(k => p.perms[k] && p.perms[k].m !== 'ld');
+  const anyLd = Object.keys(p.perms || {}).some(k => p.perms[k] && p.perms[k].m === 'ld');
+  const row = { title: p.title.trim(), subject: (p.subject || '').trim() || null, grade_level: p.grade_level || null, questions: p.questions, settings: { ...p.settings, permSig: mainPrinted ? sig : (p.settings.permSig || null), ldSig: anyLd ? ldSig : (p.settings.ldSig || null) }, perms: p.perms, updated_at: new Date().toISOString() };
   const btn = $('qp-save-btn');
   if (btn) btn.disabled = true;
   let res;
@@ -1223,7 +1320,7 @@ function drawPub() {
     if (!(p.questions || []).length && !essaysOf(p).length) { setStatus('أضف الأسئلة قبل النشر', true); return; }
     if (!confirm(`نشر أسئلة «${p.title || 'بدون عنوان'}» للإدارة؟\nسيصل تنبيه للمدير والوكيل بأن الأسئلة جاهزة.`)) return;
     pub.disabled = true;
-    p.settings.pubSig = contentSig(p);
+    p.settings.pubSig = contentSig(p);   // البصمة تشمل النموذجين بحالتهما الأصلية
     if (!(await savePaper(true))) { pub.disabled = false; return; }
     const { data, error } = await sb.rpc('exam_paper_publish', { p_id: p.id, p_publish: true });
     if (error) { pub.disabled = false; setStatus('تعذّر النشر: ' + error.message, true); return; }
@@ -1257,15 +1354,25 @@ async function renderPrint() {
   const g = scope.grade;
   const secs = [...new Set(list.filter(s => s.grade_level === g).map(s => Number(s.class_section) || 0).filter(Boolean))].sort((a, b) => a - b);
   const chosen = selectedStudents(list);
+  const [, , lq0] = canonParts(cur);
+  const ldOn = !!(ldInfo(cur) && lq0.length);
+  const sup = await loadSupportMap();
+  if (!$('qp-print')) return;
+  const nLdSel = chosen.filter(s => sup.has(s.id)).length;
+  const ldNote = !nLdSel ? '' : ldOn
+    ? `<p class="qp-ldnote on">يشمل التحديد <b>${nLdSel}</b> ${nLdSel === 1 ? 'طالب' : 'طلاب'} صعوبات تعلم، تُطبع لهم ورقة نموذج الصعوبات في مكانهم من ترتيب الأوراق.</p>`
+    : `<p class="qp-ldnote">يشمل التحديد <b>${nLdSel}</b> ${nLdSel === 1 ? 'طالب' : 'طلاب'} صعوبات تعلم. أضف «نموذج صعوبات التعلم» من أعلى الأسئلة لتُطبع لهم ورقة خاصة، وإلا تُطبع لهم ورقة النموذج الرئيسي.</p>`;
   box.innerHTML = `
     <label class="as-f">الصف<select id="qp-pr-grade"><option value="">اختر الصف</option>${GRADES.map(x => `<option value="${x}"${g === x ? ' selected' : ''}>${gradeLabels[x]}</option>`).join('')}</select></label>
     ${g ? `<div class="qp-secs">${secs.map(n => `<button type="button" class="sd-chip sm${scope.sections.has(n) ? ' on' : ''}" data-s="${n}">فصل ${n}</button>`).join('')}</div><p class="qp-note">${scope.sections.size ? '' : 'كل الفصول — '}اضغط على فصل لتحديده.</p>` : ''}
     <label class="as-f">حجم الطباعة<select id="qp-pr-layout"><option value="A3"${scope.layout === 'A3' ? ' selected' : ''}>تلقائي: A4، وA3 بالعرض إذا لم تكفِ صفحة واحدة</option><option value="A4"${scope.layout === 'A4' ? ' selected' : ''}>A4 بالطول دائمًا (التكملة على ظهر الورقة)</option><option value="A4L2"${scope.layout === 'A4L2' ? ' selected' : ''}>A4 بالعرض (طالبان + علامة قص)</option></select></label>
     ${scope.layout === 'A3' ? '<p class="qp-note">إذا تجاوزت الأسئلة صفحة واحدة تُطبع صفحتا الطالب متجاورتين على ورقة A3 بالعرض، وتُقص من المنتصف فتصبح ورقتين A4 (التظليل في الأولى بمقاسه نفسه).</p>' : ''}
+    ${ldNote}
     <div class="qp-pr-sum">${chosen.length ? (scope.layout === 'A4L2' ? `<b>${chosen.length}</b> طالب — <b>${Math.ceil(chosen.length / 2)}</b> ورقة A4 بالعرض` : `<b>${chosen.length}</b> طالب — ورقة لكل طالب`) : 'اختر الصف'}</div>
     <div class="qp-pr-btns">
       <button type="button" class="btn-primary" id="qp-print-st" style="width:auto; padding:10px 16px;" ${chosen.length ? '' : 'disabled'}>🖨️ أوراق الطلاب</button>
       <button type="button" class="btn-secondary" id="qp-print-key" style="width:auto; padding:10px 14px;">نسخة المعلم</button>
+      ${ldOn ? '<button type="button" class="btn-secondary" id="qp-print-key-ld" style="width:auto; padding:10px 14px;">نسخة المعلم (الصعوبات)</button>' : ''}
       <button type="button" class="text-action-btn" id="qp-preview">معاينة طالب</button>
     </div>
     <div id="qp-pr-msg" class="qp-status"></div>`;
@@ -1275,6 +1382,7 @@ async function renderPrint() {
   $('qp-print-st').onclick = () => printStudents(false);
   $('qp-preview').onclick = () => printStudents(true);
   $('qp-print-key').onclick = () => printKey();
+  const kl = $('qp-print-key-ld'); if (kl) kl.onclick = () => printKey(true);
 }
 
 function selectedStudents(list) {
@@ -1293,9 +1401,18 @@ function readyProblems() {
   return null;
 }
 
+function ldProblems(ldp) {
+  if (!ldp) return null;
+  if (essaysOf(ldp).some(q => !String(q.text || '').trim())) return 'نموذج صعوبات التعلم: يوجد سؤال مقالي بدون نص';
+  if (ldp.questions.length > CAP_AUTO) return `نموذج صعوبات التعلم: أقصى عدد ${CAP_AUTO} سؤالًا موضوعيًا`;
+  const bad = ldp.questions.filter(q => questionIssues(q).length).length;
+  return bad ? `نموذج صعوبات التعلم: يوجد ${bad} ${bad === 1 ? 'سؤال ناقص' : 'أسئلة ناقصة'} - أكملها أو احذفها قبل الطباعة` : null;
+}
+
 async function printStudents(previewOnly) {
+  toMain();
   const msg = $('qp-pr-msg');
-  const prob = readyProblems();
+  const prob = readyProblems() || ldProblems(ldPaperOf(cur));
   if (prob) { msg.textContent = prob; msg.className = 'qp-status warn'; return; }
   const list = selectedStudents(studentsList || []);
   if (!list.length) { msg.textContent = 'اختر الصف'; msg.className = 'qp-status warn'; return; }
@@ -1303,30 +1420,44 @@ async function printStudents(previewOnly) {
   if (!win) { msg.textContent = 'اسمح بالنوافذ المنبثقة للطباعة'; msg.className = 'qp-status warn'; return; }
   win.document.write('<p style="font:16px Tahoma; padding:30px; text-align:center;" dir="rtl">جارٍ تجهيز الأوراق...</p>');
   const p = cur;
+  const ldp = ldPaperOf(p), sup = ldp ? await loadSupportMap() : new Map();
+  const isLdSt = st => !!ldp && sup.has(st.id);
   const targets = previewOnly ? list.slice(0, scope.layout === 'A4L2' ? 2 : 1) : list;
+  const nLd = targets.filter(isLdSt).length;
   if (!previewOnly) {
-    // نحفظ خريطة كل طالب قبل الطباعة (اللي انطبع له قبل يبقى على نفس ورقته)
+    // نحفظ خريطة كل طالب قبل الطباعة (اللي انطبع له قبل يبقى على نفس ورقته)، ولطالب الصعوبات ورقة نموذجه
     const sig = structSig(p);
-    if (p.settings.permSig && p.settings.permSig !== sig) p.perms = {};
+    if (p.settings.permSig && p.settings.permSig !== sig) Object.keys(p.perms).forEach(k => { if (p.perms[k].m !== 'ld') delete p.perms[k]; });
+    if (ldp && p.settings.ldSig && p.settings.ldSig !== structSig(ldp)) Object.keys(p.perms).forEach(k => { if (p.perms[k].m === 'ld') delete p.perms[k]; });
     if (!p.id) { if (!(await savePaper(true))) { win.close(); return; } }
-    targets.forEach(st => { const id = String(st.national_id).trim(); if (!p.perms[id]) p.perms[id] = makePerm(p, id); });
+    targets.forEach(st => {
+      const id = String(st.national_id).trim(), ld = isLdSt(st), cur0 = p.perms[id];
+      if (cur0 && (cur0.m === 'ld') === ld) return;
+      p.perms[id] = ld ? { ...makePerm(ldp, id), m: 'ld' } : makePerm(p, id);
+    });
     p.settings.permSig = sig;
+    if (ldp && nLd) p.settings.ldSig = structSig(ldp);
     if (!(await savePaper(true))) { win.close(); msg.textContent = 'تعذّر حفظ ربط الأوراق بالطلاب - لم تُطبع'; msg.className = 'qp-status warn'; return; }
-    msg.textContent = `تم ربط ${targets.length} ورقة بالطلاب وحفظها ✓`; msg.className = 'qp-status ok';
+    msg.textContent = `تم ربط ${targets.length} ورقة بالطلاب وحفظها ✓${nLd ? ` · منها ${nLd} بنموذج صعوبات التعلم` : ''}`; msg.className = 'qp-status ok';
   }
   const bundles = targets.map(st => {
-    const id = String(st.national_id).trim();
-    const perm = (!previewOnly && p.perms[id]) || makePerm({ ...p, id: p.id || 'preview' }, id);
-    return studentBundle(p, perm, st, {});
+    const id = String(st.national_id).trim(), ld = isLdSt(st);
+    const pp = ld ? ldp : p;
+    const saved = !previewOnly && p.perms[id];
+    const perm = saved && (saved.m === 'ld') === ld ? saved : makePerm({ ...pp, id: p.id || 'preview' }, id);
+    return studentBundle(pp, perm, st, {});
   });
   openPrintWindow(win, `${p.title} — أوراق الطلاب`, bundles, previewOnly ? 'معاينة (غير محفوظة)' : `${targets.length} طالب`, scope.layout, FS[fmtOf(p).size]);
 }
 
-function printKey() {
+function printKey(ld = false) {
+  toMain();
   const msg = $('qp-pr-msg');
-  const prob = readyProblems();
+  const pp = ld ? ldPaperOf(cur) : cur;
+  const prob = ld ? ldProblems(pp) : readyProblems();
+  if (!pp) return;
   if (prob) { msg.textContent = prob; msg.className = 'qp-status warn'; return; }
   const win = window.open('', '_blank');
   if (!win) return;
-  openPrintWindow(win, `${cur.title} — نسخة المعلم`, [studentBundle(cur, identityPerm(cur), null, { key: true })], 'نسخة المعلم بالترتيب الأصلي والإجابات مظللة', scope.layout, FS[fmtOf(cur).size]);
+  openPrintWindow(win, `${cur.title} — نسخة المعلم${ld ? ' (نموذج صعوبات التعلم)' : ''}`, [studentBundle(pp, identityPerm(pp), null, { key: true })], `نسخة المعلم${ld ? ' لنموذج صعوبات التعلم' : ''} بالترتيب الأصلي والإجابات مظللة`, scope.layout, FS[fmtOf(cur).size]);
 }

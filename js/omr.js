@@ -409,9 +409,11 @@ function bubbleDark(g, H, x, y, b) {
 }
 
 // تصنيف: نحسب مستوى الفاضي (الوسيط) ومستوى المظلل من الورقة نفسها
+// مستوى الدائرة الفارغة: وسيط أفتح دائرة في كل سطر. (وسيط كل الدوائر يفشل حين تكون نصف الدوائر مظللة،
+// كما في أسئلة الخيارين: نموذج صعوبات التعلم والصح والخطأ)
+const emptyLevel = groups => (groups.length ? percentile(groups.map(g => Math.min(...g)), 0.5) : 0.1);
 function classify(groups, choicesOf) {
-  const all = groups.flat();
-  const base = percentile(all, 0.5);
+  const base = emptyLevel(groups);
   const maxes = groups.map(g => Math.max(...g));
   const filledLvl = Math.max(base + 0.25, percentile(maxes, 0.8));
   const T = base + Math.max(0.16, (filledLvl - base) * 0.42);
@@ -456,8 +458,7 @@ export function readSheet(gFull, geo, loc, ox = 0) {
     offsets: off.map(o => [o.dx, o.dy]),
     model: null, essay: null, barcode: null,
   };
-  const allEmpty = dark.flat();
-  const base = allEmpty.length ? percentile(allEmpty, 0.5) : 0.1;
+  const base = emptyLevel(dark);
   const pickOne = (pts) => {
     const r = refineOffset(gFull, H, pts, b / 2);
     const d = pts.map(([x, y]) => bubbleDark(gFull, H, x + r.dx, y + r.dy, b));
