@@ -189,15 +189,19 @@ const defaultsFor = (no, ind) => {
 };
 const docName = (no, d) => { const def = FORM_DEFS[no]; const k = ['name', 'body', 'topic', 'title', 'doc', 'team', 'org', 'subj', 'teacher', 'student', 'period', 'month']; const v = k.map(x => d[x]).find(x => x && String(x).trim()); return def.t + (v ? ' — ' + String(v).trim().slice(0, 60) : ''); };
 
-export function openFormEditor({ no, doc = null, ind = null, onClose }) {
+// copyOf: تكرار نموذج معبأ — نسخة جديدة بالبيانات نفسها، غير مرتبطة بمؤشر، تُحفظ باسم من كرّرها
+export function openFormEditor({ no, doc = null, ind = null, copyOf = null, onClose }) {
   const def = FORM_DEFS[no]; if (!def) return;
-  const st = { no, id: doc ? doc.id : null, d: doc ? structuredClone(doc.data || {}) : defaultsFor(no, ind), ind: doc ? doc.indicator_id : (ind && ind.id) || null, dirty: false, saving: null, tm: null };
+  let d0 = doc ? structuredClone(doc.data || {}) : copyOf ? structuredClone(copyOf.data || {}) : defaultsFor(no, ind);
+  if (copyOf) delete d0.ind;
+  const st = { no, id: doc ? doc.id : null, d: d0, ind: doc ? doc.indicator_id : (ind && ind.id) || null, dirty: !!copyOf, saving: null, tm: null };
   const ev = st.id ? X.D.evs.find(e => e.form_doc === st.id) : null;
   const foreign = !!(doc && doc.created_by && doc.created_by !== X.currentUserId && !X.isPrincipal());
   const locked = foreign || (ev && !['draft', 'returned'].includes(ev.status));
   const wrap = document.createElement('div'); wrap.className = 'acf-ed';
-  wrap.innerHTML = `<div class="acf-bar"><button type="button" class="acf-b ghost" data-close>→ رجوع</button><div class="acf-bt"><b>ن${no} · ${esc(def.t)}</b><small id="acf-state">${st.id ? 'محفوظ' : 'مسودة جديدة — تُحفظ تلقائيًا'}</small></div>
+  wrap.innerHTML = `<div class="acf-bar"><button type="button" class="acf-b ghost" data-close>→ رجوع</button><div class="acf-bt"><b>ن${no} · ${esc(def.t)}</b><small id="acf-state">${copyOf ? 'نسخة مكررة — عدّل ما تريد، وتُحفظ تلقائيًا' : st.id ? 'محفوظ' : 'مسودة جديدة — تُحفظ تلقائيًا'}</small></div>
     <div class="acf-acts"><button type="button" class="acf-b ghost" data-print title="طباعة">🖨<span> طباعة</span></button><button type="button" class="acf-b ghost" data-pdf title="تنزيل PDF">⬇<span> PDF</span></button>
+    ${st.id ? '<button type="button" class="acf-b ghost" data-dup title="تكرار النموذج بالبيانات نفسها">⧉<span> تكرار</span></button>' : ''}
     ${ev ? `<span class="acf-linked">مرتبط بالمؤشر ${esc((X.D.inds.find(i => i.id === ev.indicator_id) || {}).code || '')}</span>` : '<button type="button" class="acf-b" data-toind>📌 حفظ في مؤشر</button>'}</div></div>
     ${locked ? `<div class="acf-lockmsg">${foreign ? 'هذا النموذج عبّأه ' + esc(X.nameOf(doc.created_by)) + '؛ يمكنك الاطلاع والطباعة فقط.' : 'هذا النموذج مرسل للمراجعة؛ يمكنك الاطلاع والطباعة فقط.'}</div>` : ''}
     <div class="acf-stage">${paperHtml(no, st.d, !locked)}</div>`;
@@ -211,7 +215,7 @@ export function openFormEditor({ no, doc = null, ind = null, onClose }) {
     st.saving = (async () => {
       const row = { form_no: no, title: docName(no, st.d), data: st.d, indicator_id: st.d.ind || st.ind || null, updated_at: new Date().toISOString() };
       if (st.id) { const { error } = await X.sb.from('acc_form_docs').update(row).eq('id', st.id); if (error) { st.dirty = true; state('تعذر الحفظ'); X.toast('تعذر حفظ النموذج: ' + error.message, true); return; } }
-      else { const { data, error } = await X.writeWithSchool(extra => X.sb.from('acc_form_docs').insert({ ...row, created_by: X.currentUserId, ...extra }).select().single()); if (error) { st.dirty = true; state('تعذر الحفظ'); X.toast('تعذر حفظ النموذج: ' + error.message, true); return; } st.id = data.id; X.D.formDocs = [data, ...(X.D.formDocs || [])]; }
+      else { const { data, error } = await X.writeWithSchool(extra => X.sb.from('acc_form_docs').insert({ ...row, created_by: X.currentUserId, ...extra }).select().single()); if (error) { st.dirty = true; state('تعذر الحفظ'); X.toast('تعذر حفظ النموذج: ' + error.message, true); return; } st.id = data.id; X.D.formDocs = [data, ...(X.D.formDocs || []).filter(x => x.id !== data.id)]; }
       const fd = (X.D.formDocs || []).find(x => x.id === st.id); if (fd) Object.assign(fd, row);
       state('محفوظ ✓ ' + new Date().toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' }));
     })();
@@ -221,6 +225,8 @@ export function openFormEditor({ no, doc = null, ind = null, onClose }) {
   const redraw = () => { const y = wrap.querySelector('.acf-stage').scrollTop; wrap.querySelector('.acf-stage').innerHTML = paperHtml(no, st.d, !locked); wrap.querySelector('.acf-stage').scrollTop = y; autosize(); };
   const autosize = () => wrap.querySelectorAll('textarea.acf-in').forEach(t => { if (t.closest('td')) { t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; } });
   autosize();
+  // النسخة المكررة تُحفظ فورًا حتى تظهر في «النماذج المعبأة»
+  if (copyOf) setTimeout(() => save().then(id => { if (id) X.toast('أُنشئت نسخة من النموذج ✓'); }), 0);
 
   wrap.addEventListener('input', e => {
     const el = e.target.closest('[data-b]'); if (!el) return;
@@ -246,6 +252,7 @@ export function openFormEditor({ no, doc = null, ind = null, onClose }) {
     if (t.dataset.rmph) { const [id, k] = t.dataset.rmph.split(':'); st.d[id].splice(+k, 1); redraw(); touch(); return; }
     if (t.hasAttribute('data-close')) { await save(); close(); return; }
     if (t.hasAttribute('data-print')) { await save(); printForm(no, st.d); return; }
+    if (t.hasAttribute('data-dup')) { await save(); const src = { data: st.d }; close(); openFormEditor({ no, copyOf: src, onClose }); return; }
     if (t.hasAttribute('data-pdf')) { t.disabled = true; try { await save(); await downloadPdf(no, st.d); } catch (er) { X.toast(er.message || 'تعذر إنشاء الملف', true); } t.disabled = false; return; }
     if (t.hasAttribute('data-toind')) { if (foreign) return; st.dirty = true; const id = await save(); if (!id) return; pickIndicator(no, st, () => { close(); }); }
   });
@@ -414,6 +421,7 @@ function filledHtml(mine, all, evState) {
     ${canAll ? `<div class="acf-scope"><button type="button" data-ls="mine" class="${LS === 'mine' ? 'on' : ''}">نماذجي <i>${mine.length}</i></button><button type="button" data-ls="all" class="${LS === 'all' ? 'on' : ''}">كل نماذج المدرسة <i>${all.length}</i></button></div>` : ''}
     ${list.length ? `<div class="acf-flist">${list.map(x => { const own = x.created_by === X.currentUserId; return `<div class="acf-frow"><button type="button" data-opendoc="${x.id}">
       <span class="acf-cn sm" dir="ltr">ن${x.form_no}</span><span class="acf-fname"><b>${esc(x.title || FORM_DEFS[x.form_no].t)}</b><small>${own ? '' : esc(X.nameOf(x.created_by)) + ' · '}آخر تعديل ${when(x.updated_at)}</small></span>${evState(x.id)}</button>
+      <button type="button" class="dup" data-dupdoc="${x.id}" title="تكرار النموذج بالبيانات نفسها" aria-label="تكرار النموذج">تكرار</button>
       ${own || X.isPrincipal() ? `<button type="button" class="del" data-deldoc="${x.id}" title="حذف النموذج" aria-label="حذف النموذج">حذف</button>` : ''}</div>`; }).join('')}</div>`
     : `<div class="acx-empty sm">${LS === 'mine' && canAll ? 'لم تعبّئ أي نموذج بعد. اختر «كل نماذج المدرسة» للاطلاع على نماذج المنسوبين.' : 'لا توجد نماذج معبأة بعد. اختر «تعبئة نموذج جديد» للبدء.'}</div>`}
   </section>`;
@@ -425,6 +433,7 @@ export function bindLibrary(box, rerender) {
   if (q) q.oninput = () => { const v = q.value.trim(), pos = q.selectionStart; rerender(v); const n = document.getElementById('acf-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } };
   box.querySelectorAll('[data-newform]').forEach(b => b.onclick = () => openFormEditor({ no: +b.dataset.newform, onClose: () => { LV = 'filled'; LS = 'mine'; rerender(''); } }));
   box.querySelectorAll('[data-opendoc]').forEach(b => b.onclick = () => { const doc = X.D.formDocs.find(x => x.id === b.dataset.opendoc); openFormEditor({ no: doc.form_no, doc, onClose: () => rerender() }); });
+  box.querySelectorAll('[data-dupdoc]').forEach(b => b.onclick = () => { const doc = X.D.formDocs.find(x => x.id === b.dataset.dupdoc); if (doc) openFormEditor({ no: doc.form_no, copyOf: doc, onClose: () => { LV = 'filled'; LS = 'mine'; rerender(''); } }); });
   box.querySelectorAll('[data-deldoc]').forEach(b => b.onclick = async () => {
     if (!confirm('حذف هذا النموذج نهائيًا؟')) return;
     const { error } = await X.sb.from('acc_form_docs').delete().eq('id', b.dataset.deldoc);
