@@ -164,7 +164,55 @@ function mathHtml(src) {
   t = t.replace(/\^([0-9A-Za-z\u0660-\u0669\u0621-\u064A+\-−]+)/g, '<sup>$1</sup>').replace(/_([0-9A-Za-z\u0660-\u0669\u0621-\u064A]+)/g, '<sub>$1</sub>');
   return t;
 }
+/* ---------- المعادلات (مثل محرر معادلات Word) ----------
+ * تُحفظ داخل النص بين \( و \) بصيغة LaTeX، وتُكتب بمحرر مرئي (MathLive) وتُعرض وتُطبع معادلةً حقيقية. */
+let ML = null, mlLoading = null, mlCss = '', mlCssReady = Promise.resolve();
+const ML_BASE = '/vendor/mathlive/';
+export function ensureMath() {
+  if (ML) return Promise.resolve(ML);
+  if (!mlLoading) {
+    if (!document.getElementById('ml-static-css')) { const l = document.createElement('link'); l.id = 'ml-static-css'; l.rel = 'stylesheet'; l.href = ML_BASE + 'mathlive-static.css'; document.head.appendChild(l); }
+    // أنماط المعادلات تُضمَّن نصًّا في نافذة الطباعة (روابط الخطوط مطلقة)
+    // والخطوط مضمّنة فيها (data:) لأن نافذة الطباعة قد لا تحمّل ملفات خارجية
+    mlCssReady = fetch(ML_BASE + 'mathlive-static.css').then(r => r.text()).then(async t => {
+      const names = [...new Set([...t.matchAll(/url\(fonts\/([^)]+)\)/g)].map(m => m[1]))];
+      const data = {};
+      await Promise.all(names.map(n => fetch(ML_BASE + 'fonts/' + n).then(r => r.blob()).then(b => new Promise(res => { const fr = new FileReader(); fr.onload = () => { data[n] = fr.result; res(); }; fr.onerror = () => res(); fr.readAsDataURL(b); })).catch(() => {})));
+      mlCss = t.replace(/url\(fonts\/([^)]+)\)/g, (m, n) => `url(${data[n] || location.origin + ML_BASE + 'fonts/' + n})`);
+    }).catch(() => {});
+    mlLoading = import(ML_BASE + 'mathlive.min.mjs').then(m => {
+      ML = m;
+      try { m.MathfieldElement.fontsDirectory = location.origin + ML_BASE + 'fonts/'; m.MathfieldElement.soundsDirectory = null; m.MathfieldElement.plonkSound = null; m.MathfieldElement.keypressSound = null; } catch (e) { /* إعدادات اختيارية */ }
+      return m;
+    }).catch(e => { mlLoading = null; throw e; });
+  }
+  return mlLoading;
+}
+// للطباعة: المحرك وأنماطه مع الخطوط
+export async function ensureMathPrint() {
+  const m = await ensureMath();
+  await mlCssReady;
+  return m;
+}
+const hasEq = t => /\\\(/.test(String(t || ''));
+function eqHtml(latex) {
+  if (ML) { try { return `<span class="eq" dir="ltr">${ML.convertLatexToMarkup(latex)}</span>`; } catch (e) { /* نعرض النص */ } }
+  return `<span class="eq raw" dir="ltr">${esc(latex)}</span>`;
+}
+// يقسم النص إلى نص عادي ومعادلات
+export function splitEq(text) {
+  const out = [], str = String(text == null ? '' : text), re = /\\\(([\s\S]*?)\\\)/g;
+  let last = 0, m;
+  while ((m = re.exec(str))) { if (m.index > last) out.push({ t: str.slice(last, m.index) }); out.push({ eq: m[1], at: m.index, end: re.lastIndex }); last = re.lastIndex; }
+  if (last < str.length) out.push({ t: str.slice(last) });
+  return out;
+}
+
 export function rich(text) {
+  if (hasEq(text)) return splitEq(text).map(x => (x.eq != null ? eqHtml(x.eq) : richOld(x.t))).join('');
+  return richOld(text);
+}
+function richOld(text) {
   const parts = String(text == null ? '' : text).split('$');
   if (parts.length < 3 || parts.length % 2 === 0) return esc(text);
   return parts.map((seg, i) => (i % 2 ? `<span class="mth" dir="${/[A-Za-z]/.test(seg) ? 'ltr' : 'rtl'}">${mathHtml(seg)}</span>` : esc(seg))).join('');
@@ -202,6 +250,9 @@ function identityPerm(paper) {
  * رسم الورقة
  * ========================================================================= */
 const PAPER_STYLES = `
+  .eq { display:inline-block; direction:ltr; unicode-bidi:isolate; vertical-align:middle; margin:0 0.4mm; line-height:1; font-weight:400; }
+  .eq .ML__latex { font-size:1.12em; }
+  .eq.raw { font-family:monospace; color:#900; }
   * { box-sizing:border-box; margin:0; padding:0; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   html, body { background:#fff; }
   body { font-family:'Tahoma','Arial',sans-serif; color:#16233A; }
@@ -497,7 +548,7 @@ function studentBundle(paper, perm, student, opts = {}) {
 }
 
 // يوزّع الأسئلة: الصفحة الأولى ثم صفحات تكميلية؛ ولو كلها تقريبًا تدخل بالأولى يصغّر الخط شوي
-const FLOW_SCRIPT = `(function(){
+const FLOW_SCRIPT = `(function(){ var RUN = function(){
   function fill(stu, fs){
     stu.querySelectorAll('.qp-next').forEach(function(p){ p.remove(); });
     var area = stu.querySelector('.qp-first .qp-qarea'); area.innerHTML = '';
@@ -597,6 +648,13 @@ const FLOW_SCRIPT = `(function(){
   var mxP = 0; document.querySelectorAll('.qp-stu').forEach(function(stu){ mxP = Math.max(mxP, stu.querySelectorAll('.qp-page').length); });
   if (!window.QP_SINGLE && mxP > 2) { var w = document.getElementById('qp-warn'); if (w) w.textContent = 'تنبيه: الورقة ' + mxP + ' صفحات وتتجاوز ورقة A3 واحدة. قلّل سطور المقالي أو عدد الأسئلة، أو اختر خطًّا أصغر وتباعدًا مضغوطًا.'; }
   var n = document.querySelectorAll('.qp-sheet2').length || document.querySelectorAll('.qp-a3').length || document.querySelectorAll('.qp-page').length; var c = document.getElementById('qp-count'); if (c) c.textContent = n;
+  };
+  // المعادلات: ننتظر خطوطها قبل توزيع الأسئلة على الصفحات حتى لا تتغيّر المقاسات بعده
+  if (window.QP_MATH && document.fonts && document.fonts.load) {
+    var done = false, go = function(){ if (!done) { done = true; setTimeout(function(){ try { RUN(); } catch (e) { console.error('QP RUN', e && e.stack || e); } }, 0); } };
+    Promise.all(['KaTeX_Main', 'KaTeX_Math', 'KaTeX_AMS', 'KaTeX_Size1', 'KaTeX_Size2', 'KaTeX_Size3', 'KaTeX_Size4'].map(function(f){ return document.fonts.load('16px ' + f).catch(function(){}); })).then(go, go);
+    setTimeout(go, 4000);
+  } else RUN();
 })();`;
 
 // A4 بالعرض: ورقتين A5 (نفس تصميم A4 مصغّر بنسبة ١/√٢ بالضبط) مع خط قص بالنص - الطالب الأول يمين
@@ -623,10 +681,10 @@ function openPrintWindow(win, title, bundles, note, layout = 'A4', fs = 10) {
     }
   }
   win.document.open();
-  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><style id="qp-pg">@page { size:${two ? 'A4 landscape' : 'A4 portrait'}; margin:0; }</style><style>${PAPER_STYLES}${two ? TWO_UP_STYLES : ''}</style></head><body>
+  win.document.write(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title>${body.includes('ML__') && mlCss ? `<style>${mlCss}</style>` : ''}<style id="qp-pg">@page { size:${two ? 'A4 landscape' : 'A4 portrait'}; margin:0; }</style><style>${PAPER_STYLES}${two ? TWO_UP_STYLES : ''}</style></head><body>
     <div class="qp-bar"><span>${esc(note)} · <span id="qp-count"></span> <span id="qp-unit">${two ? 'ورقة A4 بالعرض' : 'صفحة'}</span></span><b id="qp-warn" style="color:#ffd27a;"></b><span id="qp-hint" style="font-weight:400; font-size:12px; color:#cfe3ff;">في نافذة الطباعة: المقياس 100% (الحجم الفعلي) · الهوامش: بلا</span><button onclick="window.print()">🖨️ طباعة</button></div>
     ${body}
-    <script>window.QP_SINGLE = ${two ? 'true' : 'false'};window.QP_A3 = ${layout === 'A3' ? 'true' : 'false'};window.QP_FS = ${Number(fs) || 10};${FLOW_SCRIPT}<\/script></body></html>`);
+    <script>window.QP_MATH = ${body.includes('ML__') ? 'true' : 'false'};window.QP_SINGLE = ${two ? 'true' : 'false'};window.QP_A3 = ${layout === 'A3' ? 'true' : 'false'};window.QP_FS = ${Number(fs) || 10};${FLOW_SCRIPT}<\/script></body></html>`);
   win.document.close();
   win.focus();
 }
@@ -876,7 +934,7 @@ function renderEditor() {
             <button type="button" class="btn-secondary" id="qp-add-mcq" style="width:auto; padding:8px 12px;">+ اختيار من متعدد</button>
             <button type="button" class="btn-secondary" id="qp-add-tf" style="width:auto; padding:8px 12px;">+ صح وخطأ</button>
             <button type="button" class="btn-secondary" id="qp-add-es" style="width:auto; padding:8px 12px;">+ سؤال مقالي</button>
-            <button type="button" class="btn-secondary" id="qp-math-btn" style="width:auto; padding:8px 12px;" aria-expanded="false">رموز رياضية</button>
+            <button type="button" class="btn-secondary qp-eqbtn" id="qp-eq-btn" style="width:auto; padding:8px 12px;" title="إدراج معادلة في الحقل الذي فيه المؤشر"><span dir="ltr" aria-hidden="true">∑ π</span> معادلة</button>
             <button type="button" class="text-action-btn" id="qp-paste-btn">لصق أسئلة جاهزة</button>
           </div>`}
         </div>
@@ -888,12 +946,7 @@ function renderEditor() {
           <button type="button" class="btn-primary" id="qp-st-go" style="width:auto; padding:9px 18px;">تجهيز الأسئلة</button>
           <span id="qp-st-msg" class="qp-status"></span>
         </div>`}
-        <div id="qp-math" class="qp-math hidden">
-          <div class="qp-math-row">${[['معادلة', '$ $', 2], ['كسر', '${ }/{ }$', 3], ['أس', '^{ }', 2], ['دليل', '_{ }', 2], ['جذر', '√{ }', 2]].map(([t, v, c]) => `<button type="button" class="qp-sym tpl" data-v="${esc(v)}" data-c="${c}">${t}</button>`).join('')}</div>
-          <div class="qp-math-row">${['×', '÷', '±', '−', '=', '≠', '≈', '<', '>', '≤', '≥', '√', 'π', '∞', '°', '%', '²', '³', '½', '¼', '¾', '∠', '△', '⊥', '∥', '∈', '∪', '∩', '⊂', '∅', 'θ', 'α', 'β', '∑', '←', '→'].map(c => `<button type="button" class="qp-sym" data-v="${c}">${c}</button>`).join('')}</div>
-          <p class="qp-note">ضع المؤشر في نص السؤال أو الخيار ثم اضغط الرمز. ما يُكتب بين علامتي <b dir="ltr">$ $</b> يُعرض معادلةً: <b dir="ltr">3/4</b> كسر، <b dir="ltr">س^2</b> أس، <b dir="ltr">√{س+1}</b> جذر، و<b dir="ltr">{2س+1}/{3}</b> كسر مركّب.</p>
-          <div class="qp-math-prev"><span>المعاينة</span><div id="qp-math-out">اكتب في أي حقل لتظهر معاينته هنا</div></div>
-        </div>
+        <div id="qp-eqprev" class="qp-eqprev hidden" aria-live="polite"></div>
         <div id="qp-paste" class="qp-paste hidden">
           <p>الصق أسئلتك بهذا الشكل، وضع <b>*</b> بجانب الإجابة الصحيحة، و<b>(صح)</b> أو <b>(خطأ)</b> في نهاية سؤال الصح والخطأ:</p>
           <pre dir="rtl">1- عاصمة المملكة العربية السعودية؟
@@ -957,26 +1010,50 @@ function renderEditor() {
     bind('qp-f-size', el => setF('size', el.value)); bind('qp-f-gap', el => setF('gap', el.value)); bind('qp-f-opts', el => setF('opts', el.value));
     bind('qp-f-time', el => setF('time', el.value.trim())); bind('qp-f-heads', el => setF('heads', el.checked));
     bind('qp-f-marks', el => setF('showMarks', el.checked)); bind('qp-f-total', el => setF('total', el.checked));
-    // الرموز الرياضية: تُدرج عند المؤشر في آخر حقل نصي كان التركيز عليه
+    // المعادلات: تُدرج عند المؤشر في آخر حقل نصي كان التركيز عليه، وتظهر معاينتها تحته
     let lastField = null;
     const main = root.querySelector('.qp-main');
-    const showPrev = el => { const o = $('qp-math-out'); if (o && el) o.innerHTML = rich(el.value) || '<span class="as-muted">فارغ</span>'; };
+    const prev = $('qp-eqprev');
+    const showPrev = el => {
+      if (!prev) return;
+      if (!el || !document.contains(el) || !hasEq(el.value)) { prev.classList.add('hidden'); return; }
+      const parts = splitEq(el.value); let k = 0;
+      prev.innerHTML = `<span class="qp-eqprev-h">المعاينة — اضغط المعادلة لتعديلها</span><div class="qp-eqprev-b" dir="auto">${parts.map(x => (x.eq != null ? `<button type="button" class="qp-eqedit" data-k="${k++}" title="تعديل المعادلة">${eqHtml(x.eq)}</button>` : esc(x.t))).join('')}</div>`;
+      (el.closest('.qp-opt') || el).after(prev);
+      prev.classList.remove('hidden');
+    };
     main.addEventListener('focusin', e => { if (e.target.matches('textarea, input[type="text"]') && e.target.id !== 'qp-paste-text') { lastField = e.target; showPrev(lastField); } });
     main.addEventListener('input', e => { if (e.target === lastField) showPrev(lastField); });
-    $('qp-math-btn').onclick = () => { const h = $('qp-math').classList.toggle('hidden'); $('qp-math-btn').setAttribute('aria-expanded', String(!h)); };
-    $('qp-math').addEventListener('mousedown', e => { if (e.target.closest('.qp-sym')) e.preventDefault(); });
-    $('qp-math').addEventListener('click', e => {
-      const b = e.target.closest('.qp-sym'); if (!b) return;
-      const el = lastField && document.contains(lastField) ? lastField : main.querySelector('.qp-text');
-      if (!el || el.disabled) return;
-      const v = b.dataset.v, a = el.selectionStart ?? el.value.length, z = el.selectionEnd ?? a;
-      const sel = el.value.slice(a, z);
-      let ins = v, from = a + v.length, to = from;
-      if (b.classList.contains('tpl')) { const i = v.indexOf(' '); ins = sel ? v.slice(0, i) + sel + v.slice(i + 1) : v; from = a + i; to = sel ? from + sel.length : from + 1; }
-      el.value = el.value.slice(0, a) + ins + el.value.slice(z);
-      el.focus(); el.setSelectionRange(from, to);
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    if (prev) {
+      prev.addEventListener('mousedown', e => { if (e.target.closest('.qp-eqedit')) e.preventDefault(); });
+      prev.addEventListener('click', e => { const b = e.target.closest('.qp-eqedit'); if (!b || !lastField) return; const eqs = splitEq(lastField.value).filter(x => x.eq != null); const it = eqs[Number(b.dataset.k)]; if (it) openEqEditor(lastField, it); });
+    }
+    ensureMath().then(() => { if (lastField) showPrev(lastField); renderQuestions(); }).catch(() => {});
+    const eqb = $('qp-eq-btn');
+    if (eqb) {
+      eqb.addEventListener('mousedown', e => e.preventDefault());
+      eqb.onclick = () => {
+        const el = lastField && document.contains(lastField) ? lastField : main.querySelector('.qp-text');
+        if (!el || el.disabled) return;
+        // المؤشر داخل معادلة؟ نعدّلها بدل إدراج جديدة
+        const at = el.selectionStart ?? el.value.length;
+        const inside = splitEq(el.value).find(x => x.eq != null && at > x.at && at < x.end);
+        openEqEditor(el, inside || null);
+      };
+    }
+    function openEqEditor(el, existing) {
+      const a0 = el.selectionStart ?? el.value.length, z0 = el.selectionEnd ?? a0;
+      eqModal(existing ? existing.eq : '', latex => {
+        const tok = latex ? `\\(${latex}\\)` : '';
+        const a = existing ? existing.at : a0, z = existing ? existing.end : z0;
+        const pre = el.value.slice(0, a), post = el.value.slice(z);
+        const sp1 = tok && pre && !/\s$/.test(pre) ? ' ' : '', sp2 = tok && post && !/^\s/.test(post) ? ' ' : '';
+        el.value = pre + sp1 + tok + sp2 + post;
+        el.focus(); const c = (pre + sp1 + tok + sp2).length; el.setSelectionRange(c, c);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        showPrev(el);
+      });
+    }
     $('qp-paste-btn').onclick = () => { $('qp-paste').classList.toggle('hidden'); $('qp-paste-text').focus(); };
     $('qp-paste-cancel').onclick = () => $('qp-paste').classList.add('hidden');
     $('qp-paste-go').onclick = () => {
@@ -1298,6 +1375,46 @@ async function savePaperCanon(silent) {
   return true;
 }
 
+/* ---------- نافذة محرر المعادلات ---------- */
+const EQ_TPL = [
+  ['كسر', '\\frac{#@}{#?}', '<sup>□</sup>⁄<sub>□</sub>'], ['أس', '#@^{#?}', 'x<sup>□</sup>'], ['دليل سفلي', '#@_{#?}', 'x<sub>□</sub>'],
+  ['جذر تربيعي', '\\sqrt{#0}', '√□'], ['جذر نوني', '\\sqrt[#?]{#0}', '<sup>n</sup>√□'], ['أقواس', '\\left(#0\\right)', '( )'],
+  ['قيمة مطلقة', '\\left|#0\\right|', '|□|'], ['مجموع', '\\sum_{#?}^{#?}#0', '∑'], ['نهاية', '\\lim_{#?}#0', 'lim'],
+  ['تكامل', '\\int_{#?}^{#?}#0\\,dx', '∫'], ['نظام معادلات', '\\begin{cases}#?\\\\#?\\end{cases}', '{ ⁝'], ['مصفوفة', '\\begin{pmatrix}#?&#?\\\\#?&#?\\end{pmatrix}', '[⠿]'],
+];
+const EQ_SYM = [['×', '\\times'], ['÷', '\\div'], ['±', '\\pm'], ['≠', '\\ne'], ['≈', '\\approx'], ['≤', '\\le'], ['≥', '\\ge'], ['π', '\\pi'], ['∞', '\\infty'], ['°', '^{\\circ}'],
+  ['∠', '\\angle'], ['△', '\\triangle'], ['⊥', '\\perp'], ['∥', '\\parallel'], ['∈', '\\in'], ['∪', '\\cup'], ['∩', '\\cap'], ['→', '\\rightarrow'], ['θ', '\\theta'], ['α', '\\alpha'], ['β', '\\beta'], ['Δ', '\\Delta']];
+async function eqModal(initial, onDone) {
+  try { await ensureMath(); } catch (e) { alert('تعذّر تحميل محرر المعادلات. تحقق من الاتصال ثم حاول مرة أخرى.'); return; }
+  const ov = document.createElement('div'); ov.className = 'qp-eqm';
+  ov.innerHTML = `<div class="qp-eqm-box" role="dialog" aria-modal="true" aria-label="محرر المعادلات">
+    <header><b>${initial ? 'تعديل المعادلة' : 'إدراج معادلة'}</b><button type="button" class="qp-eqm-x" data-x aria-label="إغلاق">✕</button></header>
+    <div class="qp-eqm-tpl">${EQ_TPL.map(([t, l, ic]) => `<button type="button" data-ins="${esc(l)}" title="${t}"><span class="ic" dir="ltr">${ic}</span><small>${t}</small></button>`).join('')}</div>
+    <div class="qp-eqm-sym" dir="ltr">${EQ_SYM.map(([c, l]) => `<button type="button" data-ins="${esc(l)}" title="${esc(c)}">${c}</button>`).join('')}</div>
+    <div class="qp-eqm-field" dir="ltr"><math-field id="qp-mf" math-virtual-keyboard-policy="manual"></math-field></div>
+    <p class="qp-eqm-hint">اكتب المعادلة كما في Word: <b dir="ltr">/</b> للكسر، <b dir="ltr">^</b> للأس، <b dir="ltr">_</b> للدليل، والأسهم للتنقل بين الخانات. لوحة المفاتيح الرياضية من زر ⌨ داخل الخانة.</p>
+    <footer><button type="button" class="btn-primary" data-ok style="width:auto; padding:9px 22px;">${initial ? 'حفظ التعديل' : 'إدراج'}</button><button type="button" class="text-action-btn" data-x>إلغاء</button>${initial ? '<button type="button" class="text-action-btn danger" data-del>حذف المعادلة</button>' : ''}</footer>
+  </div>`;
+  document.body.appendChild(ov);
+  const mf = ov.querySelector('#qp-mf');
+  try { mf.smartFence = true; mf.mathVirtualKeyboardPolicy = 'manual'; mf.menuItems = []; } catch (e) { /* اختياري */ }
+  mf.value = initial || '';
+  setTimeout(() => mf.focus(), 50);
+  const close = () => { try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide(); } catch (e) { /* */ } ov.remove(); document.removeEventListener('keydown', onKey, true); };
+  const done = v => { close(); onDone(v); };
+  const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
+  document.addEventListener('keydown', onKey, true);
+  ov.addEventListener('mousedown', e => { if (e.target.closest('[data-ins]')) e.preventDefault(); });
+  ov.addEventListener('click', e => {
+    if (e.target === ov || e.target.closest('[data-x]')) { close(); return; }
+    const ins = e.target.closest('[data-ins]');
+    if (ins) { mf.executeCommand(['insert', ins.dataset.ins, { selectionMode: 'placeholder', format: 'latex' }]); mf.focus(); return; }
+    if (e.target.closest('[data-del]')) { done(''); return; }
+    if (e.target.closest('[data-ok]')) { const v = String(mf.getValue('latex-expanded') || mf.value || '').trim(); if (!v) { mf.focus(); return; } done(v); }
+  });
+  mf.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ov.querySelector('[data-ok]').click(); } });
+}
+
 /* ---------- نشر الأسئلة للإدارة ---------- */
 function drawPub() {
   const box = $('qp-pub'); if (!box || !cur) return;
@@ -1420,6 +1537,7 @@ async function printStudents(previewOnly) {
   if (!win) { msg.textContent = 'اسمح بالنوافذ المنبثقة للطباعة'; msg.className = 'qp-status warn'; return; }
   win.document.write('<p style="font:16px Tahoma; padding:30px; text-align:center;" dir="rtl">جارٍ تجهيز الأوراق...</p>');
   const p = cur;
+  await ensureMathPrint().catch(() => {});
   const ldp = ldPaperOf(p), sup = ldp ? await loadSupportMap() : new Map();
   const isLdSt = st => !!ldp && sup.has(st.id);
   const targets = previewOnly ? list.slice(0, scope.layout === 'A4L2' ? 2 : 1) : list;
@@ -1450,7 +1568,7 @@ async function printStudents(previewOnly) {
   openPrintWindow(win, `${p.title} — أوراق الطلاب`, bundles, previewOnly ? 'معاينة (غير محفوظة)' : `${targets.length} طالب`, scope.layout, FS[fmtOf(p).size]);
 }
 
-function printKey(ld = false) {
+async function printKey(ld = false) {
   toMain();
   const msg = $('qp-pr-msg');
   const pp = ld ? ldPaperOf(cur) : cur;
@@ -1459,5 +1577,6 @@ function printKey(ld = false) {
   if (prob) { msg.textContent = prob; msg.className = 'qp-status warn'; return; }
   const win = window.open('', '_blank');
   if (!win) return;
+  await ensureMathPrint().catch(() => {});
   openPrintWindow(win, `${cur.title} — نسخة المعلم${ld ? ' (نموذج صعوبات التعلم)' : ''}`, [studentBundle(pp, identityPerm(pp), null, { key: true })], `نسخة المعلم${ld ? ' لنموذج صعوبات التعلم' : ''} بالترتيب الأصلي والإجابات مظللة`, scope.layout, FS[fmtOf(cur).size]);
 }
