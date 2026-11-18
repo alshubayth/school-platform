@@ -5375,3 +5375,34 @@ html.booting #boot-splash{ display:flex; position:fixed; inset:0; z-index:9999; 
 /* نشر النتائج: تاريخ كل اختبار لتمييز الاختبارات المتشابهة (نافس) */
 .rp-rep input{ grid-row:span 3; }
 .rp-rep .rp-date{ font-size:11px; color:#0F6E78; font-weight:700; }
+
+/* ===================== ورقة الأسئلة: النشر للإدارة ===================== */
+.qp-filt{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.qp-filt button{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--border,#e3e7ee);background:#fff;color:var(--slate);border-radius:999px;padding:7px 14px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.qp-filt button b{font-size:11.5px;background:#EEF1F6;color:#3a4558;border-radius:999px;padding:1px 8px}
+.qp-filt button.on{background:#14325E;border-color:#14325E;color:#fff}
+.qp-filt button.on b{background:rgba(255,255,255,.18);color:#fff}
+.qpi-when{font-size:11.5px !important;color:#0F6E78 !important;font-weight:700}
+.qpi-tags i.pub{background:#E3F2EE;color:#0B6B57;font-weight:700}
+.qpi-tags i.warn{background:#FFF3DF;color:#9A5B00;font-weight:700}
+.qp-pubbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px solid #DCE3EC;border-inline-start:4px solid #8A97AA;background:#fff;border-radius:12px;padding:11px 14px;margin:0 0 12px}
+.qp-pubbar>div:not(.qpp-act){display:flex;flex-direction:column;gap:2px;flex:1;min-width:200px}
+.qp-pubbar b{font-size:14px;color:var(--navy,#14325E)}
+.qp-pubbar span{font-size:12.5px;color:var(--slate);line-height:1.6}
+.qp-pubbar .qpp-ico{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#EEF1F6;color:#4A5568;flex:none}
+.qp-pubbar.published{border-inline-start-color:#0E8C6E;background:#F4FBF8}
+.qp-pubbar.published .qpp-ico{background:#DDF2EA;color:#0B6B57}
+.qp-pubbar.edited{border-inline-start-color:#D98A00;background:#FFFBF2}
+.qp-pubbar.edited .qpp-ico{background:#FFEFD2;color:#9A5B00}
+.qpp-act{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+/* مركز الاختبارات: أسئلة جاهزة من المعلمين */
+.xh-ready{display:flex;flex-direction:column;gap:8px}
+.xh-rd{display:flex;align-items:center;gap:12px;width:100%;text-align:start;background:#fff;border:1px solid #E1E6EE;border-inline-start:4px solid #0E8C6E;border-radius:12px;padding:10px 14px;font:inherit;cursor:pointer;transition:border-color .15s,box-shadow .15s}
+.xh-rd:hover{border-color:#0E8C6E;box-shadow:0 4px 14px rgba(14,140,110,.12)}
+.xh-rd-i{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:#E3F2EE;color:#0B6B57;flex:none}
+.xh-rd-i svg{width:18px;height:18px}
+.xh-rd-t{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.xh-rd-t b{font-size:14px;color:#14325E;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xh-rd-t small{font-size:12px;color:var(--slate);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.xh-rd-d{font-size:12px;font-weight:700;color:#0B6B57;white-space:nowrap}
+.xh-rd-all{align-self:flex-start;background:none;border:0;color:#0F6E78;font:inherit;font-size:13px;font-weight:700;cursor:pointer;padding:4px 2px}

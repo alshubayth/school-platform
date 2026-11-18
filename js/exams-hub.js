@@ -45,7 +45,7 @@ function go(key, sub = null, intent = null) {
 }
 
 async function loadData() {
-  const out = { reps: [], keys: null, pubs: null, period: null };
+  const out = { reps: [], keys: null, pubs: null, period: null, ready: null };
   const rr = await readScopedBySchool(scoped => {
     let q = sb.from('exam_reports').select('id, title, subject_name, grade_level, students_count, created_at, created_by, exam_type');
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
@@ -78,6 +78,19 @@ async function loadData() {
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
       return q;
     }).then(r => { if (!r.error) out.pubs = (r.data || []).filter(p => p.published).length; }).catch(() => {}));
+    // أوراق الأسئلة التي نشرها المعلمون للإدارة
+    jobs.push(readScopedBySchool(scoped => {
+      let q = sb.from('exam_papers').select('id, title, subject, grade_level, created_by, published_at').not('published_at', 'is', null);
+      if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
+      return q.order('published_at', { ascending: false }).limit(50);
+    }).then(async r => {
+      if (r.error) return;
+      const list = r.data || [];
+      const ids = [...new Set(list.slice(0, 6).map(x => x.created_by).filter(Boolean))];
+      const names = {};
+      if (ids.length) { const { data } = await sb.from('profiles').select('id, full_name').in('id', ids); (data || []).forEach(x => { names[x.id] = x.full_name; }); }
+      out.ready = { count: list.length, list: list.slice(0, 6).map(x => ({ ...x, teacher: names[x.created_by] || '' })) };
+    }).catch(() => {}));
     jobs.push(readScopedBySchool(scoped => {
       let q = sb.from('exam_periods').select('name, committee_count, created_at');
       if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
@@ -138,7 +151,7 @@ function draw(view, D) {
         ${allowed('exam-prep') ? `<article class="xh-stage s1">
           <div class="xh-stage-h"><i>1</i><div><h3>إعداد الاختبار</h3><p>نموذج الإجابة والمهارات وطباعة الأوراق</p></div></div>
           ${link('prep', I.sheet, 'ورقة إجابة ونموذج إجابة', 'ورقة تظليل لكل طالب برقمه')}
-          ${link('prep-paper', I.paper, 'ورقة أسئلة مع التظليل', 'الأسئلة والتظليل في ورقة واحدة')}
+          ${link('prep-paper', I.paper, 'ورقة أسئلة مع التظليل', D.ready && D.ready.count ? `${num(D.ready.count)} ورقة أسئلة جاهزة من المعلمين` : 'الأسئلة والتظليل في ورقة واحدة')}
         </article>` : ''}
         ${allowed('exam-grading') ? `<article class="xh-stage s2">
           <div class="xh-stage-h"><i>2</i><div><h3>التصحيح</h3><p>اختر الطريقة المناسبة لأوراقك</p></div></div>
@@ -156,6 +169,15 @@ function draw(view, D) {
 
     <div class="xh-cols">
       <div class="xh-main">
+        ${!teacher && D.ready && allowed('exam-prep') ? `<section class="xh-block">
+          <header class="xh-h"><h2>أسئلة جاهزة من المعلمين</h2><span>${D.ready.count ? `${num(D.ready.count)} ورقة أسئلة نشرها معلّموها للإدارة` : 'تظهر هنا أوراق الأسئلة عندما ينشرها المعلم للإدارة'}</span></header>
+          ${D.ready.count ? `<div class="xh-ready">${D.ready.list.map(p => `<button type="button" class="xh-rd" data-paper="${esc(p.id)}">
+              <span class="xh-rd-i">${I.paper}</span>
+              <span class="xh-rd-t"><b>${esc(p.title || 'بدون عنوان')}</b><small>${esc([p.teacher, p.subject, gradeLabels[p.grade_level]].filter(Boolean).join(' · '))}</small></span>
+              <span class="xh-rd-d">${dateTxt(p.published_at)}</span></button>`).join('')}
+            ${D.ready.count > D.ready.list.length ? `<button type="button" class="xh-rd-all" data-act="prep-paper">عرض كل الأوراق الجاهزة (${num(D.ready.count)})</button>` : ''}</div>`
+          : '<p class="xh-empty">لم ينشر المعلمون أسئلة بعد. يصلك تنبيه عندما يضغط المعلم «نشر الأسئلة للإدارة».</p>'}
+        </section>` : ''}
         ${allowed('exam-reports') ? `<section class="xh-block">
           <header class="xh-h"><h2>مكتبة التقارير</h2><span>كل تقرير يفتح مباشرة على الصفحة المطلوبة</span></header>
 
@@ -219,6 +241,10 @@ function draw(view, D) {
     'nafes-students': () => go('exam-reports', null, { act: 'nafes', id: nafes[0].id, tab: 'students' }),
     'final-exams': () => go('exams'), 'final-tracking': () => go('tracking'),
   };
+  view.querySelectorAll('[data-paper]').forEach(b => b.addEventListener('click', () => {
+    try { sessionStorage.setItem('qp-open', b.dataset.paper); } catch { /* التخزين ممنوع */ }
+    go('exam-prep', 'paper');
+  }));
   view.querySelectorAll('[data-act]').forEach(b => b.addEventListener('click', () => {
     const a = b.dataset.act;
     if (a.startsWith('tab-')) { if (PICK) go('exam-reports', PICK, { act: 'tab', id: PICK, tab: a.slice(4) }); return; }

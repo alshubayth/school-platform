@@ -636,7 +636,7 @@ function openPrintWindow(win, title, bundles, note, layout = 'A4', fs = 10) {
  * ========================================================================= */
 export async function fetchPapers() {
   const { data, error } = await readScopedBySchool(scoped => {
-    let q = sb.from('exam_papers').select('id, title, subject, grade_level, questions, settings, perms, created_by, updated_at');
+    let q = sb.from('exam_papers').select('id, title, subject, grade_level, questions, settings, perms, created_by, updated_at, published_at, published_by');
     if (scoped && currentSchoolId) q = q.eq('school_id', currentSchoolId);
     return q.order('updated_at', { ascending: false });
   });
@@ -714,6 +714,15 @@ function blankPaper() {
 const newMcq = () => ({ type: 'mcq', text: '', options: ['', '', ''], answer: null });
 const newTf = () => ({ type: 'tf', text: '', answer: null });
 const canEdit = p => !p.id || p.created_by === currentUserId || ['admin', 'deputy'].includes(currentProfile && currentProfile.role);
+const isManager = () => ['admin', 'deputy', 'owner'].includes(currentProfile && currentProfile.role);
+const isMine = p => !p.id || p.created_by === currentUserId;
+// حالة النشر للإدارة: مسودة / منشورة / عُدّلت بعد النشر
+// بصمة محتوى الأسئلة (العنوان والأسئلة والمقالي)، حتى لا تُعدّ الطباعة أو حفظ التنسيق تعديلًا بعد النشر
+const contentSig = p => { const t = JSON.stringify([p.title || '', p.subject || '', p.grade_level || '', p.questions || [], essaysOf(p)]); let h = 5381; for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0; return (h >>> 0).toString(36) + '.' + t.length; };
+const pubState = p => (!p.published_at ? 'draft' : ((p.settings || {}).pubSig && p.settings.pubSig !== contentSig(p) ? 'edited' : 'published'));
+const fmtWhen = iso => { try { return new Date(iso).toLocaleString('ar-SA-u-ca-gregory-nu-latn', { weekday: 'long', day: 'numeric', month: 'long', hour: 'numeric', minute: '2-digit' }); } catch (e) { return ''; } };
+const PUB_TAG = { draft: '<i class="muted">مسودة - لم تُنشر للإدارة</i>', published: '<i class="pub">منشورة للإدارة</i>', edited: '<i class="warn">عُدّلت بعد النشر</i>' };
+let listFilter = null, authors = {};
 
 export async function openQuestionPapers() {
   const root = $('qp-root');
@@ -728,20 +737,35 @@ async function renderList() {
   const { data, error } = await fetchPapers();
   if (error) { root.innerHTML = `<div class="error-msg" style="display:block;">تعذر التحميل: ${esc(error.message)}</div>`; return; }
   papers = data;
+  const mgr = isManager();
+  if (mgr) {
+    const ids = [...new Set(papers.map(p => p.created_by).filter(id => id && !authors[id]))];
+    if (ids.length) { const { data: ps } = await sb.from('profiles').select('id, full_name').in('id', ids); (ps || []).forEach(x => { authors[x.id] = x.full_name; }); }
+  }
+  const pubCount = papers.filter(p => p.published_at).length;
+  if (listFilter == null) listFilter = mgr && pubCount ? 'pub' : 'all';
+  const shown = papers.filter(p => listFilter === 'all' || (listFilter === 'pub' ? !!p.published_at : !p.published_at))
+    .sort((a, b) => (listFilter === 'pub' ? String(b.published_at).localeCompare(String(a.published_at)) : 0));
   root.innerHTML = `
     <div class="qp-intro">
       <div><b>ورقة أسئلة مع التظليل</b><span>اكتب الأسئلة مرة واحدة، فتُطبع لكل طالب ورقة بترتيب مختلف للأسئلة والخيارات مرتبطة بهويته. وعند رفع ملف Remark في التقارير يُصحَّح كل طالب وفق نموذجه تلقائيًا.</span></div>
       <button type="button" class="btn-primary" id="qp-new" style="width:auto; padding:10px 18px;">+ ورقة أسئلة جديدة</button>
     </div>
-    ${papers.length ? `<div class="qp-list">${papers.map(p => {
+    ${mgr && papers.length ? `<div class="qp-filt" role="tablist">${[['pub', 'جاهزة من المعلمين', pubCount], ['draft', 'مسودات', papers.length - pubCount], ['all', 'كل الأوراق', papers.length]].map(([k, t, n]) => `<button type="button" data-f="${k}" class="${listFilter === k ? 'on' : ''}">${t} <b>${n}</b></button>`).join('')}</div>` : ''}
+    ${papers.length && !shown.length ? `<div class="ex-empty"><b>${listFilter === 'pub' ? 'لم ينشر المعلمون أسئلة بعد' : 'لا توجد مسودات'}</b><span>${listFilter === 'pub' ? 'تظهر هنا أوراق الأسئلة التي يضغط معلّموها «نشر الأسئلة للإدارة»، ويصلك تنبيه بها.' : ''}</span></div>` : ''}
+    ${papers.length ? `<div class="qp-list">${shown.map(p => {
       const printed = Object.keys(p.perms || {}).length;
       const mcq = (p.questions || []).filter(q => q.type === 'mcq').length, tf = (p.questions || []).length - mcq;
       return `<div class="qp-item" data-id="${esc(p.id)}">
-        <div class="qpi-main"><b>${esc(p.title || 'بدون عنوان')}</b><span>${esc([p.subject, gradeLabels[p.grade_level]].filter(Boolean).join(' · '))}</span></div>
-        <div class="qpi-tags"><i>${mcq} اختيار متعدد</i>${tf ? `<i>${tf} صح وخطأ</i>` : ''}${printed ? `<i class="ok">مطبوعة لـ ${printed} طالب</i>` : '<i class="muted">لم تُطبع</i>'}</div>
+        <div class="qpi-main"><b>${esc(p.title || 'بدون عنوان')}</b><span>${esc([mgr && p.created_by !== currentUserId && authors[p.created_by] ? 'المعلم: ' + authors[p.created_by] : '', p.subject, gradeLabels[p.grade_level]].filter(Boolean).join(' · '))}</span>${p.published_at ? `<span class="qpi-when">نُشرت ${esc(fmtWhen(p.published_at))}</span>` : ''}</div>
+        <div class="qpi-tags">${PUB_TAG[pubState(p)]}<i>${mcq} اختيار متعدد</i>${tf ? `<i>${tf} صح وخطأ</i>` : ''}${essaysOf(p).length ? `<i>${essaysOf(p).length} مقالي</i>` : ''}${printed ? `<i class="ok">مطبوعة لـ ${printed} طالب</i>` : '<i class="muted">لم تُطبع</i>'}</div>
         <div class="qpi-act"><button type="button" class="btn-secondary qp-open" data-id="${esc(p.id)}" style="width:auto; padding:8px 14px;">فتح</button>${canEdit(p) ? `<button type="button" class="text-action-btn qp-del" data-id="${esc(p.id)}" style="color:var(--danger) !important;">حذف</button>` : ''}</div>
       </div>`;
     }).join('')}</div>` : '<div class="ex-empty"><b>لا توجد أوراق أسئلة بعد</b><span>اضغط «+ ورقة أسئلة جديدة» واكتب أسئلتك أو الصقها جاهزة.</span></div>'}`;
+  root.querySelectorAll('[data-f]').forEach(b => b.onclick = () => { listFilter = b.dataset.f; renderList(); });
+  // فتح ورقة مباشرة (من «أسئلة جاهزة من المعلمين» في مركز الاختبارات)
+  let want = null; try { want = sessionStorage.getItem('qp-open'); sessionStorage.removeItem('qp-open'); } catch (e) { /* التخزين ممنوع */ }
+  if (want && papers.some(p => p.id === want)) { setTimeout(() => { const b = root.querySelector(`.qp-open[data-id="${want}"]`); if (b) b.click(); else { listFilter = 'all'; renderList().then(() => { const c = $('qp-root').querySelector(`.qp-open[data-id="${want}"]`); if (c) c.click(); }); } }, 0); }
   $('qp-new').onclick = () => { cur = blankPaper(); cur.questions.push(newMcq()); dirty = false; renderEditor(); };
   root.querySelectorAll('.qp-open').forEach(b => b.onclick = () => { const p = papers.find(x => x.id === b.dataset.id); if (!p) return; cur = JSON.parse(JSON.stringify(p)); cur.settings = { shuffleQ: true, shuffleOpts: true, order: 'mcq', ...(cur.settings || {}) }; cur.perms = cur.perms || {}; dirty = false; renderEditor(); });
   root.querySelectorAll('.qp-del').forEach(b => b.onclick = async () => {
@@ -766,6 +790,7 @@ function renderEditor() {
       <button type="button" class="btn-secondary" id="qp-back" style="width:auto; padding:9px 16px;">→ أوراق الأسئلة</button>
       <div class="qp-save">${ro ? '<span class="as-muted">للعرض فقط - الورقة لمعلم آخر</span>' : `<span id="qp-status" class="qp-status"></span><button type="button" class="btn-primary" id="qp-save-btn" style="width:auto; padding:10px 22px;">حفظ</button>`}</div>
     </div>
+    <div id="qp-pub"></div>
     <div class="qp-grid">
       <div class="qp-side">
         <div class="form-card">
@@ -844,6 +869,7 @@ function renderEditor() {
       </div>
     </div>`;
 
+  drawPub();
   $('qp-back').onclick = () => { if (dirty && !confirm('توجد تعديلات غير محفوظة. هل تريد الرجوع دون حفظ؟')) return; cur = null; dirty = false; renderList(); };
   if (!ro) {
     const bind = (id, fn) => { const el = $(id); el.addEventListener('input', () => { fn(el); markDirty(); }); el.addEventListener('change', () => { fn(el); markDirty(); }); };
@@ -854,7 +880,7 @@ function renderEditor() {
     bind('qp-shq', el => { s.shuffleQ = el.checked; });
     bind('qp-sho', el => { s.shuffleOpts = el.checked; });
     bind('qp-order', el => { s.order = el.value; renderQuestions(); });
-    $('qp-save-btn').onclick = () => savePaper();
+    $('qp-save-btn').onclick = async () => { if (await savePaper()) drawPub(); };
     $('qp-add-mcq').onclick = () => { p.questions.push(newMcq()); markDirty(); renderQuestions(true); };
     $('qp-add-tf').onclick = () => { p.questions.push(newTf()); markDirty(); renderQuestions(true); };
     $('qp-add-es').onclick = () => { s.essays = essaysOf(p).concat([{ text: '', marks: 2, lines: 4, model: '' }]); markDirty(); renderQuestions(); const c = [...document.querySelectorAll('.qp-q.es')].pop(); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.querySelector('textarea').focus(); } };
@@ -1170,8 +1196,47 @@ async function savePaper(silent = false) {
   if (res.data) { p.id = res.data.id; p.created_by = res.data.created_by || currentUserId; }
   p.settings = row.settings;
   dirty = false;
+  if (p.published_at) drawPub();
   if (!silent) setStatus('تم الحفظ ✓');
   return true;
+}
+
+/* ---------- نشر الأسئلة للإدارة ---------- */
+function drawPub() {
+  const box = $('qp-pub'); if (!box || !cur) return;
+  const p = cur, st = pubState(p), mine = isMine(p);
+  const who = !mine && authors[p.created_by] ? `المعلم ${esc(authors[p.created_by])}` : 'المعلم';
+  const ico = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>';
+  if (!mine) {   // الإدارة تطّلع على ورقة معلم
+    box.innerHTML = p.published_at
+      ? `<div class="qp-pubbar ${st}"><span class="qpp-ico">${ico}</span><div><b>${st === 'edited' ? 'عدّل المعلم الأسئلة بعد نشرها' : 'الأسئلة جاهزة ومنشورة للإدارة'}</b><span>نشرها ${who} ${esc(fmtWhen(p.published_at))}</span></div></div>`
+      : `<div class="qp-pubbar draft"><span class="qpp-ico">${ico}</span><div><b>مسودة</b><span>لم ينشر ${who} هذه الأسئلة للإدارة بعد</span></div></div>`;
+    return;
+  }
+  const txt = { draft: ['أسئلتك جاهزة؟', 'انشرها للإدارة ليطّلع عليها المدير والوكيل، ويصلهم تنبيه بذلك. تبقى قادرًا على تعديلها.'],
+    published: ['منشورة للإدارة', `نُشرت ${fmtWhen(p.published_at)}`],
+    edited: ['عدّلت الأسئلة بعد نشرها', 'أعد النشر لتصل الإدارة النسخة الأخيرة وتنبيه بها.'] }[st];
+  box.innerHTML = `<div class="qp-pubbar ${st}"><span class="qpp-ico">${ico}</span><div><b>${esc(txt[0])}</b><span>${esc(txt[1])}</span></div>
+    <div class="qpp-act">${st === 'published' ? '<button type="button" class="text-action-btn" id="qp-unpub">سحب النشر</button>' : `<button type="button" class="btn-primary" id="qp-dopub" style="width:auto; padding:9px 18px;">${st === 'edited' ? 'إعادة النشر للإدارة' : 'نشر الأسئلة للإدارة'}</button>`}${st === 'edited' ? '<button type="button" class="text-action-btn" id="qp-unpub">سحب النشر</button>' : ''}</div></div>`;
+  const pub = $('qp-dopub');
+  if (pub) pub.onclick = async () => {
+    if (!(p.questions || []).length && !essaysOf(p).length) { setStatus('أضف الأسئلة قبل النشر', true); return; }
+    if (!confirm(`نشر أسئلة «${p.title || 'بدون عنوان'}» للإدارة؟\nسيصل تنبيه للمدير والوكيل بأن الأسئلة جاهزة.`)) return;
+    pub.disabled = true;
+    p.settings.pubSig = contentSig(p);
+    if (!(await savePaper(true))) { pub.disabled = false; return; }
+    const { data, error } = await sb.rpc('exam_paper_publish', { p_id: p.id, p_publish: true });
+    if (error) { pub.disabled = false; setStatus('تعذّر النشر: ' + error.message, true); return; }
+    p.published_at = data; p.published_by = currentUserId;
+    setStatus('نُشرت الأسئلة للإدارة ✓'); drawPub();
+  };
+  const un = $('qp-unpub');
+  if (un) un.onclick = async () => {
+    if (!confirm('سحب نشر الأسئلة؟ ستعود مسودة، ولن تظهر للإدارة ضمن الأوراق الجاهزة.')) return;
+    const { error } = await sb.rpc('exam_paper_publish', { p_id: p.id, p_publish: false });
+    if (error) { setStatus('تعذّر السحب: ' + error.message, true); return; }
+    p.published_at = null; p.published_by = null; setStatus('سُحب النشر'); drawPub();
+  };
 }
 
 /* ---------- الطباعة ---------- */
