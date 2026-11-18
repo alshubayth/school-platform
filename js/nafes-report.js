@@ -899,6 +899,8 @@ const NR_CSS = `
 .nr-empty{ padding:30px; text-align:center; color:#667085; }
 .nr-modal{ position:absolute; inset:0; background:rgba(10,24,48,.55); backdrop-filter:blur(3px); display:flex; justify-content:center; overflow:auto; padding:18px 10px; z-index:2; }
 .nr-modal-b{ width:min(860px,100%); } .nr-modal-b .nc{ box-shadow:0 20px 50px rgba(10,24,48,.3); }
+#nr-pass{ background:rgba(255,255,255,.14); color:#fff; border:1px solid rgba(255,255,255,.45); }
+#nr-pass:hover{ background:rgba(255,255,255,.24); }
 .nr-pe{ width:min(520px,100%); align-self:flex-start; margin-top:40px; background:#fff; border-radius:16px; padding:16px 18px; box-shadow:0 20px 50px rgba(10,24,48,.3); }
 .nr-pe header{ display:flex; align-items:center; justify-content:space-between; gap:10px; }
 .nr-pe h3{ margin:0; font-size:17px; color:#0F2447; }
@@ -911,7 +913,7 @@ const NR_CSS = `
 .nr-pe-in small{ font-size:12px; color:#5B6575; white-space:nowrap; }
 .nr-pe-row em{ font-style:normal; font-weight:800; color:#1971C2; text-align:center; }
 .nr-pe-all{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:12px; padding:10px 12px; background:#F5F7FA; border-radius:12px; font-size:13px; color:#3A4558; }
-.nr-pe-all input{ width:70px; margin:0; padding:6px 8px; text-align:center; }
+.nr-pe-all input{ width:96px; margin:0; padding:6px 8px; text-align:center; }
 .nr-pe-err{ color:#C92A2A; font-size:13px; min-height:18px; margin:8px 0 0; }
 .nr-pe footer{ display:flex; justify-content:flex-end; gap:8px; margin-top:6px; }
 .nr-toast{ position:absolute; bottom:22px; left:50%; transform:translateX(-50%); background:#0F2447; color:#fff; padding:11px 18px; border-radius:12px; font-size:13.5px; z-index:20; box-shadow:0 10px 30px rgba(10,24,48,.3); max-width:92%; text-align:center; }
