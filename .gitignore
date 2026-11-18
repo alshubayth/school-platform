@@ -1,2 +1,4 @@
 node_modules/
 package-lock.json
+# ملفات تجربة محلية (قد تحتوي بيانات طلاب حقيقية)
+zz-*
