@@ -5477,3 +5477,19 @@ html.booting #boot-splash{ display:flex; position:fixed; inset:0; z-index:9999; 
 .qp-eqm-hint{ font-size:12px; color:#5B6575; line-height:1.8; margin:8px 0 10px; }
 .qp-eqm-box footer{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 @media (max-width:600px){ .qp-eqm{ padding-top:2vh; } .qp-eqm-tpl{ grid-template-columns:repeat(4,1fr); } }
+/* لوحة المفاتيح الرياضية (MathLive) فوق نافذة المعادلة */
+body{ --keyboard-zindex: 3000; }
+.qp-eqm-kb{ margin-top:8px; }
+.qp-eqm.kb{ align-items:flex-start; padding-top:8px; }
+.qp-eqm.kb .qp-eqm-hint{ display:none; }
+@media (max-width:600px){ .qp-eqm-tpl small{ display:none; } .qp-eqm-tpl button{ padding:6px 2px; } .qp-eqm-field math-field{ font-size:22px; } }
+.qp-eqm.kb .qp-eqm-box footer{ position:fixed; left:50%; transform:translateX(-50%); width:min(696px, calc(100% - 24px)); z-index:3001; background:#fff; padding:10px 12px; border-radius:14px; box-shadow:0 6px 24px rgba(10,24,48,.25); box-sizing:border-box; }
+.qp-eqm.kb .qp-eqm-kb{ display:none; }
+@media (max-width:600px){
+  .qp-eqm.kb{ padding-top:4px; }
+  .qp-eqm.kb .qp-eqm-box{ padding:10px 12px; }
+  .qp-eqm.kb .qp-eqm-box header{ margin-bottom:6px; }
+  .qp-eqm.kb .qp-eqm-sym{ display:none; }
+  .qp-eqm.kb .qp-eqm-tpl{ display:flex; overflow-x:auto; gap:6px; padding-bottom:4px; scrollbar-width:none; }
+  .qp-eqm.kb .qp-eqm-tpl button{ flex:none; width:58px; }
+}

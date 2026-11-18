@@ -1391,28 +1391,45 @@ async function eqModal(initial, onDone) {
     <header><b>${initial ? 'تعديل المعادلة' : 'إدراج معادلة'}</b><button type="button" class="qp-eqm-x" data-x aria-label="إغلاق">✕</button></header>
     <div class="qp-eqm-tpl">${EQ_TPL.map(([t, l, ic]) => `<button type="button" data-ins="${esc(l)}" title="${t}"><span class="ic" dir="ltr">${ic}</span><small>${t}</small></button>`).join('')}</div>
     <div class="qp-eqm-sym" dir="ltr">${EQ_SYM.map(([c, l]) => `<button type="button" data-ins="${esc(l)}" title="${esc(c)}">${c}</button>`).join('')}</div>
-    <div class="qp-eqm-field" dir="ltr"><math-field id="qp-mf" math-virtual-keyboard-policy="manual"></math-field></div>
-    <p class="qp-eqm-hint">اكتب المعادلة كما في Word: <b dir="ltr">/</b> للكسر، <b dir="ltr">^</b> للأس، <b dir="ltr">_</b> للدليل، والأسهم للتنقل بين الخانات. لوحة المفاتيح الرياضية من زر ⌨ داخل الخانة.</p>
+    <div class="qp-eqm-field" dir="ltr"><math-field id="qp-mf" math-virtual-keyboard-policy="auto"></math-field></div>
+    <div class="qp-eqm-kb"><button type="button" class="btn-secondary" data-kb style="width:auto; padding:7px 14px;">⌨ لوحة المفاتيح الرياضية</button></div>
+    <p class="qp-eqm-hint">اكتب المعادلة كما في Word: <b dir="ltr">/</b> للكسر، <b dir="ltr">^</b> للأس، <b dir="ltr">_</b> للدليل، والأسهم للتنقل بين الخانات. على الجوال تظهر لوحة المفاتيح الرياضية عند لمس الخانة.</p>
     <footer><button type="button" class="btn-primary" data-ok style="width:auto; padding:9px 22px;">${initial ? 'حفظ التعديل' : 'إدراج'}</button><button type="button" class="text-action-btn" data-x>إلغاء</button>${initial ? '<button type="button" class="text-action-btn danger" data-del>حذف المعادلة</button>' : ''}</footer>
   </div>`;
   document.body.appendChild(ov);
   const mf = ov.querySelector('#qp-mf');
-  try { mf.smartFence = true; mf.mathVirtualKeyboardPolicy = 'manual'; mf.menuItems = []; } catch (e) { /* اختياري */ }
+  const vk = window.mathVirtualKeyboard;
+  try { mf.smartFence = true; mf.mathVirtualKeyboardPolicy = 'auto'; mf.menuItems = []; } catch (e) { /* اختياري */ }
   mf.value = initial || '';
   setTimeout(() => mf.focus(), 50);
-  const close = () => { try { if (window.mathVirtualKeyboard) window.mathVirtualKeyboard.hide(); } catch (e) { /* */ } ov.remove(); document.removeEventListener('keydown', onKey, true); };
+  // لوحة المفاتيح الرياضية فوق النافذة، والنافذة تُرفع بقدر ارتفاعها حتى لا تغطي الخانة
+  // وزر «إدراج» يطفو فوق لوحة المفاتيح ليبقى ظاهرًا
+  const fit = () => {
+    const h = vk && vk.visible && vk.boundingRect ? vk.boundingRect.height : 0;
+    const ft = ov.querySelector('footer');
+    ov.style.paddingBottom = h ? (h + 76) + 'px' : '';
+    ov.classList.toggle('kb', !!h);
+    ft.style.bottom = h ? (h + 8) + 'px' : '';
+    if (h) mf.scrollIntoView({ block: 'nearest' });
+  };
+  if (vk) vk.addEventListener('geometrychange', fit);
+  const close = () => { try { if (vk) { vk.removeEventListener('geometrychange', fit); vk.hide(); } } catch (e) { /* */ } ov.remove(); document.removeEventListener('keydown', onKey, true); };
   const done = v => { close(); onDone(v); };
   const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); close(); } };
   document.addEventListener('keydown', onKey, true);
-  ov.addEventListener('mousedown', e => { if (e.target.closest('[data-ins]')) e.preventDefault(); });
+  // أزرار القوالب والرموز لا تأخذ التركيز من الخانة (وإلا اختفت لوحة المفاتيح)
+  ['mousedown', 'pointerdown'].forEach(ev => ov.addEventListener(ev, e => { if (e.target.closest('[data-ins], [data-kb]')) e.preventDefault(); }));
   ov.addEventListener('click', e => {
     if (e.target === ov || e.target.closest('[data-x]')) { close(); return; }
     const ins = e.target.closest('[data-ins]');
     if (ins) { mf.executeCommand(['insert', ins.dataset.ins, { selectionMode: 'placeholder', format: 'latex' }]); mf.focus(); return; }
+    if (e.target.closest('[data-kb]')) { mf.focus(); try { if (vk.visible) vk.hide(); else vk.show({ animate: true }); } catch (er) { /* */ } setTimeout(fit, 250); return; }
     if (e.target.closest('[data-del]')) { done(''); return; }
     if (e.target.closest('[data-ok]')) { const v = String(mf.getValue('latex-expanded') || mf.value || '').trim(); if (!v) { mf.focus(); return; } done(v); }
   });
   mf.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ov.querySelector('[data-ok]').click(); } });
+  // زر ↵ في لوحة المفاتيح الرياضية: يُدرج (أما «change» الناتج عن ترك الخانة فلا)
+  mf.addEventListener('change', () => { setTimeout(() => { if (document.contains(ov) && (document.activeElement === mf || mf.hasFocus?.())) ov.querySelector('[data-ok]').click(); }, 0); });
 }
 
 /* ---------- نشر الأسئلة للإدارة ---------- */
