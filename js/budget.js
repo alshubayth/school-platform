@@ -974,8 +974,8 @@ function printVoucher(r, items, total) {
     </table>
 
     <div class="sign">
-      <div>اعتماد المدير<div class="box"><div class="name">${esc(schoolBrand.principal || '')}</div><div class="line">التوقيع</div></div></div>
       <div>استلام المبلغ<div class="box"><div class="name">${esc(r.beneficiary_name)}</div><div class="line">التوقيع</div></div></div>
+      <div>اعتماد المدير<div class="box"><div class="name">${esc(schoolBrand.principal || '')}</div><div class="line">التوقيع</div></div></div>
     </div>
 
     <div class="footer-note">تمت الطباعة من نظام إدارة المدرسة — ${fmtDate(todayIso())}</div>
